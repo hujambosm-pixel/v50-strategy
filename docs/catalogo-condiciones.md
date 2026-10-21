@@ -325,6 +325,16 @@ condiciones que guarda el navegador (localStorage) no se han podido revisar. Los
 siguen con su código (no estaban mal). Siguiente: el 11, el editor visual. Se añade al final el 12: fuerza relativa por percentil (§3.1),
 mediano, cuando se decidan sus tres puntos.
 
+**Cierre del plan (V9.1029, 21/10/2026)**: hechos los commits 0–12 (el 11, el editor visual, en E1–E11 de
+docs/editor-visual.md) y la referencia en la cartera (V9.1018). Lo que faltaba de la decisión 4 era la versión del cálculo
+de los filtros del backtest: el commit 9 (V9.1009) solo llevó al catálogo su variante heredada. En V9.1029 cada filtro
+admite `calculo: 2` (botones C1 / C2 en su panel): la condición se calcula con el catálogo en las velas del PROPIO ticker
+(sus sesiones), se lleva a cada fecha del activo con el último valor ya cerrado (`alineaReferencia`; si la referencia
+cierra después que el activo —un valor europeo con ^GSPC—, el del día anterior; en semanal sobre diario, la última semana
+cerrada), «sin dato» bloquea y las comparaciones son estrictas (en el RSI, min < RSI < max). Sin el campo, el cálculo 1
+de siempre: la batería y las 64 pruebas de filtros, idénticas; `calculo: 1` da la misma respuesta byte a byte que no
+ponerlo. Queda pendiente, fuera del plan, el fallo latente de `calcEMA` con un nulo a mitad de serie (§7).
+
 Donde el byte a byte es **imposible** si se unifica, se aísla con una **versión del cálculo**, como en V9.988
 (`config.calculo`): sin el campo, el cálculo de siempre; con él, el nuevo. Hoy hay tres casos:
 - **Filtros del backtest (C)**: `≥` frente a `>`, fail-open, y EMA sobre la rejilla del activo con relleno hacia

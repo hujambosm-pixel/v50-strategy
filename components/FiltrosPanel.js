@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { MONO } from '../lib/utils'
-import { FILTROS_CATALOGO, defDe, nuevoFiltro, filtrosDe, cuentaActivos, tiposDisponibles } from '../lib/filtros'
+import { FILTROS_CATALOGO, defDe, nuevoFiltro, filtrosDe, cuentaActivos, tiposDisponibles, CALCULOS_FILTRO } from '../lib/filtros'
+
+// El cálculo del filtro (V9.1029): el 1 (heredado, el de siempre) o el 2 (las reglas del catálogo). Ver lib/filtros.js.
+const AYUDA_CALCULO = `Cálculo del filtro.\n\nC1 — ${CALCULOS_FILTRO[1]}: el de siempre; con él se hicieron todos los backtests guardados.\n\nC2 — ${CALCULOS_FILTRO[2]}: mientras el indicador no tiene valor (calentamiento) el filtro NO deja entrar, compara con «>» y la media se calcula en las velas del propio ticker y se usa el último valor ya cerrado. Puede dar resultados algo distintos.`
 
 // Cómo encaja la sección en su panel. Son las únicas diferencias reales entre los dos sitios donde
 // se pinta: en el panel de estrategias el contenedor cierra la sección con su propio borde y la
@@ -139,6 +142,8 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
   const toggle = (id) => setFiltros(p => (p || []).map(f => f.id === id ? { ...f, activo: !f.activo } : f))
   const setParam = (id, campo, val) => setFiltros(p => (p || []).map(f =>
     f.id === id ? { ...f, params: { ...conDefaults(f), [campo]: val } } : f))
+  // Cambiar de cálculo: con el 1 se quita el campo (el filtro queda exactamente como los de siempre).
+  const setCalculo = (id, c) => setFiltros(p => (p || []).map(f => { if (f.id !== id) return f; const { calculo: _c, ...resto } = f; return c === 2 ? { ...resto, calculo: 2 } : resto }))
 
   return (
     <div style={V.wrap}>
@@ -236,6 +241,10 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
                              style={{...fInp,width:c.ancho}}/>}
                       </span>
                     ))}
+                    <span style={{display:'inline-flex',alignItems:'center',gap:3,flexShrink:0}} title={AYUDA_CALCULO}>
+                      <button style={ivBtn(f.calculo!==2,false,false)} onClick={()=>setCalculo(f.id,1)}>C1</button>
+                      <button style={ivBtn(f.calculo===2,true,false)} onClick={()=>setCalculo(f.id,2)}>C2</button>
+                    </span>
                     {def.intervaloConfigurable&&(
                       /* Con la estrategia en semanal el intervalo se muestra en S y bloqueado, pero
                          NO se escribe en el estado: así, al volver a diario, cada filtro recupera el
