@@ -355,5 +355,24 @@ que cubren todas las órdenes, stops, salidas y condiciones; y en el motor, la f
 respuesta que la del editor en `/api/datos` y en el multibacktest. `MOTOR_EXPORTADO` = 1: si el intérprete cambia, el
 exportador se actualiza con él (la prueba lo vigila).
 
+**Notas de los lotes, V9.1024 (peticiones de Sergi tras probar PRUEBA_EDITOR_1)**:
+- **Universo por reglas**: además de una lista fija, el Nasdaq-100 dinámico del multibacktest (regla momentum o
+  volatilidad, N = 10, 20 o 30; solo con reparto concentrado y desde 2016), con su máscara de entradas: las entradas fuera
+  del universo se descartan y se cuentan («Descartadas por universo»). La regla y N entran en la huella; la lista de cada año
+  sale de la base (universo_screener) y cada ejecución guarda la huella de esa selección por periodo, para ver si cambió.
+  **Por defecto**: Nasdaq-100 por momentum, N = 30 (no una lista de megacaps que ya se sabe que ganaron).
+- **Subperiodos**: varios periodos en el mismo lote (por defecto 2016–2020 y 2021–2025), con resultado y veredicto de cada
+  uno; el criterio del lote es superar al azar (percentil del CAGR en A ≥ 95) en TODOS. Cada periodo tiene su semilla.
+- Compatibilidad: el formato sigue siendo el 1 (la tabla lo exige); `universo` y `periodos` son campos nuevos de lo común,
+  y un lote congelado antes (PRUEBA_EDITOR_1, con symbols / desde / hasta) se sigue leyendo igual: misma huella (a2cdfd85,
+  comprobado con el código nuevo) y mismas semillas.
+- **Nombres de variantes**: legibles, por defecto el de la estrategia (y «… (2)» si se repite), editables antes de congelar;
+  no entran en la huella (el id corto V1, V2… sí).
+- Al ejecutar con el universo real: la cartera del navegador = la del servidor en los dos periodos. Eso destapó un fallo
+  ANTERIOR de la comprobación del azar de la multicartera (V9.1023, `comparaConServidor`): calculaba el CAGR del servidor
+  desde el primer punto de su curva y la recomposición desde el capital inicial, así que si el primer día del periodo ya
+  había una operación con ganancia o pérdida, decía «no coincide» con las dos curvas iguales punto a punto. Ahora usa el
+  capital inicial en los dos lados (también en el panel del azar del multibacktest).
+
 **Estado del plan**: hechos E1–E7, E9, E10 (con la tabla) y E11, y exportar a code_js. Pendientes: E8 (dibujar con el ratón,
 aplazado) y la prueba contra el azar del laboratorio, con calibración, para estrategias del editor (decisión 5).
