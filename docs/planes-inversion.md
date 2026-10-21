@@ -235,3 +235,34 @@ Mandan sobre lo escrito antes en este documento.
 condiciones y su manera de decidir (al cierre, a la apertura siguiente), pero no toca `simula`: CARTERA_1–3 y las
 exploraciones no se pueden mover. P3 (flujos dentro de la máquina de estados) desaparece; en su lugar, una prueba de que
 el motor nuevo, sin aportaciones ni costes ni impuestos, da la MISMA curva que el laboratorio de cartera.
+
+---
+
+## 9. Estado: el motor (V9.1032)
+
+Construido solo el MOTOR (decisión 9), sin pantalla:
+- `lib/planes/plan.js`: formato 1, validación (errores en castellano), huella y `ejecutaPlan` (piezas de cartera y de comprar
+  y mantener, aportaciones mensuales / trimestrales / anuales con crecimiento y extraordinarias, a la infraponderada o con los
+  pesos, rebalanceo entre piezas por calendario y / o banda, costes reales en euros, lotes FIFO de la persona, impuestos del
+  ahorro en euros pagados el primer día de bolsa de julio, regla de los dos meses, liquidación final).
+- `lib/planes/medidas.js`: TWR (VL desde 1 a la primera apertura) y TWR neto (tras liquidar), TIR (XIRR), caída en % del
+  VL, en € del patrimonio y frente a lo aportado (y días por debajo), tiempo bajo el agua, rentabilidad por año.
+- `lib/planes/evalua.js`: las referencias con los mismos flujos (QQQ, SPY, 50/50 con el ETF del plan, liquidez), la
+  comparación por TWR neto y los inicios rodantes (10 años por defecto).
+- `pages/api/plan.js`: la ruta para probarlo (`POST { plan, rodantes? }`), con las velas de la caché, los dividendos y el
+  sintético como CARTERA_3.
+
+Comprobado: las 14 reglas de CARTERA_1–3 como plan de una pieza (sin aportaciones, costes ni impuestos) dan el mismo VL que
+el laboratorio de cartera (diferencia relativa ≤ 4·10⁻¹⁵); comprar y mantener con aportaciones: TWR = el CAGR del activo;
+a la infraponderada no vende nunca; costes con mínimo por orden; rebalanceo anual y por banda; identidad fiscal (la suma de
+las plusvalías de todos los años = patrimonio + impuestos pagados − aportado, con y sin la regla de los dos meses); la regla
+de los dos meses exacta con precios a mano (venta con pérdida en diciembre y recompra en enero: 225 € en 2020 y 1.275 €
+aplazados a 2021); referencias y liquidez al 0 %; la ruta = el motor con los mismos datos.
+
+Notas:
+- Con aportaciones mensuales al MISMO ETF, la regla de los dos meses aplaza casi todas las pérdidas de las ventas (cada
+  aportación es una compra de valores homogéneos dentro de la ventana). Lo aplazado tributa al vender lo recomprado.
+- Simplificación: la regla se aplica al resultado neto de cada venta, no lote a lote.
+- Lo que sobra al vender para pagar un impuesto se reparte por igual entre las piezas (en liquidez).
+- Pendiente de decidir: dónde viven los lotes de planes (decisión 10). Pendiente de construir: la pieza «estrategia» (el
+  multibacktest con dinero que entra) y la rotación; dividendos y divisa con los productos reales en euros.
