@@ -374,5 +374,11 @@ exportador se actualiza con él (la prueba lo vigila).
   había una operación con ganancia o pérdida, decía «no coincide» con las dos curvas iguales punto a punto. Ahora usa el
   capital inicial en los dos lados (también en el panel del azar del multibacktest).
 
+**V9.1025**: «📋 Copiar para Claude» en el resultado de cada lote (cabecera, tabla por variante y periodo, y la prueba
+contra el azar de cada una con el formato del multibacktest: `textoLoteEditor` en `lib/exportaTexto.js`) y «📋 Copiar lote
+completo» (además, la declaración congelada: regla, valores y huella de cada variante). Al elegir un lote se recupera su
+última ejecución del registro, así que se puede ver y copiar otro día. Al congelar, el formulario se vacía y el lote
+congelado queda a la derecha en solo lectura (con sus variantes y valores), para que no parezca editable.
+
 **Estado del plan**: hechos E1–E7, E9, E10 (con la tabla) y E11, y exportar a code_js. Pendientes: E8 (dibujar con el ratón,
 aplazado) y la prueba contra el azar del laboratorio, con calibración, para estrategias del editor (decisión 5).

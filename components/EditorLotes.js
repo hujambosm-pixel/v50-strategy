@@ -15,12 +15,15 @@ import { esDefinicionEditor } from '../lib/editor/fuente'
 import { valoresDe, esquemaDe } from '../lib/editor/definicion'
 import { FORMATO_LOTE, MAX_VARIANTES, MAX_PERIODOS, PERCENTIL_SUPERA, N_UNIVERSO, REGLAS_UNIVERSO, PERIODOS_DEFECTO, INICIO_UNIVERSO_NDX, validaLote, huellasLote, peticionVariante, semillaVariante,
          superaAzar, superaEnTodos, resumenLote, comunNormal, esUniversoDinamico, nombreUniversoLote, nombreVariante, huellaSeleccion } from '../lib/editor/lotes'
-import { preparaCartera, realCartera, comparaConServidor, creaPrueba, resumenPrueba, motivoNoAdmitida } from '../lib/azarCartera'
+import { preparaCartera, realCartera, comparaConServidor, creaPrueba, resumenPrueba, motivoNoAdmitida, bhDe } from '../lib/azarCartera'
+import { textoLoteEditor } from '../lib/exportaTexto'
+import { fraseDefinicion } from '../lib/editor/definicion'
+import BotonCopiar from './BotonCopiar'
 import { resumenCurva } from '../lib/respuestaMc'
 import { cargaUniversoMc, FRASE_REGLA } from '../lib/universoMc'
 import { universoDePeriodo } from '../lib/screener'
 import { avisoUniverso } from './AzarCarteraPanel'
-import { guardarPrueba } from '../lib/registroLab'
+import { guardarPrueba, listarPruebas } from '../lib/registroLab'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 
 const GRIS = 'var(--text-legible)'
@@ -104,13 +107,26 @@ export default function EditorLotes({ apiFetch, version, estrategias = [], borra
       if (r.status === 409) { setMsg({ tipo: 'err', texto: 'Ese lote ya está congelado (misma huella): elígelo en la lista.' }); recarga(); return }
       if (!r.ok) throw new Error(`No se pudo congelar el lote (HTTP ${r.status}).`)
       const j = await r.json(), f = Array.isArray(j) ? j[0] : j
-      setMsg({ tipo: 'ok', texto: `Congelado: «${fila.nombre}». Ya no se puede cambiar; ejecútalo cuando quieras.` })
-      await recarga(); setSel(f)
+      // El formulario se vacía: el lote congelado ya no se edita aquí; está a la derecha, en solo lectura.
+      setBorrador(nuevoLote()); setSimbolosTexto(LISTA_EJEMPLO)
+      setMsg({ tipo: 'ok', texto: `Congelado: «${fila.nombre}». Ya no se puede cambiar: está a la derecha, en solo lectura, para ejecutarlo. El formulario se ha vaciado para declarar otro.` })
+      await recarga(); eligeLote(f)
     } catch (e) { setMsg({ tipo: 'err', texto: e.message }) }
   }
 
   // ── Ejecutar (el lote elegido): cada variante en cada periodo ──
   const [ejec, setEjec] = useState(null), [progreso, setProgreso] = useState(null), [errorEjec, setErrorEjec] = useState(null)
+  // Al elegir un lote, su última ejecución guardada en el registro (lab_pruebas), si la hay: así se puede ver y copiar.
+  const eligeLote = async (f) => {
+    setSel(f); setEjec(null); setErrorEjec(null)
+    if (!f || !hayConfigSupabase()) return
+    try {
+      const [u] = await listarPruebas(ctx(), { limite: 1, soloResumen: false, filtro: `&config->>prueba=eq.editorLote&config->>hashLote=eq.${f.hash_lote}` })
+      if (u?.resultados?.variantes) setEjec(e => e || { resultados: u.resultados.variantes, resumen: u.resultados.resumen, creado: u.creado, versionApp: u.version_app, errorGuardar: null, delRegistro: true })
+    } catch (_) {}
+  }
+  const textoCopia = (completo) => textoLoteEditor({ fila: sel, ejec, version, completo, avisoUniverso: esUniversoDinamico(comunNormal(sel.lote.comun).universo) ? avisoUniverso(comunNormal(sel.lote.comun).universo.regla) : '',
+    frases: Object.fromEntries(sel.lote.variantes.map(v => { try { return [v.id, fraseDefinicion(v.definicion, v.valores || {})] } catch (_) { return [v.id, '—'] } })) })
   const parar = useRef(false)
   const ejecuta = async () => {
     if (!sel || progreso) return
@@ -142,7 +158,7 @@ export default function EditorLotes({ apiFetch, version, estrategias = [], borra
           let j = null; try { j = await r.json() } catch (_) {}
           if (!r.ok || !j?.candidatosAzar) throw new Error(`El servidor no pudo calcular ${etq}: ${j?.error || `HTTP ${r.status}`}`)
           const P = preparaCartera(j.candidatosAzar, { mascara: pet.universo?.mascara || null }), real = realCartera(P), cmp = comparaConServidor(real, j, 1e-6, P.o.capitalIni)
-          const rp = { desde: p.desde, hasta: p.hasta, real, coincide: cmp.ok !== false, activos: pet.symbols.length,
+          const rp = { desde: p.desde, hasta: p.hasta, real, coincide: cmp.ok !== false, activos: pet.symbols.length, nSim: cn.nSim, semilla: semillaVariante(sel.hash_lote, v.id, p, 'A', lote.comun), bh: bhDe(j),
             ...(j.universo ? { descartadas: j.universo.descartadasPorUniverso ?? null, refs: { universo: resumenCurva(j.universo.bhUniversoCurve), qqq: resumenCurva(j.universo.qqqBHCurve) }, huellaSeleccion: uPer[ip]?.huella || null } : {}) }
           for (const tipo of ['A', 'B']) {
             if (motivoNoAdmitida(pet, tipo)) continue
@@ -161,9 +177,9 @@ export default function EditorLotes({ apiFetch, version, estrategias = [], borra
         resultados.push(out)
       }
       const resumen = resumenLote(resultados, cn.periodos.length)
-      const res = { resultados, resumen, errorGuardar: null, creado: new Date().toISOString() }
+      const res = { resultados, resumen, errorGuardar: null, creado: new Date().toISOString(), versionApp: version || null }
       try {
-        const compacto = resultados.map(x => ({ id: x.id, nombre: x.nombre, supera: x.supera, periodos: x.periodos.map(p => ({ desde: p.desde, hasta: p.hasta, activos: p.activos, coincide: p.coincide,
+        const compacto = resultados.map(x => ({ id: x.id, nombre: x.nombre, supera: x.supera, periodos: x.periodos.map(p => ({ desde: p.desde, hasta: p.hasta, activos: p.activos, coincide: p.coincide, nSim: p.nSim, semilla: p.semilla, bh: p.bh,
           real: { cagr: p.real.cagr, maxDD: p.real.maxDD, ratio: p.real.ratio ?? null, capInv: p.real.capInv },
           A: p.A ? { cagr: p.A.cagr, maxDD: p.A.maxDD, ratio: p.A.ratio } : null, B: p.B ? { cagr: p.B.cagr, maxDD: p.B.maxDD, ratio: p.B.ratio } : null, supera: superaAzar(p.A),
           ...(p.refs ? { refs: p.refs, descartadas: p.descartadas, sinColocar: p.sinColocar ?? null, huellaSeleccion: p.huellaSeleccion } : {}) })) }))
@@ -273,7 +289,7 @@ export default function EditorLotes({ apiFetch, version, estrategias = [], borra
           {lotes.cargando && <div style={nota}>Cargando…</div>}
           {!lotes.error && !lotes.cargando && !lotes.filas.length && <div style={nota}>Todavía no hay ninguno.</div>}
           {lotes.filas.map(f => (
-            <div key={f.id} onClick={() => { setSel(f); setEjec(null); setErrorEjec(null) }}
+            <div key={f.id} onClick={() => eligeLote(f)}
               style={{ ...nota, cursor: 'pointer', padding: '3px 6px', borderRadius: 4, background: sel?.id === f.id ? 'var(--bg3)' : 'transparent', color: sel?.id === f.id ? 'var(--accent)' : 'var(--text)' }}>
               {f.nombre} · {f.lote?.variantes?.length} variantes · {String(f.creado).slice(0, 10)} · {f.hash_lote.slice(0, 8)}
             </div>
@@ -284,7 +300,10 @@ export default function EditorLotes({ apiFetch, version, estrategias = [], borra
             <div style={etiqueta}>{sel.nombre}</div>
             <div style={nota}>
               {nombreUniversoLote(selC.universo)} · {selC.periodos.map(nombrePeriodo).join(' y ')} · velas {selC.intervalo === 'semanal' ? 'semanales' : 'diarias'} · {selC.modoAsig}, {selC.sizeRules.maxPosiciones} posiciones, prioridad {PRIORIDADES[selC.sizeRules.prioridad] || selC.sizeRules.prioridad} · {selC.nSim} simulaciones<br/>
-              Variantes: {sel.lote.variantes.map(nombreVariante).join(', ')} · huella {sel.hash_lote.slice(0, 16)}… · congelado el {String(sel.creado).slice(0, 10)}
+              Huella {sel.hash_lote.slice(0, 16)}… · congelado el {String(sel.creado).slice(0, 10)} · solo lectura
+            </div>
+            <div style={{ marginTop: 4 }}>
+              {sel.lote.variantes.map(v => <div key={v.id} style={{ ...nota, color: 'var(--text)' }}>· <span style={{ color: LILA }}>{nombreVariante(v)}</span> <span style={{ color: GRIS }}>({v.id}: {Object.entries(v.valores || {}).map(([k, x]) => `${k} ${aTexto(x === true ? 'sí' : x === false ? 'no' : x)}`).join(', ') || 'valores por defecto'})</span></div>)}
             </div>
             <div style={{ ...fila, marginTop: 8 }}>
               <button style={{ ...botonPrincipal, opacity: progreso ? 0.5 : 1 }} disabled={!!progreso} onClick={ejecuta}>Ejecutar el lote</button>
@@ -312,8 +331,12 @@ export default function EditorLotes({ apiFetch, version, estrategias = [], borra
               <div style={{ ...nota, marginTop: 6, color: 'var(--text)' }}>{ejec.resumen.texto}</div>
               <div style={nota}>✓ = supera al azar en todos los periodos. {esUniversoDinamico(selC.universo) ? '«Descartadas por universo»: entradas de la estrategia en valores que ese año no estaban en el universo.' : ''}</div>
               {ejec.resultados.some(x => x.periodos.some(p => !p.coincide)) && <div style={{ ...nota, color: AMBAR }}>⚠ En algún periodo la cartera recalculada en el navegador no coincide con la del servidor: su prueba no es fiable.</div>}
-              {ejec.errorGuardar ? <div style={{ ...nota, color: ROJO }}>{ejec.errorGuardar}</div> : <div style={nota}>Guardado en el registro de pruebas.</div>}
+              {ejec.errorGuardar ? <div style={{ ...nota, color: ROJO }}>{ejec.errorGuardar}</div> : <div style={nota}>{ejec.delRegistro ? `La última ejecución guardada en el registro (${String(ejec.creado).slice(0, 10)}).` : 'Guardado en el registro de pruebas.'}</div>}
             </>}
+            <div style={{ ...fila, marginTop: 8 }}>
+              {ejec && <BotonCopiar obtenerTexto={() => textoCopia(false)} titulo="El resultado y la prueba contra el azar de cada variante y periodo, en Markdown (el formato del multibacktest)"/>}
+              <BotonCopiar obtenerTexto={() => textoCopia(true)} etiqueta="📋 Copiar lote completo" titulo="Además, la declaración congelada: la regla, los valores y la huella de cada variante"/>
+            </div>
           </div>
         )}
         <div style={caja}>
