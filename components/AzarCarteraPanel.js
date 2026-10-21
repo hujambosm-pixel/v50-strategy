@@ -179,7 +179,7 @@ export default function AzarCarteraPanel({ resultados = [], apiFetch = null }) {
         const msDatos = Date.now() - t0
         const P = preparaCartera(j.candidatosAzar, { mascara: peticion.universo?.mascara || null })
         const real = realCartera(P)
-        const cmp = comparaConServidor(real, j)
+        const cmp = comparaConServidor(real, j, 1e-6, P.o.capitalIni)
         if (!cmp.ok) {
           Object.assign(e, { estado: 'error', error: `La cartera recompuesta no coincide con la ejecución (diferencias: CAGR ${cmp.dif.cagr.toExponential(1)}, caída ${cmp.dif.maxDD.toExponential(1)}, capital invertido ${cmp.dif.capInv.toExponential(1)}); la prueba no se calcula.` })
         } else {
