@@ -1,0 +1,194 @@
+# Planes de inversión — diseño
+
+Fase de diseño (solo documentación; V9.1030, 21/10/2026). No se construye nada hasta que se respondan las preguntas
+del §7.
+
+Un **plan de inversión** es cómo invertiría Sergi de verdad: un capital inicial más **aportaciones periódicas**, repartido
+entre una o varias **piezas** (la mezcla 50 % QQQ + 50 % ETF apalancado, un filtro de tendencia del mercado, una estrategia
+del editor, una rotación por momentum…), con **reglas de calendario** (rebalanceo, fechas de aportación), **costes** e
+**impuestos**. La pregunta que contesta no es «¿qué estrategia tiene ventaja?» (eso lo hacen el laboratorio y los lotes),
+sino «si hago esto durante años, con mi dinero y mis aportaciones, ¿qué me queda después de impuestos, cuánto sufro por el
+camino y qué habría sacado haciendo algo más simple con el mismo dinero?».
+
+---
+
+## 1. Qué hay ya en la app que se puede reutilizar
+
+| Pieza | Dónde | Qué aporta al plan | Lo que le falta |
+|---|---|---|---|
+| Máquina de estados de cartera | `lib/laboratorioCartera.js` (`simula`, `ejecutaPeriodoCartera`) | Estados con pesos (QQQ, ETF, liquidez), transiciones por condición (caída desde el máximo, medias diarias y semanales, cruces, O / NO / histéresis, «una semana de cada N»), rebalanceo por calendario (`primerDiaHabil`, `calendario`), `inicio` según una media, referencia en otro ticker (`regla.referencia`, V9.1018). Es justo «la mezcla 50/50» y «el filtro de tendencia» de CARTERA_2 y CARTERA_3 | Trabaja con UNA unidad de capital (fracciones): no hay entradas de dinero. Los impuestos usan `CAPITAL_EUR = 10.000` fijo para los tramos |
+| Precios de rentabilidad total | `preciosTotales` + `lib/dividendosCartera.json` | QQQ, QLD, TQQQ y SPY con los dividendos reinvertidos | Solo esos cuatro: la caché de velas no trae dividendos (las acciones de una estrategia irían sin dividendos) |
+| ETF sintéticos ×2 / ×3 | `lib/etfSintetico.js`, `lib/etfSinteticos.json` | Historia desde 1999 (dot-com y 2008) para el apalancado, calibrada con QLD y TQQQ | — |
+| Impuestos en caja (cálculo 2) | `simula({ impuestosEnCaja })`, `liquidaAnio`, `lib/afterTaxSim.js` (`calcImpuestoTramos`) | Plusvalías FIFO por activo, tramos del ahorro, compensación de pérdidas de 4 años, pago el primer día hábil del año siguiente con la liquidez (o vendiendo a prorrata) y liquidación final | Tramos sobre un importe fijo; sin regla de los dos meses, sin dividendos (retención), sin divisa. Es de la persona, no de cada pieza: con varias piezas hay que sumarlas |
+| Costes por operación | `config.costes`, `COSTES_DEFECTO` | Comisión % con mínimo en € y media horquilla por activo | El mínimo en € solo tiene sentido con importes reales (hoy, sobre 10.000 €) |
+| Medidas de una curva | `medidas`, `bajoAgua`, `bajoAguaCorto`, `compraMantiene`, `mitadMitad` | CAGR, caída máxima, CAGR / caída, peor año, tiempo bajo el agua, comprar y mantener QQQ y SPY, 50/50 | Todas suponen que no entra dinero: son medidas «por tiempo» |
+| Azar de cartera | `programaAzar` (ciclos y bloques FUERA), calibración (`scripts/calibracionCartera*.js`), criterios 5–7 | La prueba de que los MOMENTOS que elige una regla son mejores que el azar | Con aportaciones el resultado depende también de cuándo entra el dinero: hay que separar las dos cosas (§4) |
+| Editor visual, modo Cartera | `components/EditorCartera.js` | Pantalla para declarar la regla de una pieza de cartera, con frase, diagrama y validación | — |
+| Estrategias del editor | `lib/editor/*` (intérprete, multibacktest con `definicionEditor`) | Una pieza «estrategia»: entradas y salidas de un valor sobre un universo | El multibacktest reparte un capital fijo (concentrado / compartido): no recibe dinero a mitad |
+| Universo dinámico | `universo_screener` (momentum y volatilidad, N = 10, 20, 30), `lib/screener.js` | La base de una «rotación por momentum»: los N con más momentum de cada año | Selección ANUAL; una rotación mensual necesitaría su propio cálculo |
+| Lotes y registro | `editor_lotes` (inmutable, huella), `lab_pruebas`, `lib/lotesLab.js` (LOTES y huellas en el código) | Declarar antes de mirar, congelar, contar cuántas cosas se probaron | Un tipo de lote para planes |
+| Aportaciones reales | tabla `capital_contributions` y `computeBuyAndHold` (TradeLog, `pages/index.js`) | La idea de la referencia «lo mismo aportado al índice» ya existe para la cartera real | Es del diario, no del simulador; `capital_contributions` está sin RLS (es de antes de la autenticación) |
+
+Conclusión: el **motor de estados de cartera** es la base natural (ya hace calendario, rebalanceo, impuestos en caja y
+costes); lo que falta en todas partes es el **dinero que entra** y medir con él.
+
+---
+
+## 2. El formato de un plan
+
+Un plan es datos (como la `regla` de la cartera y las definiciones del editor), con su huella y su versión del cálculo:
+
+```js
+{
+  tipo: 'plan', formato: 1, calculo: 1, nombre, descripcion?,
+  dinero: {
+    capitalInicial: 10000,                         // €
+    aportaciones: { importe: 500, frecuencia: 'mensual' | 'trimestral' | 'anual',
+                    dia: 'primerDiaHabil',          // la primera vela con datos del periodo (decisión 6 del catálogo)
+                    crecimientoAnual: 0 },          // % que sube la aportación cada año (0 = siempre igual)
+    extraordinarias: [{ fecha, importe }],          // opcional
+  },
+  piezas: [                                          // de 1 a ~5; cada una es una SUBCARTERA con su dinero
+    { id: 'base', tipo: 'cartera', regla: { … },   // la máquina de estados de hoy (QQQ, ETF, liquidez)
+      etf: 'QLD' | 'TQQQ' | 'x2' | 'x3', peso: 0.7 },
+    { id: 'satelite', tipo: 'estrategia', definicion: { … }, valores: { … },   // del editor
+      universo: { tipo: 'ndx', regla: 'momentum', n: 30 }, maxPosiciones: 5, peso: 0.3 },
+    // 'activo' (comprar y mantener un ticker), 'rotacion' (los N mejores por momentum cada mes) — fases posteriores
+  ],
+  reparto: {
+    rebalanceo: { calendario: 'anual' | 'trimestral' | 'nunca', banda: 0.05 },   // entre PIEZAS; banda opcional (±5 pp)
+    aportacionesA: 'pesos' | 'infraponderada',      // la aportación se reparte con los pesos o va a la pieza que más se ha quedado atrás
+  },
+  impuestos: { regimen: 'ES-ahorro-2026', pagoEn: 'caja' },   // el cálculo 2 de la cartera, sobre importes reales
+  costes: { comisionPct, comisionMinEur, horquillaPct: { … } },
+  periodo: { desde, hasta }, iniciosRodantes?: 'anual',      // ver §3
+}
+```
+
+**Las piezas son subcarteras.** Cada una lleva su propio dinero y su propia lógica, y solo se tocan entre ellas al
+aportar y al rebalancear (que vende en una y compra en otra: realiza plusvalías). Así cada pieza reutiliza su motor tal
+cual, y el plan solo añade el reparto, los flujos y los impuestos de la persona.
+
+**Huella**: la del JSON canónico del plan sin nombre ni descripción (como las demás). **Versión del cálculo**: `calculo: 1`
+desde el principio, para poder corregir sin mover lo guardado.
+
+---
+
+## 3. Cómo se ejecuta
+
+1. **Calendario común**: las velas de todos los activos que toquen las piezas (rentabilidad total donde la hay), en el
+   eje de días de bolsa del QQQ. Las decisiones, como siempre: al cierre de t, ejecución a la apertura de t+1.
+2. **Cada día**, en este orden:
+   - las piezas deciden y operan con SU dinero (la máquina de estados mueve QQQ / ETF / liquidez; la estrategia abre y
+     cierra posiciones);
+   - si es día de aportación, el dinero entra a la apertura y se reparte (con los pesos o a la infraponderada); dentro de
+     una pieza de cartera se invierte con los pesos de su estado actual (o queda en liquidez si el estado es «fuera»);
+   - si toca rebalancear entre piezas (calendario, o banda superada al cierre de la víspera), se vende y se compra a la
+     apertura, con sus costes;
+   - el primer día hábil del año, el impuesto del año anterior (de TODAS las piezas juntas: una sola persona, unos
+     tramos, una compensación) se paga con la liquidez y, si no basta, vendiendo a prorrata.
+3. **Lotes fiscales en euros**: cada compra es un lote FIFO con su coste en euros (aportaciones incluidas); cada venta
+   realiza plusvalía o pérdida. Los tramos se aplican a importes REALES (no a 10.000 € fijos).
+4. **Al final**: valor bruto, y valor neto tras liquidar todo y pagar lo pendiente (como comprar y mantener).
+5. **Inicios rodantes**: con aportaciones el resultado depende mucho de cuándo se empieza (empezar en 2000 o en 2009 es
+   otro mundo). Además del periodo pedido, el plan se repite empezando el 1 de enero de cada año con la misma duración
+   (o hasta hoy), y se da la distribución (mediana, peor, mejor).
+
+---
+
+## 4. Cómo se mide
+
+Con aportaciones, el CAGR de siempre (`medidas`) deja de tener sentido: una curva que sube porque entra dinero no es una
+estrategia que gana. Se dan dos rentabilidades y se explica cuál es cuál:
+
+- **Rentabilidad ponderada por TIEMPO (TWR)**: la de la estrategia, sin el efecto de cuándo entra el dinero. Se calcula con
+  un valor liquidativo por participación (las aportaciones compran participaciones al valor del día): es comparable con el
+  CAGR de los lotes y de los laboratorios. Es la que juzga las REGLAS.
+- **Rentabilidad ponderada por DINERO (TIR, XIRR)**: la que de verdad consigue la persona con sus flujos (aporta más cuando
+  el mercado está alto o bajo, y eso cuenta). Es la que juzga el PLAN con sus aportaciones.
+- **Dinero**: total aportado, valor final bruto y neto, ganancia neta, impuestos y costes pagados (por año y en total).
+- **Caída máxima**:
+  - en **%** sobre el valor liquidativo (la del TWR): la principal, comparable entre planes;
+  - en **€** sobre el patrimonio (pico a valle): informativa y engañosa (las aportaciones tapan las caídas);
+  - **frente a lo aportado**: el peor momento en que el patrimonio estuvo por debajo de lo aportado hasta ese día, y
+    cuánto tiempo (lo que más se nota en el bolsillo).
+- **Tiempo bajo el agua**: del valor liquidativo (`bajoAgua`) y por debajo de lo aportado.
+- **Peor año** (TWR) y peor año en € (lo que se perdió ese año sumando las aportaciones).
+
+**Referencias con los mismos flujos** (mismas fechas e importes, mismos costes e impuestos, liquidación final igual):
+1. aportar lo mismo al **QQQ** (comprar y mantener, rentabilidad total);
+2. al **SPY**;
+3. a la **mezcla 50 % QQQ + 50 % ETF** con rebalanceo anual (la pieza base sin reglas: dice cuánto aportan las reglas);
+4. **dejarlo en liquidez** (0 %): lo aportado.
+
+Las mismas medidas para todas, y una tabla «plan frente a referencias» (TWR, TIR, valor neto, caída en %, tiempo bajo el
+agua, tiempo por debajo de lo aportado), por periodo y por inicio rodante.
+
+---
+
+## 5. Lotes oficiales y azar
+
+- **Lote de planes**: variantes de un plan (p. ej., 60/40 frente a 70/30; aportar con pesos frente a la infraponderada)
+  declaradas y congeladas antes de mirar, como los lotes del editor (tabla `editor_lotes`, con un `tipo: 'planes'` dentro
+  del formato 1, o una tabla aparte; ver §7) y cada ejecución en `lab_pruebas` (`prueba: 'plan'`).
+- **Criterio** (versión nueva, como los criterios 5–7): el plan «mejora» a su referencia sin reglas (la mezcla con los
+  mismos flujos) si su TWR / caída en % es mejor en el periodo total y en la mayoría de los subperiodos y de los inicios
+  rodantes. Batir al QQQ se enseña, pero prueba poco (lo dice la memoria de CARTERA_1: casi cualquier cosa apalancada lo
+  bate en un mercado alcista).
+- **Azar**: solo tiene sentido para las piezas que ELIGEN MOMENTOS (filtro de tendencia, transiciones por condición,
+  estrategias). Se reutiliza el azar de cada pieza sobre el TWR (las mismas transiciones o ciclos en fechas al azar,
+  `programaAzar`), con los flujos del plan iguales en lo real y en el azar: así se mide la regla, no el calendario de las
+  aportaciones. Calibración en universos sintéticos sin ventaja, como CARTERA_3 (criterio 7) y el laboratorio del editor.
+  Las piezas sin decisiones (mezcla fija, comprar y mantener) van sin azar: comparativas.
+- **Huellas y versiones**: plan y lote con huella; `calculo` del plan; las calibraciones, por la huella de la pieza.
+
+---
+
+## 6. Plan en commits pequeños
+
+| # | Commit | Qué hace | Riesgo / prueba | Tamaño |
+|---|---|---|---|---|
+| P1 | Medidas con flujos | `lib/planes/medidas.js`: valor liquidativo y participaciones, TWR, TIR (XIRR por Newton con respaldo de bisección), caídas en % y en €, frente a lo aportado, tiempo bajo el agua. Puro | Casos a mano (aportación constante en un activo plano: TIR 0; un solo flujo: TIR = CAGR), sin tocar nada | pequeño |
+| P2 | Referencias con flujos | Aportar lo mismo a QQQ, SPY, 50/50 y liquidez, con costes, lotes FIFO e impuestos en euros | Sin flujos, la referencia QQQ = `compraMantiene` de siempre (byte a byte en la curva normalizada) | mediano |
+| P3 | Flujos en la máquina de estados | `simula` acepta `flujos` (fecha, importe) y lotes en euros; sin `flujos`, el cálculo de siempre | **Toca el motor de cartera**: CARTERA_1–3 y exploraciones byte a byte sin flujos; con un flujo inicial único = la ejecución de siempre escalada | mediano |
+| P4 | Impuestos sobre importes reales | Los tramos y la compensación con euros reales (`CAPITAL_EUR` solo para el cálculo 1) | Sin flujos y con 10.000 € iniciales, el cálculo 2 de siempre | pequeño |
+| P5 | Plan de una pieza | `lib/planes/plan.js`: formato, validación, huella y ejecución con una pieza de cartera + aportaciones; frase en castellano | Un plan sin aportaciones = la cartera de siempre (TWR = CAGR) | mediano |
+| P6 | Pantalla, primera versión | Pestaña o modo «Planes» (en el Editor): formulario del plan, ejecución, tabla frente a referencias, gráfico de patrimonio y de lo aportado, cómo leerlo, «Copiar para Claude» | Montaje y estado; consejos (por qué TWR ≠ TIR, por qué la caída en € engaña) | grande |
+| P7 | Varias piezas y rebalanceo entre ellas | Subcarteras, reparto de aportaciones, rebalanceo por calendario o banda, impuestos de la persona | Con una pieza, = P5 byte a byte | grande |
+| P8 | Pieza «estrategia» | El multibacktest (concentrado / compartido) con dinero que entra, para una estrategia del editor como pieza | **Toca el motor del multibacktest**: batería 52 + 44 sin flujos; es lo más arriesgado | grande |
+| P9 | Inicios rodantes | Repetir el plan desde cada año y dar la distribución | Rendimiento (muchas ejecuciones): en el servidor por tandas | mediano |
+| P10 | Lotes de planes y azar | Declarar y congelar variantes de planes; criterio nuevo; azar de las piezas que eligen momentos y su calibración | Lotes y calibraciones existentes intactos | grande |
+| P11 | Rotación por momentum (opcional) | Pieza «rotacion»: los N con más momentum cada mes (o cada año, con el universo de hoy) | Sesgo de supervivencia del universo (2016–2018, 14–22 % sin datos) | mediano |
+
+**Riesgos generales**: los tres que tocan motores (P3, P8 y, en menor medida, P4) van solos y con toda la batería; el
+importe mínimo de comisión y los tramos hacen que el plan dependa del tamaño (dos planes iguales con 10.000 € y con
+100.000 € darán resultados distintos, y está bien: es lo real); la historia antes de 2006 solo existe para QQQ, SPY y los
+sintéticos; las acciones de una estrategia van sin dividendos.
+
+---
+
+## 7. Preguntas
+
+1. **Aportaciones**: ¿mensuales por defecto? ¿Importe fijo o creciendo con la inflación (o un %)? ¿Aportaciones
+   extraordinarias y retiradas (p. ej., una retirada anual a partir de cierto año)?
+2. **Dónde va la aportación**: ¿con los pesos objetivo, a la pieza que se ha quedado atrás (rebalancea sin vender, sin
+   impuestos) o siempre a una pieza concreta? Dentro de una pieza de cartera que está «fuera» (filtro de tendencia en
+   liquidez), ¿la aportación espera en liquidez o compra igualmente la parte sin apalancar?
+3. **Rebalanceo entre piezas**: ¿por calendario, por bandas (±5 pp) o ambos? ¿Vale la pena el coste fiscal o prefieres
+   rebalancear solo con aportaciones?
+4. **Impuestos**: ¿régimen español del ahorro con los tramos de hoy para todo el periodo? ¿Hay que modelar ya la regla de
+   los dos meses, la retención de dividendos o la divisa (ETF en dólares), o se deja para después? ¿Cuenta con otras
+   ganancias tuyas que llenen los tramos, o el plan va solo?
+5. **Piezas de la primera versión**: ¿basta con la máquina de estados (mezcla, filtro de tendencia) + comprar y mantener,
+   y la estrategia del editor (P8) y la rotación (P11) después?
+6. **Medida principal para el veredicto**: ¿TWR / caída en % (juzga las reglas) o TIR y valor neto (juzga el plan
+   entero)? Propuesta: el veredicto por TWR / caída frente a la mezcla sin reglas, y TIR, valor neto y tiempo por debajo de
+   lo aportado como información principal en pantalla.
+7. **Referencias**: ¿QQQ, SPY, 50/50 y liquidez bastan? ¿Alguna cartera concreta (p. ej., un indexado MSCI World en
+   euros, que no está en la caché)?
+8. **Periodos**: ¿2006–hoy con datos reales, o 1999–hoy con los sintéticos (incluye 2000–2002)? ¿Inicios rodantes cada año
+   y con qué duración (10 años, hasta hoy)?
+9. **Dónde en la app**: ¿un modo «Planes» en la pestaña Editor (junto a Estrategia, Cartera y Lotes) o una pestaña propia?
+10. **Lotes de planes**: ¿en la tabla `editor_lotes` (mismo mecanismo, `tipo: 'planes'`) o en una tabla nueva?
+11. **Liquidez**: hoy al 0 % en todo (decisión tuya en CARTERA_3). En un plan con dinero esperando, ¿sigue al 0 % o se le da
+    un tipo (letras, monetario)?
