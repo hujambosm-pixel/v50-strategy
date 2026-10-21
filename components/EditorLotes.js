@@ -62,7 +62,8 @@ const textoSimbolos = (l) => (comunNormal(l.comun).universo.symbols || []).join(
 const LISTA_EJEMPLO = 'AAPL, ADBE, AMD, AMGN, AVGO, CSCO, INTC, MU, NFLX, PEP, QCOM, TXN'
 
 // borradorInicial (opcional): un lote con el que empezar la declaración en lugar del de ejemplo.
-export default function EditorLotes({ apiFetch, version, estrategias = [], borradorInicial = null }) {
+// abrirLote (el Builder): { loteId, n } elige ese lote en cuanto la lista esté cargada.
+export default function EditorLotes({ apiFetch, version, estrategias = [], borradorInicial = null, abrirLote = null }) {
   const [lotes, setLotes] = useState({ filas: [], error: null, cargando: false })
   const [sel, setSel] = useState(null)            // la fila de editor_lotes elegida (congelada)
   const [borrador, setBorrador] = useState(() => borradorInicial ? borradorDe(borradorInicial) : nuevoLote())
@@ -84,6 +85,12 @@ export default function EditorLotes({ apiFetch, version, estrategias = [], borra
     } catch (e) { setLotes({ filas: [], error: e.message, cargando: false }) }
   }, [])
   useEffect(() => { recarga() }, [recarga])
+  const [abierto, setAbierto] = useState(null)
+  useEffect(() => {
+    if (!abrirLote || abierto === abrirLote.n) return
+    const f = lotes.filas.find(x => x.id === abrirLote.loteId)
+    if (f) { setAbierto(abrirLote.n); eligeLote(f) }
+  }, [abrirLote, lotes.filas])
 
   // ── Declarar ──
   const errores = useMemo(() => { try { return validaLote(borrador) } catch (e) { return [e.message] } }, [borrador])

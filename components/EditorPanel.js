@@ -298,11 +298,13 @@ const estadoDe = (filaInicial) => esDefinicionEditor(filaInicial?.definition)
 // (components/EditorLotes.js, E10: se monta al abrirlo por primera vez). Los dos primeros se quedan
 // montados al cambiar de modo, así que lo que se está editando en uno no se pierde al mirar el otro. Abrir una estrategia
 // del editor desde su panel vuelve al modo Estrategia.
-export default function EditorPanel({ apiFetch, filaInicial = null, onGuardada, onProbar, onExportar, version, estrategias = [] }) {
+export default function EditorPanel({ apiFetch, filaInicial = null, onGuardada, onProbar, onExportar, version, estrategias = [], abrir = null }) {
   const [modo, setModo] = useState('estrategia')
   const [lotesVisto, setLotesVisto] = useState(false)
   useEffect(() => { if (modo === 'lotes') setLotesVisto(true) }, [modo])
   useEffect(() => { if (filaInicial) setModo('estrategia') }, [filaInicial])
+  // abrir (el Builder): { modo: 'lotes', loteId?, n } abre el modo Lotes y, si viene, ese lote.
+  useEffect(() => { if (abrir?.modo === 'lotes') setModo('lotes') }, [abrir])
   const pestana = (m, texto, ayuda) => (
     <button key={m} title={ayuda} onClick={() => setModo(m)}
       style={{ ...boton, borderColor: modo === m ? 'var(--accent)' : 'var(--border)', color: modo === m ? 'var(--accent)' : 'var(--text)', fontWeight: modo === m ? 700 : 400 }}>{texto}</button>
@@ -323,7 +325,7 @@ export default function EditorPanel({ apiFetch, filaInicial = null, onGuardada, 
       {/* Lotes: se monta al abrirlo por primera vez (lee la tabla editor_lotes). */}
       {(modo === 'lotes' || lotesVisto) && (
         <div style={{ flex: 1, display: modo === 'lotes' ? 'flex' : 'none', minHeight: 0 }}>
-          <EditorLotes apiFetch={apiFetch} version={version} estrategias={estrategias}/>
+          <EditorLotes apiFetch={apiFetch} version={version} estrategias={estrategias} abrirLote={abrir?.modo === 'lotes' && abrir.loteId != null ? abrir : null}/>
         </div>
       )}
     </div>
