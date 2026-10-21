@@ -227,8 +227,8 @@ Mandan sobre lo escrito antes en este documento.
    10 años por defecto (o la que se pida).
 9. **Dónde en la app**: la pantalla definitiva irá en un futuro «Builder» guiado, que se diseñará aparte. Ahora, solo el
    motor y una ruta para probarlo (`/api/plan`).
-10. **Lotes de planes**: SIN DECIDIR (¿tabla `editor_lotes` con `tipo: 'planes'` o una tabla nueva?). No se construye nada que
-    dependa de ello hasta que Sergi responda.
+10. **Lotes de planes** (Sergi, 22/10/2026): en la tabla `editor_lotes`, con `tipo: 'planes'`, sin cambiar los lotes que ya
+    existen (sus huellas tienen que salir iguales).
 11. **Liquidez** (propuesta): al 0 %, como en toda la cartera (decisión de CARTERA_3).
 
 **Cambio de plan por estas decisiones**: el motor de planes es NUEVO (`lib/planes/`) y reutiliza de la cartera sus
@@ -264,5 +264,15 @@ Notas:
   aportación es una compra de valores homogéneos dentro de la ventana). Lo aplazado tributa al vender lo recomprado.
 - Simplificación: la regla se aplica al resultado neto de cada venta, no lote a lote.
 - Lo que sobra al vender para pagar un impuesto se reparte por igual entre las piezas (en liquidez).
-- Pendiente de decidir: dónde viven los lotes de planes (decisión 10). Pendiente de construir: la pieza «estrategia» (el
-  multibacktest con dinero que entra) y la rotación; dividendos y divisa con los productos reales en euros.
+- Pendiente de construir: la pieza «estrategia» (el multibacktest con dinero que entra) y la rotación; dividendos y divisa
+  con los productos reales en euros; el azar de los planes (P10).
+
+**Lotes de planes (V9.1033, decisión 10)**: `lib/planes/lotes.js` y `pages/api/planes-lote.js` (congelar, listar y
+ejecutar; sin pantalla). En `editor_lotes` con `tipo: 'planes'` dentro del formato 1; los lotes de estrategias (sin `tipo`)
+no cambian: su validación y su huella son las de siempre, el modo Lotes del Editor no enseña los de planes y las huellas de
+PRUEBA_EDITOR_1 (a2cdfd85) y RETROCESOS_1 (23c5006c), recalculadas con el código de hoy, salen iguales. Formato:
+`{ formato: 1, tipo: 'planes', nombre, comun: { referencia: 'MEZCLA' | 'QQQ' | 'SPY', rodantes: null | { duracion } },
+variantes: [{ id, nombre, plan }] }`; todas las variantes con el mismo dinero, periodo, impuestos y costes. Huella: la de
+`{ formato, tipo, comun, [id y huella de cada plan] }`. Criterio (versión 1, la propuesta de §5): una variante MEJORA si su
+TWR neto supera al de la referencia (por defecto la mezcla 50/50 sin reglas) en el periodo y, con inicios rodantes, en más
+de la mitad de ellos. Cada ejecución, en `lab_pruebas` (`prueba: 'planLote'`), exploratoria. Sin azar todavía.

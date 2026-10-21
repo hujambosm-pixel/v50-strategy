@@ -79,7 +79,8 @@ export default function EditorLotes({ apiFetch, version, estrategias = [], borra
         const t = await r.text().catch(() => '')
         throw new Error(r.status === 404 || /editor_lotes/.test(t) ? 'La tabla editor_lotes no existe todavía (sql/editor_lotes.sql): hasta crearla no se pueden congelar lotes.' : `No se pudieron leer los lotes (HTTP ${r.status}).`)
       }
-      setLotes({ filas: await r.json(), error: null, cargando: false })
+      // Los lotes de PLANES (tipo 'planes', lib/planes/lotes.js) viven en la misma tabla pero no son de este modo.
+      setLotes({ filas: (await r.json()).filter(f => f?.lote?.tipo !== 'planes'), error: null, cargando: false })
     } catch (e) { setLotes({ filas: [], error: e.message, cargando: false }) }
   }, [])
   useEffect(() => { recarga() }, [recarga])
