@@ -380,5 +380,28 @@ completo» (además, la declaración congelada: regla, valores y huella de cada 
 última ejecución del registro, así que se puede ver y copiar otro día. Al congelar, el formulario se vacía y el lote
 congelado queda a la derecha en solo lectura (con sus variantes y valores), para que no parezca editable.
 
-**Estado del plan**: hechos E1–E7, E9, E10 (con la tabla) y E11, y exportar a code_js. Pendientes: E8 (dibujar con el ratón,
-aplazado) y la prueba contra el azar del laboratorio, con calibración, para estrategias del editor (decisión 5).
+**Laboratorio para estrategias del editor, con calibración (V9.1026–V9.1028, decisión 5, segunda parte)**:
+- **Lo real** (`lib/editor/laboratorio.js`): el intérprete sobre cada miembro del Nasdaq-100 del periodo (3 años de historia
+  antes; un año después para cerrar operaciones). Cuentan las operaciones cerradas que ENTRAN dentro del periodo mientras el
+  valor es miembro (las de fuera se descartan y se cuentan, como el universo del multibacktest). Medida: la media por
+  operación, como LOTE_3.
+- **El azar**: la «estrategia al azar» de LOTE_3 sin cambios (mismas duraciones de cada valor en fechas al azar, sin
+  solaparse). Duración de una operación real en puntos desde la apertura de su vela de entrada: salida a la apertura de la
+  vela x → 2 (x − e); a otro precio (stop, objetivo, cierre) → 2 (x − e) + 1.
+- **Calibración por estrategia** (criterio de LOTE_3: ≤ 10 % de falsos aprobados): la definición con sus valores en 50
+  universos de paseo aleatorio sin ventaja (los parámetros de `scripts/calibracionLab.js`), en el navegador (≈ 2–3,5 min),
+  con una semilla de su huella; se guarda en el registro (`prueba: 'editorCalibracion'`) y se reutiliza. También enseña el
+  percentil medio sin ventaja: lejos de 50, la prueba está sesgada con esa estrategia (con la 1 V50, ≈ 8: conservadora;
+  sus stops la hunden).
+- **Ruta**: `/api/laboratorio` con `prueba: 'editorLab'` (definición, valores, NDX, diario, periodos y la huella de la
+  variante); ≈ 3 s por periodo con 1000 simulaciones. Solo velas diarias por ahora (la calibración es diaria).
+- **Veredicto**: «pasa» si está calibrada y su media queda en el percentil ≥ 95 en TODOS los periodos; «sin veredicto»
+  si no está calibrada; «sin calibrar» / «pendiente» si falta algo.
+- **Pantalla**: sección «Laboratorio» del lote elegido (modo Lotes): por variante, calibrar, ejecutar los periodos del lote
+  en el Nasdaq-100 (sea cual sea el universo del lote) y su veredicto; va en «Copiar lote completo».
+- Comprobado: lo real = las operaciones del intérprete de dentro del periodo y del índice; periodo y calibración
+  reproducibles; la ruta = la librería con las mismas velas y semilla; LOTE_1–3 idénticos por la ruta.
+
+**Estado del plan**: hechos E1–E7, E9, E10 (con la tabla) y E11, exportar a code_js y el laboratorio con calibración.
+Pendiente: E8 (dibujar con el ratón, aplazado). Ideas para después: el laboratorio en semanal (con una calibración
+semanal) y un azar que no se sesgue con los stops (p. ej., la misma salida sobre series sustitutas).

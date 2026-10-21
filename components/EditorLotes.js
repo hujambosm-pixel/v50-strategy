@@ -19,6 +19,8 @@ import { preparaCartera, realCartera, comparaConServidor, creaPrueba, resumenPru
 import { textoLoteEditor } from '../lib/exportaTexto'
 import { fraseDefinicion } from '../lib/editor/definicion'
 import BotonCopiar from './BotonCopiar'
+import { calibraDefinicion, veredictoEditorLab, VERSION_CALIBRACION, MAX_FALSOS_APROBADOS, PERCENTIL_SUPERA_LAB, CALIBRACION } from '../lib/editor/laboratorio'
+import { semillaDe } from '../lib/azar'
 import { resumenCurva } from '../lib/respuestaMc'
 import { cargaUniversoMc, FRASE_REGLA } from '../lib/universoMc'
 import { universoDePeriodo } from '../lib/screener'
@@ -119,13 +121,67 @@ export default function EditorLotes({ apiFetch, version, estrategias = [], borra
   // Al elegir un lote, su última ejecución guardada en el registro (lab_pruebas), si la hay: así se puede ver y copiar.
   const eligeLote = async (f) => {
     setSel(f); setEjec(null); setErrorEjec(null)
+    cargaLab(f)
     if (!f || !hayConfigSupabase()) return
     try {
       const [u] = await listarPruebas(ctx(), { limite: 1, soloResumen: false, filtro: `&config->>prueba=eq.editorLote&config->>hashLote=eq.${f.hash_lote}` })
       if (u?.resultados?.variantes) setEjec(e => e || { resultados: u.resultados.variantes, resumen: u.resultados.resumen, creado: u.creado, versionApp: u.version_app, errorGuardar: null, delRegistro: true })
     } catch (_) {}
   }
-  const textoCopia = (completo) => textoLoteEditor({ fila: sel, ejec, version, completo, avisoUniverso: esUniversoDinamico(comunNormal(sel.lote.comun).universo) ? avisoUniverso(comunNormal(sel.lote.comun).universo.regla) : '',
+  // ── Laboratorio (Nasdaq-100, contra la misma estrategia al azar; lib/editor/laboratorio.js) ──
+  // Por variante (su huella): la calibración (en el navegador; se guarda en el registro y se reutiliza) y la ejecución de
+  // los periodos del lote en /api/laboratorio. lab[id] = { cal, periodos, cargando, progreso, error, creado }.
+  const [lab, setLab] = useState({})
+  const pararLab = useRef(false)
+  const huellaDe = (f, v) => (f?.huellas?.variantes || []).find(x => x.id === v.id)?.huella
+  const ponLab = (id, cambio) => setLab(l => ({ ...l, [id]: { ...(l[id] || {}), ...cambio } }))
+  const cargaLab = async (f) => {
+    setLab({})
+    if (!f || !hayConfigSupabase()) return
+    for (const v of f.lote.variantes) {
+      const h = huellaDe(f, v); if (!h) continue
+      try {
+        const [c] = await listarPruebas(ctx(), { limite: 1, soloResumen: false, filtro: `&config->>prueba=eq.editorCalibracion&config->>huella=eq.${h}` })
+        const [r] = await listarPruebas(ctx(), { limite: 1, soloResumen: false, filtro: `&config->>prueba=eq.editorLab&config->>huellaVariante=eq.${h}` })
+        ponLab(v.id, { ...(c?.resultados ? { cal: c.resultados } : {}), ...(r?.resultados?.periodos ? { periodos: r.resultados.periodos, creado: r.creado } : {}) })
+      } catch (_) {}
+    }
+  }
+  const calibra = async (v) => {
+    const h = huellaDe(sel, v); if (!h || lab[v.id]?.cargando) return
+    pararLab.current = false
+    ponLab(v.id, { cargando: true, error: null, progreso: 'calibrando: universo 0 de ' + CALIBRACION.universos })
+    try {
+      const cal = await calibraDefinicion(v.definicion, v.valores || {}, { semilla: semillaDe(`editor-calibracion|${h}`), parar: () => pararLab.current,
+        alProgreso: (k, n) => ponLab(v.id, { progreso: `calibrando: universo ${k} de ${n}` }), cede: () => new Promise(r => setTimeout(r, 0)) })
+      ponLab(v.id, { cal, cargando: false, progreso: null })
+      try { await guardarPrueba({ config: { prueba: 'editorCalibracion', huella: h, version: VERSION_CALIBRACION }, resultados: cal, versionApp: version }, ctx()) } catch (e) { ponLab(v.id, { error: `Calibrada, pero no se pudo guardar en el registro: ${e.message}` }) }
+    } catch (e) { ponLab(v.id, { cargando: false, progreso: null, error: e.message }) }
+  }
+  const ejecutaLab = async (v) => {
+    const h = huellaDe(sel, v); if (!h || lab[v.id]?.cargando) return
+    const cn = comunNormal(sel.lote.comun)
+    const config = { prueba: 'editorLab', definicion: v.definicion, valores: v.valores || {}, universo: { indice: 'NDX' }, intervalo: 'diario', periodos: cn.periodos.map(p => ({ desde: p.desde, hasta: p.hasta })), huellaVariante: h }
+    pararLab.current = false
+    ponLab(v.id, { cargando: true, error: null })
+    try {
+      const periodos = []
+      for (const [k, p] of config.periodos.entries()) {
+        if (pararLab.current) throw new Error('Parado a petición tuya: esta ejecución no se ha guardado.')
+        ponLab(v.id, { progreso: `periodo ${k + 1} de ${config.periodos.length} (${nombrePeriodo(p)})` })
+        const r = await apiFetch('/api/laboratorio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config, periodo: p }) })
+        let j = null; try { j = await r.json() } catch (_) {}
+        if (!r.ok) throw new Error(`El servidor no pudo calcular ${nombrePeriodo(p)}: ${j?.error || `HTTP ${r.status}`}`)
+        const x = j.resultado
+        periodos.push({ desde: x.desde, hasta: x.hasta, operaciones: x.operaciones, media: x.media, mediana: x.mediana, acierto: x.acierto, duracionMedia: x.duracionMedia, fueraDelIndice: x.fueraDelIndice,
+          azar: x.azar, qqq: x.qqq ? { total: x.qqq.total, porDia: x.qqq.porDia } : null, miembros: j.simbolos, sinDatos: (j.sinDatos || []).length })
+      }
+      ponLab(v.id, { periodos, cargando: false, progreso: null, creado: new Date().toISOString() })
+      try { await guardarPrueba({ config, resultados: { periodos, hashLote: sel.hash_lote }, versionApp: version }, ctx()) } catch (e) { ponLab(v.id, { error: `No se pudo guardar en el registro: ${e.message}` }) }
+    } catch (e) { ponLab(v.id, { cargando: false, progreso: null, error: e.message }) }
+  }
+  const labTexto = () => sel ? sel.lote.variantes.map(v => ({ nombre: nombreVariante(v), id: v.id, cal: lab[v.id]?.cal || null, periodos: lab[v.id]?.periodos || null, veredicto: veredictoEditorLab(lab[v.id]?.cal || null, lab[v.id]?.periodos || null) })) : []
+  const textoCopia = (completo) => textoLoteEditor({ fila: sel, ejec, version, completo, lab: labTexto(), avisoUniverso: esUniversoDinamico(comunNormal(sel.lote.comun).universo) ? avisoUniverso(comunNormal(sel.lote.comun).universo.regla) : '',
     frases: Object.fromEntries(sel.lote.variantes.map(v => { try { return [v.id, fraseDefinicion(v.definicion, v.valores || {})] } catch (_) { return [v.id, '—'] } })) })
   const parar = useRef(false)
   const ejecuta = async () => {
@@ -335,8 +391,46 @@ export default function EditorLotes({ apiFetch, version, estrategias = [], borra
             </>}
             <div style={{ ...fila, marginTop: 8 }}>
               {ejec && <BotonCopiar obtenerTexto={() => textoCopia(false)} titulo="El resultado y la prueba contra el azar de cada variante y periodo, en Markdown (el formato del multibacktest)"/>}
-              <BotonCopiar obtenerTexto={() => textoCopia(true)} etiqueta="📋 Copiar lote completo" titulo="Además, la declaración congelada: la regla, los valores y la huella de cada variante"/>
+              <BotonCopiar obtenerTexto={() => textoCopia(true)} etiqueta="📋 Copiar lote completo" titulo="Además, la declaración congelada (regla, valores y huella de cada variante) y el laboratorio"/>
             </div>
+          </div>
+        )}
+        {sel && (
+          <div style={caja}>
+            <div style={etiqueta}>Laboratorio · Nasdaq-100, contra la misma estrategia al azar</div>
+            {selC.intervalo !== 'diario' ? <div style={{ ...nota, color: AMBAR }}>Por ahora el laboratorio solo trabaja con velas diarias (la calibración es diaria): este lote es semanal.</div> : <>
+              <div style={nota}>Cada variante en TODOS los miembros del Nasdaq-100 de cada periodo del lote ({selC.periodos.map(nombrePeriodo).join(' y ')}), sea cual sea el universo del lote. Lo real: la media por operación. El azar: las mismas operaciones de cada valor (cuántas y cuánto duran) en fechas al azar.</div>
+              {sel.lote.variantes.map(v => {
+                const x = lab[v.id] || {}, cal = x.cal, ver = veredictoEditorLab(cal || null, x.periodos || null)
+                const colorVer = ver === 'pasa' ? VERDE : ver === 'no pasa' ? ROJO : /sin veredicto/.test(ver) ? AMBAR : GRIS
+                return (
+                  <div key={v.id} style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 6 }}>
+                    <div style={fila}>
+                      <span style={{ ...nota, color: LILA }}>{nombreVariante(v)}</span>
+                      <span style={{ ...nota, color: colorVer, fontWeight: 700 }}>{ver}</span>
+                      <button style={{ ...botonMini, opacity: x.cargando ? 0.5 : 1 }} disabled={!!x.cargando} onClick={() => calibra(v)} title="Unos 2–3 minutos en este navegador: la misma estrategia en 50 universos de paseo aleatorio sin ventaja">{cal ? 'recalibrar' : 'calibrar'}</button>
+                      <button style={{ ...botonMini, opacity: x.cargando ? 0.5 : 1 }} disabled={!!x.cargando} onClick={() => ejecutaLab(v)}>{x.periodos ? 'ejecutar otra vez' : 'ejecutar'}</button>
+                      {x.cargando && <><span style={nota}>{x.progreso}…</span><button style={botonMini} onClick={() => { pararLab.current = true }}>parar</button></>}
+                    </div>
+                    {cal && <div style={nota}>Calibración: {num(cal.pctAprobados)} % de {cal.conOperaciones} universos sin ventaja salen con percentil ≥ {PERCENTIL_SUPERA_LAB} (máximo {MAX_FALSOS_APROBADOS} %) → <span style={{ color: cal.calibrada ? VERDE : AMBAR }}>{cal.calibrada ? 'calibrada' : 'NO calibrada'}</span>; percentil medio sin ventaja {num(cal.percentilMedio)}{cal.percentilMedio != null && cal.percentilMedio < 35 ? ' (la prueba es conservadora con esta estrategia: le cuesta pasar aunque tenga ventaja)' : cal.percentilMedio != null && cal.percentilMedio > 65 ? ' (la prueba favorece a esta estrategia)' : ''}.</div>}
+                    {x.periodos && <div style={{ overflowX: 'auto' }}>
+                      <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+                        <thead><tr>{['Periodo', 'Operaciones', 'Media', 'Azar: media', 'P5–P95', 'Percentil', 'Fuera del índice'].map((hh, i) => <th key={i} style={{ ...celda, textAlign: i ? 'right' : 'left', color: GRIS, fontWeight: 400 }}>{hh}</th>)}</tr></thead>
+                        <tbody>{x.periodos.map((p, k) => <tr key={k}>
+                          <td style={{ ...celda, textAlign: 'left' }}>{nombrePeriodo(p)}</td><td style={celda}>{p.operaciones}</td><td style={celda}>{pct(p.media * 100, 2)}</td><td style={celda}>{pct(p.azar?.media * 100, 2)}</td>
+                          <td style={celda}>{p.azar?.p5 == null ? '—' : `${pct(p.azar.p5 * 100, 2)} – ${pct(p.azar.p95 * 100, 2)}`}</td>
+                          <td style={{ ...celda, color: p.azar?.percentil >= PERCENTIL_SUPERA_LAB ? VERDE : 'var(--text)' }}>{num(p.azar?.percentil)}</td><td style={celda}>{p.fueraDelIndice ?? '—'}</td></tr>)}</tbody>
+                      </table>
+                    </div>}
+                    {x.error && <div style={{ ...nota, color: ROJO }}>{x.error}</div>}
+                  </div>
+                )
+              })}
+              <div style={{ ...nota, marginTop: 8 }}>
+                · Veredicto: «pasa» si la calibración dice que la prueba es justa con esta estrategia y su media queda en el percentil ≥ {PERCENTIL_SUPERA_LAB} del azar en TODOS los periodos. «Sin veredicto»: en universos sin ventaja esta estrategia ya sale «buena» demasiadas veces (más del {MAX_FALSOS_APROBADOS} %), así que un buen percentil no probaría nada; pasa con salidas que dependen del precio, como los stops.<br/>
+                · Mientras calibra, la pantalla puede ir a tirones: son 50 universos de 100 valores con {num(CALIBRACION.nSim, 0)} simulaciones cada uno.
+              </div>
+            </>}
           </div>
         )}
         <div style={caja}>
