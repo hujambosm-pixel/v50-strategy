@@ -3,7 +3,7 @@
 // trabajo» (lib/builder/miTrabajo.js), con el estilo de lib/builder/estilo.js (solo el Builder; el resto de la app no cambia).
 // No crea nada por su cuenta: abre el editor visual de hoy (con una COPIA nueva de la plantilla, que se guarda al pulsar
 // Guardar), el panel de código de siempre o el modo Lotes del editor, a través de los callbacks de la página.
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { PLANTILLAS, BLANCO } from '../lib/builder/plantillas'
 import { construyeMiTrabajo, ESTADOS } from '../lib/builder/miTrabajo'
 import { fraseDefinicion } from '../lib/editor/definicion'
@@ -16,6 +16,8 @@ export const SUBTITULOS_PASOS = ['Cuándo compro, cuándo vendo y cuánto arries
 const TIPO_CHIP = { [ESTADOS.supera]: 'supera', [ESTADOS.mejora]: 'supera', [ESTADOS.noSupera]: 'noSupera', [ESTADOS.noMejora]: 'noSupera', [ESTADOS.borrador]: 'borrador' }
 export const FILTROS_TRABAJO = [['editorLotes', 'Editor y lotes'], ['codigo', 'Código'], ['todo', 'Todo']]
 export const filtraTrabajo = (filas, filtro) => (filas || []).filter(f => filtro === 'todo' ? true : filtro === 'codigo' ? f.origen === 'código' : f.origen !== 'código')
+// La firma de lo leído de la base (lotes y pruebas: id y huella / fecha): si no cambia, no se recalcula «Mi trabajo».
+export const firmaDatos = (lotes, pruebas) => JSON.stringify([(lotes || []).map(l => [l.id, l.hash_lote]), (pruebas || []).map(p => [p.id, p.creado])])
 const celda = { padding: '10px 12px', borderBottom: `1px solid ${B.borde}`, verticalAlign: 'top', textAlign: 'left' }
 
 // Una frase con las partes clave entre ** en negrita blanca.
@@ -47,26 +49,32 @@ export function BarraPasos({ actual = 1 }) {
 
 // estrategias: las de la página (strategies). datosIniciales (opcional, para las pruebas): { lotes, pruebas } en lugar de leerlos;
 // filasIniciales (opcional, para las pruebas de montaje): las filas de «Mi trabajo» ya calculadas; filtroInicial: el del filtro.
-export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla, onAbrirEstrategia, onAbrirLote, onModoLotes, onEditorClasico, datosIniciales = null, filasIniciales = null, filtroInicial = 'editorLotes' }) {
+// visible: si la pestaña se ve. Cada vez que pasa a verse (al entrar o al volver del editor) se vuelve a leer la base, sin
+// enseñar «Cargando» y sin recalcular si no ha cambiado nada (firmaDatos). Las estrategias llegan de la página.
+export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla, onAbrirEstrategia, onAbrirLote, onModoLotes, onEditorClasico, datosIniciales = null, filasIniciales = null, filtroInicial = 'editorLotes', visible }) {
   const [datos, setDatos] = useState(() => datosIniciales || { lotes: [], pruebas: [], cargando: !datosIniciales, error: null })
   const [filas, setFilas] = useState(filasIniciales)
   const [filtro, setFiltro] = useState(filtroInicial)
   const [detalle, setDetalle] = useState({})
+  const firma = useRef(null)
   const recarga = useCallback(async () => {
     if (datosIniciales) return
     if (!hayConfigSupabase()) { setDatos({ lotes: [], pruebas: [], cargando: false, error: 'Sin conexión con la base de datos: solo se ven las estrategias.' }); return }
-    setDatos(d => ({ ...d, cargando: true }))
     try {
       const r = await fetch(`${getSupaUrl()}/rest/v1/editor_lotes?select=id,creado,nombre,lote,hash_lote,huellas&order=creado.desc,id.desc&limit=200`, { headers: getSupaH() })
       const lotes = r.ok ? await r.json() : []
       const pruebas = await listarPruebas({ url: getSupaUrl(), headers: getSupaH() }, { limite: 500, soloResumen: false, filtro: '&config->>prueba=in.(editorLote,editorLab,editorCalibracion,planLote)' })
-      setDatos({ lotes, pruebas, cargando: false, error: r.ok ? null : `No se pudieron leer los lotes (HTTP ${r.status}).` })
+      const error = r.ok ? null : `No se pudieron leer los lotes (HTTP ${r.status}).`, f = firmaDatos(lotes, pruebas)
+      if (f === firma.current && !error) return   // nada nuevo: no se toca
+      firma.current = f
+      setDatos({ lotes, pruebas, cargando: false, error })
     } catch (e) { setDatos(d => ({ ...d, cargando: false, error: e.message })) }
   }, [datosIniciales])
-  useEffect(() => { recarga() }, [recarga])
+  useEffect(() => { if (visible !== false) recarga() }, [visible, recarga])
   useEffect(() => { let vivo = true; construyeMiTrabajo({ estrategias, lotes: datos.lotes, pruebas: datos.pruebas }).then(f => { if (vivo) setFilas(f) }).catch(() => { if (vivo) setFilas([]) }); return () => { vivo = false } }, [estrategias, datos.lotes, datos.pruebas])
   const frases = useMemo(() => Object.fromEntries(PLANTILLAS.filter(p => p.definicion).map(p => { try { return [p.id, fraseDefinicion(p.definicion(), p.valores)] } catch (_) { return [p.id, ''] } })), [])
   const visibles = filtraTrabajo(filas, filtro)
+  const cuantas = Object.fromEntries(FILTROS_TRABAJO.map(([k]) => [k, filtraTrabajo(filas, k).length]))
   const accion = (f) => {
     const a = f.toca?.accion
     if (!a) return
@@ -123,9 +131,8 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
           <div style={{ ...S.subtituloSeccion, marginBottom: 0 }}>Tus estrategias y tus lotes: en qué paso están, cómo les fue y qué toca ahora. Pulsa un nombre para abrirlo.</div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }} role="group" aria-label="Qué enseñar">
-          {FILTROS_TRABAJO.map(([k, t]) => <button key={k} onClick={() => setFiltro(k)} aria-pressed={filtro === k}
-            style={{ ...S.boton, padding: '6px 12px', fontSize: 13, ...(filtro === k ? { background: B.cabecera, borderColor: B.siguienteBorde, color: B.titulo, fontWeight: 700 } : { background: 'transparent', color: B.secundario }) }}>{t}</button>)}
-          {!datosIniciales && <button style={{ ...S.enlace, fontSize: 13, marginLeft: 6 }} onClick={recarga}>Actualizar</button>}
+          {FILTROS_TRABAJO.map(([k, t]) => <button key={k} onClick={() => setFiltro(k)} aria-pressed={filtro === k} title={k === 'todo' ? 'Editor y lotes arriba; código debajo' : undefined}
+            style={{ ...S.boton, padding: '6px 12px', fontSize: 13, ...(filtro === k ? { background: B.cabecera, borderColor: B.siguienteBorde, color: B.titulo, fontWeight: 700 } : { background: 'transparent', color: B.secundario }) }}>{filas ? `${t} (${cuantas[k]})` : t}</button>)}
         </div>
       </div>
       <div style={{ ...S.tarjeta, marginTop: 12 }}>
