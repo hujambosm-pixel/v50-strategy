@@ -1,0 +1,298 @@
+// components/BuilderPrueba.js — el paso 2 del Builder, «Probarla contra el azar» (docs/builder.md, tanda 2), con el estilo de
+// lib/builder/estilo.js. El usuario solo confirma qué se prueba (tarjeta A); lo demás va solo y en orden (tarjeta B: congelar,
+// calibrar, comparar con el azar y veredicto; lib/builder/pruebaGuiada.js, lo mismo que el modo Lotes del editor). Si se
+// cierra a medias, al volver se lee de la base lo hecho y se sigue con «Continuar». Un lote ya congelado se abre aquí en solo
+// lectura, con sus etapas y sus resultados.
+//   inicio: { estrategiaId } (confirmar una prueba nueva a partir de esa estrategia) | { loteId } (un lote congelado) | {} (nueva, vacía)
+//   lotes: las filas de editor_lotes que ya leyó el Builder. deps (opcional, para las pruebas): { ctx, f, listar, guardar }.
+//   estadoInicial (opcional, para las pruebas de montaje): { fila, est } ya leídos.
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { B, S } from '../lib/builder/estilo'
+import { BarraPasos } from './BuilderPanel'
+import BotonCopiar from './BotonCopiar'
+import { ETAPAS, OPCIONES_UNIVERSO, loteDesde, nombrePropuesto, erroresPorCampo, textoQueSePrueba, leeHecho, etapasDe, etapasConNotas, completo, encadena, congela, veredictoVariante, filasResultado, esSemanal, nombrePeriodo } from '../lib/builder/pruebaGuiada'
+import { PERIODOS_DEFECTO, MAX_PERIODOS, MAX_VARIANTES, comunNormal, esUniversoDinamico, nombreUniversoLote, nombreVariante } from '../lib/editor/lotes'
+import { esDefinicionEditor } from '../lib/editor/fuente'
+import { fraseDefinicion } from '../lib/editor/definicion'
+import { veredictoEditorLab } from '../lib/editor/laboratorio'
+import { textoLoteEditor } from '../lib/exportaTexto'
+import { avisoUniverso } from './AzarCarteraPanel'
+import { guardarPrueba, listarPruebas } from '../lib/registroLab'
+import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
+
+const AMARILLO = '#f2cc60', ROJO = '#ff8b8b'
+const entrada = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px' }
+const etiqueta = { fontWeight: 600, color: B.titulo, marginBottom: 6 }
+const celda = { padding: '9px 12px', borderBottom: `1px solid ${B.borde}`, textAlign: 'left', verticalAlign: 'top' }
+const pct = (x) => x == null || !Number.isFinite(x) ? '—' : `${(Math.round(x * 10) / 10).toFixed(1).replace('.', ',')} %`
+const ESTADO_TXT = { pendiente: 'Pendiente', enMarcha: 'En marcha', hecho: 'Hecho', error: 'Error' }
+const CHIP_ETAPA = { pendiente: 'neutro', enMarcha: 'borrador', hecho: 'supera', error: 'noSupera' }
+const etapasVacias = () => Object.fromEntries(ETAPAS.map(e => [e.id, { estado: 'pendiente' }]))
+
+function Errores({ lista }) {
+  return lista?.length ? <div style={{ color: ROJO, fontSize: 13, marginTop: 6 }}>{lista.map((e, k) => <div key={k}>{e}</div>)}</div> : null
+}
+function Tarjeta({ titulo, children, estilo }) {
+  return <div style={{ ...S.tarjeta, marginTop: 16, ...estilo }}><div style={S.cabeceraTarjeta}>{titulo}</div><div style={S.cuerpo}>{children}</div></div>
+}
+
+export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {}, apiFetch, version, onVolver, onNuevaPrueba, onCambio, deps: depsPrueba = null, estadoInicial = null }) {
+  const delEditor = useMemo(() => estrategias.filter(s => esDefinicionEditor(s.definition)), [estrategias])
+  const deps = useMemo(() => {
+    const ctx = depsPrueba?.ctx || { url: getSupaUrl(), headers: getSupaH() }
+    return { ctx, f: depsPrueba?.f || ((...a) => fetch(...a)), listar: depsPrueba?.listar || listarPruebas, guardar: depsPrueba?.guardar || guardarPrueba, apiFetch: depsPrueba?.apiFetch || apiFetch, version, cargaUniverso: depsPrueba?.cargaUniverso }
+  }, [depsPrueba, apiFetch, version])
+  const sinBase = !depsPrueba && !hayConfigSupabase()
+
+  // ── Confirmar (solo sin lote) ──
+  const [elegidas, setElegidas] = useState(() => inicio.estrategiaId != null ? [inicio.estrategiaId] : [])
+  const [claveU, setClaveU] = useState('momentum|30')
+  const [periodos, setPeriodos] = useState(() => PERIODOS_DEFECTO.map(p => ({ ...p })))
+  const [nombre, setNombre] = useState(null)   // null = el propuesto
+  const [anade, setAnade] = useState('')
+  const estrElegidas = elegidas.map(id => delEditor.find(s => String(s.id) === String(id))).filter(Boolean)
+  const nombreEf = nombre ?? nombrePropuesto(estrElegidas)
+  const opU = OPCIONES_UNIVERSO.find(o => o.clave === claveU) || OPCIONES_UNIVERSO[0]
+  const loteNuevo = useMemo(() => loteDesde({ estrategias: estrElegidas, universo: { tipo: 'ndx', regla: opU.regla, n: opU.n }, periodos, nombre: nombreEf }), [JSON.stringify(elegidas), claveU, JSON.stringify(periodos), nombreEf, delEditor])
+  const semanales = estrElegidas.filter(esSemanal)
+  const errores = useMemo(() => {
+    const e = erroresPorCampo(loteNuevo)
+    for (const s of semanales) e.variantes.unshift(`«${s.name}» usa velas semanales: esta prueba solo funciona con velas diarias. Quítala o cámbiala a diarias en el editor.`)
+    return e
+  }, [loteNuevo, semanales.length])
+  const hayErrores = Object.values(errores).some(x => x.length)
+
+  // ── El lote congelado, lo hecho y las etapas ──
+  const [fila, setFila] = useState(estadoInicial?.fila || null)
+  const [est, setEst] = useState(estadoInicial?.est || null)
+  const [etapas, setEtapas] = useState(() => estadoInicial ? etapasConNotas(estadoInicial.fila, estadoInicial.est) : etapasVacias())
+  const [corriendo, setCorriendo] = useState(false)
+  const [errorGeneral, setErrorGeneral] = useState(null)
+  const [leyendo, setLeyendo] = useState(false)
+  const parar = useRef(false)
+  useEffect(() => () => { parar.current = true }, [])
+  // Abrir un lote: leer lo hecho del registro.
+  useEffect(() => {
+    if (estadoInicial || inicio.loteId == null || fila?.id === inicio.loteId) return
+    const f = lotes.find(x => x.id === inicio.loteId)
+    if (!f) { if (lotes.length) setErrorGeneral('No encuentro ese lote.'); return }
+    setFila(f); setLeyendo(true)
+    leeHecho(f, deps).then(e => { setEst(e); setEtapas(etapasConNotas(f, e)) }).catch(e => setErrorGeneral(`No se pudo leer lo hecho: ${e.message}`)).finally(() => setLeyendo(false))
+  }, [inicio.loteId, lotes])
+
+  const al = (id, cambio) => setEtapas(x => ({ ...x, [id]: { ...(id === 'calibrar' && cambio.estado === 'hecho' ? {} : x[id]), ...cambio, ...(cambio.estado !== 'error' ? { error: null } : {}) } }))
+  const sigue = async (f, e0) => {
+    setCorriendo(true); setErrorGeneral(null); parar.current = false
+    try {
+      const e = await encadena(f, e0, { ...deps, parar: () => parar.current }, al)
+      setEst(e); onCambio?.()
+    } catch (err) {
+      setEtapas(x => { const k = Object.keys(x).find(id => x[id].estado === 'enMarcha'); return k ? { ...x, [k]: { ...x[k], estado: 'error', error: err.message } } : x })
+      setErrorGeneral(err.message)
+      try { setEst(await leeHecho(f, deps)) } catch (_) {}
+      onCambio?.()
+    }
+    setCorriendo(false)
+  }
+  const confirma = async () => {
+    if (hayErrores || corriendo) return
+    setCorriendo(true); setErrorGeneral(null)
+    al('congelar', { estado: 'enMarcha', progreso: null, texto: 'guardando…' })
+    try {
+      const { fila: f, yaExistia } = await congela(loteNuevo, deps)
+      setFila(f)
+      al('congelar', { estado: 'hecho', nota: yaExistia ? 'Esta misma prueba ya estaba congelada: se sigue con ella.' : null })
+      const e0 = await leeHecho(f, deps)
+      setEst(e0); onCambio?.()
+      setCorriendo(false)
+      await sigue(f, e0)
+    } catch (err) { al('congelar', { estado: 'error', error: err.message }); setErrorGeneral(err.message); setCorriendo(false) }
+  }
+  const continua = () => { if (fila && est && !corriendo) { parar.current = false; sigue(fila, est) } }
+
+  const lote = fila?.lote || loteNuevo
+  const queSePrueba = textoQueSePrueba(lote)
+  const hecho = fila && est && completo(etapasDe(fila, est))
+  const faltaAlgo = fila && est && !hecho
+  const calibrando = corriendo && etapas.calibrar.estado === 'enMarcha'
+  const titulo = fila ? fila.nombre : (estrElegidas[0]?.name || 'tu estrategia')
+  const resultados = fila && est ? filasResultado(fila, est) : []
+  const veredictos = fila && est ? fila.lote.variantes.map(v => ({ v, ...veredictoVariante({ cal: est.cal[v.id], lab: est.lab[v.id], abVariante: (est.ab?.resultados || []).find(x => x.id === v.id) }) })) : []
+  const algunaPasa = veredictos.some(x => x.pasa === true)
+  const textoCopia = () => {
+    const cn = comunNormal(fila.lote.comun)
+    return textoLoteEditor({ fila, ejec: est?.ab || null, version, completo: true,
+      lab: fila.lote.variantes.map(v => ({ nombre: nombreVariante(v), id: v.id, cal: est?.cal[v.id] || null, periodos: est?.lab[v.id] || null, veredicto: veredictoEditorLab(est?.cal[v.id] || null, est?.lab[v.id] || null) })),
+      avisoUniverso: esUniversoDinamico(cn.universo) ? avisoUniverso(cn.universo.regla) : '',
+      frases: Object.fromEntries(fila.lote.variantes.map(v => { try { return [v.id, fraseDefinicion(v.definicion, v.valores || {})] } catch (_) { return [v.id, '—'] } })) })
+  }
+
+  return (
+    <div style={S.pagina}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+        <button style={{ ...S.enlace, color: B.secundario }} onClick={() => onVolver?.()}>← Builder</button>
+        <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Builder</span>
+      </div>
+      <BarraPasos actual={2}/>
+
+      <div style={{ fontSize: 20, fontWeight: 700, color: B.titulo, marginTop: 8 }}>¿Gana «{titulo}» por algo más que suerte?</div>
+      <div style={{ ...S.secundario, marginTop: 4 }}>Tú solo confirmas qué vas a probar. Todo lo demás va solo y en orden.</div>
+
+      <div style={{ background: B.siguienteFondo, border: `1px solid ${B.siguienteBorde}`, borderRadius: B.radioTarjeta, padding: B.aire, marginTop: 16 }}>
+        <div style={{ fontWeight: 700, color: B.titulo, marginBottom: 6 }}>Qué se prueba</div>
+        {queSePrueba.map((t, k) => <div key={k} style={{ marginBottom: 4 }}>{t}</div>)}
+      </div>
+      {sinBase && <div style={{ color: AMARILLO, marginTop: 12 }}>Sin conexión con la base de datos: no se puede congelar ni leer lo hecho.</div>}
+
+      {/* Tarjeta A: confirmar (o, con un lote, lo confirmado en solo lectura) */}
+      <Tarjeta titulo={fila ? 'Lo que se confirmó (ya no se puede cambiar)' : 'Confirma qué vas a probar'}>
+        {fila ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '6px 16px' }}>
+            <span style={S.secundario}>Variantes</span><span>{fila.lote.variantes.map(nombreVariante).join(' · ')}</span>
+            <span style={S.secundario}>Valores</span><span>{nombreUniversoLote(comunNormal(fila.lote.comun).universo)}</span>
+            <span style={S.secundario}>Periodos</span><span>{comunNormal(fila.lote.comun).periodos.map(nombrePeriodo).join(' y ')}</span>
+            <span style={S.secundario}>Nombre del lote</span><span>{fila.nombre}</span>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <div style={etiqueta}>Variantes</div>
+              {estrElegidas.map(s => (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                  <span>{s.name}{esSemanal(s) ? <span style={{ color: AMARILLO }}> · velas semanales</span> : null}</span>
+                  <button style={{ ...S.enlace, fontSize: 12, color: B.apagado }} onClick={() => setElegidas(x => x.filter(y => String(y) !== String(s.id)))}>Quitar</button>
+                </div>
+              ))}
+              {!estrElegidas.length && <div style={S.apagado}>Todavía ninguna.</div>}
+              {estrElegidas.length < MAX_VARIANTES && (
+                <select style={{ ...entrada, marginTop: 6 }} value={anade} aria-label="Añadir variante" onChange={e => { const v = e.target.value; if (v) setElegidas(x => [...x, v]); setAnade('') }}>
+                  <option value="">+ Añadir variante</option>
+                  {delEditor.filter(s => !elegidas.some(y => String(y) === String(s.id))).map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
+                </select>
+              )}
+              <Errores lista={errores.variantes}/>
+            </div>
+            <div>
+              <div style={etiqueta}>Valores</div>
+              <select style={entrada} value={claveU} onChange={e => setClaveU(e.target.value)} aria-label="Valores">
+                {OPCIONES_UNIVERSO.map(o => <option key={o.clave} value={o.clave}>{o.texto}</option>)}
+              </select>
+              <div style={{ ...S.apagado, marginTop: 4 }}>Cada año cambia la lista: solo se puede entrar en un valor mientras está en ella.</div>
+              <Errores lista={errores.universo}/>
+            </div>
+            <div>
+              <div style={etiqueta}>Periodos</div>
+              {periodos.map((p, k) => (
+                <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                  <input type="date" style={entrada} value={p.desde} aria-label={`Periodo ${k + 1}: desde`} onChange={e => setPeriodos(x => x.map((y, j) => j === k ? { ...y, desde: e.target.value } : y))}/>
+                  <span style={S.secundario}>a</span>
+                  <input type="date" style={entrada} value={p.hasta} aria-label={`Periodo ${k + 1}: hasta`} onChange={e => setPeriodos(x => x.map((y, j) => j === k ? { ...y, hasta: e.target.value } : y))}/>
+                  {periodos.length > 1 && <button style={{ ...S.enlace, fontSize: 12, color: B.apagado }} onClick={() => setPeriodos(x => x.filter((_, j) => j !== k))}>Quitar</button>}
+                </div>
+              ))}
+              {periodos.length < MAX_PERIODOS && <button style={{ ...S.enlace, fontSize: 13 }} onClick={() => setPeriodos(x => [...x, { desde: '', hasta: '' }])}>+ Añadir periodo</button>}
+              <Errores lista={errores.periodos}/>
+            </div>
+            <div>
+              <div style={etiqueta}>Nombre del lote</div>
+              <input style={{ ...entrada, width: '100%', maxWidth: 520, boxSizing: 'border-box' }} value={nombreEf} aria-label="Nombre del lote" onChange={e => setNombre(e.target.value)}/>
+              <Errores lista={errores.nombre}/>
+            </div>
+            <div style={{ background: B.fondo, borderRadius: B.radioBoton, padding: '10px 12px', color: B.secundario }}>
+              <strong style={{ color: B.titulo }}>Por qué no se puede cambiar después:</strong> si pudieras ver el resultado y retocar un número, acabarías probando hasta que saliera bien por casualidad. Para probar otra idea, crea una prueba nueva.
+            </div>
+            <Errores lista={errores.general}/>
+            <div><button style={{ ...S.botonVerde, opacity: hayErrores || corriendo || sinBase ? 0.5 : 1, cursor: hayErrores || corriendo || sinBase ? 'not-allowed' : 'pointer' }} disabled={hayErrores || corriendo || sinBase} onClick={confirma}>Confirmar y probar</button></div>
+          </div>
+        )}
+      </Tarjeta>
+
+      {/* Tarjeta B: las cuatro etapas */}
+      <Tarjeta titulo="La app lo hace sola">
+        {calibrando && <div style={{ color: AMARILLO, fontWeight: 600, marginBottom: 12 }}>No cierres esta página; tarda unos minutos.</div>}
+        {leyendo && <div style={{ ...S.secundario, marginBottom: 12 }}>Mirando qué está hecho…</div>}
+        <ol style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+          {ETAPAS.map((e, k) => {
+            const x = etapas[e.id] || { estado: 'pendiente' }
+            return (
+              <li key={e.id} data-etapa={e.id} data-estado={x.estado} style={{ display: 'flex', gap: 12, padding: '10px 0', borderTop: k ? `1px solid ${B.borde}` : 'none' }}>
+                <span style={{ width: 26, height: 26, flexShrink: 0, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, border: `1px solid ${B.borde}`, color: B.secundario }}>{k + 1}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, color: B.titulo }}>{e.titulo}</span>
+                    <span style={S.chip(CHIP_ETAPA[x.estado])}>{ESTADO_TXT[x.estado]}</span>
+                  </div>
+                  <div style={{ ...S.secundario, marginTop: 2 }}>{e.frase}</div>
+                  {x.nota && <div style={{ ...S.apagado, marginTop: 4 }}>{x.nota}</div>}
+                  {x.estado === 'enMarcha' && (
+                    <div style={{ marginTop: 6 }}>
+                      {x.texto && <div style={S.apagado}>{x.texto}</div>}
+                      {x.progreso != null && <div style={{ height: 6, background: B.fondo, borderRadius: 3, marginTop: 4, overflow: 'hidden' }}><div style={{ width: `${Math.round(Math.min(1, Math.max(0, x.progreso)) * 100)}%`, height: '100%', background: B.verde }}/></div>}
+                    </div>
+                  )}
+                  {x.estado === 'error' && <div style={{ color: ROJO, marginTop: 4 }}>{x.error}</div>}
+                </div>
+              </li>
+            )
+          })}
+        </ol>
+        {faltaAlgo && !corriendo && (
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <button style={S.botonVerde} onClick={continua}>Continuar</button>
+            <span style={S.secundario}>{errorGeneral ? 'Se paró por el error de arriba. Lo hecho está guardado: «Continuar» sigue desde donde se quedó.' : 'Esta prueba se quedó a medias. Lo hecho está guardado: «Continuar» sigue desde donde se quedó.'}</span>
+          </div>
+        )}
+        {errorGeneral && !fila && <div style={{ color: ROJO, marginTop: 8 }}>{errorGeneral}</div>}
+      </Tarjeta>
+
+      {/* Resultados */}
+      {fila && est && (est.ab || Object.values(est.lab).some(Boolean)) && (
+        <Tarjeta titulo="Resultados">
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+              <thead><tr>{['Variante', 'Periodo', 'Gana a … de las copias', 'CAGR', 'Caída máxima', ''].map((h, k) => <th key={k} style={{ ...celda, color: B.secundario, fontWeight: 600, fontSize: 12, background: B.cabecera }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {resultados.map((r, k) => {
+                  const lab = r.decide === 'laboratorio', principal = lab ? r.percentilLab : r.percentilLote
+                  return (
+                    <tr key={k}>
+                      <td style={celda}>{r.variante}</td>
+                      <td style={celda}>{nombrePeriodo(r.periodo)}</td>
+                      <td style={celda}>{principal == null ? '—' : `Gana a ${pct(principal)} de las copias`}<div style={S.apagado}>{lab ? `laboratorio${r.percentilLote != null ? ` · lote: ${pct(r.percentilLote)}` : ''}` : r.decide === 'lote' ? 'prueba del lote' : ''}</div></td>
+                      <td style={celda}>{pct(r.cagr)}</td>
+                      <td style={celda}>{pct(r.maxDD)}</td>
+                      <td style={celda}>{r.pasa == null ? <span style={S.chip('neutro')}>Sin veredicto</span> : <span style={S.chip(r.pasa ? 'supera' : 'noSupera')}>{r.pasa ? 'Pasa' : 'No llega'}</span>}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: 12, color: B.titulo }}>
+            {veredictos.map(x => <div key={x.v.id} style={{ marginBottom: 4 }}>{veredictos.length > 1 ? <strong>{nombreVariante(x.v)}: </strong> : null}{x.texto}</div>)}
+          </div>
+          <div style={{ ...S.apagado, marginTop: 6 }}>CAGR y caída máxima: los de la prueba del lote. Pasa = gana al 95 % de las copias al azar en todos los periodos.</div>
+          <div style={{ marginTop: 12 }}><BotonCopiar obtenerTexto={textoCopia} etiqueta="Copiar para Claude" estilo={S.boton}/></div>
+        </Tarjeta>
+      )}
+
+      {/* Siguiente paso */}
+      {hecho && (
+        <div style={{ background: B.siguienteFondo, border: `1px solid ${B.siguienteBorde}`, borderRadius: B.radioTarjeta, padding: B.aire, marginTop: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: B.titulo, marginBottom: 8 }}>Siguiente paso</div>
+          {algunaPasa ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <button style={{ ...S.boton, opacity: 0.6, cursor: 'not-allowed' }} disabled>Convertirla en plan</button>
+              <span style={S.chip('neutro')}>Próximamente</span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <button style={S.boton} onClick={() => onVolver?.()}>Volver al paso 1</button>
+              <button style={S.boton} onClick={() => onNuevaPrueba?.()}>Crear prueba nueva con otra variante</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

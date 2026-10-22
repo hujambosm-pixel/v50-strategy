@@ -2,7 +2,8 @@
 // los tres pasos (indicativa), el recuadro «Siguiente paso», las plantillas de estrategia (lib/builder/plantillas.js) y «Mi
 // trabajo» (lib/builder/miTrabajo.js), con el estilo de lib/builder/estilo.js (solo el Builder; el resto de la app no cambia).
 // No crea nada por su cuenta: abre el editor visual de hoy (con una COPIA nueva de la plantilla, que se guarda al pulsar
-// Guardar), el panel de código de siempre o el modo Lotes del editor, a través de los callbacks de la página.
+// Guardar), el panel de código de siempre o el modo Lotes del editor, a través de los callbacks de la página. El paso 2
+// («Probarla contra el azar», tanda 2) es una pantalla del propio Builder: components/BuilderPrueba.js.
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { PLANTILLAS, BLANCO } from '../lib/builder/plantillas'
 import { construyeMiTrabajo, ESTADOS } from '../lib/builder/miTrabajo'
@@ -10,6 +11,7 @@ import { fraseDefinicion } from '../lib/editor/definicion'
 import { listarPruebas } from '../lib/registroLab'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 import { B, S } from '../lib/builder/estilo'
+import BuilderPrueba from './BuilderPrueba'
 
 export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convertirla en plan']
 export const SUBTITULOS_PASOS = ['Cuándo compro, cuándo vendo y cuánto arriesgo', '¿Gana por algo más que suerte?', 'Dinero real, aportaciones e impuestos']
@@ -51,17 +53,19 @@ export function BarraPasos({ actual = 1 }) {
 // filasIniciales (opcional, para las pruebas de montaje): las filas de «Mi trabajo» ya calculadas; filtroInicial: el del filtro.
 // visible: si la pestaña se ve. Cada vez que pasa a verse (al entrar o al volver del editor) se vuelve a leer la base, sin
 // enseñar «Cargando» y sin recalcular si no ha cambiado nada (firmaDatos). Las estrategias llegan de la página.
-export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla, onAbrirEstrategia, onAbrirLote, onModoLotes, onEditorClasico, datosIniciales = null, filasIniciales = null, filtroInicial = 'editorLotes', visible }) {
+// apiFetch y version: para la pantalla del paso 2. vistaInicial (opcional, para las pruebas): la de BuilderPrueba ({ estrategiaId } | { loteId }).
+export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla, onAbrirEstrategia, onAbrirLote, onModoLotes, onEditorClasico, datosIniciales = null, filasIniciales = null, filtroInicial = 'editorLotes', visible, apiFetch, version, vistaInicial = null }) {
   const [datos, setDatos] = useState(() => datosIniciales || { lotes: [], pruebas: [], cargando: !datosIniciales, error: null })
   const [filas, setFilas] = useState(filasIniciales)
   const [filtro, setFiltro] = useState(filtroInicial)
   const [detalle, setDetalle] = useState({})
+  const [prueba, setPrueba] = useState(vistaInicial ? { ...vistaInicial, n: 0 } : null)   // la pantalla del paso 2, si está abierta
   const firma = useRef(null)
   const recarga = useCallback(async () => {
     if (datosIniciales) return
     if (!hayConfigSupabase()) { setDatos({ lotes: [], pruebas: [], cargando: false, error: 'Sin conexión con la base de datos: solo se ven las estrategias.' }); return }
     try {
-      const r = await fetch(`${getSupaUrl()}/rest/v1/editor_lotes?select=id,creado,nombre,lote,hash_lote,huellas&order=creado.desc,id.desc&limit=200`, { headers: getSupaH() })
+      const r = await fetch(`${getSupaUrl()}/rest/v1/editor_lotes?select=id,creado,version_app,nombre,lote,hash_lote,huellas&order=creado.desc,id.desc&limit=200`, { headers: getSupaH() })
       const lotes = r.ok ? await r.json() : []
       const pruebas = await listarPruebas({ url: getSupaUrl(), headers: getSupaH() }, { limite: 500, soloResumen: false, filtro: '&config->>prueba=in.(editorLote,editorLab,editorCalibracion,planLote)' })
       const error = r.ok ? null : `No se pudieron leer los lotes (HTTP ${r.status}).`, f = firmaDatos(lotes, pruebas)
@@ -82,9 +86,12 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
     else if (a.tipo === 'editor') onAbrirEstrategia?.(f.estrategia, 'editor')
     else if (a.tipo === 'lotes') onModoLotes?.()
     else if (a.tipo === 'lote') onAbrirLote?.(a.id)
+    else if (a.tipo === 'prueba') setPrueba({ ...(a.loteId != null ? { loteId: a.loteId } : { estrategiaId: a.estrategiaId }), n: Date.now() })
   }
   const abreFila = (f) => f.tipo === 'lote' ? (f.lote?.lote?.tipo === 'planes' ? null : onAbrirLote?.(f.lote.id)) : onAbrirEstrategia?.(f.estrategia, f.origen === 'editor' ? 'editor' : 'codigo')
 
+  if (prueba) return <BuilderPrueba key={prueba.n} estrategias={estrategias} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
+    onVolver={() => { setPrueba(null); recarga() }} onNuevaPrueba={() => setPrueba({ n: Date.now() })} onCambio={recarga}/>
   return (
     <div style={S.pagina}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -150,7 +157,7 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
                   <td style={{ ...celda, whiteSpace: 'nowrap', color: B.secundario }}>{f.paso} · {f.paso === 1 ? 'Crear' : f.paso === 2 ? 'Prueba' : 'Plan'}</td>
                   <td style={celda}><span style={S.chip(TIPO_CHIP[f.estado] || 'neutro')}>{f.estado}</span></td>
                   <td style={{ ...celda, color: B.resultado, maxWidth: 380 }}>{f.resultado}</td>
-                  <td style={celda}>{f.toca?.accion ? <button style={{ ...S.enlace, fontWeight: 700 }} onClick={() => accion(f)}>{f.toca.texto}</button> : <span style={{ color: B.apagado }}>{f.toca?.texto || '—'}</span>}</td>
+                  <td style={celda}>{f.toca?.accion ? <button style={{ ...S.enlace, fontWeight: 700 }} onClick={() => accion(f)}>{f.toca.texto}</button> : <span style={{ color: B.apagado }}>{f.toca?.texto || '—'}</span>}{f.toca?.nota && <div style={S.apagado}>{f.toca.nota}</div>}</td>
                 </tr>
               ))}
               {filas && !visibles.length && <tr><td colSpan={5} style={{ ...celda, color: B.secundario }}>{filas.length ? 'Nada con este filtro.' : 'Todavía no hay nada. Empieza en blanco o desde una plantilla.'}</td></tr>}
@@ -159,7 +166,7 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
           </table>
         </div>
       </div>
-      <div style={{ ...S.apagado, marginTop: 10 }}>«Calibrando…» no aparece aquí: la calibración corre en el navegador y solo se guarda al terminar (mientras corre, se ve en el modo Lotes del editor). Las estrategias de código se prueban contra el azar en Backtesting.</div>
+      <div style={{ ...S.apagado, marginTop: 10 }}>«Calibrando…» no aparece aquí: la calibración corre en el navegador y solo se guarda al terminar (mientras corre, se ve en la pantalla de su prueba). Las estrategias de código se prueban contra el azar en Backtesting.</div>
     </div>
   )
 }
