@@ -203,3 +203,28 @@ lo leen igual. Sin motores, validación ni huellas nuevos; sin tablas nuevas.
 - **Ayuda**: los textos en `lib/builder/ayuda.js`; el «?» (`components/BuilderAyuda.js`, se abre al pasar el ratón o al
   tocarlo y se cierra al tocar fuera) junto a «Gana a … de las copias», CAGR, caída máxima, QQQ, la calibración, Pasa / No llega
   y «laboratorio · lote»; y el plegable «Cómo leer estos resultados» con todos los textos.
+
+### Tanda 2c (V9.1040): nombres claros y explicaciones de las pruebas (solo textos)
+
+- **Nombres del Builder** (paso 2, «Mi trabajo», etapas, «Qué se prueba», `lib/builder/ayuda.js`): «laboratorio de
+  operaciones» (el laboratorio: media por operación en todo el Nasdaq-100), «laboratorio de cartera» (la prueba A / B del
+  lote: la cartera real), «verificación de sesgos» (la calibración) y «mercados ficticios» (sus universos sintéticos). La
+  línea pequeña de la tabla: «operaciones · cartera: X %». «Lote» queda solo para el grupo congelado. No cambian las pestañas,
+  el modo Lotes ni el texto de «Copiar para Claude»; los registros y sus nombres internos (editorLab, editorLote,
+  editorCalibracion) son los de siempre.
+- **Cómo decide** (lo que hace el código, `veredictoVariante`): con verificación y laboratorio de operaciones, decide este;
+  si la verificación no lo acepta, «sin veredicto» (el laboratorio de cartera NO pasa a decidir). Solo sin verificación
+  decide el laboratorio de cartera. Los textos de la tanda 2b decían otra cosa y se han corregido.
+- **«Cómo funciona esta prueba»**: plegable cerrado debajo de «Cómo leer estos resultados», con tres partes por variante y
+  periodo (laboratorio de operaciones, laboratorio de cartera y, por variante, verificación de sesgos) rellenadas con lo ya
+  guardado (operaciones, media real y de la copia típica, nº de copias, señales descartadas por no estar entre los elegidos,
+  veces por encima de 95 en los mercados ficticios, percentil medio). Sin un dato, la frase va sin él. Las «descartadas» son
+  las entradas en valores que ese año no estaban entre los 30 elegidos (no las que no caben por el límite de posiciones, que
+  no se guardan).
+- **«Guía de las pruebas»** (`components/BuilderGuia.js`, textos en `lib/builder/ayuda.js`): enlace «Cómo funcionan las
+  pruebas» arriba a la derecha del Builder y al final de «Cómo funciona esta prueba» (desde ahí se abre sin desmontar la
+  prueba). Nueve apartados: para qué sirve, las copias (ejemplo de Apple), el percentil, P5–P95, por qué ≥ 95 en todos los
+  periodos, los dos laboratorios, la verificación de sesgos (la báscula; mercados de precios inventados por paseo aleatorio,
+  no barajados; 5 de 50; percentil medio), la limitación de los stops y QQQ.
+- **Fechas**: lo escrito vive en la pantalla y `revisaFechas` da los errores en el mismo pintado; con una fecha imposible o un
+  fin anterior (o igual) al inicio, «Confirmar y probar» queda desactivado sin esperar a ningún efecto.

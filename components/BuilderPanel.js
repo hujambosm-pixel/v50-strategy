@@ -12,6 +12,7 @@ import { listarPruebas } from '../lib/registroLab'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 import { B, S } from '../lib/builder/estilo'
 import BuilderPrueba from './BuilderPrueba'
+import BuilderGuia from './BuilderGuia'
 
 export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convertirla en plan']
 export const SUBTITULOS_PASOS = ['Cuándo compro, cuándo vendo y cuánto arriesgo', '¿Gana por algo más que suerte?', 'Dinero real, aportaciones e impuestos']
@@ -59,7 +60,8 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
   const [filas, setFilas] = useState(filasIniciales)
   const [filtro, setFiltro] = useState(filtroInicial)
   const [detalle, setDetalle] = useState({})
-  const [prueba, setPrueba] = useState(vistaInicial ? { ...vistaInicial, n: 0 } : null)   // la pantalla del paso 2, si está abierta
+  const [prueba, setPrueba] = useState(vistaInicial && !vistaInicial.guia ? { ...vistaInicial, n: 0 } : null)   // la pantalla del paso 2, si está abierta
+  const [guia, setGuia] = useState(!!vistaInicial?.guia)   // la «Guía de las pruebas» (vistaInicial { guia: true }, para las pruebas)
   const firma = useRef(null)
   const recarga = useCallback(async () => {
     if (datosIniciales) return
@@ -90,6 +92,7 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
   }
   const abreFila = (f) => f.tipo === 'lote' ? (f.lote?.lote?.tipo === 'planes' ? null : onAbrirLote?.(f.lote.id)) : onAbrirEstrategia?.(f.estrategia, f.origen === 'editor' ? 'editor' : 'codigo')
 
+  if (guia) return <BuilderGuia onVolver={() => setGuia(false)}/>
   if (prueba) return <BuilderPrueba key={prueba.n} estrategias={estrategias} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
     onVolver={() => { setPrueba(null); recarga() }} onNuevaPrueba={() => setPrueba({ n: Date.now() })} onCambio={recarga}/>
   return (
@@ -97,7 +100,10 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Builder</span>
         <span style={S.secundario}>Crea una estrategia, pruébala contra el azar y conviértela en un plan.</span>
-        <button style={{ ...S.enlace, marginLeft: 'auto', color: B.apagado, fontSize: 13 }} onClick={() => onEditorClasico?.()} title="La pantalla de siempre para crear una estrategia escribiendo su código">Editor clásico</button>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 16, flexWrap: 'wrap' }}>
+          <button style={{ ...S.enlace, fontSize: 13 }} onClick={() => setGuia(true)} title="Guía de las pruebas: qué hace cada una y cómo leer sus resultados">Cómo funcionan las pruebas</button>
+          <button style={{ ...S.enlace, color: B.apagado, fontSize: 13 }} onClick={() => onEditorClasico?.()} title="La pantalla de siempre para crear una estrategia escribiendo su código">Editor clásico</button>
+        </span>
       </div>
       <BarraPasos actual={1}/>
 
@@ -166,7 +172,7 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
           </table>
         </div>
       </div>
-      <div style={{ ...S.apagado, marginTop: 10 }}>«Calibrando…» no aparece aquí: la calibración corre en el navegador y solo se guarda al terminar (mientras corre, se ve en la pantalla de su prueba). Las estrategias de código se prueban contra el azar en Backtesting.</div>
+      <div style={{ ...S.apagado, marginTop: 10 }}>La verificación de sesgos en marcha no aparece aquí: corre en el navegador y solo se guarda al terminar (mientras corre, se ve en la pantalla de su prueba). Las estrategias de código se prueban contra el azar en Backtesting.</div>
     </div>
   )
 }

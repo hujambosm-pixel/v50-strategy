@@ -4,6 +4,8 @@
 // cierra a medias, al volver se lee de la base lo hecho y se sigue con «Continuar». Un lote ya congelado se abre aquí en solo
 // lectura, con sus etapas y sus resultados. Con el veredicto hecho (tanda 2b), arriba van los resultados y el siguiente paso, y
 // «qué se probó y cómo» queda en un plegable. Los «?» y «Cómo leer estos resultados» sacan sus textos de lib/builder/ayuda.js.
+// Tanda 2c: los nombres del Builder (laboratorio de operaciones, laboratorio de cartera, verificación de sesgos), el plegable
+// «Cómo funciona esta prueba» con los datos guardados y la «Guía de las pruebas» (components/BuilderGuia.js).
 //   inicio: { estrategiaId } (confirmar una prueba nueva a partir de esa estrategia) | { loteId } (un lote congelado) | {} (nueva, vacía)
 //   lotes: las filas de editor_lotes que ya leyó el Builder. deps (opcional, para las pruebas): { ctx, f, listar, guardar }.
 //   estadoInicial (opcional, para las pruebas de montaje): { fila, est } ya leídos.
@@ -11,11 +13,13 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import { BarraPasos } from './BuilderPanel'
 import BotonCopiar from './BotonCopiar'
-import CampoFecha from './CampoFecha'
+import { textoAIso } from './CampoFecha'
+import { isoAMostrar } from './SelectorPeriodo'
 import Ayuda from './BuilderAyuda'
-import { AYUDA, AYUDA_GANA, COMO_LEER } from '../lib/builder/ayuda'
+import BuilderGuia from './BuilderGuia'
+import { AYUDA, AYUDA_GANA, COMO_LEER, textoOperaciones, textoCartera, textoSesgos } from '../lib/builder/ayuda'
 import { ETAPAS, OPCIONES_UNIVERSO, loteDesde, nombrePropuesto, erroresPorCampo, textoQueSePrueba, leeHecho, etapasDe, etapasConNotas, completo, encadena, congela, veredictoVariante, filasResultado, esSemanal, nombrePeriodo } from '../lib/builder/pruebaGuiada'
-import { PERIODOS_DEFECTO, MAX_PERIODOS, MAX_VARIANTES, comunNormal, esUniversoDinamico, nombreUniversoLote, nombreVariante } from '../lib/editor/lotes'
+import { PERIODOS_DEFECTO, MAX_PERIODOS, MAX_VARIANTES, REGLAS_UNIVERSO, comunNormal, esUniversoDinamico, nombreUniversoLote, nombreVariante } from '../lib/editor/lotes'
 import { esDefinicionEditor } from '../lib/editor/fuente'
 import { fraseDefinicion } from '../lib/editor/definicion'
 import { veredictoEditorLab } from '../lib/editor/laboratorio'
@@ -38,6 +42,17 @@ const sinComienzo = (t) => { const s = t.replace(/^(Pasa|No llega|Sin veredicto)
 const plegable = { background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioTarjeta, padding: '10px 16px', marginTop: 16 }
 const resumenPlegable = { cursor: 'pointer', fontWeight: 700, color: B.titulo }
 
+// Los errores de las fechas escritas (textos: [{ desde, hasta }] como dd/mm/aaaa): por caja y el orden. Se usa al pintar; si
+// hay alguno, «Confirmar y probar» queda desactivado.
+export function revisaFechas(textos) {
+  const mal = (txt, iso) => iso ? null : String(txt || '').trim() ? 'fecha no válida; escríbela como dd/mm/aaaa (p. ej. 31/12/2020).' : 'escribe la fecha como dd/mm/aaaa.'
+  const porFila = textos.map(t => {
+    const d = textoAIso(t.desde), h = textoAIso(t.hasta)
+    return { desde: mal(t.desde, d), hasta: mal(t.hasta, h), orden: d && h && !(d < h) ? 'La fecha final tiene que ser posterior a la inicial.' : null }
+  })
+  return { porFila, hayError: porFila.some(x => x.desde || x.hasta || x.orden) }
+}
+
 function Errores({ lista }) {
   return lista?.length ? <div style={{ color: ROJO, fontSize: 13, marginTop: 6 }}>{lista.map((e, k) => <div key={k}>{e}</div>)}</div> : null
 }
@@ -56,14 +71,15 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
   // ── Confirmar (solo sin lote) ──
   const [elegidas, setElegidas] = useState(() => inicio.estrategiaId != null ? [inicio.estrategiaId] : [])
   const [claveU, setClaveU] = useState('momentum|30')
-  const [periodos, setPeriodos] = useState(() => PERIODOS_DEFECTO.map(p => ({ ...p })))
-  // Las fechas se escriben como dd/mm/aaaa (CampoFecha); lo guardado sigue siendo ISO, igual que antes. claves: una por
-  // periodo, aparte del lote (para no cambiar su huella), para saber qué caja tiene una fecha imposible al quitar un periodo.
+  // Las fechas se escriben como dd/mm/aaaa (textos: lo que hay en las cajas, con la misma lectura que CampoFecha) y de ahí
+  // salen los periodos en ISO, igual que antes (una caja con una fecha imposible da '' y el lote no valida). revisaFechas da
+  // el error de cada caja en el mismo pintado, así que «Confirmar y probar» se desactiva sin esperar a nada. claves: una por
+  // periodo, aparte del lote (para no cambiar su huella), para que no se confundan las cajas al quitar un periodo.
+  const [textos, setTextos] = useState(() => PERIODOS_DEFECTO.map(p => ({ desde: isoAMostrar(p.desde), hasta: isoAMostrar(p.hasta) })))
   const [claves, setClaves] = useState(() => PERIODOS_DEFECTO.map((_, k) => k))
   const sigClave = useRef(PERIODOS_DEFECTO.length)
-  const [fechaOk, setFechaOk] = useState({})
-  const fechasMal = claves.some(c => fechaOk[`${c}d`] === false || fechaOk[`${c}h`] === false)
-  const alReves = (p) => !!p.desde && !!p.hasta && !(p.desde < p.hasta)
+  const periodos = textos.map(t => ({ desde: textoAIso(t.desde) || '', hasta: textoAIso(t.hasta) || '' }))
+  const fechas = revisaFechas(textos)
   const [nombre, setNombre] = useState(null)   // null = el propuesto
   const [anade, setAnade] = useState('')
   const estrElegidas = elegidas.map(id => delEditor.find(s => String(s.id) === String(id))).filter(Boolean)
@@ -76,7 +92,8 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
     for (const s of semanales) e.variantes.unshift(`«${s.name}» usa velas semanales: esta prueba solo funciona con velas diarias. Quítala o cámbiala a diarias en el editor.`)
     return e
   }, [loteNuevo, semanales.length])
-  const hayErrores = Object.values(errores).some(x => x.length) || fechasMal
+  const hayErrores = Object.values(errores).some(x => x.length) || fechas.hayError
+  const [verGuia, setVerGuia] = useState(false)   // la guía se abre aquí mismo: la prueba sigue montada (y corriendo)
 
   // ── El lote congelado, lo hecho y las etapas ──
   const [fila, setFila] = useState(estadoInicial?.fila || null)
@@ -143,9 +160,11 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
       frases: Object.fromEntries(fila.lote.variantes.map(v => { try { return [v.id, fraseDefinicion(v.definicion, v.valores || {})] } catch (_) { return [v.id, '—'] } })) })
   }
 
-  const ponFecha = (k, campo, v) => setPeriodos(x => x.map((y, j) => j === k ? { ...y, [campo]: v } : y))
-  const quitaPeriodo = (k) => { setPeriodos(x => x.filter((_, j) => j !== k)); setClaves(x => x.filter((_, j) => j !== k)) }
-  const anadePeriodo = () => { setPeriodos(x => [...x, { desde: '', hasta: '' }]); setClaves(x => [...x, sigClave.current++]) }
+  const ponFecha = (k, campo, v) => setTextos(x => x.map((y, j) => j === k ? { ...y, [campo]: v } : y))
+  const quitaPeriodo = (k) => { setTextos(x => x.filter((_, j) => j !== k)); setClaves(x => x.filter((_, j) => j !== k)) }
+  const anadePeriodo = () => { setTextos(x => [...x, { desde: '', hasta: '' }]); setClaves(x => [...x, sigClave.current++]) }
+  const cajaFecha = (k, campo, error) => <input type="text" inputMode="numeric" placeholder="dd/mm/aaaa" value={textos[k][campo]} aria-invalid={!!error}
+    aria-label={`Periodo ${k + 1}: ${campo}`} onChange={e => ponFecha(k, campo, e.target.value)} style={{ ...entrada, width: 110, ...(error ? { borderColor: ROJO } : {}) }}/>
   // El aviso general de «desde < hasta» ya sale junto a cada periodo (fecha imposible o fin antes del inicio).
   const erroresPeriodos = errores.periodos.filter(e => !/necesita dos fechas/.test(e))
   const bloqueado = hayErrores || corriendo || sinBase
@@ -196,16 +215,21 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
           </div>
           <div>
             <div style={etiqueta}>Periodos</div>
-            {periodos.map((p, k) => (
-              <div key={claves[k]} data-periodo={k + 1} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                <CampoFecha valor={p.desde} onCambio={v => ponFecha(k, 'desde', v)} onValidez={v => setFechaOk(o => ({ ...o, [`${claves[k]}d`]: v }))} style={{ ...entrada, width: 110 }} avisoStyle={{ color: ROJO, fontSize: 13 }}/>
-                <span style={S.secundario}>a</span>
-                <CampoFecha valor={p.hasta} onCambio={v => ponFecha(k, 'hasta', v)} onValidez={v => setFechaOk(o => ({ ...o, [`${claves[k]}h`]: v }))} style={{ ...entrada, width: 110 }} avisoStyle={{ color: ROJO, fontSize: 13 }}/>
-                {periodos.length > 1 && <button style={{ ...S.enlace, fontSize: 12, color: B.apagado }} onClick={() => quitaPeriodo(k)}>Quitar</button>}
-                {alReves(p) && <span style={{ color: ROJO, fontSize: 13 }}>La fecha final tiene que ser posterior a la inicial.</span>}
-              </div>
-            ))}
-            {periodos.length < MAX_PERIODOS && <button style={{ ...S.enlace, fontSize: 13 }} onClick={anadePeriodo}>+ Añadir periodo</button>}
+            {textos.map((_, k) => {
+              const e = fechas.porFila[k]
+              return (
+                <div key={claves[k]} data-periodo={k + 1} style={{ marginBottom: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    {cajaFecha(k, 'desde', e.desde)}
+                    <span style={S.secundario}>a</span>
+                    {cajaFecha(k, 'hasta', e.hasta)}
+                    {textos.length > 1 && <button style={{ ...S.enlace, fontSize: 12, color: B.apagado }} onClick={() => quitaPeriodo(k)}>Quitar</button>}
+                  </div>
+                  <Errores lista={[e.desde && `Desde: ${e.desde}`, e.hasta && `Hasta: ${e.hasta}`, e.orden].filter(Boolean)}/>
+                </div>
+              )
+            })}
+            {textos.length < MAX_PERIODOS && <button style={{ ...S.enlace, fontSize: 13 }} onClick={anadePeriodo}>+ Añadir periodo</button>}
             <Errores lista={erroresPeriodos}/>
           </div>
           <div>
@@ -277,7 +301,7 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
                 <tr key={k}>
                   <td style={celda}>{r.variante}</td>
                   <td style={celda}>{nombrePeriodo(r.periodo)}</td>
-                  <td style={celda}>{principal == null ? '—' : `Gana a ${pct(principal)} de las copias`}{r.decide && <div style={S.apagado}>{lab ? `laboratorio${r.percentilLote != null ? ` · lote: ${pct(r.percentilLote)}` : ''}` : 'prueba del lote'}<Ayuda texto={AYUDA.laboratorio_lote} etiqueta="laboratorio y lote"/></div>}</td>
+                  <td style={celda}>{principal == null ? '—' : `Gana a ${pct(principal)} de las copias`}{r.decide && <div style={S.apagado}>{lab ? `operaciones${r.percentilLote != null ? ` · cartera: ${pct(r.percentilLote)}` : ''}` : 'cartera'}<Ayuda texto={AYUDA.operaciones_cartera} etiqueta="operaciones y cartera"/></div>}</td>
                   <td style={celda}>{pct(r.cagr)}</td>
                   <td style={celda}>{pct(r.maxDD)}</td>
                   <td style={celda}>{r.qqq ? `${pct(r.qqq.cagr)} · cae ${pct(r.qqq.maxDD)}` : '—'}</td>
@@ -299,12 +323,37 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
           )
         })}
       </div>
-      <div style={{ ...S.apagado, marginTop: 6 }}>CAGR, caída máxima y QQQ: los de la prueba del lote. QQQ es solo una referencia: no cambia el veredicto.</div>
+      <div style={{ ...S.apagado, marginTop: 6 }}>CAGR, caída máxima y QQQ: los del laboratorio de cartera. QQQ es solo una referencia: no cambia el veredicto.</div>
       <details style={{ ...plegable, background: B.fondo, marginTop: 12 }}>
         <summary style={resumenPlegable}>Cómo leer estos resultados</summary>
         <div style={{ marginTop: 10 }}>
           {COMO_LEER.map(([t, x]) => <div key={t} style={{ marginBottom: 8 }}><strong style={{ color: B.titulo }}>{t}.</strong> <span style={S.secundario}>{x}</span></div>)}
         </div>
+      </details>
+      <details style={{ ...plegable, background: B.fondo, marginTop: 12 }} data-plegable="como-funciona">
+        <summary style={resumenPlegable}>Cómo funciona esta prueba</summary>
+        {fila.lote.variantes.map(v => {
+          const cn = comunNormal(fila.lote.comun), abV = (est.ab?.resultados || []).find(x => x.id === v.id)
+          const dondeTxt = esUniversoDinamico(cn.universo) ? `los ${cn.universo.n} valores ${REGLAS_UNIVERSO[cn.universo.regla]}` : `una lista fija de ${cn.universo.symbols?.length ?? '…'} valores`
+          return (
+            <div key={v.id} style={{ marginTop: 10 }}>
+              {fila.lote.variantes.length > 1 && <div style={{ fontWeight: 700, color: B.titulo, marginBottom: 6 }}>{nombreVariante(v)}</div>}
+              {cn.periodos.map(p => {
+                const pl = (est.lab[v.id] || []).find(x => x.desde === p.desde && x.hasta === p.hasta)
+                const pa = Array.isArray(abV?.periodos) ? abV.periodos.find(x => x.desde === p.desde && x.hasta === p.hasta) : null
+                return (
+                  <div key={`${p.desde}|${p.hasta}`} data-como-funciona={`${v.id}|${p.desde}`} style={{ marginBottom: 10 }}>
+                    <div style={{ fontWeight: 600, color: B.titulo, marginBottom: 4 }}>{nombrePeriodo(p)}</div>
+                    <div style={{ marginBottom: 6 }}><strong style={{ color: B.titulo }}>Laboratorio de operaciones.</strong> <span style={S.secundario}>{textoOperaciones(nombrePeriodo(p), pl)}</span></div>
+                    <div><strong style={{ color: B.titulo }}>Laboratorio de cartera.</strong> <span style={S.secundario}>{textoCartera(nombrePeriodo(p), pa, cn, dondeTxt)}</span></div>
+                  </div>
+                )
+              })}
+              <div data-como-funciona={`${v.id}|sesgos`}><strong style={{ color: B.titulo }}>Verificación de sesgos.</strong> <span style={S.secundario}>{textoSesgos(est.cal[v.id] || null)}</span></div>
+            </div>
+          )
+        })}
+        <div style={{ marginTop: 12 }}><button style={S.enlace} onClick={() => setVerGuia(true)}>Cómo funcionan las pruebas</button></div>
       </details>
       <div style={{ marginTop: 12 }}><BotonCopiar obtenerTexto={textoCopia} etiqueta="Copiar para Claude" estilo={S.boton}/></div>
     </Tarjeta>
@@ -328,6 +377,8 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
       </>)}
     </div>
   )
+
+  if (verGuia) return <BuilderGuia onVolver={() => setVerGuia(false)} volverTexto="← Volver a la prueba"/>
 
   return (
     <div style={S.pagina}>
