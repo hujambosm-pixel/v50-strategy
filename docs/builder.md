@@ -185,3 +185,21 @@ lo leen igual. Sin motores, validación ni huellas nuevos; sin tablas nuevas.
   «Revisar la prueba» abren esta pantalla (una estrategia fuera de lotes, para confirmar; si no, su lote). Las de código: «—»
   con una nota (no entran en la prueba guiada). Pulsar el nombre sigue abriendo el editor, el código o el modo Lotes. El modo
   Lotes y el Laboratorio no cambian.
+
+### Tanda 2b (V9.1039): retoques del paso 2 (solo presentación y ayuda)
+
+- **Al terminar, resultados arriba**: con el veredicto hecho (también los lotes en solo lectura), debajo del título van
+  «Resultados» y «Siguiente paso»; «Qué se prueba», «Lo que se confirmó» y «La app lo hace sola» quedan en un único plegable
+  cerrado, «Ver qué se probó y cómo». Mientras la prueba no ha terminado, el orden de siempre.
+- **Chips**: en cada fila, «≥ 95 en este periodo» (verde) o «< 95 en este periodo» (gris). «Pasa» / «No llega» solo en el
+  veredicto final, como chip grande junto a su frase.
+- **Fechas**: los periodos se escriben como dd/mm/aaaa (`components/CampoFecha.js`, el del Laboratorio); lo guardado sigue en
+  ISO, así que el lote y su huella son los mismos. Una fecha imposible o un fin anterior al inicio: error junto al campo y
+  «Confirmar y probar» desactivado.
+- **QQQ sin hacer nada**: columna con el CAGR y la caída máxima de QQQ comprar y mantener de la misma ejecución del lote
+  (`refs.qqq`, lo que el texto copiado llama «B&H QQQ»). Un lote sin ello guardado: «—». Solo informativa.
+- **Aviso** junto a «Crear prueba nueva con otra variante»: probar muchas variantes hasta que una pase hace que alguna pase por
+  suerte.
+- **Ayuda**: los textos en `lib/builder/ayuda.js`; el «?» (`components/BuilderAyuda.js`, se abre al pasar el ratón o al
+  tocarlo y se cierra al tocar fuera) junto a «Gana a … de las copias», CAGR, caída máxima, QQQ, la calibración, Pasa / No llega
+  y «laboratorio · lote»; y el plegable «Cómo leer estos resultados» con todos los textos.
