@@ -484,5 +484,6 @@ guarda en la misma. La versión se lee del nombre (`partesNombre`): no hay colum
 - Parámetros y optimizador (defecto, valor, rangos de-a, restricciones): hoy solo en el Editor clásico; el Builder no los enseña.
 - «Exportar a code_js» y «Probar en backtest» (abrir la estrategia en el gráfico) desde el Builder.
 - Los modos «Cartera (QQQ + ETF)» y «Lotes» del Editor (el paso 3 y el modo Lotes antiguo).
-- IWM y DIA no están en los precios guardados: hasta que se añadan, el filtro con ellos funciona en el backtest pero no en los
-  laboratorios del paso 2.
+- (Hecho el 24/10/2026, V9.1046: IWM desde 26/05/2000 y DIA desde 20/01/1998 ya están en los precios guardados, con
+  `node scripts/llenaCachePrecios.js --simbolo IWM --anios 30` y lo mismo con DIA; el filtro con ellos funciona también en los
+  laboratorios del paso 2.)
