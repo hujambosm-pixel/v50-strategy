@@ -16,6 +16,7 @@ import EditorCartera from './EditorCartera'
 import EditorLotes from './EditorLotes'
 import { exportaCodeJs, motivosNoExportable } from '../lib/editor/exporta'
 import { preparaGuardado } from '../lib/editor/guardar'
+import { anadeStop, cambiaTipoStop } from '../lib/editor/piezas'
 
 const GRIS = 'var(--text-legible)'
 const TAM = 12
@@ -54,14 +55,6 @@ const condPorDefecto = (id) => {
 const TIPOS_ORDEN = { apertura: 'A la apertura siguiente', cierre: 'Al cierre de la vela de la señal', stop: 'Orden stop (compra si sube hasta un nivel)', limite: 'Orden límite (compra si baja hasta un nivel)' }
 const CAMPOS = { high: 'máximo', low: 'mínimo', close: 'cierre' }
 const TIPOS_STOP = { nivel: 'Nivel de la vela (mínimo, media…)', minimoVelas: 'Mínimo de N velas', porcentaje: '% fijo bajo la entrada', atr: 'k × ATR bajo la entrada', trailing: 'Trailing (sube, nunca baja)' }
-const CAMPOS_STOP = {
-  nivel: { de: [{ campo: 'low' }] }, minimoVelas: { n: 3 }, porcentaje: { pct: 8 }, atr: { k: 2, periodo: 14 },
-  trailing: { si: { c: 'precioVsMedia', p: { tipo: 'EMA', periodo: 10, lado: 'debajo' } }, nivel: { campo: 'low', velas: 1 }, historial: 'siSube', fechaHistorial: 'vela' },
-}
-// Los stops fijos nuevos se anotan en el historial al entrar (stopHistory): así el gráfico y el guardián ven el stop que
-// explica una salida, también la del mismo día de la entrada. En el motor 1 es una opción de cada stop (la 1 V50 y la 23 la
-// usan como sus code_js), así que la pantalla la pone por defecto.
-const stopPorDefecto = (tipo, n) => ({ id: `${tipo}${n}`, tipo, motivo: tipo === 'trailing' ? 'trailing_exit' : 'stop', ...copia(CAMPOS_STOP[tipo]), ...(tipo === 'trailing' ? {} : { historialAlEntrar: true }) })
 const TIPOS_SALIDA = { condicion: 'Por condición (a la apertura siguiente)', objetivo: 'Objetivo en múltiplos del riesgo inicial', tope: 'Tope de velas' }
 const salidaPorDefecto = (tipo) => ({
   condicion: { tipo, si: condPorDefecto('precioVsMedia'), precio: 'apertura', motivo: 'salida' },
@@ -208,7 +201,7 @@ function Stop({ s, k, n, onChange, onQuitar, onMueve, params, ids }) {
     <div style={{ borderTop: k ? '1px solid var(--border)' : 'none', paddingTop: k ? 8 : 0, marginTop: k ? 8 : 0 }}>
       <div style={fila}>
         <span style={{ ...nota, color: 'var(--text)' }}>{k + 1}.</span>
-        <select style={entrada} value={s.tipo} onChange={e => onChange({ ...stopPorDefecto(e.target.value, k + 1), id: s.id, motivo: s.motivo, activa: s.activa })}>{Object.entries(TIPOS_STOP).map(([t, v]) => <option key={t} value={t}>{v}</option>)}</select>
+        <select style={entrada} value={s.tipo} onChange={e => onChange(cambiaTipoStop(s, e.target.value, k))}>{Object.entries(TIPOS_STOP).map(([t, v]) => <option key={t} value={t}>{v}</option>)}</select>
         <span style={nota}>id</span><input style={{ ...entrada, width: 80 }} value={s.id || ''} onChange={e => set({ id: e.target.value.trim() })}/>
         <span style={nota} title="El nombre de la salida en las operaciones (exitReason)">motivo</span><input style={{ ...entrada, width: 100 }} value={s.motivo || ''} onChange={e => set({ motivo: e.target.value.trim() })}/>
         <Activa valor={s.activa} params={params} onChange={v => { const x = { ...s }; if (v === undefined) delete x.activa; else x.activa = v; onChange(x) }}/>
@@ -349,7 +342,7 @@ export function FormularioDefinicion({ def, setDef, valoresEf, onValores, params
           onMueve={d => { const a = [...stops]; [a[k], a[k + d]] = [a[k + d], a[k]]; setDef({ stops: a }) }}/>)}
         <div style={{ ...fila, marginTop: 6 }}>
           <span style={nota}>Añadir:</span>
-          {Object.entries(TIPOS_STOP).map(([t, v]) => <button key={t} style={botonMini} onClick={() => { let n = stops.length + 1; while (ids.includes(`${t}${n}`)) n++; setDef({ stops: [...stops, stopPorDefecto(t, n)] }) }}>{v}</button>)}
+          {Object.entries(TIPOS_STOP).map(([t, v]) => <button key={t} style={botonMini} onClick={() => setDef({ stops: anadeStop(stops, t) })}>{v}</button>)}
         </div>
       </div>
 

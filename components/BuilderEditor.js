@@ -1,30 +1,38 @@
-// components/BuilderEditor.js — el paso 1 del Builder, «Crear la estrategia»: el EDITOR POR TARJETAS (V9.1043; docs/builder.md,
-// §10), con el estilo de lib/builder/estilo.js. Es otra forma de ver y editar la MISMA definición del editor visual (formato 1,
-// motor 1): leer no cambia nada y cada tarjeta reescribe solo su parte (lib/builder/tarjetas.js). Tres columnas (en móvil, una
-// debajo de otra): el catálogo de condiciones; las tarjetas «Compro cuando…», «Vendo cuando…», «Protección» y «Avanzado» (los
-// formularios del editor de siempre, components/EditorPanel.js: FormularioDefinicion); y «La regla, en una frase», la
-// comprobación y «Guardar y pasar al paso 2». Guardar es lo mismo que en el editor de siempre (/api/strategies, que valida otra
-// vez); si la estrategia ya está en una prueba congelada y cambia su regla, se crea una versión nueva (lib/builder/versiones.js).
+// components/BuilderEditor.js — el paso 1 del Builder, «Crear la estrategia»: el EDITOR POR TARJETAS (V9.1043, V9.1044;
+// docs/builder.md, §10 y §11), con el estilo de lib/builder/estilo.js. Es otra forma de ver y editar la MISMA definición del
+// editor visual (formato 1, motor 1): leer no cambia nada y cada tarjeta reescribe solo su parte (lib/builder/tarjetas.js). Tres
+// columnas (en móvil, una debajo de otra): el catálogo de condiciones; las tarjetas «Solo opero cuando…», «Compro cuando…»,
+// «Vendo cuando…», «Protección» y la línea de ejecución; y «La regla, en una frase», la comprobación y «Guardar y pasar al paso 2».
+// Cada fila va en UNA línea: solo se editan los números, el símbolo y el tipo de media (los desplegables llevan width: auto,
+// porque la hoja de estilos de la app les pone width: 100%). Lo poco habitual (órdenes stop o límite, el optimizador y sus
+// rangos, piezas que se encienden con un parámetro) no está aquí: se conserva siempre y se ve en el Editor clásico (la pestaña
+// «Editor»). Guardar es lo mismo que en el editor de siempre (/api/strategies, que valida otra vez); si la estrategia ya está en
+// una prueba congelada y cambia su regla, se crea una versión nueva (lib/builder/versiones.js).
 //   fila: la estrategia de partida ({ id?, name, description, definition, params, copiaDe? }). lotes: las filas de editor_lotes.
-//   Para las pruebas de montaje: avanzadoInicial («Avanzado» abierto), estadoInicial (lo editado: { def, valores, nombre,
-//   descripcion }), enPruebaInicial (los nombres de las pruebas donde está; si no, se buscan por la huella) y buscarInicial.
+//   onEditorClasico(fila): abre lo que se está editando en el Editor clásico.
+//   Para las pruebas de montaje: estadoInicial (lo editado: { def, valores, nombre, descripcion }), enPruebaInicial (los nombres
+//   de las pruebas donde está; si no, se buscan por la huella) y buscarInicial.
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { B, S } from '../lib/builder/estilo'
-import { CONDICIONES_EDITOR, validaDefinicion, valoresDe, esquemaDe, fraseDefinicion, fraseCond, huellaDefinicion, paraHuella } from '../lib/editor/definicion'
+import { CONDICIONES_EDITOR, validaDefinicion, valoresDe, esquemaDe, huellaDefinicion, paraHuella } from '../lib/editor/definicion'
 import { jsonCanonico } from '../lib/lotesLab'
-import { GRUPOS, buscaCatalogo, nombreCond, condNueva, leeCompra, escribeCompra, leeVenta, escribeVenta, leeProteccion, ponStop, ponSalida, DEFECTO_PROTECCION,
-  partesAvanzado, plantillaFila, opcionesOp, opDe, conOp, erroresFila, erroresProteccion, notaFila, fraseRegla, datosSuficientes, unidadDe, aTexto, deTexto } from '../lib/builder/tarjetas'
+import { GRUPOS, buscaCatalogo, nombreCond, condNueva, soloDelValor, AYUDA_COND, AYUDA_NO, AYUDA_CRUZA, leeCompra, escribeCompra, leeFiltro, escribeFiltro, cambiaIndice, INDICES, nombreQuien,
+  leeVenta, escribeVenta, leeProteccion, TIPOS_STOP, CAMPOS_STOP_TARJETA, numeroStop, anadeStopDef, cambiaTipoStopDef, quitaStopDef, ponNumeroStop, ponSalida, DEFECTO_PROTECCION,
+  opcionesClasico, frasesClasico, fraseStopTarjeta, plantillaFila, opcionesOp, opDe, conOp, conVuelta, conCruce, conNumero, tieneLado, erroresFila, erroresProteccion, cuentaErroresProteccion, notaFila, fraseRegla,
+  datosSuficientes, aTexto, deTexto } from '../lib/builder/tarjetas'
 import { partesNombre, planGuardado, avisoVersion } from '../lib/builder/versiones'
-import { FormularioDefinicion } from './EditorPanel'
+import Ayuda from './BuilderAyuda'
 import BuilderGuia from './BuilderGuia'
 
-const AZUL = '#58a6ff', NARANJA = '#f0883e', ROJO = '#ff8b8b', AMARILLO = '#f2cc60'
-const entrada = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '5px 8px' }
-const mini = { ...entrada, padding: '3px 6px', fontSize: 13 }
+const AZUL = '#58a6ff', NARANJA = '#f0883e', MORADO = '#a371f7', ROJO = '#ff8b8b', AMARILLO = '#f2cc60'
+const entrada = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '5px 8px', width: 'auto' }
+const mini = { ...entrada, padding: '2px 4px', fontSize: 13, width: 'auto', display: 'inline-block' }
 const copia = (x) => JSON.parse(JSON.stringify(x))
 const params = (p) => { try { return typeof p === 'string' ? JSON.parse(p || '{}') : (p || {}) } catch (_) { return {} } }
-const ENV = [['', 'se cumple'], ['cruza', 'empieza a cumplirse'], ['NO', 'no se cumple']]
 const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`
+const val = (x, valores) => typeof x === 'string' && x.startsWith('$') ? valores[x.slice(1)] : x
+const AYUDA_FILTRO = 'Cada fila dice de quién es: un índice (QQQ, SPY…) o «Este valor». Se tienen que cumplir todas. Si no se cumplen, no compro nada, aunque se cumpla «Compro cuando…». No obligan a vender lo que ya tengo.'
+export const LINEA_EJECUCION = 'Las órdenes se ejecutan siempre igual: la señal se mira al cierre de la vela y se compra o vende a la apertura de la siguiente. Opciones poco habituales (órdenes stop o límite, optimizador): Editor clásico.'
 
 // Lo que se edita: la definición (copia), los valores, el nombre y la descripción.
 export const estadoDe = (fila) => ({ def: copia(fila.definition), valores: params(fila.params), nombre: fila.name || '', descripcion: fila.description || '' })
@@ -34,34 +42,52 @@ function Numero({ valor, onCambia, error, etiqueta }) {
   const [t, setT] = useState(aTexto(valor))
   useEffect(() => { if (deTexto(t) !== valor) setT(aTexto(valor)) }, [valor])
   return <input type="text" inputMode="decimal" value={t} aria-label={etiqueta} aria-invalid={!!error} onChange={e => { setT(e.target.value); onCambia(deTexto(e.target.value)) }}
-    style={{ ...mini, width: Math.max(3, String(t).length + 1) + 'ch', minWidth: 36, textAlign: 'right', ...(error ? { borderColor: ROJO } : {}) }}/>
+    style={{ ...mini, width: `${Math.max(2, String(t).length) + 2}ch`, minWidth: 0, textAlign: 'right', ...(error ? { borderColor: ROJO } : {}) }}/>
 }
 
-// Una fila de condición: «Cierre > SMA (200)», con los números editables, la nota gris y la ×. Un número '$nombre' es un
-// parámetro de la estrategia: se edita su valor (y su rango, en Avanzado).
-function Fila({ f, errores, valores, onCambia, onValor, onQuita, color }) {
+// El menú «…» de una fila: darle (o quitarle) la vuelta y, en las condiciones sin símbolo, «solo la vela en que empieza».
+function Menu({ f, onCambia }) {
+  const [abierto, setAbierto] = useState(false)
+  return (
+    <span style={{ position: 'relative', flexShrink: 0 }}>
+      <button style={{ ...S.enlace, color: B.apagado, padding: '0 4px' }} aria-label="Más opciones de la fila" aria-expanded={abierto} onClick={() => setAbierto(a => !a)}>…</button>
+      {abierto && (
+        <span data-menu-fila style={{ position: 'absolute', right: 0, top: '100%', zIndex: 5, background: B.cabecera, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: 6, display: 'flex', flexDirection: 'column', gap: 4, whiteSpace: 'nowrap' }}>
+          <button style={S.enlace} onClick={() => { onCambia(conVuelta(f)); setAbierto(false) }}>{f.env === 'NO' ? 'Quitarle la vuelta (NO)' : 'Darle la vuelta (NO)'}</button>
+          {!tieneLado(f.cond.c) && <button style={S.enlace} onClick={() => { onCambia(conCruce(f)); setAbierto(false) }}>{f.env === 'cruza' ? 'Cada vela que se cumpla' : 'Solo la vela en que empieza a cumplirse (cruza)'}</button>}
+        </span>
+      )}
+    </span>
+  )
+}
+
+// Una fila de condición en UNA línea: «Cierre [> ▾] SMA ( [200] )», con la nota gris, el «?», el menú «…» y la ×; el error,
+// debajo. quien / onQuien: el selector «de quién» de «Solo opero cuando…».
+function Fila({ f, errores, valores, tarjeta, color, onCambia, onQuita, quien, onQuien, indices }) {
   const p = f.cond.p || {}, decl = Object.fromEntries((CONDICIONES_EDITOR[f.cond.c]?.parametros || []).map(d => [d.clave, d]))
   const hay = Object.keys(errores).length > 0
-  const pon = (k, v) => onCambia({ ...f, cond: { ...f.cond, p: { ...p, [k]: v } } })
   const campo = (c, j) => {
     if (typeof c === 'string') return <span key={j}>{c}</span>
-    const crudo = p[c.k], ref = typeof crudo === 'string' && crudo.startsWith('$') ? crudo.slice(1) : null
-    if (c.tipo === 'op') return <select key={j} style={mini} aria-label="Comparación" value={opDe(p)} onChange={e => onCambia({ ...f, cond: { ...f.cond, p: conOp(f.cond.c, p, e.target.value) } })}>{opcionesOp(f.cond.c).map(o => <option key={o} value={o}>{o}</option>)}</select>
-    if (c.tipo === 'media' || c.tipo === 'opcion') return <select key={j} style={mini} aria-label={decl[c.k]?.etiqueta} value={crudo ?? decl[c.k]?.defecto} onChange={e => pon(c.k, e.target.value)}>{(decl[c.k]?.opciones || []).map(o => <option key={o} value={o}>{o}</option>)}</select>
-    return (
-      <span key={j} title={ref ? `Este número es el parámetro «${ref}» de la estrategia: en «Avanzado» puedes darle un rango para el optimizador.` : undefined}
-        style={ref ? { borderBottom: `1px dashed ${B.apagado}`, paddingBottom: 1 } : undefined}>
-        <Numero valor={ref ? valores[ref] : crudo} error={errores[c.k]} etiqueta={decl[c.k]?.etiqueta} onCambia={v => ref ? onValor(ref, v) : pon(c.k, v)}/>
-      </span>
-    )
+    if (c.tipo === 'op') return <select key={j} style={mini} aria-label="Símbolo" value={opDe(f)} onChange={e => onCambia(conOp(f, e.target.value))} title={AYUDA_CRUZA}>{opcionesOp(f.cond.c).map(o => <option key={o} value={o}>{o}</option>)}</select>
+    if (c.tipo === 'media' || c.tipo === 'opcion') return <select key={j} style={mini} aria-label={decl[c.k]?.etiqueta} value={p[c.k] ?? decl[c.k]?.defecto} onChange={e => onCambia(conNumero(f, c.k, e.target.value))}>{(decl[c.k]?.opciones || []).map(o => <option key={o} value={o}>{o}</option>)}</select>
+    return <Numero key={j} valor={val(p[c.k], valores)} error={errores[c.k]} etiqueta={decl[c.k]?.etiqueta} onCambia={v => onCambia(conNumero(f, c.k, v))}/>
   }
   return (
-    <div data-fila={f.cond.c} data-error={hay ? 'si' : undefined} style={{ border: `1px solid ${hay ? ROJO : B.borde}`, borderLeft: `3px solid ${hay ? ROJO : color}`, borderRadius: B.radioBoton, padding: '8px 10px', marginTop: 8, background: B.fondo }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        <select style={{ ...mini, color: f.env ? B.titulo : B.apagado }} aria-label="Cuándo cuenta" value={f.env || ''} onChange={e => onCambia({ ...f, env: e.target.value || null })}>{ENV.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', color: B.titulo, fontWeight: 600 }}>{plantillaFila(f.cond.c).map(campo)}</span>
-        <span style={{ marginLeft: 'auto', color: B.apagado, fontSize: 12 }}>{notaFila(f, valores)}</span>
-        <button style={{ ...S.enlace, color: B.apagado, fontSize: 18, lineHeight: 1, padding: '0 4px' }} aria-label="Quitar esta condición" title="Quitar esta condición" onClick={onQuita}>×</button>
+    <div data-fila={f.cond.c} data-error={hay ? 'si' : undefined} style={{ border: `1px solid ${hay ? ROJO : B.borde}`, borderLeft: `3px solid ${hay ? ROJO : color}`, borderRadius: B.radioBoton, padding: '6px 8px', marginTop: 8, background: B.fondo }}>
+      <div data-linea style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+        {onQuien && (
+          <select style={{ ...mini, color: MORADO }} aria-label="De quién" value={quien} onChange={e => onQuien(e.target.value)}>
+            {indices.map(t => <option key={t} value={t} disabled={soloDelValor(f.cond.c)}>{nombreQuien(t)}</option>)}
+            <option value="valor">Este valor</option>
+          </select>
+        )}
+        {f.env === 'NO' && <span data-no style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}><span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#3b1d22', color: ROJO }}>NO</span><Ayuda texto={AYUDA_NO} etiqueta="NO"/></span>}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: B.titulo, fontWeight: 600, flexShrink: 0 }}>{plantillaFila(f.cond.c).map(campo)}</span>
+        {f.env === 'cruza' && !tieneLado(f.cond.c) && <span style={{ fontSize: 12, color: B.secundario, flexShrink: 0 }}>(solo la vela en que empieza)</span>}
+        <span style={{ marginLeft: 'auto', paddingLeft: 8, color: B.apagado, fontSize: 12 }}>{notaFila(f, valores, tarjeta)}</span>
+        <span style={{ flexShrink: 0 }}><Ayuda texto={AYUDA_COND[f.cond.c] || nombreCond(f.cond.c)} etiqueta={nombreCond(f.cond.c)}/></span>
+        <Menu f={f} onCambia={onCambia}/>
+        <button style={{ ...S.enlace, color: B.apagado, fontSize: 18, lineHeight: 1, padding: '0 4px', flexShrink: 0 }} aria-label="Quitar esta condición" title="Quitar esta condición" onClick={onQuita}>×</button>
       </div>
       {hay && <div data-error-fila style={{ color: ROJO, fontSize: 13, marginTop: 6 }}>{Object.values(errores).map((e, k) => <div key={k}>{e}</div>)}</div>}
     </div>
@@ -79,13 +105,12 @@ function Tarjeta({ titulo, color, derecha, children, datos }) {
   )
 }
 
-export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, onVolver, onGuardada, avanzadoInicial = false, estadoInicial = null, enPruebaInicial = null, buscarInicial = '' }) {
+export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, onVolver, onGuardada, onEditorClasico, estadoInicial = null, enPruebaInicial = null, buscarInicial = '' }) {
   const [est, setEst] = useState(() => estadoInicial || estadoDe(fila))
   const orig = useRef(null); if (!orig.current) orig.current = estadoDe(fila)
   const { def, valores } = est
   const setDef = (d) => setEst(e => ({ ...e, def: typeof d === 'function' ? d(e.def) : d }))
-  const setValor = (k, v) => setEst(e => ({ ...e, valores: { ...e.valores, [k]: v } }))
-  const intervalo = valores.intervalo === 'semanal' ? 'semanal' : 'diario', u = unidadDe(intervalo)
+  const intervalo = valores.intervalo === 'semanal' ? 'semanal' : 'diario'
   const [modoCompraUI, setModoCompraUI] = useState(() => leeCompra(def).modo || 'todas')
   const [modoVentaUI, setModoVentaUI] = useState(() => leeVenta(def).modo || 'alguna')
   const [buscar, setBuscar] = useState(buscarInicial)
@@ -107,27 +132,27 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
     return () => { vivo = false }
   }, [fila?.id, lotes])
 
-  const compra = leeCompra(def), venta = leeVenta(def), prot = leeProteccion(def)
+  const filtro = leeFiltro(def), compra = leeCompra(def), venta = leeVenta(def), prot = leeProteccion(def)
   const modoC = compra.modo || modoCompraUI, modoV = venta.modo || modoVentaUI
   const esquema = useMemo(() => { try { return esquemaDe(def) } catch (_) { return null } }, [def])
   const valoresEf = useMemo(() => { try { return valoresDe(def, valores) } catch (_) { return {} } }, [def, valores])
-  const avz = partesAvanzado(def)
+  const clasico = opcionesClasico(def, valoresEf)
+  const errFiltro = filtro.filas.map(f => erroresFila(f, valoresEf, esquema, f.quien))
   const errCompra = compra.filas.map(f => erroresFila(f, valoresEf, esquema)), errVenta = venta.filas.map(f => erroresFila(f, valoresEf, esquema))
   const errProt = erroresProteccion(prot, def, valoresEf)
   const validacion = useMemo(() => { try { return validaDefinicion(def, valores) } catch (e) { return [`La definición no se puede leer: ${e.message}`] } }, [def, valores])
-  const sinCompra = !def.entrada?.senal, sinSalida = !(def.stops || []).length && !(def.salidas || []).length
+  const sinCompra = !def.entrada?.senal || (compra.ok && !compra.filas.length), sinSalida = !(def.stops || []).length && !(def.salidas || []).length
   const errNombre = !est.nombre.trim() ? 'Ponle un nombre a la estrategia (por ejemplo, «Retrocesos con RSI»).' : null
   const n = (xs) => xs.reduce((a, e) => a + Object.keys(e).length, 0)
-  const nCompra = n(errCompra) + (sinCompra ? 1 : 0), nVenta = n(errVenta), nProt = Object.keys(errProt).length + (sinSalida ? 1 : 0)
-  // Lo que la validación de siempre ve y las tarjetas no explican (una parte de «Avanzado»): cuenta como error de «Avanzado».
-  const nTarjetas = nCompra + nVenta + nProt
-  const errAvanzado = nTarjetas ? [] : validacion
-  const zonas = [['«Compro cuando…»', nCompra], ['«Vendo cuando…»', nVenta], ['«Protección»', nProt], ['«Avanzado»', errAvanzado.length], ['el nombre', errNombre ? 1 : 0]].filter(([, k]) => k)
+  const nFiltro = n(errFiltro), nCompra = n(errCompra) + (sinCompra ? 1 : 0), nVenta = n(errVenta), nProt = cuentaErroresProteccion(errProt) + (sinSalida ? 1 : 0)
+  // Lo que la validación de siempre ve y las tarjetas no explican (una opción del Editor clásico): cuenta como error de allí.
+  const errClasico = nFiltro + nCompra + nVenta + nProt ? [] : validacion
+  const zonas = [['«Solo opero cuando…»', nFiltro], ['«Compro cuando…»', nCompra], ['«Vendo cuando…»', nVenta], ['«Protección»', nProt], ['el Editor clásico', errClasico.length], ['el nombre', errNombre ? 1 : 0]].filter(([, k]) => k)
   const nErrores = zonas.reduce((a, [, k]) => a + k, 0)
   const hayErrores = nErrores > 0 || validacion.length > 0
   const malos = (es) => es.map(e => Object.fromEntries(Object.keys(e).map(k => [k, true])))
-  const regla = fraseRegla({ compra: { ...compra, modo: modoC }, venta: { ...venta, modo: modoV }, prot, valores: valoresEf, intervalo, malosCompra: malos(errCompra), malosVenta: malos(errVenta), malosProt: errProt, avanzado: avz,
-    fraseCompraAvanzada: !compra.ok && def.entrada?.senal ? (() => { try { return fraseCond(def.entrada.senal, valoresEf) } catch (_) { return null } })() : null })
+  const regla = fraseRegla({ def, filtro, compra: { ...compra, modo: modoC }, venta: { ...venta, modo: modoV }, prot, valores: valoresEf, malosFiltro: malos(errFiltro), malosCompra: malos(errCompra), malosVenta: malos(errVenta),
+    malosProt: { ...errProt, stops: malos(errProt.stops) }, ...frasesClasico(def, valoresEf, compra, filtro) })
   const datos = useMemo(() => { try { return datosSuficientes(def, valoresEf, intervalo) } catch (_) { return null } }, [def, valoresEf, intervalo])
   const cambiaRegla = jsonCanonico(paraHuella(def, valores)) !== jsonCanonico(paraHuella(orig.current.def, orig.current.valores))
   const plan = planGuardado({ fila, est, orig: orig.current, enPrueba, estrategias, cambiaRegla })
@@ -135,19 +160,24 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   const estado = fila?.copiaDe ? `Copia de «${fila.copiaDe}». La original y sus pruebas no cambian.`
     : !fila?.id ? 'Estrategia nueva · todavía sin guardar'
     : `Versión ${version} · ${enPrueba.length ? `probada en ${enPrueba.length > 1 ? 'las pruebas' : 'la prueba'} ${enPrueba.map(x => `«${x}»`).join(', ')}` : 'sin probar todavía'}`
+  const indiceActual = filtro.filas.find(f => f.quien !== 'valor')?.quien
+  const indices = [...new Set([...INDICES, ...(def.filtroMercado?.ticker ? [def.filtroMercado.ticker] : [])])]
 
   // ── Cambios desde las tarjetas ──
+  const cambiaFiltro = (filas) => setDef(d => escribeFiltro(d, filas))
   const cambiaCompra = (filas, modo = modoC) => setDef(d => escribeCompra(d, filas, modo))
   const cambiaVenta = (filas, modo = modoV) => setDef(d => escribeVenta(d, filas, modo))
   const anade = (id, donde) => {
     const f = { cond: condNueva(id), env: null }
-    if (donde === 'compra') cambiaCompra([...compra.filas, f]); else cambiaVenta([...venta.filas, f])
+    if (donde === 'filtro') cambiaFiltro([...filtro.filas, { ...f, quien: soloDelValor(id) ? 'valor' : (indiceActual || 'QQQ') }])
+    else if (donde === 'compra') cambiaCompra([...compra.filas, f]); else cambiaVenta([...venta.filas, f])
     setAnadiendo(null)
   }
+  // «De quién»: un índice cambia el de todas las filas del índice (el motor admite uno); «Este valor» la pasa a la señal.
+  const cambiaQuien = (k, q) => cambiaFiltro(q === 'valor' ? filtro.filas.map((x, j) => j === k ? { ...x, quien: 'valor' } : x) : cambiaIndice(filtro.filas.map((x, j) => j === k ? { ...x, quien: q } : x), q))
   const otroModo = (m) => m === 'todas' ? 'alguna' : 'todas'
   const cambiaModoCompra = () => { const m = otroModo(modoC); setModoCompraUI(m); if (compra.filas.length > 1) cambiaCompra(compra.filas, m) }
   const cambiaModoVenta = () => { const m = otroModo(modoV); setModoVentaUI(m); if (venta.filas.length > 1) cambiaVenta(venta.filas, m) }
-  const valorProt = (x) => typeof x === 'string' && x.startsWith('$') ? x.slice(1) : null
 
   const guarda = async () => {
     if (hayErrores || guardando) return
@@ -162,6 +192,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
     } catch (e) { setMsg(`No se pudo guardar: ${e.message}`) }
     setGuardando(false)
   }
+  const abreClasico = () => onEditorClasico?.({ id: fila?.id ?? null, name: est.nombre, description: est.descripcion, definition: def, params: { ...valores } })
 
   if (guia) return <BuilderGuia onVolver={() => setGuia(false)} volverTexto="← Volver a la estrategia"/>
 
@@ -169,18 +200,27 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   const enlaceModo = (modo, onClick) => <>{modo === 'todas' ? 'se cumplen todas' : 'basta con una'} · <button style={{ ...S.enlace, fontSize: 13 }} onClick={onClick}>cambiar a «{modo === 'todas' ? 'al menos una' : 'todas'}»</button></>
   const vacia = (t) => <div style={{ ...S.apagado, marginTop: 4 }}>{t}</div>
   const errorTarjeta = (t) => <div data-error-tarjeta style={{ color: ROJO, fontSize: 13, marginTop: 8 }}>{t}</div>
-  const cajaProt = (titulo, clave, opciones, cuerpo) => (
-    <div data-proteccion={clave} style={{ flex: '1 1 180px', border: `1px solid ${errProt[clave] ? ROJO : B.borde}`, borderRadius: B.radioBoton, padding: 10, background: B.fondo }}>
-      <div style={{ fontWeight: 600, color: B.titulo, marginBottom: 6 }}>{titulo}</div>
-      {opciones}
+  const linea = { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }
+  const caja = (clave, titulo, cuerpo, error) => (
+    <div data-proteccion={clave} style={{ flex: '1 1 220px', border: `1px solid ${error ? ROJO : B.borde}`, borderRadius: B.radioBoton, padding: 10, background: B.fondo }}>
+      <div style={{ fontWeight: 600, color: B.titulo, marginBottom: 4 }}>{titulo}</div>
       {cuerpo}
-      {errProt[clave] && <div data-error-proteccion style={{ color: ROJO, fontSize: 13, marginTop: 6 }}>{errProt[clave]}</div>}
+      {error && <div data-error-proteccion style={{ color: ROJO, fontSize: 13, marginTop: 6 }}>{error}</div>}
     </div>
   )
-  const selProt = (pieza, clave, si, alSi, alNo) => pieza.estado === 'otro'
-    ? <div style={S.apagado}>Otro: se ve y se cambia en «Avanzado».</div>
-    : <select style={mini} aria-label={clave} value={pieza.estado === 'ninguno' ? 'no' : 'si'} onChange={e => e.target.value === 'si' ? alSi() : alNo()}><option value="no">Ninguno</option><option value="si">{si}</option></select>
-  const numProt = (pieza, clave, poner) => { const ref = valorProt(pieza.valor); return <Numero valor={ref ? valoresEf[ref] : pieza.valor} error={errProt[clave]} etiqueta={clave} onCambia={v => ref ? setValor(ref, v) : poner(v)}/> }
+  const numStop = (k, s, ruta) => { const [, que, , ] = (CAMPOS_STOP_TARJETA[s.tipo] || []).find(([r]) => r.join('.') === ruta.join('.')) || []; return <Numero valor={numeroStop(s, ruta, valoresEf)} error={errProt.stops[k]?.[ruta.join('.')]} etiqueta={que} onCambia={v => setDef(d => ponNumeroStop(d, k, ruta, v))}/> }
+  const cuerpoStop = (s, k) => {
+    if (s.tipo === 'porcentaje') return <>Vender si baja un {numStop(k, s, ['pct'])} % bajo la compra</>
+    if (s.tipo === 'minimoVelas') return <>En el mínimo de las últimas {numStop(k, s, ['n'])} velas</>
+    if (s.tipo === 'atr') return <>{numStop(k, s, ['k'])} veces el ATR de {numStop(k, s, ['periodo'])} velas bajo la compra</>
+    if (s.tipo === 'nivel') return <>En el mínimo de la vela de la señal</>
+    return <>Cuando una vela cierra bajo su <select style={mini} aria-label="Tipo de la media del stop" value={s.si.p.tipo} onChange={e => setDef(d => ponNumeroStop(d, k, ['si', 'p', 'tipo'], e.target.value))}><option value="SMA">SMA</option><option value="EMA">EMA</option></select> ({numStop(k, s, ['si', 'p', 'periodo'])}), sube al mínimo de las últimas {numStop(k, s, ['nivel', 'velas'])} velas</>
+  }
+  const primerStop = prot.stops[0]?.s, objetivoValor = val(prot.objetivo.valor, valoresEf)
+  const calculoObjetivo = primerStop?.tipo === 'porcentaje' && typeof val(primerStop.pct, valoresEf) === 'number' && typeof objetivoValor === 'number'
+    ? `Con el stop al ${aTexto(val(primerStop.pct, valoresEf))} %, vende al subir un ${aTexto(Math.round(val(primerStop.pct, valoresEf) * objetivoValor * 100) / 100)} %.`
+    : 'Vende al subir esas veces la distancia entre el precio de compra y el primer stop.'
+  const tiempoN = val(prot.tiempo.valor, valoresEf)
 
   return (
     <div style={S.pagina}>
@@ -189,11 +229,27 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
         <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Paso 1 · Crear la estrategia</span>
         <span style={{ marginLeft: 'auto' }}><button style={S.boton} onClick={() => setGuia(true)}>Guía: cómo se prueba una estrategia</button></span>
       </div>
+      {clasico.length > 0 && (
+        <div data-aviso="clasico" style={{ border: `1px solid ${AMARILLO}`, borderRadius: B.radioBoton, padding: 12, marginBottom: 14 }}>
+          <div style={{ color: AMARILLO, fontWeight: 600 }}>Esta estrategia usa opciones que solo se pueden ver y cambiar en el Editor clásico:</div>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18, color: B.texto }}>{clasico.map(t => <li key={t}>{t}</li>)}</ul>
+          <div style={{ ...S.secundario, marginTop: 6 }}>Al guardar aquí se conservan tal cual. <button style={S.enlace} onClick={abreClasico}>Abrir en el Editor clásico</button></div>
+        </div>
+      )}
       <div style={{ ...S.tarjeta, marginBottom: 16 }} data-tarjeta="nombre">
         <div style={{ ...S.cuerpo, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <label style={{ fontWeight: 600, color: B.titulo }} htmlFor="nombre-estrategia">Nombre de la estrategia</label>
-          <input id="nombre-estrategia" value={est.nombre} onChange={e => setEst(x => ({ ...x, nombre: e.target.value }))} style={{ ...entrada, flex: '1 1 260px', maxWidth: 480, ...(errNombre ? { borderColor: ROJO } : {}) }}/>
-          <span data-estado style={S.secundario}>{estado}</span>
+          <input id="nombre-estrategia" value={est.nombre} onChange={e => setEst(x => ({ ...x, nombre: e.target.value }))} style={{ ...entrada, flex: '1 1 240px', maxWidth: 420, ...(errNombre ? { borderColor: ROJO } : {}) }}/>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontWeight: 600, color: B.titulo }}>Velas:</span>
+            <select style={entrada} aria-label="Velas" value={intervalo} onChange={e => setEst(x => ({ ...x, valores: { ...x.valores, intervalo: e.target.value } }))}>
+              <option value="diario">Diarias (1 vela = 1 día de mercado)</option><option value="semanal">Semanales (1 vela = 1 semana)</option>
+            </select>
+          </label>
+          <div style={{ flexBasis: '100%', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <span data-estado style={S.secundario}>{estado}</span>
+            <span style={S.apagado}>La prueba del paso 2 solo admite velas diarias.</span>
+          </div>
           {errNombre && <div style={{ color: ROJO, fontSize: 13, flexBasis: '100%' }}>{errNombre}</div>}
         </div>
       </div>
@@ -220,10 +276,13 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                           <button style={{ ...S.boton, padding: '0 9px', fontWeight: 700 }} aria-label={`Añadir «${nombreCond(id)}»`} onClick={() => setAnadiendo(anadiendo === id ? null : id)}>+</button>
                         </div>
                         {anadiendo === id && (
-                          <div data-pregunta style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <span style={S.secundario}>¿Añadir a Compro o a Vendo?</span>
-                            <button style={{ ...S.boton, padding: '3px 10px', color: AZUL, opacity: compra.ok ? 1 : 0.5 }} disabled={!compra.ok} onClick={() => anade(id, 'compra')}>Compro</button>
-                            <button style={{ ...S.boton, padding: '3px 10px', color: NARANJA, opacity: venta.ok ? 1 : 0.5 }} disabled={!venta.ok} onClick={() => anade(id, 'venta')}>Vendo</button>
+                          <div data-pregunta style={{ marginTop: 6 }}>
+                            <div style={S.secundario}>¿Añadir a Solo opero cuando, a Compro o a Vendo?</div>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                              <button style={{ ...S.boton, padding: '3px 8px', fontSize: 13, color: MORADO, opacity: filtro.ok ? 1 : 0.5 }} disabled={!filtro.ok} onClick={() => anade(id, 'filtro')}>Solo opero cuando</button>
+                              <button style={{ ...S.boton, padding: '3px 8px', fontSize: 13, color: AZUL, opacity: compra.ok ? 1 : 0.5 }} disabled={!compra.ok} onClick={() => anade(id, 'compra')}>Compro</button>
+                              <button style={{ ...S.boton, padding: '3px 8px', fontSize: 13, color: NARANJA, opacity: venta.ok ? 1 : 0.5 }} disabled={!venta.ok} onClick={() => anade(id, 'venta')}>Vendo</button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -236,79 +295,99 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
         </div>
 
         {/* ── Centro: las tarjetas ── */}
-        <div data-columna="tarjetas" style={{ flex: '3 1 420px', minWidth: 0 }}>
-          {avz.length > 0 && <div data-aviso="avanzado" style={{ color: AMARILLO, marginBottom: 10 }}>Esta estrategia tiene partes que solo se pueden ver y cambiar en «Avanzado» (abajo).</div>}
+        <div data-columna="tarjetas" style={{ flex: '3 1 440px', minWidth: 0 }}>
+          <Tarjeta titulo="Solo opero cuando…" color={MORADO} datos={{ 'data-tarjeta': 'filtro' }} derecha={filtro.filas.length ? 'se cumplen todas' : 'opcional'}>
+            {filtro.ok ? <>
+              {filtro.filas.map((f, k) => <Fila key={k} f={f} errores={errFiltro[k]} valores={valoresEf} tarjeta="filtro" color={MORADO} quien={f.quien} indices={indices} onQuien={q => cambiaQuien(k, q)}
+                onCambia={g => cambiaFiltro(filtro.filas.map((x, j) => j === k ? { ...g, quien: x.quien } : x))} onQuita={() => cambiaFiltro(filtro.filas.filter((_, j) => j !== k))}/>)}
+              {!filtro.filas.length && vacia('Sin filtro: opera siempre que se cumpla «Compro cuando…». Añádelo desde el catálogo con «+».')}
+            </> : <div style={{ color: AMARILLO }}>Este filtro se ve y se cambia en el Editor clásico.</div>}
+            <div style={{ ...S.apagado, marginTop: 8 }}>{AYUDA_FILTRO}</div>
+          </Tarjeta>
+
           <Tarjeta titulo="Compro cuando…" color={AZUL} datos={{ 'data-tarjeta': 'compra' }} derecha={compra.ok ? enlaceModo(modoC, cambiaModoCompra) : null}>
             {compra.ok ? <>
-              {compra.filas.map((f, k) => <Fila key={k} f={f} errores={errCompra[k]} valores={valoresEf} color={AZUL} onValor={setValor}
+              {compra.filas.map((f, k) => <Fila key={k} f={f} errores={errCompra[k]} valores={valoresEf} tarjeta="compra" color={AZUL}
                 onCambia={g => cambiaCompra(compra.filas.map((x, j) => j === k ? g : x))} onQuita={() => cambiaCompra(compra.filas.filter((_, j) => j !== k))}/>)}
               {!compra.filas.length && vacia('Añade condiciones desde el catálogo con «+».')}
-            </> : <div style={S.secundario}>{(() => { try { return `Compra cuando ${fraseCond(def.entrada?.senal, valoresEf)}.` } catch (_) { return '' } })()} <span style={{ color: AMARILLO }}>Se cambia en «Avanzado».</span></div>}
+            </> : <div style={S.secundario}>{regla.partes.find(p => p.tipo === 'compra')?.texto} <span style={{ color: AMARILLO }}>Se cambia en el Editor clásico.</span></div>}
             {sinCompra && errorTarjeta('Falta la condición de compra: añade al menos una con «+» (por ejemplo, «Cierre frente a una media»).')}
           </Tarjeta>
 
           <Tarjeta titulo="Vendo cuando…" color={NARANJA} datos={{ 'data-tarjeta': 'venta' }} derecha={venta.ok ? enlaceModo(modoV, cambiaModoVenta) : null}>
             {venta.ok ? <>
-              {venta.filas.map((f, k) => <Fila key={k} f={f} errores={errVenta[k]} valores={valoresEf} color={NARANJA} onValor={setValor}
+              {venta.filas.map((f, k) => <Fila key={k} f={f} errores={errVenta[k]} valores={valoresEf} tarjeta="venta" color={NARANJA}
                 onCambia={g => cambiaVenta(venta.filas.map((x, j) => j === k ? g : x))} onQuita={() => cambiaVenta(venta.filas.filter((_, j) => j !== k))}/>)}
               {!venta.filas.length && vacia('Sin condiciones de venta: sale solo por la protección de abajo. Añádelas desde el catálogo con «+».')}
-            </> : <div style={{ color: AMARILLO }}>Las condiciones de venta se ven y se cambian en «Avanzado».</div>}
+            </> : <div style={{ color: AMARILLO }}>Las condiciones de venta se ven y se cambian en el Editor clásico.</div>}
           </Tarjeta>
 
           <Tarjeta titulo="Protección" datos={{ 'data-tarjeta': 'proteccion' }}>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {cajaProt('Stop de pérdidas', 'stop',
-                selProt(prot.stop, 'stop', 'Vender si pierde…', () => setDef(d => ponStop(d, DEFECTO_PROTECCION.stop)), () => setDef(d => ponStop(d, null))),
-                prot.stop.estado === 'pct' && <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>{numProt(prot.stop, 'stop', v => setDef(d => ponStop(d, v)))}<span>% bajo el precio de compra</span></div>)}
-              {cajaProt('Objetivo de ganancia', 'objetivo',
-                selProt(prot.objetivo, 'objetivo', 'Vender al ganar…', () => setDef(d => ponSalida(d, 'objetivo', 'multiploR', DEFECTO_PROTECCION.objetivo)), () => setDef(d => ponSalida(d, 'objetivo', 'multiploR', null))),
-                prot.objetivo.estado === 'veces' && <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>{numProt(prot.objetivo, 'objetivo', v => setDef(d => ponSalida(d, 'objetivo', 'multiploR', v)))}<span>veces lo que arriesgas (la distancia hasta el stop)</span></div>)}
-              {cajaProt('Salida por tiempo', 'tiempo',
-                selProt(prot.tiempo, 'tiempo', 'Vender a las…', () => setDef(d => ponSalida(d, 'tope', 'velas', DEFECTO_PROTECCION.tiempo)), () => setDef(d => ponSalida(d, 'tope', 'velas', null))),
-                prot.tiempo.estado === 'velas' && (() => { const ref = valorProt(prot.tiempo.valor), nv = ref ? valoresEf[ref] : prot.tiempo.valor; return (
-                  <div style={{ marginTop: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>{numProt(prot.tiempo, 'tiempo', v => setDef(d => ponSalida(d, 'tope', 'velas', v)))}<span>velas</span></div>
-                    <div data-equivalencia style={{ ...S.apagado, marginTop: 4 }}>({errProt.tiempo ? '[?]' : aTexto(nv)} {u.mercado}, porque esta estrategia usa {u.texto})</div>
-                  </div>) })())}
+              {caja('stop', 'Stop de pérdidas', <>
+                {!prot.stops.length && <select style={mini} aria-label="Stop de pérdidas" value="" onChange={e => e.target.value && setDef(d => anadeStopDef(d, e.target.value))}>
+                  <option value="">Ninguno</option>{TIPOS_STOP.map(t => <option key={t.tipo} value={t.tipo}>{t.nombre}</option>)}
+                </select>}
+                {prot.stops.map(({ s, editable }, k) => (
+                  <div key={k} data-stop={s.tipo} style={{ marginTop: k ? 10 : 0, paddingTop: k ? 8 : 0, borderTop: k ? `1px solid ${B.borde}` : 'none' }}>
+                    {editable ? <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {prot.stops.length > 1 && <span style={S.apagado}>{k + 1}.</span>}
+                        <select style={mini} aria-label="Tipo de stop" value={s.tipo} onChange={e => setDef(d => cambiaTipoStopDef(d, k, e.target.value))}>{TIPOS_STOP.map(t => <option key={t.tipo} value={t.tipo}>{t.nombre}</option>)}</select>
+                        <button style={{ ...S.enlace, color: B.apagado, marginLeft: 'auto' }} aria-label="Quitar este stop" onClick={() => setDef(d => quitaStopDef(d, k))}>×</button>
+                      </div>
+                      <div style={linea}>{cuerpoStop(s, k)}</div>
+                      <div style={{ ...S.apagado, marginTop: 4 }}>{TIPOS_STOP.find(t => t.tipo === s.tipo)?.ejemplo}</div>
+                      {Object.values(errProt.stops[k] || {}).map((e, j) => <div key={j} style={{ color: ROJO, fontSize: 13, marginTop: 4 }}>{e}</div>)}
+                    </> : <div style={S.secundario}>{k + 1}. {(t => t.charAt(0).toUpperCase() + t.slice(1))(fraseStopTarjeta(s, valoresEf))}. <span style={{ color: AMARILLO }}>(se cambia en el Editor clásico)</span></div>}
+                  </div>
+                ))}
+                {prot.stops.length > 1 && <div style={{ ...S.apagado, marginTop: 8 }}>Se comprueban en este orden; el primero que se cumple cierra la operación.</div>}
+                {prot.stops.length > 0 && <select style={{ ...mini, marginTop: 8 }} aria-label="Añadir otro stop" value="" onChange={e => e.target.value && setDef(d => anadeStopDef(d, e.target.value))}>
+                  <option value="">+ Añadir otro stop</option>{TIPOS_STOP.map(t => <option key={t.tipo} value={t.tipo}>{t.nombre}</option>)}
+                </select>}
+              </>)}
+              {caja('objetivo', 'Objetivo de ganancia (según el stop)', prot.objetivo.estado === 'otro' ? <div style={S.apagado}>Se cambia en el Editor clásico.</div> : <>
+                <select style={mini} aria-label="Objetivo de ganancia" disabled={!prot.stops.length && prot.objetivo.estado === 'ninguno'} value={prot.objetivo.estado === 'ninguno' ? 'no' : 'si'}
+                  onChange={e => setDef(d => ponSalida(d, 'objetivo', 'multiploR', e.target.value === 'si' ? DEFECTO_PROTECCION.objetivo : null))}>
+                  <option value="no">Ninguno</option><option value="si">Vender al ganar…</option>
+                </select>
+                {!prot.stops.length && prot.objetivo.estado === 'ninguno' && <div style={{ ...S.apagado, marginTop: 6 }}>Necesita un stop: se calcula a partir de lo que arriesgas hasta el stop.</div>}
+                {prot.objetivo.estado === 'veces' && <>
+                  <div style={linea}>Vender al ganar <Numero valor={objetivoValor} error={errProt.objetivo} etiqueta="Veces lo que arriesgo" onCambia={v => setDef(d => ponSalida(d, 'objetivo', 'multiploR', v))}/> veces lo que arriesgo</div>
+                  {prot.stops.length > 0 && !errProt.objetivo && <div data-calculo style={{ ...S.apagado, marginTop: 4 }}>{calculoObjetivo}</div>}
+                </>}
+              </>, errProt.objetivo)}
+              {caja('tiempo', 'Salida por tiempo', prot.tiempo.estado === 'otro' ? <div style={S.apagado}>Se cambia en el Editor clásico.</div> : <>
+                <select style={mini} aria-label="Salida por tiempo" value={prot.tiempo.estado === 'ninguno' ? 'no' : 'si'} onChange={e => setDef(d => ponSalida(d, 'tope', 'velas', e.target.value === 'si' ? DEFECTO_PROTECCION.tiempo : null))}>
+                  <option value="no">Ninguno</option><option value="si">Vender a las…</option>
+                </select>
+                {prot.tiempo.estado === 'velas' && <>
+                  <div style={linea}>Vender a las <Numero valor={tiempoN} error={errProt.tiempo} etiqueta="Velas" onCambia={v => setDef(d => ponSalida(d, 'tope', 'velas', v))}/> velas</div>
+                  <div data-equivalencia style={{ ...S.apagado, marginTop: 4 }}>= {errProt.tiempo ? '[?]' : aTexto(tiempoN)} {intervalo === 'semanal' ? 'semanas, porque las velas son semanales' : 'días de mercado, porque las velas son diarias'}</div>
+                </>}
+              </>, errProt.tiempo)}
             </div>
             {sinSalida && errorTarjeta('La estrategia necesita una forma de salir: una condición de venta, un stop o una salida por tiempo.')}
           </Tarjeta>
 
-          <details data-plegable="avanzado" open={avanzadoInicial || undefined} style={{ ...S.tarjeta, padding: '10px 16px' }}>
-            <summary style={{ cursor: 'pointer', fontWeight: 700, color: B.titulo }}>Avanzado <span style={{ fontWeight: 400, color: B.apagado, fontSize: 13 }}>— optimizador, rangos de prueba y orden de las condiciones — no hace falta tocarlo</span></summary>
-            <div style={{ marginTop: 12 }}>
-              {avz.length > 0 && (
-                <div data-aviso="partes" style={{ border: `1px solid ${AMARILLO}`, borderRadius: B.radioBoton, padding: 10, marginBottom: 12 }}>
-                  <div style={{ color: AMARILLO, fontWeight: 600 }}>Esta estrategia tiene partes que solo se pueden ver y cambiar en Avanzado.</div>
-                  <ul style={{ margin: '6px 0 0', paddingLeft: 18, color: B.secundario }}>{avz.map(t => <li key={t}>{t}</li>)}</ul>
-                </div>
-              )}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-                <span style={S.secundario}>Velas</span>
-                <select style={mini} aria-label="Velas" value={intervalo} onChange={e => setEst(x => ({ ...x, valores: { ...x.valores, intervalo: e.target.value } }))}><option value="diario">diarias</option><option value="semanal">semanales</option></select>
-                <span style={S.apagado}>La prueba del paso 2 solo admite velas diarias.</span>
-              </div>
-              <div style={{ ...S.apagado, marginBottom: 10 }}>La regla tal como la lee el motor: {(() => { try { return fraseDefinicion(def, valores) } catch (_) { return '…' } })()}</div>
-              {errAvanzado.length > 0 && <div data-error-avanzado style={{ color: ROJO, fontSize: 13, marginBottom: 10 }}>{errAvanzado.map((e, k) => <div key={k}>{e}</div>)}</div>}
-              <FormularioDefinicion def={def} setDef={cambio => setDef(d => ({ ...d, ...cambio }))} valoresEf={valoresEf} params={esquema?.lista || []}
-                onValores={v => setEst(x => ({ ...x, valores: { ...v, ...(x.valores.intervalo ? { intervalo: x.valores.intervalo } : {}) } }))}/>
-            </div>
-          </details>
+          <div data-ejecucion style={{ ...S.secundario, padding: '4px 4px 0' }}>{LINEA_EJECUCION.replace(': Editor clásico.', ': ')}<button style={S.enlace} onClick={abreClasico}>Editor clásico</button>.</div>
         </div>
 
         {/* ── Derecha: la regla, la comprobación y guardar ── */}
         <div data-columna="regla" style={{ flex: '1 1 260px', maxWidth: 380, minWidth: 0 }}>
           <Tarjeta titulo="La regla, en una frase" datos={{ 'data-tarjeta': 'regla' }}>
-            <div data-regla style={{ lineHeight: 1.6 }}>{regla.partes.map((p, k) => <span key={k} data-parte={p.tipo} style={{ color: p.tipo === 'compra' ? AZUL : p.tipo === 'venta' ? NARANJA : B.texto }}>{k ? ' ' : ''}{p.texto}</span>)}</div>
+            <div data-regla="true" style={{ lineHeight: 1.6 }}>{regla.partes.map((p, k) => <span key={k} data-parte={p.tipo} style={{ color: p.tipo === 'filtro' ? MORADO : p.tipo === 'compra' ? AZUL : p.tipo === 'venta' ? NARANJA : B.texto }}>{k ? ' ' : ''}{p.texto}</span>)}</div>
           </Tarjeta>
           <Tarjeta titulo="Comprobación" datos={{ 'data-tarjeta': 'comprobacion' }}>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <li data-comprueba="compra" style={{ color: sinCompra ? ROJO : B.texto }}>{sinCompra ? '✕ Falta la condición de compra' : '✓ Hay condición de compra'}</li>
               <li data-comprueba="salir" style={{ color: sinSalida ? ROJO : B.texto }}>{sinSalida ? '✕ Falta una forma de salir' : '✓ Hay forma de salir'}</li>
-              {datos && <li data-comprueba="datos" style={{ color: datos.ok ? B.texto : AMARILLO }}>{datos.ok
-                ? `✓ Hay datos suficientes (la condición más larga necesita ${datos.necesita} velas previas y el backtest carga ${datos.carga})`
-                : `⚠ Faltan datos al empezar: la condición más larga necesita ${datos.necesita} velas previas y el backtest carga ${datos.carga}; en las primeras ${datos.necesita - datos.carga} velas del periodo no podrá decidir`}</li>}
+              {datos && datos.necesita > 0 && <li data-comprueba="datos" style={{ color: datos.ok ? B.texto : ROJO }}>{datos.ok
+                ? `✓ Hay datos suficientes: la condición más larga necesita ${datos.necesita} velas previas.`
+                : `✕ Faltan datos: la condición más larga necesita ${datos.necesita} velas previas, pero antes del periodo solo se cargan ${datos.carga}. En las primeras ${datos.necesita - datos.carga} velas del periodo esa condición no se puede calcular y la estrategia no compra. Usa un número más pequeño.`}</li>}
               {nErrores > 0 && <li data-comprueba="errores" style={{ color: ROJO }}>✕ {plural(nErrores, 'error', 'errores')} en {zonas.map(([z]) => z).join(', ').replace(/, ([^,]*)$/, ' y $1')}</li>}
+              {errClasico.map((e, k) => <li key={k} data-error-clasico style={{ color: ROJO, fontSize: 13 }}>{e}</li>)}
             </ul>
           </Tarjeta>
           {plan.version && <div data-aviso="version" style={{ background: '#3a3220', border: `1px solid ${AMARILLO}`, borderRadius: B.radioBoton, padding: 12, marginBottom: 12, color: B.texto }}>{avisoVersion(plan.version)}</div>}

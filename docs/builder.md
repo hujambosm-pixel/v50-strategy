@@ -373,3 +373,63 @@ guarda en la misma. La versión se lee del nombre (`partesNombre`): no hay colum
 - Quitar «Editor» y «Estrategias» del menú y el enlace «Editor clásico», cuando Sergi haya usado el editor nuevo.
 - El paso 2 sigue solo con velas diarias. La plantilla «Filtro de mercado» sigue desactivada (el filtro va dentro de Avanzado).
 - Comprobado con montaje SWC (sin navegador): falta verlo y tocarlo en la app.
+
+## 11. Editor sin «Avanzado», filas en una línea y «Solo opero cuando…» (V9.1044)
+
+### Auditoría (solo lectura)
+
+- **a) Números unidos a un parámetro.** Un valor `'$nombre'` en una condición o un stop es el parámetro `nombre` de la
+  estrategia (`parametros.lista`); el motor lo cambia por su valor (`valoresDe`: el guardado en `params` o el defecto) con
+  `resuelve`. Así el optimizador puede variarlo. Lo usan las 4: PRUEBA_BUILDER_1 y Retroceso líderes RSI2 (`$nivelRSI`, el nivel
+  del RSI) y Copia editor 23 y Prueba editor EMA20 (`$ema`, el periodo de la EMA).
+- **b) Anidar.** Sí: una condición es un árbol (`Y`, `O`, `NO`, `cruza`, `histeresis`) que el intérprete y la validación recorren
+  enteros. «filtro Y (A o B)» se guarda `{ c: 'Y', de: [filtro, { c: 'O', de: [A, B] }] }`.
+- **c) Filtro de mercado.** `filtroMercado: { ticker, si }`: UN solo ticker (cualquier símbolo de Yahoo en mayúsculas: QQQ, SPY,
+  ^GSPC…) y una condición del catálogo (que puede ser un árbol) calculada en sus velas y llevada a las fechas del valor. Las de
+  universo (fuerza relativa) no sirven ahí. Solo afecta a la ENTRADA. La verificación de sesgos del paso 2 corre en mercados
+  ficticios SIN ese ticker: con un filtro de un índice, ahí no compraría nunca (pendiente, ver abajo).
+- **d) Stops.** Cinco tipos: `porcentaje` (pct), `minimoVelas` (n), `atr` (k, periodo), `nivel` (el mínimo de expresiones de la
+  vela que fija la orden: mínimo, máximo, cierre o una media) y `trailing` (cuando se cumple una condición `si`, sube al mínimo de N
+  velas o al cierre − k × ATR; nunca baja). Puede haber varios: se comprueban en su orden y el primero que salta cierra la operación.
+  Opciones: `activa` (se enciende con un parámetro), `retiraSiSupera`, `historialAlEntrar`, `soloSobreEntrada`.
+- **e) Ejecución.** Por defecto, compra a la apertura de la vela siguiente a la señal, sin cancelación, y se miran stops y salidas
+  ya en la vela de la compra. Otras: orden al cierre, orden stop o límite (con nivel y ajuste), cancelación, «no mirar la vela de
+  entrada». De las 4, solo **Copia editor 23** usa opciones que no son las de por defecto: orden stop en el máximo de la vela de la
+  señal que solo baja, cancelación si cierra bajo la EMA y no mirar stops ni salidas en la vela de la compra.
+- **f) «No se cumple».** `{ c: 'NO', de: condición }` (Copia editor 23: «NO (cierre < EMA 20)»).
+- **Por qué las filas salían una debajo de otra**: la hoja de estilos de la app (`styles/`) pone `width: 100%` a todos los `select`
+  e `input`; ahora los de las filas llevan `width: auto` y la fila no se parte (`flex-wrap: nowrap`).
+
+### Cambios
+
+- **Inicio**: «Desde una plantilla» es un desplegable («Elige la plantilla», sin la no disponible), la regla de la elegida (en velas)
+  y «Usar esta plantilla». Las tres tarjetas, de la misma altura. El enlace de arriba pasa a llamarse **«Editor de código»**: «Editor
+  clásico» quiere decir ya solo la pestaña «Editor» (el editor visual de formularios).
+- **Mis estrategias**: debajo del nombre, la regla completa sin cortar (`reglaDe`, el mismo generador que el editor).
+- **Editor** (`components/BuilderEditor.js`, `lib/builder/tarjetas.js`): sin «Avanzado» ni parámetros ni optimizador (siguen en el
+  Editor clásico, sin cambios). Velas junto al nombre. Orden: «Solo opero cuando…» (morada) → «Compro cuando…» → «Vendo cuando…» →
+  «Protección» → la línea de ejecución. Si la estrategia usa opciones que no son las de por defecto (`opcionesClasico`), aviso arriba
+  con la lista en palabras sencillas y «Abrir en el Editor clásico»; al guardar se conservan.
+- **«Solo opero cuando…»**: cada fila con «de quién» (QQQ, SPY, ^NDX, ^GSPC, IWM, DIA o «Este valor»); se cumplen todas. Las del
+  índice son el filtro de mercado (un solo ticker: cambiarlo en una fila lo cambia en todas). Las de «Este valor» van DELANTE en la
+  señal, `Y(filtro…, compra)`, y `diseno.filtrosValor` dice cuántas son (`diseno` no entra en la huella ni en el motor), así siguen
+  siendo filtro con «al menos una» en la compra. Comprobado con una serie inventada: las compras calculadas a mano = las del motor.
+- **Filas**: en una línea; solo se editan los números, el símbolo (>, <, ≥, ≤, cruza ↑ / ↓) y el tipo de media. Nota gris según la
+  tarjeta, «?» con la explicación, menú «…» («Darle la vuelta (NO)» y, sin símbolo, «Solo la vela en que empieza a cumplirse») y ×.
+  Una fila dada la vuelta lleva la etiqueta «NO» y se dice en positivo («No (cierre < EMA 20)» → «el cierre está en o por encima de su
+  media exponencial de 20 velas»). Un número unido a un parámetro se ve como cualquier otro; si se cambia, queda fijo (el parámetro no
+  se borra).
+- **Protección**: «Stop de pérdidas» con los cinco tipos (los mismos valores por defecto que el Editor clásico: `lib/editor/piezas.js`),
+  cada uno con su ejemplo en euros; varios stops en su orden. El trailing de la casilla es el del motor (sube al mínimo de N velas
+  cuando una vela cierra bajo su media), no un trailing en %. «Objetivo de ganancia (según el stop)» desactivado sin stop y con el
+  cálculo («Con el stop al 8 %, vende al subir un 16 %»). «Salida por tiempo» en velas con «= N días de mercado…».
+- **Textos**: «Hay datos suficientes: la condición más larga necesita N velas previas.»; si faltan, en rojo y explicado. La regla
+  empieza por el filtro, va en velas, sin dobles negaciones y termina con «Compro y vendo a la apertura de la vela siguiente a la
+  señal» y la protección.
+
+### Pendiente
+
+- La verificación de sesgos (paso 2) no tiene el ticker del filtro de mercado en sus mercados ficticios: una estrategia con filtro
+  de un índice no compraría allí y quedaría sin veredicto. Habría que inventar también el índice (cambia el cálculo: decisión de Sergi).
+- Trailing en % («sube a 120 € → vende a 108 €»): el motor no lo tiene; haría falta un tipo de stop nuevo.
+- Un filtro de mercado con dos índices distintos (QQQ y SPY a la vez): el motor admite uno.
