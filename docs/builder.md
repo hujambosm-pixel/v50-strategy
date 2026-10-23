@@ -282,3 +282,29 @@ lo leen igual. Sin motores, validación ni huellas nuevos; sin tablas nuevas.
 - Textos compartidos con el modo Lotes que el Builder solo usa por dentro: `validaLote` («El lote necesita un nombre», que el
   Builder ya traduce a «Ponle un nombre a la prueba.»; «El lote tiene que ser del formato…», que el Builder muestra como «La
   prueba …»), `textoLoteEditor` (el texto de «Copiar para Claude»).
+
+## 9. «Mi trabajo» en dos pestañas e inicio del Builder (V9.1042)
+
+- **Inicio, «¿Desde dónde empiezas?»**: tres tarjetas en fila (en móvil, una debajo de otra). *En blanco* (botón verde
+  «Empezar en blanco»), *Desde una plantilla* (las cuatro de siempre; la del filtro de mercado sigue desactivada) y *Desde una de
+  mis estrategias* (desplegable con las del editor y «Copiar y editar»: abre una estrategia NUEVA, sin id, llamada «<nombre>
+  (copia)»; la original y sus pruebas no cambian; no se escribe nada hasta pulsar Guardar). Sustituye al recuadro «Siguiente
+  paso» y a la sección de plantillas.
+- **Mi trabajo**: encima, «Una estrategia es una regla de compra y venta. Una prueba es la comprobación contra el azar de una o
+  varias estrategias.» Dos pestañas (`lib/builder/misListas.js`), por defecto «Mis estrategias»:
+  - *Mis estrategias (N)*: una fila por estrategia, sin pruebas mezcladas. Estrategia (nombre, que la abre; debajo, su
+    descripción o, si no tiene, el principio de su regla: así PRUEBA_BUILDER_1 la estrategia no se confunde con la prueba) ·
+    Versión · Última prueba (la que la abre; «ninguna» si nunca se probó) · Cómo le fue (chip Pasa / No llega / Sin veredicto /
+    Sin resultados todavía / Sin probar / Borrador y la línea «Decide el laboratorio de … · percentil periodo: X») · Qué toca
+    ahora. Filtros «Del editor (N)» y «Código (N)».
+  - *Mis pruebas (N)*: una fila por prueba congelada. Prueba (abre sus resultados) · Estrategias que incluye (número y
+    nombres) · Valores y periodos · Verificación de sesgos (Superada / No superada / No se hizo, prueba antigua / Pendiente) ·
+    Veredicto (chip y «Decide el laboratorio de operaciones / de cartera», por estrategia).
+  - El veredicto es el MISMO que enseña la prueba al abrirla (`estadoDesde` y `veredictoVariante` de
+    `lib/builder/pruebaGuiada.js`). Sin botones «Editar» ni «Copiar» en las filas.
+- **Resultados arriba en todas las pruebas terminadas** (punto 6b). Antes iban arriba solo con las cuatro etapas hechas
+  (`completo`); PRUEBA_EDITOR_1 es anterior a la verificación de sesgos y al laboratorio de operaciones, así que nunca estaba
+  «completa» y salía en el orden de una prueba sin empezar. Ahora van arriba en cuanto todas las variantes tienen veredicto
+  (decida el laboratorio de operaciones o el de cartera). Si le falta algo, debajo del siguiente paso lo dice, con «Continuar»
+  dentro de «Ver qué se probó y cómo».
+- «Mi trabajo» de la tanda 1 (`lib/builder/miTrabajo.js`, `construyeMiTrabajo`) ya no se pinta; se conserva para comparar.

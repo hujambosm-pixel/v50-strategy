@@ -155,6 +155,11 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
   const resultados = fila && est ? filasResultado(fila, est) : []
   const veredictos = fila && est ? fila.lote.variantes.map(v => ({ v, ...veredictoVariante({ cal: est.cal[v.id], lab: est.lab[v.id], abVariante: (est.ab?.resultados || []).find(x => x.id === v.id) }) })) : []
   const algunaPasa = veredictos.some(x => x.pasa === true)
+  // V9.1042: los resultados van arriba en cuanto la prueba tiene veredicto en todas sus variantes, aunque le falte algo (las
+  // pruebas antiguas, como PRUEBA_EDITOR_1, no tienen verificación de sesgos ni laboratorio de operaciones: decide el
+  // laboratorio de cartera, así que ya están terminadas). Antes solo iban arriba con las cuatro etapas hechas.
+  const conVeredicto = !!(fila && est && veredictos.length && veredictos.every(x => x.decide))
+  const arriba = hecho || conVeredicto
   const textoCopia = () => {
     const cn = comunNormal(fila.lote.comun)
     return textoLoteEditor({ fila, ejec: est?.ab || null, version, completo: true,
@@ -367,7 +372,7 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
   )
 
   // Siguiente paso
-  const siguientePaso = hecho && (
+  const siguientePaso = arriba && (
     <div style={{ background: B.siguienteFondo, border: `1px solid ${B.siguienteBorde}`, borderRadius: B.radioTarjeta, padding: B.aire, marginTop: 16 }}>
       <div style={{ fontSize: 15, fontWeight: 700, color: B.titulo, marginBottom: 8 }}>Siguiente paso</div>
       {algunaPasa ? (
@@ -382,6 +387,13 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
         </div>
         <div style={{ ...S.apagado, marginTop: 8 }}>Ojo: si pruebas muchas variantes hasta que una pase, alguna pasará por suerte. Decide antes qué idea quieres probar y por qué.</div>
       </>)}
+      {faltaAlgo && (
+        <div data-aviso="antigua" style={{ ...S.secundario, marginTop: 12 }}>
+          {veredictos.every(x => x.decide === 'lote')
+            ? 'Esta prueba no tiene verificación de sesgos ni laboratorio de operaciones (se hizo antes de que existieran): su veredicto es el del laboratorio de cartera.'
+            : 'A esta prueba le falta una parte.'} Si quieres completarla, abre «Ver qué se probó y cómo» y pulsa «Continuar».
+        </div>
+      )}
     </div>
   )
 
@@ -399,7 +411,7 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
       <div style={{ ...S.secundario, marginTop: 4 }}>Tú solo confirmas qué vas a probar. Todo lo demás va solo y en orden.</div>
       {sinBase && <div style={{ color: AMARILLO, marginTop: 12 }}>Sin conexión con la base de datos: no se puede congelar ni leer lo hecho.</div>}
 
-      {hecho ? (<>
+      {arriba ? (<>
         {/* Con el veredicto hecho: primero lo que importa; cómo se probó, plegado. */}
         {tarjetaResultados}
         {siguientePaso}

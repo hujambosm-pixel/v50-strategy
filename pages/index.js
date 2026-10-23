@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1041'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1042'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -6265,7 +6265,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1041</title>
+        <title>Trading Simulator V9.1042</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6354,7 +6354,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1041
+            <span className="dot"/>Trading Simulator V9.1042
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9401,6 +9401,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 <BuilderPanel estrategias={strategies} visible={sidePanel==='builder'} apiFetch={apiFetch} version={VERSION_APP}
                   onEmpezar={(f)=>{setEditorFila({...f});setSidePanel('editor')}}
                   onPlantilla={(f)=>{setEditorFila({...f});setSidePanel('editor')}}
+                  onCopiar={(f)=>{setEditorFila({...f});setSidePanel('editor')}}
                   onAbrirEstrategia={(s,como)=>{if(como==='editor'){setEditorFila({...s});setSidePanel('editor')}else{openEditStr(s);setSidePanel('config')}}}
                   onAbrirLote={(id)=>{setEditorAbrir({modo:'lotes',loteId:id,n:Date.now()});setSidePanel('editor')}}
                   onModoLotes={()=>{setEditorAbrir({modo:'lotes',n:Date.now()});setSidePanel('editor')}}
