@@ -308,3 +308,68 @@ lo leen igual. Sin motores, validación ni huellas nuevos; sin tablas nuevas.
   (decida el laboratorio de operaciones o el de cartera). Si le falta algo, debajo del siguiente paso lo dice, con «Continuar»
   dentro de «Ver qué se probó y cómo».
 - «Mi trabajo» de la tanda 1 (`lib/builder/miTrabajo.js`, `construyeMiTrabajo`) ya no se pinta; se conserva para comparar.
+
+## 10. Paso 1: el editor por tarjetas (V9.1043)
+
+Una pantalla del propio Builder (`components/BuilderEditor.js`; la lógica, pura, en `lib/builder/tarjetas.js` y
+`lib/builder/versiones.js`). Es OTRA FORMA DE VER Y EDITAR la misma definición del editor visual (formato 1, motor 1): no hay
+formato, motor, validación ni cálculo nuevos. Leer no cambia nada; cada tarjeta reescribe solo su parte. Una estrategia abierta y
+guardada sin tocar no se escribe y su definición es la misma, byte a byte (comprobado con las 4 estrategias del editor, las 5
+copias guardadas en las 3 pruebas y los ejemplos 1 V50 y 23).
+- Se abre desde el inicio (En blanco, plantillas, «Copiar y editar») y al pulsar el nombre de una estrategia del editor en «Mis
+  estrategias». «En blanco» abre una definición vacía (`VACIA` en `lib/builder/plantillas.js`): sin condiciones y sin protección.
+- **Cabecera**: «← Builder · Mi trabajo», «Paso 1 · Crear la estrategia», «Guía: cómo se prueba una estrategia»; tarjeta con el
+  nombre y una línea de estado («Versión N · sin probar todavía», «Versión N · probada en la prueba X», «Estrategia nueva ·
+  todavía sin guardar» o «Copia de X. La original y sus pruebas no cambian.»).
+- **Izquierda, catálogo**: buscador (sin tildes; abre los grupos con coincidencias y enseña solo esas) y grupos plegables,
+  cerrados por defecto, con su número. El catálogo (`lib/condiciones/catalogo.js`) NO tiene grupos ni descripciones cortas: los
+  grupos y las notas grises se definen en `lib/builder/tarjetas.js` (`GRUPOS`, `NOMBRES`, `notaFila`). Precio y medias (3: cierre
+  frente a una media, una media frente a otra, caída desde el máximo) · Osciladores (1: RSI) · Volumen (1) · Rupturas (1: nuevo
+  máximo de N velas) · Mercado (1: fuerza relativa en el Nasdaq-100). Una condición nueva del catálogo sin grupo iría a «Otras».
+  El «+» pregunta «¿Añadir a Compro o a Vendo?».
+- **Centro**: «Compro cuando…» (azul) = `entrada.senal`, una fila o Y / O de filas; por defecto «se cumplen todas» (Y).
+  «Vendo cuando…» (naranja) = las salidas por condición: una salida por fila («basta con una», por defecto: el motor sale con la
+  primera que se cumpla) o una sola salida con Y de filas («todas»). El motor admite las dos cosas en las dos tarjetas. Cada fila
+  es una condición del catálogo (sola, «empieza a cumplirse» = cruza o «no se cumple» = NO) con sus números editables en la
+  fila, la nota gris y la ×. Un número que en la definición es un parámetro (`$nivelRSI`) cambia el VALOR del parámetro (su rango,
+  en Avanzado). Errores junto a la fila (borde rojo y la frase con un ejemplo válido): periodos ≥ 1, RSI y percentiles entre 0 y
+  100, números, media rápida más corta que la lenta, el rango declarado de un parámetro.
+- **Protección**: «Stop de pérdidas» (stop en % bajo el precio de compra), «Objetivo de ganancia» y «Salida por tiempo»; las tres
+  en «Ninguno» de entrada, y «Ninguno» = sin protección (como hoy). El objetivo del motor se mide en **veces lo que arriesgas** (la
+  distancia hasta el stop: `multiploR`), no en %, y necesita un stop. La salida por tiempo se cuenta en **VELAS**, que es lo que
+  cuenta el motor (`tope`: vende a la apertura de la vela N + 1 contando la de entrada, o sea, como mucho N velas dentro), con la
+  equivalencia al lado («10 días de mercado, porque esta estrategia usa velas diarias» o semanas). No hacía falta tocar el motor.
+- **Avanzado** (plegado): las velas (diarias / semanales), la regla tal como la lee el motor y los formularios del editor de
+  siempre (`FormularioDefinicion`, sacado de `components/EditorPanel.js` sin cambiar lo que pinta: Parámetros con defecto / valor /
+  de-a, Entrada, Filtro de mercado, Stops con su orden, Salidas). Si la estrategia tiene partes que no caben en las tarjetas, arriba
+  «Esta estrategia tiene partes que solo se pueden ver y cambiar en Avanzado.» con la lista (`partesAvanzado`): orden de compra
+  stop / límite / al cierre, cancelación de la orden, «el día de la entrada no se miran stops ni salidas», filtro de mercado,
+  stops que no son un % (trailing, técnico, ATR, mínimo de N velas), salidas que dependen de un parámetro, combinaciones
+  anidadas. De las 4 estrategias del editor, solo «Copia editor 23» tiene partes así (orden stop, cancelación, trailing y el día
+  de la entrada); también la 1 V50 y la 23 de ejemplo.
+- **Derecha**: «La regla, en una frase» (sale de las tarjetas, compra en azul y venta en naranja; un número con error, «[?]»);
+  «Comprobación» (condición de compra, forma de salir, datos suficientes: el calentamiento de la condición más larga frente a las
+  velas que carga el backtest, `velasCalentamiento` como `lib/backtestActivo.js`; si faltan, aviso ⚠ que no bloquea; y «✕ N errores
+  en …»); «Guardar y pasar al paso 2» verde, o gris de verdad con «Corrige lo que está en rojo para continuar.». Guarda lo mismo que
+  el editor de siempre (`/api/strategies`, que vuelve a validar) y abre el paso 2 con esa estrategia.
+
+### Versiones (decisión de Sergi)
+
+Lo que se encontró (auditoría d): una prueba congelada guarda su propia COPIA de cada estrategia (`lote.variantes[].definicion` y
+`valores`, con su huella); no guarda el id de la estrategia, y no existía ninguna «versión de la estrategia» (la verificación de
+sesgos se hace una vez por HUELLA: definición + valores). Cambiar una estrategia nunca cambiaba lo probado, pero sí la sacaba de su
+prueba en «Mi trabajo» (otra huella).
+Ahora: si se cambia la REGLA (la huella) de una estrategia que está en alguna prueba congelada, al guardar no se sobrescribe: se
+crea una estrategia nueva «<nombre> · versión N» (N = la mayor que exista + 1) y la original sigue igual, enlazada a su prueba. La
+pantalla lo avisa antes de guardar: «Esta estrategia ya está en la prueba X. Al guardar se creará la versión 2 («X · versión 2»);
+la prueba X seguirá con la versión 1.» Cambiar solo el nombre o la descripción, o una estrategia que no está en ninguna prueba, se
+guarda en la misma. La versión se lee del nombre (`partesNombre`): no hay columna ni campo nuevos.
+
+### Pendiente
+
+- Guardar la versión en un campo propio (p. ej. una columna `version` y otra con el id de la estrategia de la que sale) en vez de en
+  el nombre, y agrupar las versiones en una sola fila de «Mis estrategias». Cambia cómo se guarda: se deja para cuando Sergi lo decida.
+- Objetivo de ganancia en %: el motor solo lo tiene en veces el riesgo. Haría falta un tipo de salida nuevo en el motor.
+- Quitar «Editor» y «Estrategias» del menú y el enlace «Editor clásico», cuando Sergi haya usado el editor nuevo.
+- El paso 2 sigue solo con velas diarias. La plantilla «Filtro de mercado» sigue desactivada (el filtro va dentro de Avanzado).
+- Comprobado con montaje SWC (sin navegador): falta verlo y tocarlo en la app.

@@ -1,18 +1,20 @@
 // components/BuilderPanel.js — la pestaña «Builder» (docs/builder.md): tanda 1 con el aspecto del boceto (tanda 1b). La barra de
 // los tres pasos (indicativa), el bloque «¿Desde dónde empiezas?» (V9.1042: en blanco, desde una plantilla o desde una de mis
 // estrategias) y «Mi trabajo» en dos pestañas, «Mis estrategias» y «Mis pruebas» (lib/builder/misListas.js), con el estilo de
-// lib/builder/estilo.js (solo el Builder; el resto de la app no cambia). No crea nada por su cuenta: abre el editor con una COPIA
-// nueva (de la plantilla o de la estrategia elegida), que se guarda al pulsar Guardar, o el panel de código de siempre, a través de
-// los callbacks de la página. El paso 2 («Probarla contra el azar», tanda 2) es una pantalla del propio Builder:
-// components/BuilderPrueba.js. En las filas no hay «Editar» ni «Copiar»: se edita pulsando el nombre y se copia desde el inicio.
+// lib/builder/estilo.js (solo el Builder; el resto de la app no cambia). No crea nada por su cuenta: abre el editor por tarjetas
+// (V9.1043, components/BuilderEditor.js, el paso 1) con una COPIA nueva (de la plantilla o de la estrategia elegida), que se guarda
+// al pulsar «Guardar y pasar al paso 2», o el panel de código de siempre, a través de los callbacks de la página. El paso 2
+// («Probarla contra el azar», tanda 2) es otra pantalla del propio Builder: components/BuilderPrueba.js. En las filas no hay
+// «Editar» ni «Copiar»: se edita pulsando el nombre y se copia desde el inicio.
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { PLANTILLAS, BLANCO } from '../lib/builder/plantillas'
+import { PLANTILLAS, VACIA } from '../lib/builder/plantillas'
 import { construyeMisEstrategias, construyeMisPruebas, filtraEstrategias, FILTROS_ESTRATEGIAS, CHIP } from '../lib/builder/misListas'
 import { esDefinicionEditor } from '../lib/editor/fuente'
 import { listarPruebas } from '../lib/registroLab'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 import { B, S } from '../lib/builder/estilo'
 import BuilderPrueba from './BuilderPrueba'
+import BuilderEditor from './BuilderEditor'
 import BuilderGuia from './BuilderGuia'
 
 export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convertirla en plan']
@@ -60,15 +62,19 @@ export const filaCopia = (s) => ({ id: null, name: `${s.name} (copia)`, descript
 // listasIniciales (opcional, para las pruebas de montaje): { estrategias, pruebas } ya calculadas; pestanaInicial y filtroInicial.
 // visible: si la pestaña se ve. Cada vez que pasa a verse (al entrar o al volver del editor) se vuelve a leer la base, sin
 // enseñar «Cargando» y sin recalcular si no ha cambiado nada (firmaDatos). Las estrategias llegan de la página.
-// apiFetch y version: para la pantalla del paso 2. vistaInicial (opcional, para las pruebas): la de BuilderPrueba ({ estrategiaId } | { loteId }).
-export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla, onCopiar, onAbrirEstrategia, onEditorClasico, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null }) {
+// apiFetch y version: para el paso 1 (guardar) y el paso 2. onGuardada: la página recarga sus estrategias. vistaInicial (opcional,
+// para las pruebas): la de BuilderPrueba ({ estrategiaId } | { loteId }), la guía ({ guia: true }) o el editor ({ editor: fila }).
+// onAbrirEstrategia(s, 'codigo'): abre una estrategia de código donde siempre; las del editor se abren aquí, en el paso 1.
+export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onEditorClasico, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null }) {
   const [datos, setDatos] = useState(() => datosIniciales || { lotes: [], pruebas: [], cargando: !datosIniciales, error: null })
   const [filasE, setFilasE] = useState(listasIniciales?.estrategias || null)
   const [filasP, setFilasP] = useState(listasIniciales?.pruebas || null)
   const [pestana, setPestana] = useState(pestanaInicial)
   const [filtro, setFiltro] = useState(filtroInicial)
   const [aCopiar, setACopiar] = useState('')
-  const [prueba, setPrueba] = useState(vistaInicial && !vistaInicial.guia ? { ...vistaInicial, n: 0 } : null)   // la pantalla del paso 2, si está abierta
+  const [prueba, setPrueba] = useState(vistaInicial && !vistaInicial.guia && !vistaInicial.editor ? { ...vistaInicial, n: 0 } : null)   // la pantalla del paso 2, si está abierta
+  const [editor, setEditor] = useState(vistaInicial?.editor ? { fila: vistaInicial.editor, n: 0 } : null)   // el paso 1 (editor por tarjetas), si está abierto
+  const [guardadas, setGuardadas] = useState([])   // lo recién guardado, hasta que la página recargue sus estrategias
   const [guia, setGuia] = useState(!!vistaInicial?.guia)   // la «Guía de las pruebas» (vistaInicial { guia: true }, para las pruebas)
   const firma = useRef(null)
   const recarga = useCallback(async () => {
@@ -92,6 +98,7 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
     try { setFilasP(construyeMisPruebas({ lotes: datos.lotes, pruebas: datos.pruebas })) } catch (_) { setFilasP([]) }
     return () => { vivo = false }
   }, [estrategias, datos.lotes, datos.pruebas, listasIniciales])
+  const estrategiasEf = useMemo(() => [...estrategias.map(s => guardadas.find(g => String(g.id) === String(s.id)) || s), ...guardadas.filter(g => !estrategias.some(s => String(s.id) === String(g.id)))], [estrategias, guardadas])
   const delEditor = useMemo(() => estrategias.filter(s => esDefinicionEditor(s.definition)).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
   const elegidaCopia = delEditor.find(s => String(s.id) === aCopiar) || delEditor[0] || null
   const visiblesE = filtraEstrategias(filasE, filtro)
@@ -99,13 +106,21 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
   const accion = (f) => {
     const a = f.toca?.accion
     if (!a) return
-    if (a.tipo === 'editor') onAbrirEstrategia?.(f.estrategia, 'editor')
+    if (a.tipo === 'editor') abreEditor(f.estrategia)
     else if (a.tipo === 'prueba') setPrueba({ ...(a.loteId != null ? { loteId: a.loteId } : { estrategiaId: a.estrategiaId }), n: Date.now() })
   }
   const abrePrueba = (id) => setPrueba({ loteId: id, n: Date.now() })
+  const abreEditor = (fila) => setEditor({ fila, n: Date.now() })
+  // Guardada en el paso 1: la página recarga sus estrategias y se pasa al paso 2 con ella (la versión nueva, si se creó).
+  const alGuardar = (fila, info = {}) => {
+    if (!info.sinCambios) { setGuardadas(g => [...g.filter(x => String(x.id) !== String(fila.id)), fila]); onGuardada?.(fila) }
+    setEditor(null); setPrueba({ estrategiaId: fila.id, n: Date.now() })
+  }
 
   if (guia) return <BuilderGuia onVolver={() => setGuia(false)}/>
-  if (prueba) return <BuilderPrueba key={prueba.n} estrategias={estrategias} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
+  if (editor) return <BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} lotes={datos.lotes} apiFetch={apiFetch}
+    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar}/>
+  if (prueba) return <BuilderPrueba key={prueba.n} estrategias={estrategiasEf} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
     onVolver={() => { setPrueba(null); recarga() }} onNuevaPrueba={() => setPrueba({ n: Date.now() })} onCambio={recarga}/>
   const pestanaBtn = (k, t, n) => (
     <button key={k} role="tab" aria-selected={pestana === k} onClick={() => setPestana(k)}
@@ -125,13 +140,13 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
       <BarraPasos actual={1}/>
 
       <div style={{ ...S.tituloSeccion, marginTop: 8 }}>¿Desde dónde empiezas?</div>
-      <div style={S.subtituloSeccion}>Las tres opciones abren el editor con una estrategia nueva. Se guarda al pulsar Guardar.</div>
+      <div style={S.subtituloSeccion}>Las tres opciones abren el paso 1 con una estrategia nueva. Se guarda al pulsar «Guardar y pasar al paso 2».</div>
       <div data-bloque="empezar" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
         <div data-tarjeta="blanco" style={{ ...S.tarjeta, display: 'flex', flexDirection: 'column' }}>
           <div style={S.cabeceraTarjeta}>En blanco</div>
           <div style={{ ...S.cuerpo, flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={S.secundario}>Abre el editor vacío y escribe tu regla de compra y venta desde cero.</div>
-            <div style={{ marginTop: 'auto' }}><button style={S.botonVerde} onClick={() => onEmpezar?.({ id: null, name: '', definition: BLANCO(), params: {} })}>Empezar en blanco</button></div>
+            <div style={{ marginTop: 'auto' }}><button style={S.botonVerde} onClick={() => abreEditor({ id: null, name: '', definition: VACIA(), params: {} })}>Empezar en blanco</button></div>
           </div>
         </div>
         <div data-tarjeta="plantilla" style={{ ...S.tarjeta, display: 'flex', flexDirection: 'column' }}>
@@ -142,7 +157,7 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <strong style={{ color: p.desactivada ? B.secundario : B.titulo, flex: 1 }}>{p.titulo}</strong>
                   <button style={{ ...S.boton, padding: '4px 10px', fontSize: 13, opacity: p.desactivada ? 0.5 : 1, cursor: p.desactivada ? 'not-allowed' : 'pointer' }} disabled={!!p.desactivada}
-                    onClick={() => !p.desactivada && onPlantilla?.({ id: null, name: p.definicion().nombre, definition: p.definicion(), params: { ...p.valores } })}>Usar esta plantilla</button>
+                    onClick={() => !p.desactivada && abreEditor({ id: null, name: p.definicion().nombre, definition: p.definicion(), params: { ...p.valores } })}>Usar esta plantilla</button>
                 </div>
                 <div style={{ fontSize: 13, color: B.texto }}><Frase texto={p.regla || p.frase}/></div>
                 {p.como && <div style={S.apagado}>Como «{p.como}»</div>}
@@ -160,7 +175,7 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
                 {delEditor.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
               </select>
               <div style={S.secundario}>Se abre una copia nueva. La original no cambia, ni sus pruebas.</div>
-              <div style={{ marginTop: 'auto' }}><button style={S.boton} onClick={() => elegidaCopia && onCopiar?.(filaCopia(elegidaCopia))}>Copiar y editar</button></div>
+              <div style={{ marginTop: 'auto' }}><button style={S.boton} onClick={() => elegidaCopia && abreEditor(filaCopia(elegidaCopia))}>Copiar y editar</button></div>
             </>) : <div style={S.secundario}>Todavía no tienes estrategias del editor. Empieza en blanco o desde una plantilla.</div>}
           </div>
         </div>
@@ -187,7 +202,7 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
                 {visiblesE.map(f => (
                   <tr key={f.clave}>
                     <td style={{ ...celda, maxWidth: 340 }}>
-                      <button style={{ ...S.enlace, color: B.titulo, fontWeight: 600 }} onClick={() => onAbrirEstrategia?.(f.estrategia, f.origen === 'editor' ? 'editor' : 'codigo')}
+                      <button style={{ ...S.enlace, color: B.titulo, fontWeight: 600 }} onClick={() => f.origen === 'editor' ? abreEditor(f.estrategia) : onAbrirEstrategia?.(f.estrategia, 'codigo')}
                         title={f.origen === 'editor' ? 'Abrir en el editor' : 'Abrir el código'}>{f.nombre}</button>
                       {f.subtitulo && <div style={S.apagado} title={f.subtitulo}>{f.subtitulo}</div>}
                       {f.desactivada && <div style={S.apagado}>Desactivada</div>}

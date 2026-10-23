@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1042'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1043'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1052,7 +1052,7 @@ export default function Home() {
   const [editorVisitado,setEditorVisitado]=useState(false)
   const [editorFila,setEditorFila]=useState(null)
   useEffect(()=>{ if(sidePanel==='editor') setEditorVisitado(true) },[sidePanel])
-  // editorAbrir: abrir el editor en un modo concreto (el Builder abre el modo Lotes, con un lote elegido o sin él).
+  // editorAbrir: abrir el editor en un modo concreto (el modo Lotes, con un lote elegido o sin él; hoy nadie lo pide).
   const [editorAbrir,setEditorAbrir]=useState(null)
   // Y la sección Builder (components/BuilderPanel.js, docs/builder.md): montada desde la primera visita.
   const [builderVisitado,setBuilderVisitado]=useState(false)
@@ -6265,7 +6265,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1042</title>
+        <title>Trading Simulator V9.1043</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6354,7 +6354,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1042
+            <span className="dot"/>Trading Simulator V9.1043
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9393,18 +9393,14 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   onExportar={async(f)=>{const saved=await upsertStrategy({...f,params:JSON.stringify(f.params),years:5,capital_ini:10000,color:'#00d4ff'});reloadStrategies();if(saved){openEditStr(saved);setSidePanel('config')}}}/>
               </div>
             )}
-            {/* ══ BUILDER (components/BuilderPanel.js, docs/builder.md): a ancho completo, montado desde la primera visita. Abre el
-                editor visual (una copia nueva de una plantilla o una estrategia del editor), el panel de código de siempre o el
-                modo Lotes del editor; no crea nada por su cuenta. ══ */}
+            {/* ══ BUILDER (components/BuilderPanel.js, docs/builder.md): a ancho completo, montado desde la primera visita. Tiene su
+                propio editor por tarjetas (el paso 1) y su paso 2; las estrategias de código se abren en el panel de código de
+                siempre. Al guardar en el paso 1, la página recarga sus estrategias. ══ */}
             {(builderVisitado||sidePanel==='builder')&&(
               <div style={{display:sidePanel==='builder'?'contents':'none'}}>
                 <BuilderPanel estrategias={strategies} visible={sidePanel==='builder'} apiFetch={apiFetch} version={VERSION_APP}
-                  onEmpezar={(f)=>{setEditorFila({...f});setSidePanel('editor')}}
-                  onPlantilla={(f)=>{setEditorFila({...f});setSidePanel('editor')}}
-                  onCopiar={(f)=>{setEditorFila({...f});setSidePanel('editor')}}
-                  onAbrirEstrategia={(s,como)=>{if(como==='editor'){setEditorFila({...s});setSidePanel('editor')}else{openEditStr(s);setSidePanel('config')}}}
-                  onAbrirLote={(id)=>{setEditorAbrir({modo:'lotes',loteId:id,n:Date.now()});setSidePanel('editor')}}
-                  onModoLotes={()=>{setEditorAbrir({modo:'lotes',n:Date.now()});setSidePanel('editor')}}
+                  onGuardada={()=>reloadStrategies()}
+                  onAbrirEstrategia={(s)=>{openEditStr(s);setSidePanel('config')}}
                   onEditorClasico={()=>{newStrategy();setSidePanel('config')}}/>
               </div>
             )}

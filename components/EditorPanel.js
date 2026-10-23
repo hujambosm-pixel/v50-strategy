@@ -289,6 +289,85 @@ function Salida({ s, k, onChange, onQuitar, params }) {
   )
 }
 
+// Los formularios de la definición (parámetros, entrada, filtro de mercado, stops y salidas): los de esta pantalla y los de
+// «Avanzado» en el editor por tarjetas del Builder (components/BuilderEditor.js, V9.1043). setDef(cambio) mezcla `cambio` en la
+// definición; onValores(valores) cambia los valores de los parámetros.
+export function FormularioDefinicion({ def, setDef, valoresEf, onValores, params }) {
+  const en = def.entrada || {}, o = en.orden || {}
+  const setEntrada = (cambio) => setDef({ entrada: { ...en, ...cambio } })
+  const stops = def.stops || [], salidas = def.salidas || []
+  const ids = stops.map(s => s.id).filter(Boolean)
+  return (
+    <>
+      <Parametros decl={def.parametros || { version: 1, lista: [] }} onDecl={d => setDef({ parametros: d })} valores={valoresEf} onValores={onValores}/>
+
+      <div style={caja}>
+        <div style={etiqueta}>Entrada</div>
+        <div style={nota}>Se decide con la vela CERRADA: la señal se mira al cierre de una vela y la orden actúa en la siguiente. Sin posición ni orden viva.</div>
+        <div style={{ ...nota, marginTop: 6, color: 'var(--text)' }}>Señal:</div>
+        <Condicion cond={en.senal} params={params} onChange={v => setEntrada({ senal: v })}/>
+        <div style={{ ...fila, marginTop: 8 }}>
+          <span style={{ ...nota, color: 'var(--text)' }}>Orden:</span>
+          <select style={entrada} value={o.tipo || 'apertura'} onChange={e => { const t = e.target.value; setEntrada({ orden: t === 'stop' ? { tipo: t, nivel: { campo: 'high', velas: 1 }, ajuste: 'fijo' } : t === 'limite' ? { tipo: t, nivel: { campo: 'low', velas: 1 }, ajuste: 'fijo' } : { tipo: t } }) }}>
+            {Object.entries(TIPOS_ORDEN).map(([t, v]) => <option key={t} value={t}>{v}</option>)}
+          </select>
+          {(o.tipo === 'stop' || o.tipo === 'limite') && <>
+            <span style={nota}>en el</span>
+            <select style={entrada} value={o.nivel?.campo || 'high'} onChange={e => setEntrada({ orden: { ...o, nivel: { ...o.nivel, campo: e.target.value } } })}>{Object.entries(CAMPOS).map(([c, v]) => <option key={c} value={c}>{v}</option>)}</select>
+            <span style={nota}>de las</span><Valor valor={o.nivel?.velas} params={params} ancho={40} onChange={v => setEntrada({ orden: { ...o, nivel: { ...o.nivel, velas: v } } })}/><span style={nota}>últimas velas;</span>
+            <select style={entrada} value={o.ajuste || 'fijo'} onChange={e => setEntrada({ orden: { ...o, ajuste: e.target.value } })}><option value="fijo">el nivel no se mueve</option><option value="soloBaja">solo baja (al de cada vela si es más bajo)</option><option value="soloSube">solo sube</option></select>
+          </>}
+        </div>
+        {o.tipo === 'cierre' && <div style={{ ...nota, color: AMBAR }}>Al cierre: compra al precio de cierre de la misma vela que da la señal. Es lo que haría alguien mirando el mercado justo antes del cierre; la estrategia se guarda con «entradaAlCierre» para que los filtros lo sepan.</div>}
+        {(o.tipo === 'stop' || o.tipo === 'limite') && (
+          <div style={{ marginTop: 6 }}>
+            <label style={nota}><input type="checkbox" checked={!!en.cancelar} onChange={e => setEntrada({ cancelar: e.target.checked ? condPorDefecto('precioVsMedia') : undefined })}/> cancelar la orden si, al cierre:</label>
+            {en.cancelar && <Condicion cond={en.cancelar} params={params} nivel={1} onChange={v => setEntrada({ cancelar: v })}/>}
+          </div>
+        )}
+        <label style={{ ...nota, display: 'block', marginTop: 6 }} title="Si no, el día de la entrada no se miran stops ni salidas (como la 23)">
+          <input type="checkbox" checked={en.revisaSalidasEnLaVelaDeEntrada !== false} onChange={e => setEntrada({ revisaSalidasEnLaVelaDeEntrada: e.target.checked ? true : false })}/> mirar stops y salidas ya en la vela de entrada
+        </label>
+      </div>
+
+      <div style={caja}>
+        <div style={etiqueta}>Filtro de mercado</div>
+        <label style={nota}><input type="checkbox" checked={!!def.filtroMercado} onChange={e => setDef({ filtroMercado: e.target.checked ? { ticker: '^GSPC', si: { c: 'precioVsMedia', p: { tipo: 'SMA', periodo: 200, lado: 'encima' } } } : undefined })}/> solo entrar si otro ticker (un índice o un ETF) cumple una condición</label>
+        {def.filtroMercado && <>
+          <div style={fila}><span style={nota}>Ticker</span><input style={{ ...entrada, width: 80 }} value={def.filtroMercado.ticker} onChange={e => setDef({ filtroMercado: { ...def.filtroMercado, ticker: e.target.value.trim().toUpperCase() } })}/>
+            <span style={nota}>se descargan sus velas en la misma temporalidad que el activo</span></div>
+          <Condicion cond={def.filtroMercado.si} params={params} nivel={1} onChange={v => setDef({ filtroMercado: { ...def.filtroMercado, si: v } })}/>
+        </>}
+      </div>
+
+      <div style={caja}>
+        <div style={etiqueta}>Stops</div>
+        <div style={nota}>Se comprueban en este orden en cada vela con posición. El primero que se cumple cierra la operación a su precio (o a la apertura, si la vela abre por debajo).</div>
+        {stops.map((s, k) => <Stop key={k} s={s} k={k} n={stops.length} params={params} ids={ids}
+          onChange={v => setDef({ stops: stops.map((x, j) => j === k ? v : x) })}
+          onQuitar={() => setDef({ stops: stops.filter((_, j) => j !== k) })}
+          onMueve={d => { const a = [...stops]; [a[k], a[k + d]] = [a[k + d], a[k]]; setDef({ stops: a }) }}/>)}
+        <div style={{ ...fila, marginTop: 6 }}>
+          <span style={nota}>Añadir:</span>
+          {Object.entries(TIPOS_STOP).map(([t, v]) => <button key={t} style={botonMini} onClick={() => { let n = stops.length + 1; while (ids.includes(`${t}${n}`)) n++; setDef({ stops: [...stops, stopPorDefecto(t, n)] }) }}>{v}</button>)}
+        </div>
+      </div>
+
+      <div style={caja}>
+        <div style={etiqueta}>Salidas</div>
+        <div style={nota}>Después de los stops. La salida por condición se decide al cierre y vende a la apertura siguiente (vender al cierre de la misma vela usaría un precio que al decidir aún no existe).</div>
+        {salidas.map((s, k) => <Salida key={k} s={s} k={k} params={params}
+          onChange={v => setDef({ salidas: salidas.map((x, j) => j === k ? v : x) })}
+          onQuitar={() => setDef({ salidas: salidas.filter((_, j) => j !== k) })}/>)}
+        <div style={{ ...fila, marginTop: 6 }}>
+          <span style={nota}>Añadir:</span>
+          {Object.entries(TIPOS_SALIDA).map(([t, v]) => <button key={t} style={botonMini} onClick={() => setDef({ salidas: [...salidas, salidaPorDefecto(t)] })}>{v}</button>)}
+        </div>
+      </div>
+    </>
+  )
+}
+
 // Lo que la pantalla recibe para editar: una fila de strategies con definición del editor, o nada (una nueva).
 const estadoDe = (filaInicial) => esDefinicionEditor(filaInicial?.definition)
   ? { def: copia(filaInicial.definition), valores: (() => { try { return typeof filaInicial.params === 'string' ? JSON.parse(filaInicial.params) : (filaInicial.params || {}) } catch (_) { return {} } })(), id: filaInicial.id, nombre: filaInicial.name || filaInicial.definition.nombre || '', descripcion: filaInicial.description || '' }
@@ -376,11 +455,6 @@ function EditorEstrategia({ apiFetch, filaInicial = null, onGuardada, onProbar, 
     finally { setGuardando(false) }
   }
 
-  const en = def.entrada || {}, o = en.orden || {}
-  const setEntrada = (cambio) => setDef({ entrada: { ...en, ...cambio } })
-  const stops = def.stops || [], salidas = def.salidas || []
-  const ids = stops.map(s => s.id).filter(Boolean)
-
   return (
     <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden', fontFamily: MONO }}>
       {/* ── Formularios ── */}
@@ -403,72 +477,8 @@ function EditorEstrategia({ apiFetch, filaInicial = null, onGuardada, onProbar, 
           <input style={{ ...entrada, width: '100%', boxSizing: 'border-box' }} value={est.descripcion} placeholder="descripción (opcional)" onChange={e => setEst(x => ({ ...x, descripcion: e.target.value }))}/>
         </div>
 
-        <Parametros decl={def.parametros || { version: 1, lista: [] }} onDecl={d => setDef({ parametros: d })} valores={valoresEf}
+        <FormularioDefinicion def={def} setDef={setDef} valoresEf={valoresEf} params={params}
           onValores={v => setEst(x => ({ ...x, valores: { ...v, ...(x.valores.intervalo ? { intervalo: x.valores.intervalo } : {}) } }))}/>
-
-        <div style={caja}>
-          <div style={etiqueta}>Entrada</div>
-          <div style={nota}>Se decide con la vela CERRADA: la señal se mira al cierre de una vela y la orden actúa en la siguiente. Sin posición ni orden viva.</div>
-          <div style={{ ...nota, marginTop: 6, color: 'var(--text)' }}>Señal:</div>
-          <Condicion cond={en.senal} params={params} onChange={v => setEntrada({ senal: v })}/>
-          <div style={{ ...fila, marginTop: 8 }}>
-            <span style={{ ...nota, color: 'var(--text)' }}>Orden:</span>
-            <select style={entrada} value={o.tipo || 'apertura'} onChange={e => { const t = e.target.value; setEntrada({ orden: t === 'stop' ? { tipo: t, nivel: { campo: 'high', velas: 1 }, ajuste: 'fijo' } : t === 'limite' ? { tipo: t, nivel: { campo: 'low', velas: 1 }, ajuste: 'fijo' } : { tipo: t } }) }}>
-              {Object.entries(TIPOS_ORDEN).map(([t, v]) => <option key={t} value={t}>{v}</option>)}
-            </select>
-            {(o.tipo === 'stop' || o.tipo === 'limite') && <>
-              <span style={nota}>en el</span>
-              <select style={entrada} value={o.nivel?.campo || 'high'} onChange={e => setEntrada({ orden: { ...o, nivel: { ...o.nivel, campo: e.target.value } } })}>{Object.entries(CAMPOS).map(([c, v]) => <option key={c} value={c}>{v}</option>)}</select>
-              <span style={nota}>de las</span><Valor valor={o.nivel?.velas} params={params} ancho={40} onChange={v => setEntrada({ orden: { ...o, nivel: { ...o.nivel, velas: v } } })}/><span style={nota}>últimas velas;</span>
-              <select style={entrada} value={o.ajuste || 'fijo'} onChange={e => setEntrada({ orden: { ...o, ajuste: e.target.value } })}><option value="fijo">el nivel no se mueve</option><option value="soloBaja">solo baja (al de cada vela si es más bajo)</option><option value="soloSube">solo sube</option></select>
-            </>}
-          </div>
-          {o.tipo === 'cierre' && <div style={{ ...nota, color: AMBAR }}>Al cierre: compra al precio de cierre de la misma vela que da la señal. Es lo que haría alguien mirando el mercado justo antes del cierre; la estrategia se guarda con «entradaAlCierre» para que los filtros lo sepan.</div>}
-          {(o.tipo === 'stop' || o.tipo === 'limite') && (
-            <div style={{ marginTop: 6 }}>
-              <label style={nota}><input type="checkbox" checked={!!en.cancelar} onChange={e => setEntrada({ cancelar: e.target.checked ? condPorDefecto('precioVsMedia') : undefined })}/> cancelar la orden si, al cierre:</label>
-              {en.cancelar && <Condicion cond={en.cancelar} params={params} nivel={1} onChange={v => setEntrada({ cancelar: v })}/>}
-            </div>
-          )}
-          <label style={{ ...nota, display: 'block', marginTop: 6 }} title="Si no, el día de la entrada no se miran stops ni salidas (como la 23)">
-            <input type="checkbox" checked={en.revisaSalidasEnLaVelaDeEntrada !== false} onChange={e => setEntrada({ revisaSalidasEnLaVelaDeEntrada: e.target.checked ? true : false })}/> mirar stops y salidas ya en la vela de entrada
-          </label>
-        </div>
-
-        <div style={caja}>
-          <div style={etiqueta}>Filtro de mercado</div>
-          <label style={nota}><input type="checkbox" checked={!!def.filtroMercado} onChange={e => setDef({ filtroMercado: e.target.checked ? { ticker: '^GSPC', si: { c: 'precioVsMedia', p: { tipo: 'SMA', periodo: 200, lado: 'encima' } } } : undefined })}/> solo entrar si otro ticker (un índice o un ETF) cumple una condición</label>
-          {def.filtroMercado && <>
-            <div style={fila}><span style={nota}>Ticker</span><input style={{ ...entrada, width: 80 }} value={def.filtroMercado.ticker} onChange={e => setDef({ filtroMercado: { ...def.filtroMercado, ticker: e.target.value.trim().toUpperCase() } })}/>
-              <span style={nota}>se descargan sus velas en la misma temporalidad que el activo</span></div>
-            <Condicion cond={def.filtroMercado.si} params={params} nivel={1} onChange={v => setDef({ filtroMercado: { ...def.filtroMercado, si: v } })}/>
-          </>}
-        </div>
-
-        <div style={caja}>
-          <div style={etiqueta}>Stops</div>
-          <div style={nota}>Se comprueban en este orden en cada vela con posición. El primero que se cumple cierra la operación a su precio (o a la apertura, si la vela abre por debajo).</div>
-          {stops.map((s, k) => <Stop key={k} s={s} k={k} n={stops.length} params={params} ids={ids}
-            onChange={v => setDef({ stops: stops.map((x, j) => j === k ? v : x) })}
-            onQuitar={() => setDef({ stops: stops.filter((_, j) => j !== k) })}
-            onMueve={d => { const a = [...stops]; [a[k], a[k + d]] = [a[k + d], a[k]]; setDef({ stops: a }) }}/>)}
-          <div style={{ ...fila, marginTop: 6 }}>
-            <span style={nota}>Añadir:</span>
-            {Object.entries(TIPOS_STOP).map(([t, v]) => <button key={t} style={botonMini} onClick={() => { let n = stops.length + 1; while (ids.includes(`${t}${n}`)) n++; setDef({ stops: [...stops, stopPorDefecto(t, n)] }) }}>{v}</button>)}
-          </div>
-        </div>
-
-        <div style={caja}>
-          <div style={etiqueta}>Salidas</div>
-          <div style={nota}>Después de los stops. La salida por condición se decide al cierre y vende a la apertura siguiente (vender al cierre de la misma vela usaría un precio que al decidir aún no existe).</div>
-          {salidas.map((s, k) => <Salida key={k} s={s} k={k} params={params}
-            onChange={v => setDef({ salidas: salidas.map((x, j) => j === k ? v : x) })}
-            onQuitar={() => setDef({ salidas: salidas.filter((_, j) => j !== k) })}/>)}
-          <div style={{ ...fila, marginTop: 6 }}>
-            <span style={nota}>Añadir:</span>
-            {Object.entries(TIPOS_SALIDA).map(([t, v]) => <button key={t} style={botonMini} onClick={() => setDef({ salidas: [...salidas, salidaPorDefecto(t)] })}>{v}</button>)}
-          </div>
-        </div>
       </div>
 
       {/* ── La regla, la validación y los consejos ── */}
