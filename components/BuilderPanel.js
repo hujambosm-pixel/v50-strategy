@@ -17,7 +17,7 @@ import BuilderGuia from './BuilderGuia'
 export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convertirla en plan']
 export const SUBTITULOS_PASOS = ['Cuándo compro, cuándo vendo y cuánto arriesgo', '¿Gana por algo más que suerte?', 'Dinero real, aportaciones e impuestos']
 const TIPO_CHIP = { [ESTADOS.supera]: 'supera', [ESTADOS.mejora]: 'supera', [ESTADOS.noSupera]: 'noSupera', [ESTADOS.noMejora]: 'noSupera', [ESTADOS.borrador]: 'borrador' }
-export const FILTROS_TRABAJO = [['editorLotes', 'Editor y lotes'], ['codigo', 'Código'], ['todo', 'Todo']]
+export const FILTROS_TRABAJO = [['editorLotes', 'Del editor'], ['codigo', 'Código'], ['todo', 'Todo']]
 export const filtraTrabajo = (filas, filtro) => (filas || []).filter(f => filtro === 'todo' ? true : filtro === 'codigo' ? f.origen === 'código' : f.origen !== 'código')
 // La firma de lo leído de la base (lotes y pruebas: id y huella / fecha): si no cambia, no se recalcula «Mi trabajo».
 export const firmaDatos = (lotes, pruebas) => JSON.stringify([(lotes || []).map(l => [l.id, l.hash_lote]), (pruebas || []).map(p => [p.id, p.creado])])
@@ -70,7 +70,7 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
       const r = await fetch(`${getSupaUrl()}/rest/v1/editor_lotes?select=id,creado,version_app,nombre,lote,hash_lote,huellas&order=creado.desc,id.desc&limit=200`, { headers: getSupaH() })
       const lotes = r.ok ? await r.json() : []
       const pruebas = await listarPruebas({ url: getSupaUrl(), headers: getSupaH() }, { limite: 500, soloResumen: false, filtro: '&config->>prueba=in.(editorLote,editorLab,editorCalibracion,planLote)' })
-      const error = r.ok ? null : `No se pudieron leer los lotes (HTTP ${r.status}).`, f = firmaDatos(lotes, pruebas)
+      const error = r.ok ? null : `No se pudieron leer las pruebas (HTTP ${r.status}).`, f = firmaDatos(lotes, pruebas)
       if (f === firma.current && !error) return   // nada nuevo: no se toca
       firma.current = f
       setDatos({ lotes, pruebas, cargando: false, error })
@@ -101,7 +101,7 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
         <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Builder</span>
         <span style={S.secundario}>Crea una estrategia, pruébala contra el azar y conviértela en un plan.</span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 16, flexWrap: 'wrap' }}>
-          <button style={{ ...S.enlace, fontSize: 13 }} onClick={() => setGuia(true)} title="Guía de las pruebas: qué hace cada una y cómo leer sus resultados">Cómo funcionan las pruebas</button>
+          <button style={S.boton} onClick={() => setGuia(true)} title="Qué es una prueba, qué hace cada laboratorio y cómo leer sus resultados">Guía: cómo se prueba una estrategia</button>
           <button style={{ ...S.enlace, color: B.apagado, fontSize: 13 }} onClick={() => onEditorClasico?.()} title="La pantalla de siempre para crear una estrategia escribiendo su código">Editor clásico</button>
         </span>
       </div>
@@ -141,10 +141,10 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1 }}>
           <div style={S.tituloSeccion}>Mi trabajo</div>
-          <div style={{ ...S.subtituloSeccion, marginBottom: 0 }}>Tus estrategias y tus lotes: en qué paso están, cómo les fue y qué toca ahora. Pulsa un nombre para abrirlo.</div>
+          <div style={{ ...S.subtituloSeccion, marginBottom: 0 }}>Tus estrategias y tus pruebas: en qué paso están, cómo les fue y qué toca ahora. Pulsa un nombre para abrirlo.</div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }} role="group" aria-label="Qué enseñar">
-          {FILTROS_TRABAJO.map(([k, t]) => <button key={k} onClick={() => setFiltro(k)} aria-pressed={filtro === k} title={k === 'todo' ? 'Editor y lotes arriba; código debajo' : undefined}
+          {FILTROS_TRABAJO.map(([k, t]) => <button key={k} onClick={() => setFiltro(k)} aria-pressed={filtro === k} title={k === 'todo' ? 'Lo del editor arriba; lo de código debajo' : undefined}
             style={{ ...S.boton, padding: '6px 12px', fontSize: 13, ...(filtro === k ? { background: B.cabecera, borderColor: B.siguienteBorde, color: B.titulo, fontWeight: 700 } : { background: 'transparent', color: B.secundario }) }}>{filas ? `${t} (${cuantas[k]})` : t}</button>)}
         </div>
       </div>
@@ -157,7 +157,7 @@ export default function BuilderPanel({ estrategias = [], onEmpezar, onPlantilla,
               {visibles.map(f => (
                 <tr key={f.clave}>
                   <td style={celda}>
-                    <button style={{ ...S.enlace, color: B.titulo, fontWeight: 600 }} onClick={() => abreFila(f)} title={f.tipo === 'lote' ? 'Abrir el lote' : f.origen === 'editor' ? 'Abrir en el editor visual' : 'Abrir el código'}>{f.nombre}</button>
+                    <button style={{ ...S.enlace, color: B.titulo, fontWeight: 600 }} onClick={() => abreFila(f)} title={f.tipo === 'lote' ? 'Abrir esta prueba en el editor' : f.origen === 'editor' ? 'Abrir en el editor visual' : 'Abrir el código'}>{f.nombre}</button>
                     <div style={S.apagado}>{f.origen}{f.desactivada ? ' · desactivada' : ''}</div>
                   </td>
                   <td style={{ ...celda, whiteSpace: 'nowrap', color: B.secundario }}>{f.paso} · {f.paso === 1 ? 'Crear' : f.paso === 2 ? 'Prueba' : 'Plan'}</td>

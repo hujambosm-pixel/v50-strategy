@@ -5,7 +5,8 @@
 // lectura, con sus etapas y sus resultados. Con el veredicto hecho (tanda 2b), arriba van los resultados y el siguiente paso, y
 // «qué se probó y cómo» queda en un plegable. Los «?» y «Cómo leer estos resultados» sacan sus textos de lib/builder/ayuda.js.
 // Tanda 2c: los nombres del Builder (laboratorio de operaciones, laboratorio de cartera, verificación de sesgos), el plegable
-// «Cómo funciona esta prueba» con los datos guardados y la «Guía de las pruebas» (components/BuilderGuia.js).
+// «Cómo funciona esta prueba» con los datos guardados y la guía (components/BuilderGuia.js). V9.1041: en pantalla, el lote
+// se llama «prueba»; el botón desactivado es gris y cada chip de periodo dice de qué laboratorio sale.
 //   inicio: { estrategiaId } (confirmar una prueba nueva a partir de esa estrategia) | { loteId } (un lote congelado) | {} (nueva, vacía)
 //   lotes: las filas de editor_lotes que ya leyó el Builder. deps (opcional, para las pruebas): { ctx, f, listar, guardar }.
 //   estadoInicial (opcional, para las pruebas de montaje): { fila, est } ya leídos.
@@ -48,7 +49,9 @@ export function revisaFechas(textos) {
   const mal = (txt, iso) => iso ? null : String(txt || '').trim() ? 'fecha no válida; escríbela como dd/mm/aaaa (p. ej. 31/12/2020).' : 'escribe la fecha como dd/mm/aaaa.'
   const porFila = textos.map(t => {
     const d = textoAIso(t.desde), h = textoAIso(t.hasta)
-    return { desde: mal(t.desde, d), hasta: mal(t.hasta, h), orden: d && h && !(d < h) ? 'La fecha final tiene que ser posterior a la inicial.' : null }
+    const orden = !d || !h || d < h ? null : d === h ? `El inicio y el final son el mismo día (${isoAMostrar(d)}): el final tiene que ser posterior.`
+      : `El inicio (${isoAMostrar(d)}) es posterior al final (${isoAMostrar(h)}): cámbialas de orden.`
+    return { desde: mal(t.desde, d), hasta: mal(t.hasta, h), orden }
   })
   return { porFila, hayError: porFila.some(x => x.desde || x.hasta || x.orden) }
 }
@@ -108,7 +111,7 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
   useEffect(() => {
     if (estadoInicial || inicio.loteId == null || fila?.id === inicio.loteId) return
     const f = lotes.find(x => x.id === inicio.loteId)
-    if (!f) { if (lotes.length) setErrorGeneral('No encuentro ese lote.'); return }
+    if (!f) { if (lotes.length) setErrorGeneral('No encuentro esa prueba.'); return }
     setFila(f); setLeyendo(true)
     leeHecho(f, deps).then(e => { setEst(e); setEtapas(etapasConNotas(f, e)) }).catch(e => setErrorGeneral(`No se pudo leer lo hecho: ${e.message}`)).finally(() => setLeyendo(false))
   }, [inicio.loteId, lotes])
@@ -184,7 +187,7 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
           <span style={S.secundario}>Variantes</span><span>{fila.lote.variantes.map(nombreVariante).join(' · ')}</span>
           <span style={S.secundario}>Valores</span><span>{nombreUniversoLote(comunNormal(fila.lote.comun).universo)}</span>
           <span style={S.secundario}>Periodos</span><span>{comunNormal(fila.lote.comun).periodos.map(nombrePeriodo).join(' y ')}</span>
-          <span style={S.secundario}>Nombre del lote</span><span>{fila.nombre}</span>
+          <span style={S.secundario}>Nombre de esta prueba</span><span>{fila.nombre}</span>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -233,15 +236,19 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
             <Errores lista={erroresPeriodos}/>
           </div>
           <div>
-            <div style={etiqueta}>Nombre del lote</div>
-            <input style={{ ...entrada, width: '100%', maxWidth: 520, boxSizing: 'border-box' }} value={nombreEf} aria-label="Nombre del lote" onChange={e => setNombre(e.target.value)}/>
+            <div style={etiqueta}>Nombre de esta prueba</div>
+            <input style={{ ...entrada, width: '100%', maxWidth: 520, boxSizing: 'border-box' }} value={nombreEf} aria-label="Nombre de esta prueba" onChange={e => setNombre(e.target.value)}/>
             <Errores lista={errores.nombre}/>
           </div>
           <div style={{ background: B.fondo, borderRadius: B.radioBoton, padding: '10px 12px', color: B.secundario }}>
             <strong style={{ color: B.titulo }}>Por qué no se puede cambiar después:</strong> si pudieras ver el resultado y retocar un número, acabarías probando hasta que saliera bien por casualidad. Para probar otra idea, crea una prueba nueva.
           </div>
           <Errores lista={errores.general}/>
-          <div><button style={{ ...S.botonVerde, opacity: bloqueado ? 0.5 : 1, cursor: bloqueado ? 'not-allowed' : 'pointer' }} disabled={bloqueado} onClick={confirma}>Confirmar y probar</button></div>
+          <div>
+            <button style={bloqueado ? S.botonDesactivado : S.botonVerde} disabled={bloqueado} onClick={confirma}>Confirmar y probar</button>
+            {hayErrores ? <div data-aviso="corrige" style={{ ...S.secundario, marginTop: 6 }}>Corrige lo que está en rojo para continuar.</div>
+              : sinBase ? <div style={{ ...S.secundario, marginTop: 6 }}>Sin conexión con la base de datos: no se puede confirmar.</div> : null}
+          </div>
         </div>
       )}
     </Tarjeta>
@@ -305,7 +312,7 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
                   <td style={celda}>{pct(r.cagr)}</td>
                   <td style={celda}>{pct(r.maxDD)}</td>
                   <td style={celda}>{r.qqq ? `${pct(r.qqq.cagr)} · cae ${pct(r.qqq.maxDD)}` : '—'}</td>
-                  <td style={celda}>{r.pasa == null ? <span style={S.chip('neutro')}>Sin veredicto</span> : <span style={S.chip(r.pasa ? 'supera' : 'neutro')}>{r.pasa ? '≥ 95 en este periodo' : '< 95 en este periodo'}</span>}</td>
+                  <td style={celda}>{r.pasa == null ? <span style={S.chip('neutro')}>Sin veredicto</span> : <span style={{ whiteSpace: 'nowrap' }}><span style={S.chip(r.pasa ? 'supera' : 'neutro')}>{`${lab ? 'Operaciones' : 'Cartera'} ${r.pasa ? '≥' : '<'} 95 en este periodo`}</span><Ayuda texto={lab ? AYUDA.chipOperaciones : AYUDA.chipCartera} etiqueta={lab ? 'Operaciones en este periodo' : 'Cartera en este periodo'}/></span>}</td>
                 </tr>
               )
             })}
@@ -353,7 +360,7 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
             </div>
           )
         })}
-        <div style={{ marginTop: 12 }}><button style={S.enlace} onClick={() => setVerGuia(true)}>Cómo funcionan las pruebas</button></div>
+        <div style={{ marginTop: 12 }}><button style={S.boton} onClick={() => setVerGuia(true)}>Guía: cómo se prueba una estrategia</button></div>
       </details>
       <div style={{ marginTop: 12 }}><BotonCopiar obtenerTexto={textoCopia} etiqueta="Copiar para Claude" estilo={S.boton}/></div>
     </Tarjeta>

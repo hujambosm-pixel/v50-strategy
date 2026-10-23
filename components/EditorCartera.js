@@ -290,7 +290,7 @@ export default function EditorCartera({ apiFetch, version, configInicial = null 
                 <tbody>{filasCartera(res.periodos).map((f, j) => <tr key={j}>{f.map((c, i) => <td key={i} style={{ textAlign: i ? 'right' : 'left', padding: '2px 6px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{c}</td>)}</tr>)}</tbody>
               </table>
             </div>
-            {res.errorGuardar ? <div style={{ ...nota, color: ROJO }}>{res.errorGuardar}</div> : <div style={nota}>Guardada en el registro de pruebas (la ves en el historial del Lab. cartera).</div>}
+            {res.errorGuardar ? <div style={{ ...nota, color: ROJO }}>{res.errorGuardar}</div> : <div style={nota}>Guardada en el registro de pruebas (la ves en el historial de «Carteras QQQ + ETF con apalancamiento»).</div>}
           </div>
         )}
         <div style={caja}>

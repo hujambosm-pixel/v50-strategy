@@ -228,3 +228,57 @@ lo leen igual. Sin motores, validación ni huellas nuevos; sin tablas nuevas.
   no barajados; 5 de 50; percentil medio), la limitación de los stops y QQQ.
 - **Fechas**: lo escrito vive en la pantalla y `revisaFechas` da los errores en el mismo pintado; con una fecha imposible o un
   fin anterior (o igual) al inicio, «Confirmar y probar» queda desactivado sin esperar a ningún efecto.
+
+### Tanda 2d (V9.1041): «lote» → «prueba», guía visible, botón de confirmar claro (solo textos y presentación)
+
+- **Vocabulario.** En lo que ve el usuario del Builder, «lote» desaparece y se llama **prueba**. Definición (la de la guía,
+  `QUE_ES_PRUEBA` en `lib/builder/ayuda.js`): «Una prueba es lo que confirmas en el paso 2: qué variantes, en qué valores y en
+  qué periodos. Una vez confirmada, ya no se puede cambiar. Ejemplo: PRUEBA_BUILDER_1 es una prueba con 1 variante, los 30
+  valores con más momentum del Nasdaq-100 y 2 periodos (2016–2020 y 2021–2025).» «Prueba» se usa SOLO para ese grupo
+  confirmado y congelado; donde antes decía «la prueba» por la comparación con el azar ahora dice «la comparación» (verificación
+  de sesgos, en la guía y en «Cómo funciona esta prueba»). «Laboratorio de operaciones», «laboratorio de cartera» y
+  «verificación de sesgos» no cambian. Por dentro todo sigue igual: `editor_lotes`, `hash_lote`, `tipo: 'lote'`, las rutas, los
+  nombres guardados («PRUEBA_BUILDER_1 · 2026-10-22») y el texto de «Copiar para Claude» (ese sí dice «lote»: no se ve en la
+  pantalla).
+- Cambios: «Tus estrategias y tus pruebas…», «Nombre de esta prueba», «(prueba PRUEBA_EDITOR_1)» y «En la prueba …, sin
+  ejecutar» en Resultado, la línea pequeña de la fila («prueba» / «prueba de planes»), el filtro «Del editor (N)», los errores
+  («No encuentro esa prueba.», «Esa prueba ya estaba congelada…», «No se pudieron leer las pruebas…»).
+- **Guía**: el enlace pequeño pasa a botón secundario «Guía: cómo se prueba una estrategia» (arriba a la derecha y al final
+  de «Cómo funciona esta prueba»). La página se titula «Cómo se prueba una estrategia» y empieza por «Qué es una prueba»
+  (10 apartados). Desde la prueba, «← Volver a la prueba».
+- **«Confirmar y probar»** desactivado: gris de verdad (`S.botonDesactivado`: fondo #59636e, texto #1c2128, not-allowed) y
+  debajo «Corrige lo que está en rojo para continuar.» (sin conexión con la base: «no se puede confirmar»).
+- **Fechas**: con el inicio posterior al final, «El inicio (dd/mm/aaaa) es posterior al final (dd/mm/aaaa): cámbialas de
+  orden.»; el mismo día, «El inicio y el final son el mismo día (…)». En «Qué se prueba», una fecha mala o vacía sale como
+  «(fecha por corregir)» (`nombrePeriodo`), nunca un guion suelto.
+- **Chips por periodo**: «Operaciones ≥ 95 en este periodo» / «Operaciones < 95 en este periodo» con su «?» (es del
+  laboratorio de operaciones, no del de cartera). En las pruebas sin verificación de sesgos (p. ej. PRUEBA_EDITOR_1) decide el
+  laboratorio de cartera, y entonces el chip dice «Cartera ≥ / < 95 en este periodo», con su propio «?»: así cada chip dice de
+  qué laboratorio sale.
+- **Números**: «1.000 copias» también en «Qué se prueba» (antes «1000»). Todos los miles visibles del Builder llevan punto.
+- **Menú**: «Lab. cartera» → «Carteras QQQ + ETF con apalancamiento» (y el título de su pantalla, y las dos menciones del
+  editor), para no chocar con el «laboratorio de cartera» del Builder. Al desplegar el menú, las etiquetas largas pasan a dos
+  líneas en vez de cortarse. No cambia nada de lo que hace.
+
+#### «Lote» que quedan FUERA del Builder (para la tanda de limpieza)
+
+- **Laboratorio (señales)** (`components/LaboratorioPanel.js`): «Oficial · LOTE_x · …», el confirm de «Ejecutar pendientes»
+  («… pendientes del lote …»), «📋 Copiar lote completo», «Al azar (fija, la del lote …)», «no coincide … con ningún elemento de
+  un lote declarado», «solo se calibran las combinaciones declaradas en un lote», «cada combinación del lote se probó antes…»,
+  la tabla de lotes (LOTE_1–3) y la columna Oficial del historial.
+- **Carteras QQQ + ETF con apalancamiento** (antes Lab. cartera, `components/CarteraPanel.js`): «Oficial · CARTERA_x · …»,
+  el confirm de «Ejecutar pendientes», «Al abrir un resultado (de un lote, …)», «1 · el de los lotes», «📋 Copiar lote
+  completo», la tabla de CARTERA_1–3 y el historial. Su texto de «Copiar para Claude» sigue titulándose «Laboratorio de
+  cartera».
+- **Editor → modo Lotes** (`components/EditorLotes.js`, `EditorPanel.js`): la pestaña «Lotes», «Declarar un lote», «Un lote
+  fija de antemano…», «el lote exige superar al azar en TODOS», «cambiar la estrategia después no cambia el lote», «Huella del
+  lote», «Congelar…», «Lotes congelados», «Ejecutar el lote», «📋 Copiar lote completo», «este lote es semanal», «cada periodo
+  del lote … el universo del lote», «Ese lote ya está congelado…», «No se pudo congelar el lote…», «…no se pueden congelar
+  lotes».
+- **Editor → Cartera** (`components/EditorCartera.js`): «la prueba es la misma que la del lote (sale «Oficial»)», «1 (el de
+  los lotes congelados)», «es la misma prueba que ese elemento del lote».
+- **Multicartera y Backtesting** (`pages/index.js`, `components/AzarCarteraPanel.js`): ningún «lote» visible (solo nombres de
+  variables y el mensaje «Actualizados N activos», que no lo dice).
+- Textos compartidos con el modo Lotes que el Builder solo usa por dentro: `validaLote` («El lote necesita un nombre», que el
+  Builder ya traduce a «Ponle un nombre a la prueba.»; «El lote tiene que ser del formato…», que el Builder muestra como «La
+  prueba …»), `textoLoteEditor` (el texto de «Copiar para Claude»).

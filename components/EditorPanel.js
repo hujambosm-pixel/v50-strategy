@@ -313,7 +313,7 @@ export default function EditorPanel({ apiFetch, filaInicial = null, onGuardada, 
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '8px 12px 0', fontFamily: MONO }}>
         {pestana('estrategia', 'Estrategia de un activo', 'Cuándo entrar y salir de un valor: se guarda como estrategia y se prueba en el backtest')}
-        {pestana('cartera', 'Cartera (QQQ + ETF)', 'Una máquina de estados que reparte la cartera entre QQQ, un ETF apalancado y liquidez: se prueba en el laboratorio de cartera')}
+        {pestana('cartera', 'Cartera (QQQ + ETF)', 'Una máquina de estados que reparte la cartera entre QQQ, un ETF apalancado y liquidez: se prueba en «Carteras QQQ + ETF con apalancamiento»')}
         {pestana('lotes', 'Lotes', 'Declarar y congelar un lote de variantes antes de ver resultados, y probarlo contra el azar')}
       </div>
       <div style={{ flex: 1, display: modo === 'estrategia' ? 'flex' : 'none', minHeight: 0 }}>

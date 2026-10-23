@@ -522,7 +522,7 @@ export default function CarteraPanel({ apiFetch, version = null }) {
     <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden', fontFamily: MONO, color: 'var(--text)' }}>
       {/* ── Constructor y lote ── */}
       <div style={{ width: 400, flexShrink: 0, overflowY: 'auto', padding: 12, borderRight: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>💼 Laboratorio de cartera</div>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>💼 Carteras QQQ + ETF con apalancamiento</div>
         <div style={{ fontSize: TAM, color: GRIS, marginBottom: 10 }} data-prueba="contador">
           {registro.contador ? <>Pruebas registradas: <b style={{ color: 'var(--text)' }}>{registro.contador.total}</b> · oficiales {registro.contador.oficiales} · exploratorias {registro.contador.exploratorias}</> : registro.cargando ? 'Leyendo el registro…' : 'Pruebas registradas: —'}
         </div>

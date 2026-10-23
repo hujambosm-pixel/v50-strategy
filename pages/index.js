@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1040'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1041'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -6265,7 +6265,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1040</title>
+        <title>Trading Simulator V9.1041</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6354,7 +6354,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1040
+            <span className="dot"/>Trading Simulator V9.1041
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6497,7 +6497,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               {id:'multi',      icon:'📊',label:'Backtesting'},
               {id:'optimiza',   icon:'🎯',label:'Optimización'},
               {id:'laboratorio',icon:'🧪',label:'Laboratorio'},
-              {id:'cartera',    icon:'💼',label:'Lab. cartera'},
+              {id:'cartera',    icon:'💼',label:'Carteras QQQ + ETF con apalancamiento'},
               {id:'tradelog',   icon:'📒',label:'TradeLog',  accent:'#9b72ff'},
               {id:'risk',       icon:'⚖️', label:'Risk Mgmt', accent:'#378add'},
             ].map(item=>(
@@ -6515,7 +6515,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   title={item.hasAlerts?`${item.alertCount} alerta${item.alertCount!==1?'s':''} activa${item.alertCount!==1?'s':''}`:undefined}
                   style={{animation:item.hasAlerts?'bellSwing 1.2s ease-in-out infinite':undefined,
                     transformOrigin:'top center'}}>{item.icon}</span>
-                <span style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',opacity:navExpanded?1:0,transition:'opacity 0.1s'}}>
+                <span style={{fontSize:11,letterSpacing:'0.06em',textTransform:'uppercase',opacity:navExpanded?1:0,transition:'opacity 0.1s',whiteSpace:navExpanded?'normal':'nowrap',lineHeight:1.25}}>
                   {item.label}
                 </span>
               </button>
