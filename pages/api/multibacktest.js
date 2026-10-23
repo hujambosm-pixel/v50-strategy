@@ -26,6 +26,7 @@ import { buildAlignedCloses, buildAlignedWeekly } from '../../lib/alineaSeries'
 import { usaFuerzaRelativa, percentilesParaBarras } from '../../lib/fuerzaRelativa'
 import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
 import { fuenteDeFila, esFuenteEditor, runDeEditor, tickerFiltroMercado } from '../../lib/editor/fuente'
+import { conHistoriaFuente } from '../../lib/editor/historia'
 import { preparaGuardado } from '../../lib/editor/guardar'
 
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -1843,8 +1844,8 @@ async function handlePortfolioMode(req, res) {
     const _ivCal = assetInterval === '1wk' ? 'semanal' : 'diario'
     const _esquemas = stratMeta.map(s => esquemaDeCodigo(s.codeJs))
     const nCal = Math.max(velasCalentamiento({}, filtrosLista, _ivCal),
-      ...stratMeta.map((s, k) => velasCalentamiento(s.stratParams, filtrosLista, _ivCal,
-        _esquemas[k] ? ventanasDeclaradas(_esquemas[k], s.stratParams) : null)))
+      ...stratMeta.map((s, k) => conHistoriaFuente(velasCalentamiento(s.stratParams, filtrosLista, _ivCal,
+        _esquemas[k] ? ventanasDeclaradas(_esquemas[k], s.stratParams) : null), s.codeJs, s.stratParams)))
     const _cal = { calentamiento: nCal, conCalentamiento: true }
     console.log(`[periodo] cartera (${assetInterval}): ${per.modo} ${per.desde}→${per.hasta} · calentamiento ${nCal}`)
     const allTickers = [...new Set(stratMeta.flatMap(s => s.symbols || []))]
@@ -2279,8 +2280,8 @@ async function handlerMultibacktest(req, res) {
     if (_ffU.forzados.length) console.log(`[filtros] ${_stratNameMb ?? strategyId}: estrategia semanal, filtros forzados a semanal: ${_ffU.forzados.join(', ')}`)
     const anyFiltroOn = hayFiltrosActivos(filtrosLista)
     const per = normalizaPeriodo({ years: cfg.years ?? 5, fromDate: cfg.fromDate ?? null, toDate: cfg.toDate ?? null })
-    const nCal = calPedido != null ? calPedido : velasCalentamiento(_stratParamsMb, filtrosLista, assetInterval === '1wk' ? 'semanal' : 'diario',
-      _esquemaMb ? ventanasDeclaradas(_esquemaMb, _stratParamsMb) : null)
+    const nCal = calPedido != null ? calPedido : conHistoriaFuente(velasCalentamiento(_stratParamsMb, filtrosLista, assetInterval === '1wk' ? 'semanal' : 'diario',
+      _esquemaMb ? ventanasDeclaradas(_esquemaMb, _stratParamsMb) : null), codeJs, _stratParamsMb)
     const _cal = { calentamiento: nCal, conCalentamiento: true }
     console.log(`[periodo] ${_stratNameMb ?? strategyId} (${assetInterval}): ${per.modo} ${per.desde}→${per.hasta} · calentamiento ${nCal}`)
     const BATCH = 4

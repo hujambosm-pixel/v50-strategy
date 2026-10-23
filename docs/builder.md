@@ -433,3 +433,56 @@ guarda en la misma. La versión se lee del nombre (`partesNombre`): no hay colum
   de un índice no compraría allí y quedaría sin veredicto. Habría que inventar también el índice (cambia el cálculo: decisión de Sergi).
 - Trailing en % («sube a 120 € → vende a 108 €»): el motor no lo tiene; haría falta un tipo de stop nuevo.
 - Un filtro de mercado con dos índices distintos (QQQ y SPY a la vez): el motor admite uno.
+
+## 12. Índice ficticio, más historia, índices claros y «Cómo compro» (V9.1045)
+
+### Auditoría (solo lectura)
+
+- **a) Mercados ficticios.** `calibraDefinicion` (`lib/editor/laboratorio.js`): 50 mercados de 100 valores, cada uno un paseo
+  aleatorio (2 % diario, ligera subida), con 260 velas previas, 5 años y 200 velas después; semilla de la huella. No había índice: una
+  estrategia con filtro de índice no compraba nunca ahí → menos del 80 % de mercados con operaciones → «Sin veredicto».
+- **b) Velas previas.** No es el mismo número en todos: backtest del editor y laboratorio de cartera (multibacktest) y la ficha de un
+  activo: `velasCalentamiento` = máx(3 × la ventana declarada más larga, 250 en diario / 60 en semanal). Laboratorio de operaciones:
+  3 años (unas 756 velas; 6 años en semanal). Verificación de sesgos: 260 inventadas. Paso 3 (planes): QQQ y el ETF desde 3 años
+  antes; no ejecuta estrategias del editor. Datos guardados de la app (precios_diarios): ^NDX y ^GSPC desde 21/10/1991, SPY desde
+  19/10/1998, QQQ desde 10/03/1999; IWM y DIA **no están**; de los 327 valores, 218 tienen datos desde antes de 2013.
+- **c) Índices.** El filtro admite cualquier símbolo de Yahoo; ninguna estrategia ni prueba guardada usa ^NDX ni ^GSPC (ni ningún
+  filtro de mercado).
+- **d) Cómo compro.** Orden: a la apertura siguiente (por defecto), al cierre de la vela de la señal, orden stop o límite en el
+  máximo / mínimo / cierre de las N últimas velas, con ajuste (fijo, solo baja, solo sube) y una condición que la cancela. Vigilancia:
+  por defecto se miran stops y salidas ya en la vela de la compra; `revisaSalidasEnLaVelaDeEntrada: false`, desde la siguiente.
+- **e) Menú «…».** Iba con posición absoluta dentro de la fila, que tiene desplazamiento horizontal (para no partirse): el navegador
+  lo recortaba y le ponía scroll. Los desplegables nativos (select) no tienen ese problema.
+
+### Cambios
+
+- **Índice ficticio** (decisión de Sergi, opción a): con filtro de índice, en cada mercado ficticio el filtro mira `indiceFicticio`:
+  la media de las rentabilidades diarias de cierre a cierre de sus 100 valores, acumulada desde 100 (apertura, máximo y mínimo = el
+  cierre; sin volumen). Sin filtro de índice no se calcula: la verificación es la misma byte a byte (la de PRUEBA_BUILDER_1, completa,
+  idéntica a V9.1044 y a la guardada). Las ya hechas no se recalculan. Frase en «Cómo funciona esta prueba» y en la guía.
+- **Más historia solo cuando haga falta** (`lib/editor/historia.js`): `velasNecesarias` (la condición más larga y las ventanas de los
+  stops); si pasan de lo de siempre, se cargan esas más un margen (máx(20, 10 %)) en el backtest, la ficha, el laboratorio de cartera,
+  la verificación de sesgos y, si pasan de sus 3 años, el laboratorio de operaciones. Las que caben no cambian (las 4 estrategias y las
+  5 copias en pruebas necesitan 250 o menos). «Comprobación»: «Hay datos suficientes…», «Necesita N velas previas: se cargarán
+  automáticamente.» o, si el índice no tiene datos tan atrás (o no está guardado), un aviso en rojo con las fechas.
+- **Índices**: «Este valor» · «Nasdaq-100 (QQQ)» · «S&P 500 (SPY)» · «Pequeñas empresas de EE. UU. (IWM)» · «Dow Jones (DIA)», con
+  su «?». ^NDX y ^GSPC ya no se ofrecen; si una estrategia los usa, los sigue viendo con nombre claro.
+- **«Cómo compro»** (entre «Vendo cuando…» y «Protección»): a la apertura de la vela siguiente (lo normal) o con una orden en el
+  máximo de la vela de la señal (o de las N últimas), con «si no llega, la orden se queda / baja / sube» y «Cancelar la orden si…» (una
+  fila). Producen la misma definición que el Editor clásico con los mismos valores. En «Protección», «Los stops y las salidas empiezan
+  a vigilarse: desde la vela siguiente a la compra / ya en la vela de la compra». La línea de ejecución y la regla lo dicen. Copia
+  editor 23 ya no tiene opciones solo del Editor clásico: sin aviso amarillo.
+- **Menú «…»** con posición fija y por encima de todo; si no cabe hacia abajo, se abre hacia arriba. «Nombre de la estrategia» con la
+  letra del Builder.
+
+### Qué falta para poder quitar el Editor clásico
+
+- Lo que el editor nuevo todavía no tiene: orden límite y compra al cierre; orden en el mínimo o el cierre; stops que se encienden con
+  un parámetro, «se retira cuando otro lo supera», «solo por encima de la compra» y el nivel con medias (la 1 V50); el trailing por ATR;
+  salidas que dependen de un parámetro; combinaciones anidadas a mano (O dentro de Y en la venta, histéresis); el filtro de mercado
+  con «al menos una».
+- Parámetros y optimizador (defecto, valor, rangos de-a, restricciones): hoy solo en el Editor clásico; el Builder no los enseña.
+- «Exportar a code_js» y «Probar en backtest» (abrir la estrategia en el gráfico) desde el Builder.
+- Los modos «Cartera (QQQ + ETF)» y «Lotes» del Editor (el paso 3 y el modo Lotes antiguo).
+- IWM y DIA no están en los precios guardados: hasta que se añadan, el filtro con ellos funciona en el backtest pero no en los
+  laboratorios del paso 2.

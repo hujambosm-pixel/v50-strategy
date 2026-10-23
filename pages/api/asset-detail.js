@@ -12,6 +12,7 @@ import { fetchData, fetchDataConMotivo, runCodeJsAsset, buildAlignedCloses, buil
 import { usaFuerzaRelativa, percentilesParaBarras } from '../../lib/fuerzaRelativa'
 import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
 import { fuenteDeFila, tickerFiltroMercado } from '../../lib/editor/fuente'
+import { conHistoriaFuente } from '../../lib/editor/historia'
 import { marcaBloqueadas } from '../../lib/graficoEstrategia'
 import { velasCalentamiento } from '../../lib/periodo'
 import { esquemaDeCodigo, paramsEfectivos, ventanasDeclaradas, cfgConParams } from '../../lib/parametrosEstrategia'
@@ -156,8 +157,8 @@ async function handlerAssetDetail(req, res) {
     const _ff = fuerzaFiltrosSemanales(normalizaFiltrosEntrada(filtrosCfg), esSemanal)
     const filtrosLista = _ff.lista
     if (_ff.forzados.length) console.log(`[filtros] ${symbol}: estrategia semanal, filtros forzados a semanal: ${_ff.forzados.join(', ')}`)
-    const nCal = velasCalentamiento(paramsEstrategia, filtrosLista, esSemanal ? 'semanal' : 'diario',
-      _esquemaAd ? ventanasDeclaradas(_esquemaAd, paramsEstrategia) : null)
+    const nCal = conHistoriaFuente(velasCalentamiento(paramsEstrategia, filtrosLista, esSemanal ? 'semanal' : 'diario',
+      _esquemaAd ? ventanasDeclaradas(_esquemaAd, paramsEstrategia) : null), codeJs, paramsEstrategia)
     const _cal = { calentamiento: nCal, conCalentamiento: true }
     const _d = await fetchDataConMotivo(symbol, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, nCal)
     // `barras` es el PERIODO (las fechas que se devuelven); `barrasConCal` lleva el calentamiento y

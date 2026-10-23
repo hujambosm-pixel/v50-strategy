@@ -27,6 +27,7 @@ import { ejecutaPeriodo, semillaLab, N_SIM_LAB } from '../../lib/laboratorio'
 import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera, esConfigExploracion, esConfigEditorLab } from '../../lib/lotesLab'
 import { ejecutaPeriodoEditor } from '../../lib/editor/laboratorio'
 import { validaDefinicion } from '../../lib/editor/definicion'
+import { aniosHistoria } from '../../lib/editor/historia'
 import { usaFuerzaRelativa } from '../../lib/fuerzaRelativa'
 import { ejecutaPeriodoCartera, alineaDatos, alineaVelasReferencia, N_SIM_CARTERA, calculoDe } from '../../lib/laboratorioCartera'
 import { curvaRiesgoEtf, sensibilidadEtf, estresParte, mapaMediaParte } from '../../lib/exploracionCartera'
@@ -138,7 +139,8 @@ export default async function handler(req, res) {
     // Semanal (V9.1006): las velas semanales REALES, construidas de las diarias de la caché (lib/velasSemanales.js). Más
     // historia hacia atrás (una media de 200 semanas son casi 4 años) y el margen tras el periodo en semanas.
     const semanal = cfg.intervalo === 'semanal'
-    const dDesde = masAnios(desde, semanal ? -6 : -3)
+    // Una estrategia del editor que necesita más velas previas que las de 3 años recibe las suyas (lib/editor/historia.js).
+    const dDesde = masAnios(desde, semanal ? -6 : editor ? -aniosHistoria(cfg.definicion, cfg.valores || {}, false) : -3)
     // (Una estrategia del editor no tiene un tope declarado: un año después del periodo para cerrar sus operaciones.)
     const dHasta = editor ? masDias(hasta, 400) : semanal ? masDias(hasta, 7 * ((tope != null ? tope : cfg.salida?.n ?? 20) + 3)) : masDias(hasta, tope != null ? diasTrasPeriodo(tope) : 45)
     const lee = (sym) => get(`rpc/leer_velas?p_simbolo=${encodeURIComponent(sym)}&p_desde=${dDesde}&p_hasta=${dHasta}`).then(velasDe)

@@ -2,10 +2,10 @@
 // docs/builder.md, §10 y §11), con el estilo de lib/builder/estilo.js. Es otra forma de ver y editar la MISMA definición del
 // editor visual (formato 1, motor 1): leer no cambia nada y cada tarjeta reescribe solo su parte (lib/builder/tarjetas.js). Tres
 // columnas (en móvil, una debajo de otra): el catálogo de condiciones; las tarjetas «Solo opero cuando…», «Compro cuando…»,
-// «Vendo cuando…», «Protección» y la línea de ejecución; y «La regla, en una frase», la comprobación y «Guardar y pasar al paso 2».
+// «Vendo cuando…», «Cómo compro» (V9.1045), «Protección» y la línea de ejecución; y «La regla, en una frase», la comprobación y «Guardar y pasar al paso 2».
 // Cada fila va en UNA línea: solo se editan los números, el símbolo y el tipo de media (los desplegables llevan width: auto,
-// porque la hoja de estilos de la app les pone width: 100%). Lo poco habitual (órdenes stop o límite, el optimizador y sus
-// rangos, piezas que se encienden con un parámetro) no está aquí: se conserva siempre y se ve en el Editor clásico (la pestaña
+// porque la hoja de estilos de la app les pone width: 100%). Lo poco habitual (orden límite, compra al cierre, el optimizador y
+// sus rangos, piezas que se encienden con un parámetro) no está aquí: se conserva siempre y se ve en el Editor clásico (la pestaña
 // «Editor»). Guardar es lo mismo que en el editor de siempre (/api/strategies, que valida otra vez); si la estrategia ya está en
 // una prueba congelada y cambia su regla, se crea una versión nueva (lib/builder/versiones.js).
 //   fila: la estrategia de partida ({ id?, name, description, definition, params, copiaDe? }). lotes: las filas de editor_lotes.
@@ -17,10 +17,11 @@ import { B, S } from '../lib/builder/estilo'
 import { CONDICIONES_EDITOR, validaDefinicion, valoresDe, esquemaDe, huellaDefinicion, paraHuella } from '../lib/editor/definicion'
 import { jsonCanonico } from '../lib/lotesLab'
 import { GRUPOS, buscaCatalogo, nombreCond, condNueva, soloDelValor, AYUDA_COND, AYUDA_NO, AYUDA_CRUZA, leeCompra, escribeCompra, leeFiltro, escribeFiltro, cambiaIndice, INDICES, nombreQuien,
-  leeVenta, escribeVenta, leeProteccion, TIPOS_STOP, CAMPOS_STOP_TARJETA, numeroStop, anadeStopDef, cambiaTipoStopDef, quitaStopDef, ponNumeroStop, ponSalida, DEFECTO_PROTECCION,
+  leeVenta, escribeVenta, leeProteccion, AYUDA_QUIEN, opcionesQuien, leeOrden, ponModoOrden, ponAjuste, ponVelasOrden, CANCELAR_DEFECTO, ponCancelar, vigilaDesdeLaCompra, ponVigilancia, AJUSTES, fraseCompra, TIPOS_STOP, CAMPOS_STOP_TARJETA, numeroStop, anadeStopDef, cambiaTipoStopDef, quitaStopDef, ponNumeroStop, ponSalida, DEFECTO_PROTECCION,
   opcionesClasico, frasesClasico, fraseStopTarjeta, plantillaFila, opcionesOp, opDe, conOp, conVuelta, conCruce, conNumero, tieneLado, erroresFila, erroresProteccion, cuentaErroresProteccion, notaFila, fraseRegla,
   datosSuficientes, aTexto, deTexto } from '../lib/builder/tarjetas'
 import { partesNombre, planGuardado, avisoVersion } from '../lib/builder/versiones'
+import { PERIODOS_DEFECTO } from '../lib/editor/lotes'
 import Ayuda from './BuilderAyuda'
 import BuilderGuia from './BuilderGuia'
 
@@ -30,9 +31,15 @@ const mini = { ...entrada, padding: '2px 4px', fontSize: 13, width: 'auto', disp
 const copia = (x) => JSON.parse(JSON.stringify(x))
 const params = (p) => { try { return typeof p === 'string' ? JSON.parse(p || '{}') : (p || {}) } catch (_) { return {} } }
 const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`
+// Las etiquetas de los campos con la letra del Builder (la hoja de estilos de la app pone a los label letra monoespaciada y pequeña).
+const etiquetaCampo = { display: 'inline-flex', flexDirection: 'row', alignItems: 'center', fontFamily: B.letra, fontSize: B.base, fontWeight: 600, color: B.titulo }
+const fechaCorta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 const val = (x, valores) => typeof x === 'string' && x.startsWith('$') ? valores[x.slice(1)] : x
 const AYUDA_FILTRO = 'Cada fila dice de quién es: un índice (QQQ, SPY…) o «Este valor». Se tienen que cumplir todas. Si no se cumplen, no compro nada, aunque se cumpla «Compro cuando…». No obligan a vender lo que ya tengo.'
-export const LINEA_EJECUCION = 'Las órdenes se ejecutan siempre igual: la señal se mira al cierre de la vela y se compra o vende a la apertura de la siguiente. Opciones poco habituales (órdenes stop o límite, optimizador): Editor clásico.'
+// La línea de ejecución dice lo que esté elegido en «Cómo compro» y en la vigilancia de los stops.
+export const lineaEjecucion = (def) => `La señal se mira al cierre de cada vela. ${leeOrden(def).modo === 'maximo' ? 'Se compra con la orden en el máximo de «Cómo compro»' : 'Se compra a la apertura de la vela siguiente'} y se vende a la apertura de la vela siguiente a la señal de venta (los stops y el objetivo, en cuanto el precio llega). Los stops y las salidas se vigilan ${vigilaDesdeLaCompra(def) ? 'ya en la vela de la compra' : 'desde la vela siguiente a la compra'}. Opciones poco habituales (orden límite, compra al cierre, optimizador): `
+const AYUDA_VIGILANCIA = '«Ya en la vela de la compra»: si el mismo día de la compra el precio toca el stop o se cumple una salida, se vende ese día. «Desde la vela siguiente a la compra»: el día de la compra no se mira nada; los stops y las salidas cuentan a partir del día siguiente.'
+const AYUDA_ORDEN = 'Ejemplo: la vela de la señal tiene máximo en 52 €. Con la orden en el máximo, compro si en las velas siguientes el precio llega a 52 € (si una vela abre ya por encima, compro a la apertura). Si no llega, según lo elegido la orden se queda en 52 €, o baja cada vela al nuevo máximo si es más bajo (por ejemplo, a 51 €). Si se cumple la condición de cancelar (por ejemplo, el cierre queda por debajo de su EMA (20)), la orden se quita sin comprar.'
 
 // Lo que se edita: la definición (copia), los valores, el nombre y la descripción.
 export const estadoDe = (fila) => ({ def: copia(fila.definition), valores: params(fila.params), nombre: fila.name || '', descripcion: fila.description || '' })
@@ -46,13 +53,29 @@ function Numero({ valor, onCambia, error, etiqueta }) {
 }
 
 // El menú «…» de una fila: darle (o quitarle) la vuelta y, en las condiciones sin símbolo, «solo la vela en que empieza».
-function Menu({ f, onCambia }) {
-  const [abierto, setAbierto] = useState(false)
+// V9.1045: el menú va con posición FIJA (como el «?»), por encima de todo: la fila tiene desplazamiento horizontal y lo recortaba.
+// Se abre hacia abajo y, si no cabe, hacia arriba; se cierra al tocar fuera o al desplazar la página.
+function Menu({ f, onCambia, abiertoInicial = false }) {
+  const [abierto, setAbierto] = useState(abiertoInicial)
+  const [pos, setPos] = useState(null)
+  const boton = useRef(null), caja = useRef(null)
+  const abre = () => {
+    const r = boton.current?.getBoundingClientRect()
+    if (r) setPos({ right: Math.max(8, window.innerWidth - r.right), ...(window.innerHeight - r.bottom < 120 ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }) })
+    setAbierto(true)
+  }
+  useEffect(() => {
+    if (!abierto) return
+    const fuera = (e) => { if (!caja.current?.contains(e.target) && !boton.current?.contains(e.target)) setAbierto(false) }
+    const cierra = () => setAbierto(false)
+    document.addEventListener('mousedown', fuera); document.addEventListener('touchstart', fuera); window.addEventListener('scroll', cierra, true)
+    return () => { document.removeEventListener('mousedown', fuera); document.removeEventListener('touchstart', fuera); window.removeEventListener('scroll', cierra, true) }
+  }, [abierto])
   return (
-    <span style={{ position: 'relative', flexShrink: 0 }}>
-      <button style={{ ...S.enlace, color: B.apagado, padding: '0 4px' }} aria-label="Más opciones de la fila" aria-expanded={abierto} onClick={() => setAbierto(a => !a)}>…</button>
+    <span style={{ flexShrink: 0 }}>
+      <button ref={boton} style={{ ...S.enlace, color: B.apagado, padding: '0 4px' }} aria-label="Más opciones de la fila" aria-expanded={abierto} onClick={() => abierto ? setAbierto(false) : abre()}>…</button>
       {abierto && (
-        <span data-menu-fila style={{ position: 'absolute', right: 0, top: '100%', zIndex: 5, background: B.cabecera, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: 6, display: 'flex', flexDirection: 'column', gap: 4, whiteSpace: 'nowrap' }}>
+        <span ref={caja} data-menu-fila style={{ position: 'fixed', zIndex: 1000, ...(pos || {}), background: B.cabecera, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: 8, display: 'flex', flexDirection: 'column', gap: 6, whiteSpace: 'nowrap', boxShadow: '0 6px 20px rgba(0,0,0,0.5)' }}>
           <button style={S.enlace} onClick={() => { onCambia(conVuelta(f)); setAbierto(false) }}>{f.env === 'NO' ? 'Quitarle la vuelta (NO)' : 'Darle la vuelta (NO)'}</button>
           {!tieneLado(f.cond.c) && <button style={S.enlace} onClick={() => { onCambia(conCruce(f)); setAbierto(false) }}>{f.env === 'cruza' ? 'Cada vela que se cumpla' : 'Solo la vela en que empieza a cumplirse (cruza)'}</button>}
         </span>
@@ -63,7 +86,7 @@ function Menu({ f, onCambia }) {
 
 // Una fila de condición en UNA línea: «Cierre [> ▾] SMA ( [200] )», con la nota gris, el «?», el menú «…» y la ×; el error,
 // debajo. quien / onQuien: el selector «de quién» de «Solo opero cuando…».
-function Fila({ f, errores, valores, tarjeta, color, onCambia, onQuita, quien, onQuien, indices }) {
+function Fila({ f, errores, valores, tarjeta, color, onCambia, onQuita, quien, onQuien, menuAbierto = false }) {
   const p = f.cond.p || {}, decl = Object.fromEntries((CONDICIONES_EDITOR[f.cond.c]?.parametros || []).map(d => [d.clave, d]))
   const hay = Object.keys(errores).length > 0
   const campo = (c, j) => {
@@ -76,17 +99,19 @@ function Fila({ f, errores, valores, tarjeta, color, onCambia, onQuita, quien, o
     <div data-fila={f.cond.c} data-error={hay ? 'si' : undefined} style={{ border: `1px solid ${hay ? ROJO : B.borde}`, borderLeft: `3px solid ${hay ? ROJO : color}`, borderRadius: B.radioBoton, padding: '6px 8px', marginTop: 8, background: B.fondo }}>
       <div data-linea style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflowX: 'auto', whiteSpace: 'nowrap' }}>
         {onQuien && (
-          <select style={{ ...mini, color: MORADO }} aria-label="De quién" value={quien} onChange={e => onQuien(e.target.value)}>
-            {indices.map(t => <option key={t} value={t} disabled={soloDelValor(f.cond.c)}>{nombreQuien(t)}</option>)}
-            <option value="valor">Este valor</option>
-          </select>
+          <span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+            <select style={{ ...mini, color: MORADO }} aria-label="De quién" value={quien} onChange={e => onQuien(e.target.value)}>
+              {opcionesQuien(quien).map(t => <option key={t} value={t} disabled={t !== 'valor' && soloDelValor(f.cond.c)}>{nombreQuien(t)}</option>)}
+            </select>
+            <Ayuda texto={AYUDA_QUIEN} etiqueta="De quién"/>
+          </span>
         )}
         {f.env === 'NO' && <span data-no style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}><span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#3b1d22', color: ROJO }}>NO</span><Ayuda texto={AYUDA_NO} etiqueta="NO"/></span>}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: B.titulo, fontWeight: 600, flexShrink: 0 }}>{plantillaFila(f.cond.c).map(campo)}</span>
         {f.env === 'cruza' && !tieneLado(f.cond.c) && <span style={{ fontSize: 12, color: B.secundario, flexShrink: 0 }}>(solo la vela en que empieza)</span>}
         <span style={{ marginLeft: 'auto', paddingLeft: 8, color: B.apagado, fontSize: 12 }}>{notaFila(f, valores, tarjeta)}</span>
         <span style={{ flexShrink: 0 }}><Ayuda texto={AYUDA_COND[f.cond.c] || nombreCond(f.cond.c)} etiqueta={nombreCond(f.cond.c)}/></span>
-        <Menu f={f} onCambia={onCambia}/>
+        <Menu f={f} onCambia={onCambia} abiertoInicial={menuAbierto}/>
         <button style={{ ...S.enlace, color: B.apagado, fontSize: 18, lineHeight: 1, padding: '0 4px', flexShrink: 0 }} aria-label="Quitar esta condición" title="Quitar esta condición" onClick={onQuita}>×</button>
       </div>
       {hay && <div data-error-fila style={{ color: ROJO, fontSize: 13, marginTop: 6 }}>{Object.values(errores).map((e, k) => <div key={k}>{e}</div>)}</div>}
@@ -105,7 +130,7 @@ function Tarjeta({ titulo, color, derecha, children, datos }) {
   )
 }
 
-export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, onVolver, onGuardada, onEditorClasico, estadoInicial = null, enPruebaInicial = null, buscarInicial = '' }) {
+export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, onVolver, onGuardada, onEditorClasico, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null }) {
   const [est, setEst] = useState(() => estadoInicial || estadoDe(fila))
   const orig = useRef(null); if (!orig.current) orig.current = estadoDe(fila)
   const { def, valores } = est
@@ -140,20 +165,22 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   const errFiltro = filtro.filas.map(f => erroresFila(f, valoresEf, esquema, f.quien))
   const errCompra = compra.filas.map(f => erroresFila(f, valoresEf, esquema)), errVenta = venta.filas.map(f => erroresFila(f, valoresEf, esquema))
   const errProt = erroresProteccion(prot, def, valoresEf)
+  const orden = leeOrden(def), errCancelar = orden.cancelar ? erroresFila(orden.cancelar, valoresEf, esquema) : {}
+  const errVelasOrden = orden.modo === 'maximo' ? (v => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 250 ? null : 'El número de velas tiene que ser un número entero de 1 a 250 (por ejemplo, 1).')(typeof orden.velas === 'string' && orden.velas.startsWith('$') ? valoresEf[orden.velas.slice(1)] : orden.velas) : null
   const validacion = useMemo(() => { try { return validaDefinicion(def, valores) } catch (e) { return [`La definición no se puede leer: ${e.message}`] } }, [def, valores])
   const sinCompra = !def.entrada?.senal || (compra.ok && !compra.filas.length), sinSalida = !(def.stops || []).length && !(def.salidas || []).length
   const errNombre = !est.nombre.trim() ? 'Ponle un nombre a la estrategia (por ejemplo, «Retrocesos con RSI»).' : null
   const n = (xs) => xs.reduce((a, e) => a + Object.keys(e).length, 0)
-  const nFiltro = n(errFiltro), nCompra = n(errCompra) + (sinCompra ? 1 : 0), nVenta = n(errVenta), nProt = cuentaErroresProteccion(errProt) + (sinSalida ? 1 : 0)
+  const nFiltro = n(errFiltro), nCompra = n(errCompra) + (sinCompra ? 1 : 0), nVenta = n(errVenta), nProt = cuentaErroresProteccion(errProt) + (sinSalida ? 1 : 0), nOrden = n([errCancelar]) + (errVelasOrden ? 1 : 0)
   // Lo que la validación de siempre ve y las tarjetas no explican (una opción del Editor clásico): cuenta como error de allí.
-  const errClasico = nFiltro + nCompra + nVenta + nProt ? [] : validacion
-  const zonas = [['«Solo opero cuando…»', nFiltro], ['«Compro cuando…»', nCompra], ['«Vendo cuando…»', nVenta], ['«Protección»', nProt], ['el Editor clásico', errClasico.length], ['el nombre', errNombre ? 1 : 0]].filter(([, k]) => k)
+  const errClasico = nFiltro + nCompra + nVenta + nProt + nOrden ? [] : validacion
+  const zonas = [['«Solo opero cuando…»', nFiltro], ['«Compro cuando…»', nCompra], ['«Vendo cuando…»', nVenta], ['«Cómo compro»', nOrden], ['«Protección»', nProt], ['el Editor clásico', errClasico.length], ['el nombre', errNombre ? 1 : 0]].filter(([, k]) => k)
   const nErrores = zonas.reduce((a, [, k]) => a + k, 0)
   const hayErrores = nErrores > 0 || validacion.length > 0
   const malos = (es) => es.map(e => Object.fromEntries(Object.keys(e).map(k => [k, true])))
   const regla = fraseRegla({ def, filtro, compra: { ...compra, modo: modoC }, venta: { ...venta, modo: modoV }, prot, valores: valoresEf, malosFiltro: malos(errFiltro), malosCompra: malos(errCompra), malosVenta: malos(errVenta),
-    malosProt: { ...errProt, stops: malos(errProt.stops) }, ...frasesClasico(def, valoresEf, compra, filtro) })
-  const datos = useMemo(() => { try { return datosSuficientes(def, valoresEf, intervalo) } catch (_) { return null } }, [def, valoresEf, intervalo])
+    malosProt: { ...errProt, stops: malos(errProt.stops) }, malosCancelar: malos([errCancelar])[0], ...frasesClasico(def, valoresEf, compra, filtro) })
+  const datos = useMemo(() => { try { return datosSuficientes(def, valoresEf, intervalo, PERIODOS_DEFECTO[0].desde) } catch (_) { return null } }, [def, valoresEf, intervalo])
   const cambiaRegla = jsonCanonico(paraHuella(def, valores)) !== jsonCanonico(paraHuella(orig.current.def, orig.current.valores))
   const plan = planGuardado({ fila, est, orig: orig.current, enPrueba, estrategias, cambiaRegla })
   const version = partesNombre(fila?.name).version
@@ -161,7 +188,6 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
     : !fila?.id ? 'Estrategia nueva · todavía sin guardar'
     : `Versión ${version} · ${enPrueba.length ? `probada en ${enPrueba.length > 1 ? 'las pruebas' : 'la prueba'} ${enPrueba.map(x => `«${x}»`).join(', ')}` : 'sin probar todavía'}`
   const indiceActual = filtro.filas.find(f => f.quien !== 'valor')?.quien
-  const indices = [...new Set([...INDICES, ...(def.filtroMercado?.ticker ? [def.filtroMercado.ticker] : [])])]
 
   // ── Cambios desde las tarjetas ──
   const cambiaFiltro = (filas) => setDef(d => escribeFiltro(d, filas))
@@ -238,10 +264,10 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
       )}
       <div style={{ ...S.tarjeta, marginBottom: 16 }} data-tarjeta="nombre">
         <div style={{ ...S.cuerpo, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <label style={{ fontWeight: 600, color: B.titulo }} htmlFor="nombre-estrategia">Nombre de la estrategia</label>
+          <label style={etiquetaCampo} htmlFor="nombre-estrategia">Nombre de la estrategia</label>
           <input id="nombre-estrategia" value={est.nombre} onChange={e => setEst(x => ({ ...x, nombre: e.target.value }))} style={{ ...entrada, flex: '1 1 240px', maxWidth: 420, ...(errNombre ? { borderColor: ROJO } : {}) }}/>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontWeight: 600, color: B.titulo }}>Velas:</span>
+          <label style={{ ...etiquetaCampo, gap: 6 }}>
+            <span>Velas:</span>
             <select style={entrada} aria-label="Velas" value={intervalo} onChange={e => setEst(x => ({ ...x, valores: { ...x.valores, intervalo: e.target.value } }))}>
               <option value="diario">Diarias (1 vela = 1 día de mercado)</option><option value="semanal">Semanales (1 vela = 1 semana)</option>
             </select>
@@ -298,7 +324,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
         <div data-columna="tarjetas" style={{ flex: '3 1 440px', minWidth: 0 }}>
           <Tarjeta titulo="Solo opero cuando…" color={MORADO} datos={{ 'data-tarjeta': 'filtro' }} derecha={filtro.filas.length ? 'se cumplen todas' : 'opcional'}>
             {filtro.ok ? <>
-              {filtro.filas.map((f, k) => <Fila key={k} f={f} errores={errFiltro[k]} valores={valoresEf} tarjeta="filtro" color={MORADO} quien={f.quien} indices={indices} onQuien={q => cambiaQuien(k, q)}
+              {filtro.filas.map((f, k) => <Fila key={k} f={f} errores={errFiltro[k]} valores={valoresEf} tarjeta="filtro" color={MORADO} quien={f.quien} onQuien={q => cambiaQuien(k, q)} menuAbierto={menuInicial?.tarjeta === 'filtro' && menuInicial.k === k}
                 onCambia={g => cambiaFiltro(filtro.filas.map((x, j) => j === k ? { ...g, quien: x.quien } : x))} onQuita={() => cambiaFiltro(filtro.filas.filter((_, j) => j !== k))}/>)}
               {!filtro.filas.length && vacia('Sin filtro: opera siempre que se cumpla «Compro cuando…». Añádelo desde el catálogo con «+».')}
             </> : <div style={{ color: AMARILLO }}>Este filtro se ve y se cambia en el Editor clásico.</div>}
@@ -307,7 +333,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
 
           <Tarjeta titulo="Compro cuando…" color={AZUL} datos={{ 'data-tarjeta': 'compra' }} derecha={compra.ok ? enlaceModo(modoC, cambiaModoCompra) : null}>
             {compra.ok ? <>
-              {compra.filas.map((f, k) => <Fila key={k} f={f} errores={errCompra[k]} valores={valoresEf} tarjeta="compra" color={AZUL}
+              {compra.filas.map((f, k) => <Fila key={k} f={f} errores={errCompra[k]} valores={valoresEf} tarjeta="compra" color={AZUL} menuAbierto={menuInicial?.tarjeta === 'compra' && menuInicial.k === k}
                 onCambia={g => cambiaCompra(compra.filas.map((x, j) => j === k ? g : x))} onQuita={() => cambiaCompra(compra.filas.filter((_, j) => j !== k))}/>)}
               {!compra.filas.length && vacia('Añade condiciones desde el catálogo con «+».')}
             </> : <div style={S.secundario}>{regla.partes.find(p => p.tipo === 'compra')?.texto} <span style={{ color: AMARILLO }}>Se cambia en el Editor clásico.</span></div>}
@@ -316,10 +342,32 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
 
           <Tarjeta titulo="Vendo cuando…" color={NARANJA} datos={{ 'data-tarjeta': 'venta' }} derecha={venta.ok ? enlaceModo(modoV, cambiaModoVenta) : null}>
             {venta.ok ? <>
-              {venta.filas.map((f, k) => <Fila key={k} f={f} errores={errVenta[k]} valores={valoresEf} tarjeta="venta" color={NARANJA}
+              {venta.filas.map((f, k) => <Fila key={k} f={f} errores={errVenta[k]} valores={valoresEf} tarjeta="venta" color={NARANJA} menuAbierto={menuInicial?.tarjeta === 'venta' && menuInicial.k === k}
                 onCambia={g => cambiaVenta(venta.filas.map((x, j) => j === k ? g : x))} onQuita={() => cambiaVenta(venta.filas.filter((_, j) => j !== k))}/>)}
               {!venta.filas.length && vacia('Sin condiciones de venta: sale solo por la protección de abajo. Añádelas desde el catálogo con «+».')}
             </> : <div style={{ color: AMARILLO }}>Las condiciones de venta se ven y se cambian en el Editor clásico.</div>}
+          </Tarjeta>
+
+          <Tarjeta titulo="Cómo compro" datos={{ 'data-tarjeta': 'orden' }}>
+            {orden.ok ? <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <select style={mini} aria-label="Cómo compro" value={orden.modo} onChange={e => setDef(d => ponModoOrden(d, e.target.value))}>
+                  <option value="apertura">A la apertura de la vela siguiente a la señal (lo normal)</option>
+                  <option value="maximo">Con una orden en el máximo de la vela de la señal</option>
+                </select>
+                <Ayuda texto={AYUDA_ORDEN} etiqueta="Cómo compro"/>
+              </div>
+              {orden.modo === 'maximo' && <div data-orden-maximo style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={linea}>Compro solo si el precio sube hasta el máximo de las últimas <Numero valor={typeof orden.velas === 'string' && orden.velas.startsWith('$') ? valoresEf[orden.velas.slice(1)] : orden.velas} error={errVelasOrden} etiqueta="Velas de la orden" onCambia={v => setDef(d => ponVelasOrden(d, v))}/> velas (1 = la vela de la señal).</div>
+                {errVelasOrden && <div style={{ color: ROJO, fontSize: 13 }}>{errVelasOrden}</div>}
+                <div style={linea}>Si no llega, la orden <select style={mini} aria-label="Si no llega" value={orden.ajuste} onChange={e => setDef(d => ponAjuste(d, e.target.value))}>{AJUSTES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></div>
+                <div>
+                  <label style={{ ...etiquetaCampo, fontWeight: 400, gap: 6 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!orden.cancelar} onChange={e => setDef(d => ponCancelar(d, e.target.checked ? { cond: copia(CANCELAR_DEFECTO), env: null } : null))}/> Cancelar la orden si…</label>
+                  {orden.cancelar && <Fila f={orden.cancelar} errores={errCancelar} valores={valoresEf} tarjeta="cancelar" color={AZUL} onCambia={g => setDef(d => ponCancelar(d, g))} onQuita={() => setDef(d => ponCancelar(d, null))}/>}
+                </div>
+                <div style={S.apagado}>Ejemplo: la vela de la señal tiene máximo en 52 €: compro si en las velas siguientes llega a 52 €.</div>
+              </div>}
+            </> : <div style={{ color: AMARILLO }}>{fraseCompra(def, valoresEf)} Se cambia en el Editor clásico.</div>}
           </Tarjeta>
 
           <Tarjeta titulo="Protección" datos={{ 'data-tarjeta': 'proteccion' }}>
@@ -368,10 +416,17 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                 </>}
               </>, errProt.tiempo)}
             </div>
+            <div data-vigilancia style={{ ...linea, marginTop: 12 }}>
+              Los stops y las salidas empiezan a vigilarse:
+              <select style={mini} aria-label="Cuándo empiezan a vigilarse" value={vigilaDesdeLaCompra(def) ? 'compra' : 'siguiente'} onChange={e => setDef(d => ponVigilancia(d, e.target.value === 'compra'))}>
+                <option value="siguiente">desde la vela siguiente a la compra</option><option value="compra">ya en la vela de la compra</option>
+              </select>
+              <Ayuda texto={AYUDA_VIGILANCIA} etiqueta="Cuándo empiezan a vigilarse"/>
+            </div>
             {sinSalida && errorTarjeta('La estrategia necesita una forma de salir: una condición de venta, un stop o una salida por tiempo.')}
           </Tarjeta>
 
-          <div data-ejecucion style={{ ...S.secundario, padding: '4px 4px 0' }}>{LINEA_EJECUCION.replace(': Editor clásico.', ': ')}<button style={S.enlace} onClick={abreClasico}>Editor clásico</button>.</div>
+          <div data-ejecucion style={{ ...S.secundario, padding: '4px 4px 0' }}>{lineaEjecucion(def)}<button style={S.enlace} onClick={abreClasico}>Editor clásico</button>.</div>
         </div>
 
         {/* ── Derecha: la regla, la comprobación y guardar ── */}
@@ -383,9 +438,12 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <li data-comprueba="compra" style={{ color: sinCompra ? ROJO : B.texto }}>{sinCompra ? '✕ Falta la condición de compra' : '✓ Hay condición de compra'}</li>
               <li data-comprueba="salir" style={{ color: sinSalida ? ROJO : B.texto }}>{sinSalida ? '✕ Falta una forma de salir' : '✓ Hay forma de salir'}</li>
-              {datos && datos.necesita > 0 && <li data-comprueba="datos" style={{ color: datos.ok ? B.texto : ROJO }}>{datos.ok
+              {datos && datos.necesita > 0 && <li data-comprueba="datos" style={{ color: B.texto }}>{datos.ok
                 ? `✓ Hay datos suficientes: la condición más larga necesita ${datos.necesita} velas previas.`
-                : `✕ Faltan datos: la condición más larga necesita ${datos.necesita} velas previas, pero antes del periodo solo se cargan ${datos.carga}. En las primeras ${datos.necesita - datos.carga} velas del periodo esa condición no se puede calcular y la estrategia no compra. Usa un número más pequeño.`}</li>}
+                : `✓ Necesita ${datos.necesita} velas previas: se cargarán automáticamente.`}</li>}
+              {datos?.falta && <li data-comprueba="faltan" style={{ color: ROJO }}>{datos.falta.sinDatos
+                ? `✕ ${nombreQuien(datos.falta.ticker)} todavía no está en los precios guardados de la app: el backtest lo descarga, pero los laboratorios de la prueba (paso 2) no lo pueden usar y el filtro no dejaría comprar nunca.`
+                : `✕ Para empezar el ${fechaCorta(datos.desdePeriodo)} hacen falta datos desde el ${fechaCorta(datos.falta.hace)}, y ${nombreQuien(datos.falta.ticker)} solo tiene desde el ${fechaCorta(datos.falta.tiene)}.`}</li>}
               {nErrores > 0 && <li data-comprueba="errores" style={{ color: ROJO }}>✕ {plural(nErrores, 'error', 'errores')} en {zonas.map(([z]) => z).join(', ').replace(/, ([^,]*)$/, ' y $1')}</li>}
               {errClasico.map((e, k) => <li key={k} data-error-clasico style={{ color: ROJO, fontSize: 13 }}>{e}</li>)}
             </ul>
