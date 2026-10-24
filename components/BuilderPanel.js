@@ -14,7 +14,7 @@ import { listarPruebas } from '../lib/registroLab'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 import { B, S } from '../lib/builder/estilo'
 import BuilderPrueba from './BuilderPrueba'
-import BuilderEditor from './BuilderEditor'
+import BuilderEditor, { ReglaPorBloques } from './BuilderEditor'
 import BuilderCodigo from './BuilderCodigo'
 import { esDeCodigo, filaCopiaCodigo } from '../lib/builder/codigo'
 import BuilderGuia from './BuilderGuia'
@@ -216,7 +216,8 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
                     <td style={{ ...celda, maxWidth: 520, minWidth: 260 }}>
                       <button style={{ ...S.enlace, color: B.titulo, fontWeight: 600 }} onClick={() => abreEditor(f.estrategia)}
                         title={f.origen === 'editor' ? 'Abrir en el editor por tarjetas' : 'Abrir: sus parámetros y su código'}>{f.nombre}</button>
-                      {f.subtitulo && <div data-regla-fila style={{ ...S.apagado, whiteSpace: 'normal', marginTop: 2 }}>{f.subtitulo}</div>}
+                      {f.partes ? <div data-regla-fila style={{ marginTop: 4 }}><ReglaPorBloques partes={f.partes} tamano={12}/></div>
+                        : f.subtitulo && <div data-regla-fila style={{ ...S.apagado, whiteSpace: 'normal', marginTop: 2 }}>{f.subtitulo}</div>}
                       {f.desactivada && <div style={S.apagado}>Desactivada</div>}
                     </td>
                     <td style={{ ...celda, whiteSpace: 'nowrap', color: B.secundario }}>{f.version}</td>
@@ -230,7 +231,7 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
               </tbody>
             </table>
           </div>
-          <div style={{ ...S.apagado, padding: '10px 12px' }}>Las estrategias de código no entran en el paso 2: no se pueden probar contra el azar aquí. Para probarla, rehazla en tarjetas.</div>
+          <div style={{ ...S.apagado, padding: '10px 12px' }}>Las estrategias de código no entran en el paso 2: no se pueden probar contra el azar aquí, en el Builder. Para probarla aquí, rehazla en tarjetas.</div>
         </>) : (<>
           <div style={{ overflowX: 'auto', maxHeight: 560, overflowY: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }} data-tabla="pruebas">

@@ -639,3 +639,39 @@ tanda cuando Sergi confirme que no lo echa de menos.
 - **Se suman**: en el backtest de un valor y en Backtesting, primero decide la regla (con su «Solo opero cuando…») y después el filtro
   de la pestaña quita operaciones. Para unificarlos (otra tanda) habría que decidir si los filtros de la pestaña pasan a ser filas de
   «Solo opero cuando…» (y con ello re-simulan en vez de quitar).
+
+## 15. Editor más claro (V9.1049)
+
+### Auditoría (solo lectura)
+
+- **a) El orden.** En «Solo opero cuando…» y en «Compro cuando…» el orden de las filas no cambia nada: son Y / O de tres valores
+  (`lib/condiciones/nucleo.js`), que no dependen del orden. En «Vendo cuando…» con «basta con una» cada fila es una salida aparte y
+  el intérprete las mira en orden; todas venden a la apertura de la vela siguiente, así que el día y el precio son los mismos: solo
+  cambia el motivo anotado si dos se cumplen en la misma vela. Los **stops sí dependen del orden**: se comprueban uno a uno y el
+  primero que salta cierra la operación a su precio (y «se retira cuando otro lo supera» mira al de otro).
+- **b) Índices.** El filtro de índice es uno (`filtroMercado: { ticker, si }`): admite varias condiciones del mismo índice (Y), pero
+  no dos índices distintos. Las tarjetas ya lo garantizan: cambiar el índice de una fila cambia el de todas.
+- **c) Fuerza relativa fuera del Nasdaq-100.** El percentil se calcula frente a los miembros del Nasdaq-100 de ese día y el valor no
+  tiene que ser miembro (`lib/fuerzaRelativa.js`). Pero el servidor lee sus velas de los precios guardados de la app: un valor que no
+  esté ahí no tiene percentil (null) y la condición no se cumple nunca.
+
+### Cambios
+
+- «La regla, en una frase» por bloques, un párrafo por bloque con la marca de su color: Solo opero cuando… (morado) · Compro cuando…
+  (azul) · Cómo compro (gris) · Vendo cuando… (naranja) · Protección (verde azulado `#3dd6c3`, también en el borde y el título de su
+  tarjeta). Los bloques vacíos no salen (Protección dice «Sin stop ni objetivo.»). Igual en «Mis estrategias» (`reglaPartes`).
+- Buscador: primero las condiciones con la palabra en el nombre; debajo, «Lo mencionan en su explicación», con el trozo y la palabra
+  resaltada. Sin acentos ni mayúsculas.
+- Añadir: el cuadro «¿Añadir a…?» con «Cancelar», y se cierra al pulsar fuera o con Esc. Cada condición del catálogo se arrastra a
+  una tarjeta (las que la admiten se iluminan y una línea marca dónde queda; las demás, en gris). Con «+», al final.
+- Ordenar: asa de seis puntos en cada fila (y en los stops) y «Subir» / «Bajar» en el menú «…». Textos: «El orden no cambia el
+  resultado: se miran todas a la vez, al cierre de cada vela.» (filtro y compra), el de la venta (solo el motivo) y «Se comprueban
+  en este orden; el primero que salta cierra la operación.» (stops). Comprobado: los 12 órdenes posibles de compra y filtro dan las
+  mismas operaciones.
+- Filtro de índice: con dos o más filas de índice, la nota «Todas las filas de índice tienen que ser del mismo índice (ahora: …).»;
+  la línea «Para filtrar por un índice…» va dentro de la tarjeta.
+- Sin el grupo «Mercado»: la fuerza relativa va en «Osciladores», con «· comparado con [Nasdaq-100]» (un selector con una sola
+  opción, `GRUPOS_FUERZA`; no se guarda: cuando haya más grupos se añadirá un parámetro con el Nasdaq-100 por defecto), su «?» nuevo
+  y el aviso de la auditoría (c). La definición guardada no cambia.
+- Paso 2 de las de código: «Las estrategias de código no se pueden probar contra el azar aquí, en el Builder. Para probarla aquí,
+  rehazla en tarjetas.»
