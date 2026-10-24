@@ -12,6 +12,7 @@ import { construyeMisEstrategias, construyeMisPruebas, filtraEstrategias, FILTRO
 import { esDefinicionEditor } from '../lib/editor/fuente'
 import { listarPruebas } from '../lib/registroLab'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
+import { deColumnasBd } from '../lib/cachePrecios'
 import { B, S } from '../lib/builder/estilo'
 import BuilderPrueba from './BuilderPrueba'
 import BuilderEditor, { ReglaPorBloques } from './BuilderEditor'
@@ -122,6 +123,9 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   }
   const abrePrueba = (id) => setPrueba({ loteId: id, n: Date.now() })
   const abreEditor = (fila) => setEditor({ fila, n: Date.now() })
+  // «Señales en el gráfico» (V9.1050): los valores con precios guardados y sus velas diarias (la caché de la app, solo lectura).
+  const cargaSimbolos = useCallback(async () => { const r = await fetch(`${getSupaUrl()}/rest/v1/precios_simbolos?select=simbolo&order=simbolo.asc`, { headers: getSupaH() }); return r.ok ? (await r.json()).map(x => x.simbolo) : [] }, [])
+  const cargaVelas = useCallback(async (sym) => { const r = await fetch(`${getSupaUrl()}/rest/v1/rpc/leer_velas?p_simbolo=${encodeURIComponent(sym)}&p_desde=1990-01-01`, { headers: getSupaH() }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return deColumnasBd(await r.json()) }, [])
   useEffect(() => { if (abrir?.fila) { setPrueba(null); setGuia(false); setEditor({ fila: abrir.fila, n: abrir.n }) } }, [abrir?.n])
   // Guardada en el paso 1: la página recarga sus estrategias y se pasa al paso 2 con ella (la versión nueva, si se creó).
   const alGuardar = (fila, info = {}) => {
@@ -138,7 +142,7 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   if (editor && esDeCodigo(editor.fila)) return <BuilderCodigo key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
     onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardarCodigo}/>
   if (editor) return <BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} lotes={datos.lotes} apiFetch={apiFetch}
-    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')}/>
+    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas}/>
   if (prueba) return <BuilderPrueba key={prueba.n} estrategias={estrategiasEf} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
     onVolver={() => { setPrueba(null); recarga() }} onNuevaPrueba={() => setPrueba({ n: Date.now() })} onCambio={recarga}/>
   const pestanaBtn = (k, t, n) => (

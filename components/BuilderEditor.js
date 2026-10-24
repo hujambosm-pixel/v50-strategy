@@ -24,6 +24,8 @@ import { partesNombre, planGuardado, avisoVersion } from '../lib/builder/version
 import { PERIODOS_DEFECTO } from '../lib/editor/lotes'
 import Ayuda from './BuilderAyuda'
 import BuilderGuia from './BuilderGuia'
+import BuilderDibujo from './BuilderDibujo'
+import BuilderSenales from './BuilderSenales'
 
 const AZUL = '#58a6ff', NARANJA = '#f0883e', MORADO = '#a371f7', ROJO = '#ff8b8b', AMARILLO = '#f2cc60'
 // V9.1049: Protección con su color, un verde azulado (ni el rojo de los errores ni el amarillo de los avisos; contraste alto sobre el
@@ -164,7 +166,7 @@ function Tarjeta({ titulo, color, derecha, children, datos, soltar = null }) {
   )
 }
 
-export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, onVolver, onGuardada, onEditorClasico, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null, abiertosInicial = null, ayudaInicial = null, anadiendoInicial = null, arrastreInicial = null }) {
+export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, onVolver, onGuardada, onEditorClasico, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null, abiertosInicial = null, ayudaInicial = null, anadiendoInicial = null, arrastreInicial = null, cargaSimbolos = null, cargaVelas = null, panelInicial = 'dibujo', senalesInicial = null, dibujoInicial = null }) {
   const [est, setEst] = useState(() => estadoInicial || estadoDe(fila))
   const orig = useRef(null); if (!orig.current) orig.current = estadoDe(fila)
   const { def, valores } = est
@@ -175,6 +177,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   const [buscar, setBuscar] = useState(buscarInicial)
   const [abiertos, setAbiertos] = useState(() => abiertosInicial === 'todos' ? Object.fromEntries(GRUPOS.map(g => [g.id, true])) : {})
   const [anadiendo, setAnadiendo] = useState(anadiendoInicial)
+  const [panel, setPanel] = useState(panelInicial)   // V9.1050: «Dibujo de la regla» o «Señales en el gráfico»
   const cajaAnadir = useRef(null)
   // Arrastrar (V9.1049): lo que se arrastra ({ tipo: 'cond', clave } del catálogo, { tipo: 'fila', tarjeta, k } o { tipo: 'stop', k })
   // y dónde quedaría ({ tarjeta, pos }: la línea que lo marca).
@@ -560,6 +563,21 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
           <button style={hayErrores || guardando ? S.botonDesactivado : S.botonVerde} disabled={hayErrores || guardando} onClick={guarda}>{guardando ? 'Guardando…' : 'Guardar y pasar al paso 2'}</button>
           {hayErrores && <div data-aviso="corrige" style={{ ...S.secundario, marginTop: 6 }}>Corrige lo que está en rojo para continuar.</div>}
           {msg && <div style={{ color: ROJO, marginTop: 6 }}>{msg}</div>}
+        </div>
+      </div>
+
+      {/* ── Debajo, a todo lo ancho (V9.1050): el dibujo de la regla y las señales en el gráfico, siempre de la regla de la pantalla ── */}
+      <div data-panel-regla style={{ ...S.tarjeta, marginTop: 4 }}>
+        <div role="tablist" aria-label="Ver la regla" style={{ display: 'flex', gap: 4, padding: '8px 10px 0', background: B.cabecera, borderBottom: `1px solid ${B.borde}` }}>
+          {[['dibujo', 'Dibujo de la regla'], ['senales', 'Señales en el gráfico']].map(([k, t]) => (
+            <button key={k} role="tab" aria-selected={panel === k} onClick={() => setPanel(k)} style={{ ...S.boton, borderRadius: `${B.radioBoton}px ${B.radioBoton}px 0 0`, borderBottom: 'none', fontWeight: panel === k ? 700 : 400,
+              ...(panel === k ? { background: B.tarjeta, color: B.titulo } : { background: 'transparent', color: B.secundario }) }}>{t}</button>
+          ))}
+        </div>
+        <div style={S.cuerpo}>
+          {panel === 'dibujo'
+            ? <BuilderDibujo def={def} valores={valoresEf} error={hayErrores ? 'Corrige lo que está en rojo para ver el dibujo.' : null} {...(dibujoInicial || {})}/>
+            : <BuilderSenales def={def} valores={valoresEf} intervalo={intervalo} error={hayErrores ? 'Corrige lo que está en rojo para ver las señales.' : null} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} {...(senalesInicial || {})}/>}
         </div>
       </div>
     </div>

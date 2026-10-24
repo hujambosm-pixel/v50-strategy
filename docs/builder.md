@@ -675,3 +675,30 @@ tanda cuando Sergi confirme que no lo echa de menos.
   y el aviso de la auditoría (c). La definición guardada no cambia.
 - Paso 2 de las de código: «Las estrategias de código no se pueden probar contra el azar aquí, en el Builder. Para probarla aquí,
   rehazla en tarjetas.»
+
+## 16. Dibujo de la regla y señales en el gráfico (V9.1050)
+
+Debajo de las tarjetas del paso 1, a todo lo ancho, un panel con dos pestañas. Los dos se actualizan solos mientras se edita y salen
+SIEMPRE de la regla de la pantalla (nunca con IA). Con errores: «Corrige lo que está en rojo para ver el dibujo» (o «las señales»).
+
+- **Dibujo de la regla** (`components/BuilderDibujo.js`): diagrama de flujo horizontal en SVG. Óvalo «Cada vela, al cierre» → rombo
+  morado «1 · FILTRO» (si hay) → rombo azul «COMPRO SI (TODAS / AL MENOS UNA)» → con orden en el máximo, rombo gris «¿Llega al máximo de
+  la señal?» con el ajuste y la cancelación → «Compro a la apertura de la vela siguiente» (o «en el máximo de la señal») → «Tengo la
+  acción» → rombo naranja «VENDO SI (BASTA UNA / TODAS)» con las condiciones de venta y, en verde azulado, la salida por tiempo, los
+  stops y el objetivo → óvalo «Vendo a la apertura de la vela siguiente». Ramas «No» (rojo claro) hacia «No compro hoy: espero a la
+  siguiente vela» y «Sigo dentro: miro la siguiente vela»; «Sí» en verde; la vuelta discontinua «después de vender, vuelvo a empezar».
+  Como mucho 3 condiciones por rombo (cada una en una o dos líneas); «y N más» las despliega. Las condiciones con NO, en positivo
+  (las frases de la regla). Scroll horizontal en pantallas estrechas.
+- **Señales en el gráfico** (`components/BuilderSenales.js`, cálculo en `lib/builder/senales.js`): valor (los de `precios_simbolos`,
+  velas de `leer_velas`, solo lectura) y fechas (por defecto, los 2 últimos años); el precio con las medias de la regla y su
+  leyenda, la zona gris del filtro («filtro: no opero»), ▲ verde en la vela de cada compra y ▼ naranja en cada venta, «En este
+  periodo: N compras · N ventas»; un panel por oscilador (RSI, MACD, ROC, ATR en %) con su nivel; y una franja por condición del
+  filtro y de la compra (pintado = sí). Sin dinero. **Mismo motor**: el calentamiento de `lib/backtestActivo.js` (velasCalentamiento
+  con las ventanas declaradas + conHistoria), el mismo recorte y el mismo intérprete; las compras son las entradas del periodo y las
+  ventas sus salidas (sin la venta virtual del último día). Comprobado contra el backtest de un valor en AAPL 2020–2021 con
+  PRUEBA_BUILDER_1 (28 y 28), Retroceso líderes RSI2 (20 y 20), Copia editor 23 (12 compras y 11 ventas: queda una abierta) y
+  PRUEBA_BUILDER_1 con filtro QQQ > SMA (200) (27 y 27). La fuerza relativa no se puede calcular en el navegador (necesita todo el
+  Nasdaq-100): sus filas salen sin dato y se avisa.
+- **Tiempos** (mediana de 7, en el ordenador de pruebas, con las velas ya leídas): 2 años en diario ≈ 1 ms (con filtro QQQ ≈ 1,2 ms),
+  10 años ≈ 1 ms, 16 años con filtro ≈ 2 ms; se recalcula 250 ms después del último cambio. Lo que más tarda es leer las velas la
+  primera vez (una lectura por valor, que se recuerda). Si un cálculo pasa de 500 ms, se avisa.
