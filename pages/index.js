@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1047'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1048'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1057,6 +1057,9 @@ export default function Home() {
   // Y la sección Builder (components/BuilderPanel.js, docs/builder.md): montada desde la primera visita.
   const [builderVisitado,setBuilderVisitado]=useState(false)
   useEffect(()=>{ if(sidePanel==='builder') setBuilderVisitado(true) },[sidePanel])
+  // builderAbrir (V9.1048): la estrategia que el Builder tiene que abrir (al pulsar su nombre en «Backtest de un valor»). { fila, n }
+  const [builderAbrir,setBuilderAbrir]=useState(null)
+  const abrirEnBuilder=(s)=>{ setBuilderAbrir({fila:s?{...s}:null,n:Date.now()}); setSidePanel('builder') }
   // Ficha fundamental del símbolo activo. Se pide SOLO con la sección abierta (ver el efecto más abajo).
   const [fundFicha,setFundFicha]=useState(null)
   const [fundCargando,setFundCargando]=useState(false)
@@ -3596,6 +3599,28 @@ export default function Home() {
       const saved=await upsertStrategy(payload)
       reloadStrategies(); closeEditStr()
       if(saved?.id) run(simbolo,{strategyId:saved.id,capital_ini:Number(payload.capital_ini),years:Number(payload.years),allocation_pct:Number(payload.allocation_pct||100),filtros:filtrosBackend})
+    }catch(e){alert('Error: '+e.message)}
+    finally{setStrSaving(false)}
+  }
+  // V9.1048: el panel de «Backtest de un valor» solo cambia lo de ejecución. Se mandan SOLO esos campos, y params solo si cambia
+  // la temporalidad (el mismo objeto con intervalo cambiado): el código, los parámetros y la descripción no se tocan.
+  const saveEjecucionStr=async()=>{
+    if(!editingStr?.id){closeEditStr();return}
+    setStrSaving(true)
+    try{
+      const payload={id:editingStr.id}
+      const num=(x)=>Number(x)
+      if((strForm.color||'')!==(editingStr.color||'')) payload.color=strForm.color
+      if(num(strForm.capital_ini)!==num(editingStr.capital_ini)) payload.capital_ini=num(strForm.capital_ini||10000)
+      if(num(strForm.allocation_pct)!==num(editingStr.allocation_pct||100)) payload.allocation_pct=num(strForm.allocation_pct||100)
+      if(num(strForm.years)!==num(editingStr.years||5)) payload.years=num(strForm.years||5)
+      if((strForm.visuals||'')!==(editingStr.visuals||'')) payload.visuals=strForm.visuals
+      let oldP=null; try{oldP=typeof editingStr.params==='string'?JSON.parse(editingStr.params||'{}'):(editingStr.params||{})}catch(_){}
+      const ivAntes=oldP?.intervalo==='semanal'?'semanal':'diario'
+      if(oldP&&strForm._intervalo&&strForm._intervalo!==ivAntes) payload.params=JSON.stringify({...oldP,intervalo:strForm._intervalo})
+      if(Object.keys(payload).length>1) await upsertStrategy(payload)
+      reloadStrategies(); closeEditStr()
+      if(Object.keys(payload).length>1) run(simbolo,{strategyId:editingStr.id,capital_ini:Number(strForm.capital_ini||10000),years:Number(strForm.years||5),allocation_pct:Number(strForm.allocation_pct||100),filtros:filtrosBackend})
     }catch(e){alert('Error: '+e.message)}
     finally{setStrSaving(false)}
   }
@@ -6265,7 +6290,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1047</title>
+        <title>Trading Simulator V9.1048</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6354,7 +6379,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1047
+            <span className="dot"/>Trading Simulator V9.1048
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6489,7 +6514,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           >
             {[
               {id:'builder',    icon:'▦', label:'Builder'},
-              {id:'config',     icon:'📈', label:'Estrategias'},
+              {id:'config',     icon:'📈', label:'Backtest de un valor'},
               {id:'editor',     icon:'✏️', label:'Editor'},
               {id:'alarms',     icon:'🔔',label:'Alertas',   hasAlerts:alarmActiveCount>0, alertCount:alarmActiveCount},
               {id:'watchlist',  icon:'📋',label:'Watchlist'},
@@ -6539,11 +6564,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 {/* ── Header: título + búsqueda + botón nueva ── */}
                 <div style={{padding:'8px 10px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
-                    <span className="sidebar-title" style={{margin:0,flex:1}}>Estrategias</span>
-                    <button onClick={()=>setShowStratManager(true)} title="Gestionar todas las estrategias en vista tabla"
+                    {/* V9.1048: «Backtest de un valor» (antes «Estrategias»): cómo se ejecuta cada estrategia y cómo se ve en el gráfico.
+                        Qué es cada estrategia (reglas o código, parámetros, descripción) se ve y se cambia en el Builder; allí se crean las
+                        nuevas (siempre de tarjetas: ya no se crean estrategias de código). docs/builder.md, §14. */}
+                    <span className="sidebar-title" style={{margin:0,flex:1}}>Backtest de un valor</span>
+                    <button onClick={()=>setShowStratManager(true)} title="Todas las estrategias en una tabla: métricas, activar o desactivar para el ranking y cambios a la vez"
                       style={{background:'rgba(0,212,255,0.06)',border:'1px solid var(--border)',color:'#8aadcc',fontFamily:MONO,fontSize:10,padding:'2px 6px',borderRadius:3,cursor:'pointer',lineHeight:1.4}}>⊞</button>
-                    <button onClick={newStrategy} title="Nueva estrategia"
-                      style={{background:'rgba(0,212,255,0.1)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:12,padding:'2px 8px',borderRadius:3,cursor:'pointer',lineHeight:1.4}}>+</button>
                   </div>
                   <div style={{position:'relative'}}>
                     <input
@@ -6574,6 +6600,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   claveLs="v50_cond_abierto_ind"/>
 
                 {/* ── Filtros: mercado (serie externa) y activo (serie del propio símbolo) ── */}
+                {/* V9.1048: solo el título y el «?»; cómo funcionan no cambia (docs/builder.md, §14). */}
+                <div data-filtros-backtest style={{padding:'6px 10px 2px',fontFamily:MONO,fontSize:11,color:'#c8dff5',display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+                  Filtros solo para este backtest (no forman parte de la estrategia)<Tip id="filtrosBacktest"/>
+                </div>
                 <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO"
                   filtros={filtrosSafe} setFiltros={setFiltros}
                   forzarSemanal={estrategiaIntervalo==='semanal'}
@@ -6590,9 +6620,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                     <div style={{padding:'14px 12px',fontFamily:MONO,fontSize:11,color:'var(--text3)',lineHeight:1.8}}>
                       Sin estrategias guardadas.
                       <br/>
-                      <button onClick={newStrategy}
+                      <button onClick={()=>setSidePanel('builder')}
                         style={{marginTop:8,background:'rgba(0,212,255,0.08)',border:'1px solid var(--accent)',color:'var(--accent)',fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:4,cursor:'pointer'}}>
-                        + Crear estrategia
+                        Crear una estrategia en el Builder
                       </button>
                     </div>
                   )}
@@ -6608,8 +6638,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       const isDisabled = s.enabled === false
                       return (
                         <div key={s.id}
-                          onClick={()=>openEditStr(s)}
-                          title="Clic para editar esta estrategia"
+                          onClick={()=>abrirEnBuilder(s)}
+                          title="Abrir en el Builder (sus reglas o su código, sus parámetros y su descripción)"
                           style={{padding:'7px 10px',display:'flex',alignItems:'center',gap:6,
                             borderBottom:'1px solid var(--border)',
                             background:isActive?'rgba(0,212,255,0.07)':'transparent',
@@ -6648,6 +6678,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               </span>
                             </div>
                           </div>
+                          {/* Ajustes de cómo se ejecuta y se ve en el gráfico (V9.1048) */}
+                          <button onClick={e=>{e.stopPropagation();openEditStr(s)}} aria-label={`Color, capital y marcadores del gráfico: ${s.name}`}
+                            title="Color, capital, % por operación, años, temporalidad y marcadores del gráfico"
+                            style={{background:'transparent',border:'1px solid var(--border)',color:'#8aadcc',fontFamily:MONO,fontSize:11,padding:'2px 6px',borderRadius:3,cursor:'pointer',flexShrink:0}}>⚙</button>
                           {/* Play/Stop button */}
                           <button onClick={e=>{e.stopPropagation();isActive?stopStrategy():loadStrategyLegacy(s)}}
                             title={isActive?`Detener: ${s.name}`:`Ejecutar: ${s.name}`}
@@ -8249,10 +8283,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               <StrategyManager
                 strategies={strategies}
                 onClose={()=>setShowStratManager(false)}
-                onEdit={s=>{setShowStratManager(false);setStratManagerReturn(true);openEditStr(s)}}
+                onEdit={s=>{setShowStratManager(false);abrirEnBuilder(s)}}
                 onDelete={id=>{deleteStr(id);setShowStratManager(false)}}
                 onToggleEnabled={toggleStrategyEnabled}
-                onNew={()=>{setShowStratManager(false);setStratManagerReturn(true);newStrategy()}}
+                onNew={()=>{setShowStratManager(false);setSidePanel('builder')}}
                 onBulkUpdate={bulkUpdateStrategies}
               />
             </div>
@@ -8264,12 +8298,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 strForm={strForm}
                 setStrForm={setStrForm}
                 strategy={editingStr}
-                onSave={saveEditStr}
+                onSave={saveEjecucionStr}
                 onCancel={closeEditStr}
                 onDelete={editingStr?.id?()=>deleteStr(editingStr.id):null}
-                onClone={editingStr?.id?cloneEditStr:null}
+                onClone={null}
                 saving={strSaving}
-                onAbrirEditor={esDefinicionEditor(editingStr?.definition)?()=>{setEditorFila({...editingStr});closeEditStr();setSidePanel('editor')}:null}
+                soloEjecucion
+                onAbrirBuilder={editingStr?.id?()=>{const s=editingStr;closeEditStr();abrirEnBuilder(s)}:null}
               />
             )}
 
@@ -9384,24 +9419,25 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
               </div>
             )}
             {/* ══ EDITOR VISUAL (components/EditorPanel.js): a ancho completo, montado desde la primera visita. Guardar recarga la
-                lista; «Probar en backtest» la abre en Estrategias como un clic en la lista (backtest del activo de siempre). ══ */}
+                lista; «Probar en backtest» y «Exportar a code_js» la abren en «Backtest de un valor» como estrategia activa (backtest del
+                activo de siempre). ══ */}
             {(editorVisitado||sidePanel==='editor')&&(
               <div style={{display:sidePanel==='editor'?'contents':'none'}}>
                 <EditorPanel apiFetch={apiFetch} filaInicial={editorFila} version={VERSION_APP} estrategias={strategies} abrir={editorAbrir}
                   onGuardada={()=>reloadStrategies()}
                   onProbar={(f)=>{reloadStrategies();loadStrategyLegacy(f)}}
-                  onExportar={async(f)=>{const saved=await upsertStrategy({...f,params:JSON.stringify(f.params),years:5,capital_ini:10000,color:'#00d4ff'});reloadStrategies();if(saved){openEditStr(saved);setSidePanel('config')}}}/>
+                  onExportar={async(f)=>{const saved=await upsertStrategy({...f,params:JSON.stringify(f.params),years:5,capital_ini:10000,color:'#00d4ff'});reloadStrategies();if(saved){loadStrategyLegacy(saved)}}}/>
               </div>
             )}
             {/* ══ BUILDER (components/BuilderPanel.js, docs/builder.md): a ancho completo, montado desde la primera visita. Tiene su
-                propio editor por tarjetas (el paso 1) y su paso 2; las estrategias de código se abren en el panel de código de
-                siempre. Al guardar en el paso 1, la página recarga sus estrategias. ══ */}
+                propio editor por tarjetas (el paso 1), el apartado de las estrategias de código (V9.1048) y su paso 2. Al guardar, la
+                página recarga sus estrategias. ══ */}
             {(builderVisitado||sidePanel==='builder')&&(
               <div style={{display:sidePanel==='builder'?'contents':'none'}}>
-                <BuilderPanel estrategias={strategies} visible={sidePanel==='builder'} apiFetch={apiFetch} version={VERSION_APP}
+                <BuilderPanel estrategias={strategies} visible={sidePanel==='builder'} apiFetch={apiFetch} version={VERSION_APP} abrir={builderAbrir}
                   onGuardada={()=>reloadStrategies()}
-                  onAbrirEstrategia={(s,como)=>{if(como==='editor'){setEditorFila({...s});setSidePanel('editor')}else{openEditStr(s);setSidePanel('config')}}}
-                  onEditorCodigo={()=>{newStrategy();setSidePanel('config')}}/>
+                  onAbrirEstrategia={(s,como)=>{if(como==='editor'){setEditorFila({...s});setSidePanel('editor')}}}
+                  onBacktestValor={()=>setSidePanel('config')}/>
               </div>
             )}
             {/* ══ LABORATORIO DE CARTERA (components/CarteraPanel.js): a ancho completo, montado desde la primera visita ══ */}

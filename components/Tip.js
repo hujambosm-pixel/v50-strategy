@@ -2,6 +2,11 @@ import { useState, useRef, useEffect } from 'react'
 import { MONO } from '../lib/utils'
 
 export const TIP_DATA = {
+  // ── «Backtest de un valor»: los filtros del panel (V9.1048; docs/builder.md, §14) ──
+  filtrosBacktest: {
+    title: 'Filtros solo para este backtest',
+    text: 'No forman parte de la estrategia: no entran en su huella ni en la prueba del paso 2 del Builder. Se aplican aquí y en «Backtesting» (es la misma lista). Funcionan así: la estrategia se ejecuta entera y DESPUÉS se quitan las operaciones que empiezan un día en que el filtro no deja comprar; una operación quitada no deja sitio a otra (la estrategia ya estaba dentro esos días). Diferencia con «Solo opero cuando…» del Builder: eso es parte de la regla; ese día la estrategia no compra y queda libre para comprar en cuanto se cumpla. Si usas los dos, se suman: primero decide la regla y luego el filtro quita operaciones.'
+  },
   // ── Config rápida ──────────────────────────────────────────
   emaR: {
     title: 'EMA Rápida — Periodo',

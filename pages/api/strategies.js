@@ -80,6 +80,12 @@ export default async function handler(req, res) {
         // La del editor lleva además sus params (y code_js a null); las demás, como siempre.
         const fila = { name, description, symbol, years, capital_ini, definition, color, active: true }
         if (editor) Object.assign(fila, { code_js: null, params: req.body.params })
+        // Una copia (o una versión nueva) de una estrategia de CÓDIGO desde el Builder (V9.1048): lleva su código (ya revisado
+        // arriba) y lo demás de su fila. Las del editor y las peticiones de siempre no cambian.
+        else if (req.body.code_js != null) {
+          fila.code_js = req.body.code_js
+          for (const k of ['params', 'visuals', 'allocation_pct', 'observations']) if (req.body[k] !== undefined) fila[k] = req.body[k]
+        }
         const data = await supa('/strategies', {
           method: 'POST',
           body: JSON.stringify(fila),

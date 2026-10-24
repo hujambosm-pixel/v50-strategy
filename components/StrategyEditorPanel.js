@@ -41,7 +41,11 @@ function hexRgb(hex) {
   return `${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)}`
 }
 
-export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onSave, onCancel, onDelete, onClone, saving, onAbrirEditor = null }) {
+// soloEjecucion (V9.1048, la pestaña «Backtest de un valor»): solo lo de CÓMO SE EJECUTA Y SE VE EN EL GRÁFICO (color, capital,
+// % por operación, años, temporalidad y marcadores visuales) y «Eliminar». Sin código, sin parámetros (JSON), sin descripción y
+// sin «Clonar»: eso es QUÉ ES la estrategia y está en el Builder (onAbrirBuilder). El panel completo de antes ya no se abre desde
+// ninguna parte (se conserva sin enlazar; docs/builder.md, §14).
+export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onSave, onCancel, onDelete, onClone, saving, onAbrirEditor = null, soloEjecucion = false, onAbrirBuilder = null }) {
   const [paramsError, setParamsError] = useState(null)
   const [codeError, setCodeError] = useState(null)
   // Avisos de la regla de la vela cerrada (lib/validaCodeJs.js): en vivo mientras se escribe, porque al
@@ -73,6 +77,7 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
   }
 
   const handleSave = () => {
+    if (soloEjecucion) { onSave(null); return }
     const raw = (strForm.params || '').trim()
     if (raw) {
       try { JSON.parse(raw) } catch (_) { setParamsError('JSON inválido'); return }
@@ -200,7 +205,7 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
           <button style={S.btn('#00e5a0', saving)} onClick={handleSave} disabled={saving}>
             {saving ? 'Guardando…' : '💾 Guardar'}
           </button>
-          {!isNew && onClone && (
+          {!isNew && onClone && !soloEjecucion && (
             <button style={S.btn('#ffd166', saving)} onClick={handleClone} disabled={saving} title="Duplicar esta estrategia">
               📋 Clonar
             </button>
@@ -214,12 +219,19 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
 
       {/* ── FILA 2: Campos básicos en una línea ── */}
       <div style={{display:'flex', gap:8, alignItems:'flex-end', flexShrink:0}}>
-        {/* Nombre */}
+        {/* Nombre (en «Backtest de un valor», solo se lee: se cambia en el Builder) */}
+        {soloEjecucion ? (
+          <div style={{flex:1, display:'flex', flexDirection:'column', gap:2, minWidth:0}}>
+            <span style={{...S.label,marginBottom:0}}>Estrategia</span>
+            <span style={{fontSize:13, color:'#e6edf3', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{strForm.name||''}</span>
+          </div>
+        ) : (
         <input
           style={{...S.input, flex:1}}
           value={strForm.name||''} onChange={e=>upd('name',e.target.value)}
           placeholder="Nombre de la estrategia"
         />
+        )}
         {/* Color */}
         <div style={{display:'flex',flexDirection:'column',gap:2,flexShrink:0}}>
           <span style={{...S.label,marginBottom:0}}>Color</span>
@@ -266,7 +278,22 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
         })()}
       </div>
 
+      {soloEjecucion && (
+        <div style={{display:'flex', flexDirection:'column', gap:10, flexShrink:0}}>
+          <div style={{fontSize:12, color:'#9fb0c3', lineHeight:1.5}}>
+            Aquí solo se cambia cómo se ejecuta y cómo se ve en el gráfico. Lo que es la estrategia (sus reglas o su código, sus parámetros y
+            su descripción) se ve y se cambia en el Builder.
+            {onAbrirBuilder && <button onClick={onAbrirBuilder} style={{marginLeft:8, fontFamily:MONO, fontSize:11, padding:'3px 9px', borderRadius:4, cursor:'pointer', border:'1px solid #3fb950', background:'rgba(63,185,80,0.12)', color:'#3fb950'}}>Abrir en el Builder</button>}
+          </div>
+          <div>
+            <label style={S.label}>Marcadores Visuales</label>
+            {renderVisuals()}
+          </div>
+        </div>
+      )}
+
       {/* ── FILA 3: Dos columnas que llenan el resto ── */}
+      {!soloEjecucion && (
       <div style={{flex:1, display:'grid', gridTemplateColumns:'45% 55%', gap:12, minHeight:0}}>
 
         {/* ── COLUMNA IZQUIERDA ── */}
@@ -353,6 +380,7 @@ export default function StrategyEditorPanel({ strForm, setStrForm, strategy, onS
         )}
 
       </div>
+      )}
     </div>
   )
 }

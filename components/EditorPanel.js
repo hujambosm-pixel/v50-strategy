@@ -4,7 +4,7 @@
 // mercado, stops y salidas, con cada condición como un árbol Y / O / NO / cruza / histéresis cuyas hojas son del catálogo
 // (lib/condiciones/catalogo.js) y se pintan con sus parámetros declarados. Al lado, en vivo: la regla en castellano, los
 // errores de la validación, la huella y cómo leer lo que sale. Guardar manda la definición a /api/strategies (que la valida
-// otra vez y guarda code_js a null); «Probar en backtest» guarda y la abre en Estrategias, con el gráfico de siempre.
+// otra vez y guarda code_js a null); «Probar en backtest» guarda y la abre en «Backtest de un valor», con el gráfico de siempre.
 // El diagrama (E7) y el dibujo con el ratón (E8) vendrán después: esto es solo la pantalla, el cálculo es el del motor.
 import { useState, useEffect, useMemo } from 'react'
 import { MONO } from '../lib/utils'
@@ -495,7 +495,7 @@ function EditorEstrategia({ apiFetch, filaInicial = null, onGuardada, onProbar, 
             <button style={{ ...botonPrincipal, opacity: errores.length || sinNombre || guardando ? 0.5 : 1 }} disabled={!!errores.length || sinNombre || guardando} onClick={() => guarda(false)}>{est.id ? 'Guardar' : 'Guardar como estrategia'}</button>
             {est.id && <button style={{ ...boton, opacity: errores.length || sinNombre || guardando ? 0.5 : 1 }} disabled={!!errores.length || sinNombre || guardando} onClick={() => guarda(true)}>Guardar como nueva</button>}
             <button style={{ ...boton, opacity: errores.length || sinNombre || guardando ? 0.5 : 1 }} disabled={!!errores.length || sinNombre || guardando}
-              title="Guarda y la abre en Estrategias con el activo de siempre: el gráfico enseña sus órdenes, entradas y salidas"
+              title="Guarda y la abre en «Backtest de un valor» con el activo de siempre: el gráfico enseña sus órdenes, entradas y salidas"
               onClick={async () => { const f = await guarda(false); if (f) onProbar?.(f) }}>Probar en backtest ▸</button>
             {onExportar && (() => {
               // Exportar a code_js (decisión 7): crea una estrategia de CÓDIGO nueva que hace lo mismo (lib/editor/exporta.js).

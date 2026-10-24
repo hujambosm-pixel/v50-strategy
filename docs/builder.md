@@ -578,3 +578,64 @@ Las de volumen en un índice miran el volumen del fondo (QQQ, SPY…); en alguno
 - **Otras medidas del valor frente al mercado** (por ejemplo, «sube más que el QQQ en 3 meses»): el motor solo da a una condición de
   «Este valor» sus propias velas; las del índice solo llegan al filtro de índice. Habría que pasar también las velas del índice a las
   condiciones del valor (un cambio en el intérprete y en el backtest).
+
+## 14. «Backtest de un valor» y las estrategias de código en el Builder (V9.1048)
+
+Regla (decisión de Sergi, opción A): **el Builder es para «qué es la estrategia»; la pestaña es para «cómo se ejecuta y se ve en
+el gráfico».** Dos tipos de estrategia en los textos: «de tarjetas» (una lista de reglas que lee el motor) y «de código» (un programa
+en JavaScript con parámetros). No se borra ninguna estrategia, dato ni cálculo; el Editor clásico no cambia.
+
+### Auditoría (solo lectura)
+
+- **a) Lo que hacía la pestaña «Estrategias»**: la lista con ▶/■ (activar o parar la estrategia del backtest de un valor; el selector
+  de arriba solo aparece si ya hay una activa), «Condiciones de la simulación» (periodo, capital, temporalidad, comisiones), los
+  filtros de mercado y del activo, la búsqueda, «+» (estrategia de código nueva), el panel de edición (nombre, color, capital, % por
+  operación, años, temporalidad, descripción con el resumen de la IA, parámetros en JSON, marcadores visuales, código JS, Guardar,
+  Clonar, Eliminar) y la tabla ⊞ (métricas del ranking por estrategia, activar o desactivar, cambios a la vez de temporalidad, capital
+  y años, Eliminar, Nueva). **Eliminar borra de verdad** (DELETE en la base; no es una papelera).
+- **b) Quién lee estrategias de código**: el backtest de un valor, Backtesting (multicartera), Optimización, la ficha del activo, el
+  ranking y el guardián entienden las dos clases. **Solo las de tarjetas**: el paso 2 del Builder (las pruebas congeladas guardan
+  definiciones de tarjetas y la verificación de sesgos las ejecuta con el intérprete) y, hasta hoy, «Copiar y editar». Coste de que el
+  paso 2 admita código: grande (guardar el código en la prueba y ejecutarlo en los mercados ficticios y en los laboratorios); no se
+  hace. El Laboratorio y Carteras QQQ + ETF no usan la tabla de estrategias (catálogo de señales propio).
+- **c) Las 75 de código**: 47 tienen datos guardados (ranking de la Watchlist; «1 V50 EMA10/11» y «2 V50f1» también en el TradeLog);
+  50 están activadas. Ninguna prueba congelada (LOTE_1–3, CARTERA_1–3, RETROCESOS_1, PRUEBA_EDITOR_1, PRUEBA_BUILDER_1) usa una
+  estrategia de código. La estrategia activa se guarda en el navegador.
+- **d) Enlaces**: no hay rutas (una sola página); se llegaba por el menú lateral, el enlace «Editor de código» del Builder y los
+  botones «Probar en backtest» y «Exportar a code_js» del Editor clásico.
+
+### Dónde ha ido cada función
+
+| Función | Ahora |
+|---|---|
+| Ver una estrategia de código; cambiar sus parámetros (números), nombre, velas y descripción; resumen con la IA | Builder → pulsar su nombre → apartado «Código de la estrategia» (`components/BuilderCodigo.js`, `lib/builder/codigo.js`) |
+| Ver el código | Ahí, plegado y solo para leer («Solo para leer. Si hay que cambiarlo, pídelo.») |
+| Duplicar | Builder → «Desde una de mis estrategias» → «Copiar y editar» (con las de tarjetas y las de código) |
+| Crear una estrategia de código | Ya no se puede: todas las nuevas, de tarjetas («+» quitado; «+ Nueva» de la tabla ⊞ abre el Builder) |
+| Pasar al paso 2 | No: botón desactivado con «Las estrategias de código no se pueden probar contra el azar. Para probarla, rehazla en tarjetas.» |
+| ▶/■, condiciones de la simulación, filtros, tabla ⊞ (métricas, activar o desactivar, cambios a la vez) | Se quedan en la pestaña, que se llama **«Backtest de un valor»** |
+| Color, capital, % por operación, años, temporalidad, marcadores visuales, Eliminar | En la pestaña, botón ⚙ de cada fila (panel sin código, sin JSON, sin descripción y sin «Clonar»; guarda solo lo que cambia) |
+| Pulsar una estrategia en la pestaña (o «editar» en la tabla ⊞) | La abre en el Builder (de tarjetas o de código) |
+| «Probar en backtest» y «Exportar a code_js» del Editor clásico | Llevan a «Backtest de un valor», con esa estrategia activa |
+| Enlace «Editor de código» del Builder | Se llama «Backtest de un valor» y lleva a la pestaña |
+
+Guardar en el apartado de código: abierta y guardada sin tocar, no se escribe nada; con cambios, PUT solo de lo que cambia (params
+reescrito cambiando solo esos valores, en su sitio; el código no se manda). Si estuviera en una prueba congelada y cambian sus
+parámetros o sus velas, se crea «Nombre · versión N» (POST con el mismo código; `pages/api/strategies.js` acepta ahora code_js en un
+POST). El panel completo de antes (`StrategyEditorPanel` sin `soloEjecucion`) queda en el código **sin enlazar**; se borrará en otra
+tanda cuando Sergi confirme que no lo echa de menos.
+
+### Los filtros de la pestaña frente a «Solo opero cuando…»
+
+- **Filtros de la pestaña** («Filtros solo para este backtest (no forman parte de la estrategia)»): la estrategia se ejecuta entera y
+  después `filtraPorEntrada` (`lib/nucleoBacktest.js`) quita las operaciones cuya entrada cae en un día en que el filtro no deja
+  (mirado al cierre anterior). Una operación quitada no se sustituye: la estrategia «estaba dentro» esos días y no buscó otra entrada.
+  Son la misma lista en «Backtesting» (multicartera). No entran en la huella ni en el paso 2 (las pruebas van «sin filtros»). Cálculo
+  1 (el de siempre): sin dato deja pasar, «≥», EMA sobre la rejilla del activo; el cálculo 2 (catálogo) existe por filtro. Un code_js
+  puede además leer `filtroActivo` de cada vela.
+- **«Solo opero cuando…»** (Builder): es parte de la regla (`filtroMercado` y las filas de «Este valor» delante de la señal). El
+  intérprete no arma la orden ese día y la estrategia queda libre para comprar en cuanto se cumpla; sin dato, no compra; comparaciones
+  estrictas; entra en la huella, en el paso 2 y en todos los laboratorios.
+- **Se suman**: en el backtest de un valor y en Backtesting, primero decide la regla (con su «Solo opero cuando…») y después el filtro
+  de la pestaña quita operaciones. Para unificarlos (otra tanda) habría que decidir si los filtros de la pestaña pasan a ser filas de
+  «Solo opero cuando…» (y con ello re-simulan en vez de quitar).

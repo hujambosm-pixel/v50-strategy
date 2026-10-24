@@ -3,7 +3,7 @@
 // estrategias) y «Mi trabajo» en dos pestañas, «Mis estrategias» y «Mis pruebas» (lib/builder/misListas.js), con el estilo de
 // lib/builder/estilo.js (solo el Builder; el resto de la app no cambia). No crea nada por su cuenta: abre el editor por tarjetas
 // (V9.1043, components/BuilderEditor.js, el paso 1) con una COPIA nueva (de la plantilla o de la estrategia elegida), que se guarda
-// al pulsar «Guardar y pasar al paso 2», o el panel de código de siempre, a través de los callbacks de la página. El paso 2
+// al pulsar «Guardar y pasar al paso 2»; una estrategia de código se abre en su apartado «Código de la estrategia» (V9.1048). El paso 2
 // («Probarla contra el azar», tanda 2) es otra pantalla del propio Builder: components/BuilderPrueba.js. En las filas no hay
 // «Editar» ni «Copiar»: se edita pulsando el nombre y se copia desde el inicio.
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
@@ -15,6 +15,8 @@ import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 import { B, S } from '../lib/builder/estilo'
 import BuilderPrueba from './BuilderPrueba'
 import BuilderEditor from './BuilderEditor'
+import BuilderCodigo from './BuilderCodigo'
+import { esDeCodigo, filaCopiaCodigo } from '../lib/builder/codigo'
 import BuilderGuia from './BuilderGuia'
 
 export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convertirla en plan']
@@ -56,8 +58,9 @@ export function BarraPasos({ actual = 1 }) {
   )
 }
 
-// La fila que se manda al editor para una copia nueva de una estrategia guardada: sin id, «<nombre> (copia)».
-export const filaCopia = (s) => ({ id: null, name: `${s.name} (copia)`, description: s.description || '', definition: copia(s.definition), params: params(s.params), copiaDe: s.name })
+// La fila que se manda al editor para una copia nueva de una estrategia guardada: sin id, «<nombre> (copia)». Una de código
+// (V9.1048) se copia entera, con su código: se abre en el apartado «Código de la estrategia».
+export const filaCopia = (s) => esDeCodigo(s) ? filaCopiaCodigo(s) : ({ id: null, name: `${s.name} (copia)`, description: s.description || '', definition: copia(s.definition), params: params(s.params), copiaDe: s.name })
 
 // estrategias: las de la página (strategies). datosIniciales (opcional, para las pruebas): { lotes, pruebas } en lugar de leerlos;
 // listasIniciales (opcional, para las pruebas de montaje): { estrategias, pruebas } ya calculadas; pestanaInicial y filtroInicial.
@@ -65,9 +68,11 @@ export const filaCopia = (s) => ({ id: null, name: `${s.name} (copia)`, descript
 // enseñar «Cargando» y sin recalcular si no ha cambiado nada (firmaDatos). Las estrategias llegan de la página.
 // apiFetch y version: para el paso 1 (guardar) y el paso 2. onGuardada: la página recarga sus estrategias. vistaInicial (opcional,
 // para las pruebas): la de BuilderPrueba ({ estrategiaId } | { loteId }), la guía ({ guia: true }) o el editor ({ editor: fila }).
-// onAbrirEstrategia(s, 'codigo'): abre una estrategia de código donde siempre; las del editor se abren aquí, en el paso 1, y
-// onAbrirEstrategia(s, 'editor') las abre en el Editor clásico (la pestaña «Editor»). onEditorCodigo: «+ Crear estrategia» de código.
-export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onEditorCodigo, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null }) {
+// Las estrategias se abren aquí, en el paso 1: las de tarjetas en el editor por tarjetas y las de código (V9.1048) en el apartado
+// «Código de la estrategia». onAbrirEstrategia(s, 'editor') las abre en el Editor clásico (la pestaña «Editor»). onBacktestValor:
+// el enlace «Backtest de un valor» (la pestaña donde se ejecutan y se ven en el gráfico). abrir ({ fila, n }): la página pide
+// abrir una estrategia (al pulsar su nombre en «Backtest de un valor»); cada n nuevo la abre.
+export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null, abrir = null }) {
   const [datos, setDatos] = useState(() => datosIniciales || { lotes: [], pruebas: [], cargando: !datosIniciales, error: null })
   const [filasE, setFilasE] = useState(listasIniciales?.estrategias || null)
   const [filasP, setFilasP] = useState(listasIniciales?.pruebas || null)
@@ -103,7 +108,8 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onEd
   }, [estrategias, datos.lotes, datos.pruebas, listasIniciales])
   const estrategiasEf = useMemo(() => [...estrategias.map(s => guardadas.find(g => String(g.id) === String(s.id)) || s), ...guardadas.filter(g => !estrategias.some(s => String(s.id) === String(g.id)))], [estrategias, guardadas])
   const delEditor = useMemo(() => estrategias.filter(s => esDefinicionEditor(s.definition)).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
-  const elegidaCopia = delEditor.find(s => String(s.id) === aCopiar) || delEditor[0] || null
+  const deCodigo = useMemo(() => estrategias.filter(s => !esDefinicionEditor(s.definition) && s.code_js), [estrategias])   // en su orden, como en «Mis estrategias»
+  const elegidaCopia = [...delEditor, ...deCodigo].find(s => String(s.id) === aCopiar) || delEditor[0] || deCodigo[0] || null
   // Las plantillas disponibles (la desactivada no sale) y la elegida en el desplegable.
   const disponibles = PLANTILLAS.filter(p => !p.desactivada && p.definicion), plantilla = disponibles.find(p => p.id === plantillaId) || disponibles[0] || null
   const visiblesE = filtraEstrategias(filasE, filtro)
@@ -116,6 +122,7 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onEd
   }
   const abrePrueba = (id) => setPrueba({ loteId: id, n: Date.now() })
   const abreEditor = (fila) => setEditor({ fila, n: Date.now() })
+  useEffect(() => { if (abrir?.fila) { setPrueba(null); setGuia(false); setEditor({ fila: abrir.fila, n: abrir.n }) } }, [abrir?.n])
   // Guardada en el paso 1: la página recarga sus estrategias y se pasa al paso 2 con ella (la versión nueva, si se creó).
   const alGuardar = (fila, info = {}) => {
     if (!info.sinCambios) { setGuardadas(g => [...g.filter(x => String(x.id) !== String(fila.id)), fila]); onGuardada?.(fila) }
@@ -123,6 +130,13 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onEd
   }
 
   if (guia) return <BuilderGuia onVolver={() => setGuia(false)}/>
+  // Una de código, guardada: vuelve a «Mi trabajo» (el paso 2 no la admite).
+  const alGuardarCodigo = (fila) => {
+    setGuardadas(g => [...g.filter(x => String(x.id) !== String(fila.id)), fila]); onGuardada?.(fila)
+    setEditor(null); recarga()
+  }
+  if (editor && esDeCodigo(editor.fila)) return <BuilderCodigo key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
+    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardarCodigo}/>
   if (editor) return <BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} lotes={datos.lotes} apiFetch={apiFetch}
     onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')}/>
   if (prueba) return <BuilderPrueba key={prueba.n} estrategias={estrategiasEf} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
@@ -139,7 +153,7 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onEd
         <span style={S.secundario}>Crea una estrategia, pruébala contra el azar y conviértela en un plan.</span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 16, flexWrap: 'wrap' }}>
           <button style={S.boton} onClick={() => setGuia(true)} title="Qué es una prueba, qué hace cada laboratorio y cómo leer sus resultados">Guía: cómo se prueba una estrategia</button>
-          <button style={{ ...S.enlace, color: B.apagado, fontSize: 13 }} onClick={() => onEditorCodigo?.()} title="La pantalla de siempre para crear una estrategia escribiendo su código">Editor de código</button>
+          <button style={{ ...S.enlace, color: B.apagado, fontSize: 13 }} onClick={() => onBacktestValor?.()} title="Donde las estrategias se ejecutan sobre un valor y se ven en el gráfico">Backtest de un valor</button>
         </span>
       </div>
       <BarraPasos actual={1}/>
@@ -167,13 +181,14 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onEd
         <div data-tarjeta="copia" style={{ ...S.tarjeta, display: 'flex', flexDirection: 'column' }}>
           <div style={S.cabeceraTarjeta}>Desde una de mis estrategias</div>
           <div style={{ ...S.cuerpo, flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {delEditor.length ? (<>
+            {delEditor.length || deCodigo.length ? (<>
               <select aria-label="Estrategia que copiar" value={elegidaCopia ? String(elegidaCopia.id) : ''} onChange={e => setACopiar(e.target.value)} style={campoSel}>
-                {delEditor.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
+                {delEditor.length > 0 && <optgroup label="De tarjetas">{delEditor.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}</optgroup>}
+                {deCodigo.length > 0 && <optgroup label="De código">{deCodigo.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}</optgroup>}
               </select>
-              <div style={S.secundario}>Se abre una copia nueva. La original no cambia, ni sus pruebas.</div>
+              <div style={S.secundario}>Se abre una copia nueva. La original no cambia, ni sus pruebas.{elegidaCopia && !esDefinicionEditor(elegidaCopia.definition) ? ' Es de código: en la copia se cambian sus parámetros; el código se copia tal cual.' : ''}</div>
               <div style={{ marginTop: 'auto' }}><button style={S.boton} onClick={() => elegidaCopia && abreEditor(filaCopia(elegidaCopia))}>Copiar y editar</button></div>
-            </>) : <div style={S.secundario}>Todavía no tienes estrategias del editor. Empieza en blanco o desde una plantilla.</div>}
+            </>) : <div style={S.secundario}>Todavía no tienes estrategias. Empieza en blanco o desde una plantilla.</div>}
           </div>
         </div>
       </div>
@@ -199,8 +214,8 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onEd
                 {visiblesE.map(f => (
                   <tr key={f.clave}>
                     <td style={{ ...celda, maxWidth: 520, minWidth: 260 }}>
-                      <button style={{ ...S.enlace, color: B.titulo, fontWeight: 600 }} onClick={() => f.origen === 'editor' ? abreEditor(f.estrategia) : onAbrirEstrategia?.(f.estrategia, 'codigo')}
-                        title={f.origen === 'editor' ? 'Abrir en el editor' : 'Abrir el código'}>{f.nombre}</button>
+                      <button style={{ ...S.enlace, color: B.titulo, fontWeight: 600 }} onClick={() => abreEditor(f.estrategia)}
+                        title={f.origen === 'editor' ? 'Abrir en el editor por tarjetas' : 'Abrir: sus parámetros y su código'}>{f.nombre}</button>
                       {f.subtitulo && <div data-regla-fila style={{ ...S.apagado, whiteSpace: 'normal', marginTop: 2 }}>{f.subtitulo}</div>}
                       {f.desactivada && <div style={S.apagado}>Desactivada</div>}
                     </td>
@@ -215,7 +230,7 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onEd
               </tbody>
             </table>
           </div>
-          <div style={{ ...S.apagado, padding: '10px 12px' }}>Las estrategias de código no entran en la prueba guiada: se prueban contra el azar en Backtesting.</div>
+          <div style={{ ...S.apagado, padding: '10px 12px' }}>Las estrategias de código no entran en el paso 2: no se pueden probar contra el azar aquí. Para probarla, rehazla en tarjetas.</div>
         </>) : (<>
           <div style={{ overflowX: 'auto', maxHeight: 560, overflowY: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }} data-tabla="pruebas">

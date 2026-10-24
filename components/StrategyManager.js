@@ -251,7 +251,7 @@ export default function StrategyManager({
           onClick={() => onNew && onNew()}
           style={{ fontFamily: MONO, fontSize: 11, padding: '4px 10px', borderRadius: 4,
             background: P.accent, border: `1px solid ${P.accent}`, color: P.accentFg, cursor: 'pointer' }}>
-          + Nueva
+          + Nueva (en el Builder)
         </button>
 
         <button
