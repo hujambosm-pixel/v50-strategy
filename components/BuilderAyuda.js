@@ -6,10 +6,11 @@ import { B } from '../lib/builder/estilo'
 
 const ANCHO = 300
 
-export default function Ayuda({ texto, etiqueta = 'Ayuda' }) {
+export default function Ayuda({ texto, etiqueta = 'Ayuda', abiertoInicial = false }) {
   const [encima, setEncima] = useState(false)   // el ratón está encima
-  const [fijo, setFijo] = useState(false)       // se tocó (o se hizo clic): sigue abierto hasta tocar fuera
-  const [pos, setPos] = useState(null)
+  const [fijo, setFijo] = useState(abiertoInicial)   // se tocó (o se hizo clic): sigue abierto hasta tocar fuera
+  // abiertoInicial (para las pruebas de montaje): abierto desde el principio, en una posición provisional hasta medir el botón.
+  const [pos, setPos] = useState(abiertoInicial ? { left: 16, top: 0, width: ANCHO } : null)
   const ref = useRef(null), boton = useRef(null)
   const abierto = encima || fijo
   const coloca = () => {

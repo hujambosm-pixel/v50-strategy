@@ -16,9 +16,9 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import { CONDICIONES_EDITOR, validaDefinicion, valoresDe, esquemaDe, huellaDefinicion, paraHuella } from '../lib/editor/definicion'
 import { jsonCanonico } from '../lib/lotesLab'
-import { GRUPOS, buscaCatalogo, nombreCond, condNueva, soloDelValor, AYUDA_COND, AYUDA_NO, AYUDA_CRUZA, leeCompra, escribeCompra, leeFiltro, escribeFiltro, cambiaIndice, INDICES, nombreQuien,
+import { GRUPOS, buscaCatalogo, nombreCond, explicacionCond, filaNueva, soloDelValor, avisoSoloValor, ayudaFila, AYUDA_NO, AYUDA_CRUZA, leeCompra, escribeCompra, leeFiltro, escribeFiltro, cambiaIndice, INDICES, nombreQuien,
   leeVenta, escribeVenta, leeProteccion, AYUDA_QUIEN, opcionesQuien, leeOrden, ponModoOrden, ponAjuste, ponVelasOrden, CANCELAR_DEFECTO, ponCancelar, vigilaDesdeLaCompra, ponVigilancia, AJUSTES, fraseCompra, TIPOS_STOP, CAMPOS_STOP_TARJETA, numeroStop, anadeStopDef, cambiaTipoStopDef, quitaStopDef, ponNumeroStop, ponSalida, DEFECTO_PROTECCION,
-  opcionesClasico, frasesClasico, fraseStopTarjeta, plantillaFila, opcionesOp, opDe, conOp, conVuelta, conCruce, conNumero, tieneLado, erroresFila, erroresProteccion, cuentaErroresProteccion, notaFila, fraseRegla,
+  opcionesClasico, frasesClasico, fraseStopTarjeta, plantillaFila, opcionesOp, opDe, opDesactivada, conOp, conVuelta, conCruce, puedeVuelta, puedeCruce, conNumero, tieneLado, erroresFila, erroresProteccion, cuentaErroresProteccion, notaFila, fraseRegla,
   datosSuficientes, aTexto, deTexto } from '../lib/builder/tarjetas'
 import { partesNombre, planGuardado, avisoVersion } from '../lib/builder/versiones'
 import { PERIODOS_DEFECTO } from '../lib/editor/lotes'
@@ -76,8 +76,10 @@ function Menu({ f, onCambia, abiertoInicial = false }) {
       <button ref={boton} style={{ ...S.enlace, color: B.apagado, padding: '0 4px' }} aria-label="Más opciones de la fila" aria-expanded={abierto} onClick={() => abierto ? setAbierto(false) : abre()}>…</button>
       {abierto && (
         <span ref={caja} data-menu-fila style={{ position: 'fixed', zIndex: 1000, ...(pos || {}), background: B.cabecera, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: 8, display: 'flex', flexDirection: 'column', gap: 6, whiteSpace: 'nowrap', boxShadow: '0 6px 20px rgba(0,0,0,0.5)' }}>
-          <button style={S.enlace} onClick={() => { onCambia(conVuelta(f)); setAbierto(false) }}>{f.env === 'NO' ? 'Quitarle la vuelta (NO)' : 'Darle la vuelta (NO)'}</button>
-          {!tieneLado(f.cond.c) && <button style={S.enlace} onClick={() => { onCambia(conCruce(f)); setAbierto(false) }}>{f.env === 'cruza' ? 'Cada vela que se cumpla' : 'Solo la vela en que empieza a cumplirse (cruza)'}</button>}
+          <button style={{ ...S.enlace, ...(puedeVuelta(f) ? {} : { color: B.apagado, cursor: 'default' }) }} disabled={!puedeVuelta(f)} onClick={() => { onCambia(conVuelta(f)); setAbierto(false) }}>{f.env === 'NO' ? 'Quitarle la vuelta (NO)' : 'Darle la vuelta (NO)'}</button>
+          {!puedeVuelta(f) && <span style={{ ...S.apagado, fontSize: 12, whiteSpace: 'normal', maxWidth: 260 }}>Una fila que se cumple solo la vela del cruce no se puede dar la vuelta: elige el cruce contrario en el símbolo.</span>}
+          {!tieneLado(f.cond.c) && <button style={{ ...S.enlace, ...(puedeCruce(f) ? {} : { color: B.apagado, cursor: 'default' }) }} disabled={!puedeCruce(f)} onClick={() => { onCambia(conCruce(f)); setAbierto(false) }}>{f.env === 'cruza' ? 'Cada vela que se cumpla' : 'Solo la vela en que empieza a cumplirse (cruza)'}</button>}
+          {!tieneLado(f.cond.c) && !puedeCruce(f) && <span style={{ ...S.apagado, fontSize: 12, whiteSpace: 'normal', maxWidth: 260 }}>Quítale primero la vuelta (NO) para elegir «solo la vela en que empieza».</span>}
         </span>
       )}
     </span>
@@ -86,12 +88,12 @@ function Menu({ f, onCambia, abiertoInicial = false }) {
 
 // Una fila de condición en UNA línea: «Cierre [> ▾] SMA ( [200] )», con la nota gris, el «?», el menú «…» y la ×; el error,
 // debajo. quien / onQuien: el selector «de quién» de «Solo opero cuando…».
-function Fila({ f, errores, valores, tarjeta, color, onCambia, onQuita, quien, onQuien, menuAbierto = false }) {
+function Fila({ f, errores, valores, tarjeta, color, onCambia, onQuita, quien, onQuien, menuAbierto = false, ayudaAbierta = false, intervalo = 'diario' }) {
   const p = f.cond.p || {}, decl = Object.fromEntries((CONDICIONES_EDITOR[f.cond.c]?.parametros || []).map(d => [d.clave, d]))
   const hay = Object.keys(errores).length > 0
   const campo = (c, j) => {
     if (typeof c === 'string') return <span key={j}>{c}</span>
-    if (c.tipo === 'op') return <select key={j} style={mini} aria-label="Símbolo" value={opDe(f)} onChange={e => onCambia(conOp(f, e.target.value))} title={AYUDA_CRUZA}>{opcionesOp(f.cond.c).map(o => <option key={o} value={o}>{o}</option>)}</select>
+    if (c.tipo === 'op') return <select key={j} style={mini} aria-label="Símbolo" value={opDe(f)} onChange={e => onCambia(conOp(f, e.target.value))} title={AYUDA_CRUZA}>{opcionesOp(f.cond.c).map(o => <option key={o} value={o} disabled={opDesactivada(f, o)}>{o}</option>)}</select>
     if (c.tipo === 'media' || c.tipo === 'opcion') return <select key={j} style={mini} aria-label={decl[c.k]?.etiqueta} value={p[c.k] ?? decl[c.k]?.defecto} onChange={e => onCambia(conNumero(f, c.k, e.target.value))}>{(decl[c.k]?.opciones || []).map(o => <option key={o} value={o}>{o}</option>)}</select>
     return <Numero key={j} valor={val(p[c.k], valores)} error={errores[c.k]} etiqueta={decl[c.k]?.etiqueta} onCambia={v => onCambia(conNumero(f, c.k, v))}/>
   }
@@ -109,11 +111,12 @@ function Fila({ f, errores, valores, tarjeta, color, onCambia, onQuita, quien, o
         {f.env === 'NO' && <span data-no style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}><span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#3b1d22', color: ROJO }}>NO</span><Ayuda texto={AYUDA_NO} etiqueta="NO"/></span>}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: B.titulo, fontWeight: 600, flexShrink: 0 }}>{plantillaFila(f.cond.c).map(campo)}</span>
         {f.env === 'cruza' && !tieneLado(f.cond.c) && <span style={{ fontSize: 12, color: B.secundario, flexShrink: 0 }}>(solo la vela en que empieza)</span>}
-        <span style={{ marginLeft: 'auto', paddingLeft: 8, color: B.apagado, fontSize: 12 }}>{notaFila(f, valores, tarjeta)}</span>
-        <span style={{ flexShrink: 0 }}><Ayuda texto={AYUDA_COND[f.cond.c] || nombreCond(f.cond.c)} etiqueta={nombreCond(f.cond.c)}/></span>
+        <span style={{ marginLeft: 'auto', paddingLeft: 8, color: B.apagado, fontSize: 12 }}>{notaFila(f, valores, tarjeta, intervalo)}</span>
+        <span style={{ flexShrink: 0 }}><Ayuda texto={ayudaFila(f)} etiqueta={nombreCond(f.cond.c)} abiertoInicial={ayudaAbierta}/></span>
         <Menu f={f} onCambia={onCambia} abiertoInicial={menuAbierto}/>
         <button style={{ ...S.enlace, color: B.apagado, fontSize: 18, lineHeight: 1, padding: '0 4px', flexShrink: 0 }} aria-label="Quitar esta condición" title="Quitar esta condición" onClick={onQuita}>×</button>
       </div>
+      {onQuien && soloDelValor(f.cond.c) && <div data-solo-valor style={{ color: B.secundario, fontSize: 13, marginTop: 6 }}>{avisoSoloValor(f.cond.c)}</div>}
       {hay && <div data-error-fila style={{ color: ROJO, fontSize: 13, marginTop: 6 }}>{Object.values(errores).map((e, k) => <div key={k}>{e}</div>)}</div>}
     </div>
   )
@@ -130,7 +133,7 @@ function Tarjeta({ titulo, color, derecha, children, datos }) {
   )
 }
 
-export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, onVolver, onGuardada, onEditorClasico, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null }) {
+export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, onVolver, onGuardada, onEditorClasico, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null, abiertosInicial = null, ayudaInicial = null }) {
   const [est, setEst] = useState(() => estadoInicial || estadoDe(fila))
   const orig = useRef(null); if (!orig.current) orig.current = estadoDe(fila)
   const { def, valores } = est
@@ -139,7 +142,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   const [modoCompraUI, setModoCompraUI] = useState(() => leeCompra(def).modo || 'todas')
   const [modoVentaUI, setModoVentaUI] = useState(() => leeVenta(def).modo || 'alguna')
   const [buscar, setBuscar] = useState(buscarInicial)
-  const [abiertos, setAbiertos] = useState({})
+  const [abiertos, setAbiertos] = useState(() => abiertosInicial === 'todos' ? Object.fromEntries(GRUPOS.map(g => [g.id, true])) : {})
   const [anadiendo, setAnadiendo] = useState(null)
   const [guia, setGuia] = useState(false)
   const [guardando, setGuardando] = useState(false)
@@ -194,7 +197,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   const cambiaCompra = (filas, modo = modoC) => setDef(d => escribeCompra(d, filas, modo))
   const cambiaVenta = (filas, modo = modoV) => setDef(d => escribeVenta(d, filas, modo))
   const anade = (id, donde) => {
-    const f = { cond: condNueva(id), env: null }
+    const f = filaNueva(id)
     if (donde === 'filtro') cambiaFiltro([...filtro.filas, { ...f, quien: soloDelValor(id) ? 'valor' : (indiceActual || 'QQQ') }])
     else if (donde === 'compra') cambiaCompra([...compra.filas, f]); else cambiaVenta([...venta.filas, f])
     setAnadiendo(null)
@@ -286,7 +289,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
           <div style={{ ...S.tarjeta }}>
             <div style={S.cabeceraTarjeta}>Catálogo de condiciones</div>
             <div style={{ padding: 12 }}>
-              <input aria-label="Buscar condiciones" placeholder="Buscar: rsi, media, volumen…" value={buscar} onChange={e => setBuscar(e.target.value)} style={{ ...entrada, width: '100%', boxSizing: 'border-box' }}/>
+              <input aria-label="Buscar condiciones" placeholder="Buscar: caída, media, volumen…" value={buscar} onChange={e => setBuscar(e.target.value)} style={{ ...entrada, width: '100%', boxSizing: 'border-box' }}/>
               {!grupos.length && <div style={{ ...S.apagado, marginTop: 8 }}>Nada coincide con «{buscar}».</div>}
               {grupos.map(g => {
                 const abierto = buscar.trim() ? true : !!abiertos[g.id], total = GRUPOS.find(x => x.id === g.id)?.conds.length ?? g.conds.length
@@ -295,10 +298,11 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                     <button aria-expanded={abierto} onClick={() => setAbiertos(a => ({ ...a, [g.id]: !abierto }))} style={{ ...S.enlace, color: B.titulo, fontWeight: 600, width: '100%', display: 'flex' }}>
                       <span style={{ width: 16 }}>{abierto ? '▾' : '▸'}</span><span style={{ flex: 1 }}>{g.titulo}</span><span style={S.apagado}>{total}</span>
                     </button>
+                    {abierto && g.aviso && <div data-aviso-grupo style={{ ...S.apagado, fontSize: 13, padding: '4px 0 2px 16px' }}>{g.aviso}</div>}
                     {abierto && g.conds.map(id => (
                       <div key={id} data-cond={id} style={{ padding: '6px 0 6px 16px', borderBottom: `1px solid ${B.borde}` }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ flex: 1 }}>{nombreCond(id)}</span>
+                          <span style={{ flex: 1 }}>{nombreCond(id)}<Ayuda texto={explicacionCond(id)} etiqueta={nombreCond(id)}/></span>
                           <button style={{ ...S.boton, padding: '0 9px', fontWeight: 700 }} aria-label={`Añadir «${nombreCond(id)}»`} onClick={() => setAnadiendo(anadiendo === id ? null : id)}>+</button>
                         </div>
                         {anadiendo === id && (
@@ -324,7 +328,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
         <div data-columna="tarjetas" style={{ flex: '3 1 440px', minWidth: 0 }}>
           <Tarjeta titulo="Solo opero cuando…" color={MORADO} datos={{ 'data-tarjeta': 'filtro' }} derecha={filtro.filas.length ? 'se cumplen todas' : 'opcional'}>
             {filtro.ok ? <>
-              {filtro.filas.map((f, k) => <Fila key={k} f={f} errores={errFiltro[k]} valores={valoresEf} tarjeta="filtro" color={MORADO} quien={f.quien} onQuien={q => cambiaQuien(k, q)} menuAbierto={menuInicial?.tarjeta === 'filtro' && menuInicial.k === k}
+              {filtro.filas.map((f, k) => <Fila key={k} f={f} errores={errFiltro[k]} valores={valoresEf} tarjeta="filtro" color={MORADO} quien={f.quien} onQuien={q => cambiaQuien(k, q)} menuAbierto={menuInicial?.tarjeta === 'filtro' && menuInicial.k === k} ayudaAbierta={ayudaInicial?.tarjeta === 'filtro' && ayudaInicial.k === k} intervalo={intervalo}
                 onCambia={g => cambiaFiltro(filtro.filas.map((x, j) => j === k ? { ...g, quien: x.quien } : x))} onQuita={() => cambiaFiltro(filtro.filas.filter((_, j) => j !== k))}/>)}
               {!filtro.filas.length && vacia('Sin filtro: opera siempre que se cumpla «Compro cuando…». Añádelo desde el catálogo con «+».')}
             </> : <div style={{ color: AMARILLO }}>Este filtro se ve y se cambia en el Editor clásico.</div>}
@@ -333,16 +337,16 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
 
           <Tarjeta titulo="Compro cuando…" color={AZUL} datos={{ 'data-tarjeta': 'compra' }} derecha={compra.ok ? enlaceModo(modoC, cambiaModoCompra) : null}>
             {compra.ok ? <>
-              {compra.filas.map((f, k) => <Fila key={k} f={f} errores={errCompra[k]} valores={valoresEf} tarjeta="compra" color={AZUL} menuAbierto={menuInicial?.tarjeta === 'compra' && menuInicial.k === k}
+              {compra.filas.map((f, k) => <Fila key={k} f={f} errores={errCompra[k]} valores={valoresEf} tarjeta="compra" color={AZUL} menuAbierto={menuInicial?.tarjeta === 'compra' && menuInicial.k === k} ayudaAbierta={ayudaInicial?.tarjeta === 'compra' && ayudaInicial.k === k} intervalo={intervalo}
                 onCambia={g => cambiaCompra(compra.filas.map((x, j) => j === k ? g : x))} onQuita={() => cambiaCompra(compra.filas.filter((_, j) => j !== k))}/>)}
               {!compra.filas.length && vacia('Añade condiciones desde el catálogo con «+».')}
             </> : <div style={S.secundario}>{regla.partes.find(p => p.tipo === 'compra')?.texto} <span style={{ color: AMARILLO }}>Se cambia en el Editor clásico.</span></div>}
-            {sinCompra && errorTarjeta('Falta la condición de compra: añade al menos una con «+» (por ejemplo, «Cierre frente a una media»).')}
+            {sinCompra && errorTarjeta('Falta la condición de compra: añade al menos una con «+» (por ejemplo, «Cierre frente a su media»).')}
           </Tarjeta>
 
           <Tarjeta titulo="Vendo cuando…" color={NARANJA} datos={{ 'data-tarjeta': 'venta' }} derecha={venta.ok ? enlaceModo(modoV, cambiaModoVenta) : null}>
             {venta.ok ? <>
-              {venta.filas.map((f, k) => <Fila key={k} f={f} errores={errVenta[k]} valores={valoresEf} tarjeta="venta" color={NARANJA} menuAbierto={menuInicial?.tarjeta === 'venta' && menuInicial.k === k}
+              {venta.filas.map((f, k) => <Fila key={k} f={f} errores={errVenta[k]} valores={valoresEf} tarjeta="venta" color={NARANJA} menuAbierto={menuInicial?.tarjeta === 'venta' && menuInicial.k === k} ayudaAbierta={ayudaInicial?.tarjeta === 'venta' && ayudaInicial.k === k} intervalo={intervalo}
                 onCambia={g => cambiaVenta(venta.filas.map((x, j) => j === k ? g : x))} onQuita={() => cambiaVenta(venta.filas.filter((_, j) => j !== k))}/>)}
               {!venta.filas.length && vacia('Sin condiciones de venta: sale solo por la protección de abajo. Añádelas desde el catálogo con «+».')}
             </> : <div style={{ color: AMARILLO }}>Las condiciones de venta se ven y se cambian en el Editor clásico.</div>}
@@ -363,7 +367,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                 <div style={linea}>Si no llega, la orden <select style={mini} aria-label="Si no llega" value={orden.ajuste} onChange={e => setDef(d => ponAjuste(d, e.target.value))}>{AJUSTES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></div>
                 <div>
                   <label style={{ ...etiquetaCampo, fontWeight: 400, gap: 6 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!orden.cancelar} onChange={e => setDef(d => ponCancelar(d, e.target.checked ? { cond: copia(CANCELAR_DEFECTO), env: null } : null))}/> Cancelar la orden si…</label>
-                  {orden.cancelar && <Fila f={orden.cancelar} errores={errCancelar} valores={valoresEf} tarjeta="cancelar" color={AZUL} onCambia={g => setDef(d => ponCancelar(d, g))} onQuita={() => setDef(d => ponCancelar(d, null))}/>}
+                  {orden.cancelar && <Fila f={orden.cancelar} errores={errCancelar} valores={valoresEf} tarjeta="cancelar" color={AZUL} intervalo={intervalo} onCambia={g => setDef(d => ponCancelar(d, g))} onQuita={() => setDef(d => ponCancelar(d, null))}/>}
                 </div>
                 <div style={S.apagado}>Ejemplo: la vela de la señal tiene máximo en 52 €: compro si en las velas siguientes llega a 52 €.</div>
               </div>}

@@ -487,3 +487,94 @@ guarda en la misma. La versión se lee del nombre (`partesNombre`): no hay colum
 - (Hecho el 24/10/2026, V9.1046: IWM desde 26/05/2000 y DIA desde 20/01/1998 ya están en los precios guardados, con
   `node scripts/llenaCachePrecios.js --simbolo IWM --anios 30` y lo mismo con DIA; el filtro con ellos funciona también en los
   laboratorios del paso 2.)
+
+## 13. Catálogo de condiciones completo y selector de índice explicado (V9.1047)
+
+### Auditoría (solo lectura)
+
+- **a) Lo que calcula el motor.** `lib/backtester.js`: `calcEMA` (siembra con la SMA de los N primeros), `calcSMA` (la del code_js:
+  suma los nulos como 0, a propósito), `calcRSI` (Wilder), `calcATR` (Wilder), `calcBollinger` (media de N y desviación
+  poblacional), `calcVolumeAvg` y `calcMACD` (línea = EMA rápida − EMA lenta; señal = EMA de la línea). `lib/indicadores.js`:
+  `calcSMAEstricta` (null si falta un dato de la ventana). En el catálogo (`lib/condiciones/indicadores.js`, con caché): media
+  (EMA / SMA del cierre), RSI, ATR y el máximo de las N velas anteriores; y la media del volumen de `volumenAlto`. Comparaciones del
+  catálogo: estrictas (> y <; `precioVsMedia` y `mediaVsMedia` admiten también ≥), frente a otra media o a un número, y los
+  combinadores «cruza» (cruce al alza o a la baja), NO, Y, O e histéresis. **No hay** estocástico ni ADX en ninguna parte del motor.
+- **b) A quién.** El filtro de índice (`filtroMercado`) calcula la condición con las velas del índice (`enReferencia`), así que vale
+  cualquier condición que salga de las velas. Solo la fuerza relativa no: lee `rsPercentil`, que el servidor calcula para cada valor
+  con todo el Nasdaq-100 (un índice no lo tiene).
+- **c) Las 7 de antes.** Cálculo en `lib/condiciones/catalogo.js` (`CONDICIONES_NIVEL` + `CONDICIONES_UNIVERSO`); nombres, grupos,
+  notas, frases y «?» en `lib/builder/tarjetas.js` (escritos en V9.1043 sin revisar: la media de 20 era «corta», las notas casi no
+  cambiaban con la tarjeta).
+- **d) Fallos conocidos.** `calcEMA` con un cierre que falta a mitad de la serie: la vela siguiente vale `cierre × k` (el hueco cuenta
+  como 0) y el error se arrastra (§7 de `docs/catalogo-condiciones.md`; con datos limpios no ocurre). Afecta a todo lo que usa EMA:
+  la media EMA, «Una media frente a otra» con EMA y **el MACD** (se añade, con este aviso). `calcATR`: con un precio que falta, NaN y
+  desde ahí «sin dato» (no da valores falsos). `calcBollinger` salta los huecos y alargaría la ventana: la condición nueva pone «sin
+  dato» mientras haya un hueco en la ventana. No se arregla nada aquí.
+
+### Cambios
+
+- **Ficha de cada condición** (`lib/builder/fichas.js`): grupo; nombre corto; la fila con sus números; la nota gris según la tarjeta
+  (filtro, compra, venta o cancelar la orden) y según los números (plazo de una media: 5 velas «corta», 20 «de un mes», 50 «de
+  plazo medio», 200 «larga, de casi un año»; en semanal, cada vela cuenta como 5 días); el trozo de «La regla, en una frase»; la
+  explicación con un ejemplo numérico (el «?» del catálogo y el de cada fila); qué es cada número y un ejemplo para el mensaje de
+  error («El nivel del RSI va de 0 a 100 (por ejemplo, 15).»; el rango es el del catálogo, el mismo que comprueba la validación al
+  guardar); a quién se aplica. Las velas previas son el calentamiento del catálogo. La definición guardada no cambia.
+- **Condiciones nuevas** (`lib/condiciones/catalogo.js`, solo con lo que el motor ya calcula; funciones nuevas en
+  `lib/condiciones/indicadores.js`: `minimoPrevio`, `maximoHasta`, `macd`, `bollinger`; las de antes no cambian): la media sube o baja,
+  cierre cerca de su media, cierre frente al de hace N velas, ROC, MACD frente a su señal, MACD frente a 0, cierre frente a una banda
+  de Bollinger, ATR en % del precio, volumen bajo, nuevo mínimo de N velas y cierre cerca del máximo de N velas. Las comparaciones en
+  % se escriben sin dividir (justo en el nivel no cuenta, sin depender del redondeo).
+- **Entradas del catálogo**: algunas son una condición con «cruza» o con unos valores de partida («El cierre cruza su media», «Cruce
+  de dos medias», «El RSI cruza un nivel», «El MACD cruza su señal», y las dos de Bollinger). Grupos plegables con su número, en el
+  orden Precio y medias · Osciladores · Volatilidad · Volumen · Rupturas · Mercado; el buscador mira el nombre, unas palabras clave y
+  la explicación. Mercado empieza con «Para filtrar por un índice (QQQ, SPY…), añade cualquier condición a «Solo opero cuando…» y
+  elige el índice en su fila.»
+- **Selector de índice**: con la fuerza relativa, los índices salen en gris y debajo de la fila: «Esta condición solo se puede aplicar a
+  este valor: la fuerza relativa compara este valor con los demás del Nasdaq-100; a un índice (QQQ, SPY…) no se le puede aplicar.»
+- **Darle la vuelta (NO)**: dos veces seguidas deja la definición igual byte a byte (también las ventas y el filtro de índice, que al
+  reescribirse cambiaban el orden de sus claves). Lo que vio Sergi en «Copia editor 23»: la fila «Cierre < EMA (20)» sin NO es la de
+  «Cancelar la orden si…», y así está guardada; la compra es «NO Cierre < EMA (20)». Pero había un fallo: en una fila con NO, elegir
+  «cruza ↑» en el símbolo le quitaba el NO sin avisar, y al volver a «<» la fila quedaba al revés. Ahora, con NO, los cruces salen en
+  gris; con «cruza», «Darle la vuelta» sale en gris y dice por qué.
+- **Exportar a code_js**: el motor copiado en el código exportado no tiene las condiciones nuevas; una estrategia que las use dice
+  «El exportador todavía no sabe copiar esta condición…» en vez de dar un código que fallaría. Las de antes se exportan igual.
+
+### El catálogo
+
+| Grupo | Condición (en el catálogo) | Fila | Números y rangos | Velas previas que necesita | A quién se aplica |
+|---|---|---|---|---|---|
+| Precio y medias | Cierre frente a su media | Cierre > SMA (200) | el periodo de la media: 1–1.000 (entero); tipo de la media: EMA / SMA | periodo (con la fila de partida: 200) | este valor o un índice |
+| Precio y medias | El cierre cruza su media (= «Cierre frente a su media» con «cruza») | Cierre cruza ↑ EMA (20) | el periodo de la media: 1–1.000 (entero); tipo de la media: EMA / SMA | periodo (con la fila de partida: 20) | este valor o un índice |
+| Precio y medias | Una media frente a otra | EMA (10) > EMA (50) | el periodo de la media rápida: 1–1.000 (entero); el periodo de la media lenta: 1–1.000 (entero); tipo de la media rápida: EMA / SMA; tipo de la media lenta: EMA / SMA | la lenta (con la fila de partida: 50) | este valor o un índice |
+| Precio y medias | Cruce de dos medias (= «Una media frente a otra» con «cruza») | EMA (10) cruza ↑ EMA (50) | el periodo de la media rápida: 1–1.000 (entero); el periodo de la media lenta: 1–1.000 (entero); tipo de la media rápida: EMA / SMA; tipo de la media lenta: EMA / SMA | la lenta (con la fila de partida: 50) | este valor o un índice |
+| Precio y medias | La media sube o baja | SMA (50) > la de hace 5 velas | el periodo de la media: 1–1.000 (entero); el número de velas atrás: 1–500 (entero); tipo de la media: EMA / SMA | periodo + N (con la fila de partida: 55) | este valor o un índice |
+| Precio y medias | Cierre cerca de su media | Cierre a menos de 3 % de su SMA (20) | el periodo de la media: 1–1.000 (entero); la distancia: 0,1–100; tipo de la media: EMA / SMA | periodo (con la fila de partida: 20) | este valor o un índice |
+| Precio y medias | Cierre frente al de hace N velas | Cierre > el de hace 5 velas | el número de velas atrás: 1–1.000 (entero) | N (con la fila de partida: 5) | este valor o un índice |
+| Precio y medias | Caída desde el máximo | Caída ≥ 10 % desde el máximo de 252 velas | el número de velas del máximo: 2–2.000 (entero); la caída: 0–100 | velas del máximo (con la fila de partida: 252) | este valor o un índice |
+| Osciladores | RSI frente a un nivel | RSI (14) > 50 | el periodo del RSI: 1–100 (entero); el nivel del RSI: 0–100 | periodo + 1 (con la fila de partida: 15) | este valor o un índice |
+| Osciladores | El RSI cruza un nivel (= «RSI frente a un nivel» con «cruza») | RSI (14) cruza ↑ 30 | el periodo del RSI: 1–100 (entero); el nivel del RSI: 0–100 | periodo + 1 (con la fila de partida: 15) | este valor o un índice |
+| Osciladores | MACD frente a su señal | MACD (12, 26, 9) > su señal | la media rápida del MACD: 1–500 (entero); la media lenta del MACD: 2–1.000 (entero); la señal del MACD: 1–500 (entero) | lenta + señal (con la fila de partida: 35) | este valor o un índice |
+| Osciladores | El MACD cruza su señal (= «MACD frente a su señal» con «cruza») | MACD (12, 26, 9) cruza ↑ su señal | la media rápida del MACD: 1–500 (entero); la media lenta del MACD: 2–1.000 (entero); la señal del MACD: 1–500 (entero) | lenta + señal (con la fila de partida: 35) | este valor o un índice |
+| Osciladores | MACD frente a 0 | MACD (12, 26) > 0 | la media rápida del MACD: 1–500 (entero); la media lenta del MACD: 2–1.000 (entero) | lenta (con la fila de partida: 26) | este valor o un índice |
+| Osciladores | ROC: cambio en % en N velas | Cambio en 10 velas > 5 % | el número de velas: 1–1.000 (entero); el nivel del cambio: −100–1.000 | N (con la fila de partida: 10) | este valor o un índice |
+| Volatilidad | Cierre bajo la banda inferior de Bollinger (= «Cierre frente a una banda de Bollinger») | Cierre < banda inferior de Bollinger (20, 2) | el periodo de las bandas: 2–1.000 (entero); las desviaciones de las bandas: 0,1–10; banda: inferior / superior | periodo (con la fila de partida: 20) | este valor o un índice |
+| Volatilidad | Cierre sobre la banda superior de Bollinger (= «Cierre frente a una banda de Bollinger») | Cierre > banda superior de Bollinger (20, 2) | el periodo de las bandas: 2–1.000 (entero); las desviaciones de las bandas: 0,1–10; banda: inferior / superior | periodo (con la fila de partida: 20) | este valor o un índice |
+| Volatilidad | ATR en % del precio | ATR (14) en % del precio > 3 % | el periodo del ATR: 1–200 (entero); el nivel del ATR: 0–100 | periodo (con la fila de partida: 14) | este valor o un índice |
+| Volumen | Volumen alto | Volumen > 1,5 × su media de 20 velas | las veces la media: 0–100; el número de velas de la media: 1–500 (entero) | N + 1 (con la fila de partida: 21) | este valor o un índice |
+| Volumen | Volumen bajo | Volumen < 1 × su media de 20 velas | las veces la media: 0–100; el número de velas de la media: 1–500 (entero) | N + 1 (con la fila de partida: 21) | este valor o un índice |
+| Rupturas | Nuevo máximo de N velas | Cierre > máximo de las 20 velas anteriores | el número de velas: 1–1.000 (entero) | N (con la fila de partida: 20) | este valor o un índice |
+| Rupturas | Nuevo mínimo de N velas | Cierre < mínimo de las 20 velas anteriores | el número de velas: 1–1.000 (entero) | N (con la fila de partida: 20) | este valor o un índice |
+| Rupturas | Cierre cerca del máximo de N velas | Cierre a menos de 5 % del máximo de 50 velas | la distancia: 0,1–100; el número de velas: 1–1.000 (entero) | N (con la fila de partida: 50) | este valor o un índice |
+| Mercado | Fuerza relativa en el Nasdaq-100 | Fuerza relativa > percentil 80 | el percentil: 0–100 | 253 (12 meses) (con la fila de partida: 253) | solo este valor |
+
+Las condiciones con «lado» admiten en la fila >, < y «cruza ↑ / ↓» (las de medias, también ≥ y ≤); todas admiten «Darle la vuelta (NO)».
+Las de volumen en un índice miran el volumen del fondo (QQQ, SPY…); en algunos ETF el volumen de Yahoo no es fiable.
+
+### Lo que no se pudo añadir (el motor no lo calcula)
+
+- **Estocástico** (por debajo o por encima de un nivel): haría falta su cálculo (%K = posición del cierre entre el mínimo y el máximo
+  de N velas, y %D = su media), una función nueva en el motor y su prueba.
+- **ADX** (fuerza de la tendencia): haría falta el cálculo de Wilder de +DI, −DI y su media (otra función nueva en el motor).
+- **Otras medidas del valor frente al mercado** (por ejemplo, «sube más que el QQQ en 3 meses»): el motor solo da a una condición de
+  «Este valor» sus propias velas; las del índice solo llegan al filtro de índice. Habría que pasar también las velas del índice a las
+  condiciones del valor (un cambio en el intérprete y en el backtest).
