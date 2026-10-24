@@ -621,7 +621,7 @@ export default function LaboratorioPanel({ apiFetch, version = null }) {
             <div style={{ overflowX: 'auto' }}>
               <table style={{ borderCollapse: 'collapse', fontSize: TAM }}>
                 <thead><tr>{['Fecha', 'Regla', 'Tipo', 'Criterio', 'Percentiles', 'Veredicto', ''].map((c, i) => <th key={i} style={{ textAlign: 'left', padding: '3px 8px', color: GRIS, fontWeight: 400, borderBottom: '1px solid var(--border)' }}>{c}</th>)}</tr></thead>
-                <tbody>{registro.historial.filter(h => !esConfigCartera(h.config) && !esConfigExploracion(h.config)).map(h => (
+                <tbody>{registro.historial.filter(h => !esConfigCartera(h.config) && !esConfigExploracion(h.config) && h.config?.prueba !== 'editorCurvas').map(h => (
                   <tr key={h.id} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '3px 8px', whiteSpace: 'nowrap' }}>{fmtDate(h.creado)}</td>
                     <td style={{ padding: '3px 8px', minWidth: 240 }}>{h.config ? reglaDe(h.config) : '—'}</td>

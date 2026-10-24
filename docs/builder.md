@@ -702,3 +702,39 @@ SIEMPRE de la regla de la pantalla (nunca con IA). Con errores: «Corrige lo que
 - **Tiempos** (mediana de 7, en el ordenador de pruebas, con las velas ya leídas): 2 años en diario ≈ 1 ms (con filtro QQQ ≈ 1,2 ms),
   10 años ≈ 1 ms, 16 años con filtro ≈ 2 ms; se recalcula 250 ms después del último cambio. Lo que más tarda es leer las velas la
   primera vez (una lectura por valor, que se recuerda). Si un cálculo pasa de 500 ms, se avisa.
+
+## 17. Curva y copias al azar en los resultados del paso 2 (V9.1051)
+
+### Auditoría (solo lectura)
+
+- **a)** Ninguna prueba guardaba la evolución diaria del dinero ni la distribución de las copias. El laboratorio de cartera guarda
+  CAGR, caída y ratio de la estrategia, y por cada prueba A / B la mediana, el 5 y el 95 de cada 100 y el percentil; el laboratorio
+  de operaciones, la media, el 5 y el 95 de cada 100 y el percentil de las 1.000 copias.
+- **b)** Recalcular al abrir haría falta volver a lanzar los laboratorios en el servidor sobre todo el universo, y si los precios
+  guardados cambiaron (correcciones de Yahoo, splits) las cifras podrían no coincidir. Decisión de Sergi (opción A): guardarlo en las
+  pruebas nuevas.
+
+### Cambios
+
+- **Sin cambiar ninguna cifra.** `lib/azarCartera.js`: las medidas salen de las mismas métricas (`aMedidas`); `creaPrueba(…, { curvas:
+  true })` se queda además con la curva diaria de cada copia y `curvaReal(P)` da la de la cartera real (la de `metricasCartera`).
+  `lib/editor/laboratorio.js`: el resultado lleva además `copias.medias` (las 1.000 medias). Comprobado: lo que se guardaba sale
+  idéntico byte a byte a V9.1050 (motor real, 18 valores, 2 periodos; laboratorio de operaciones con 40 valores inventados; la
+  verificación de sesgos, igual).
+- **Qué se guarda** (`lib/builder/curvasPrueba.js`). El registro (`lab_pruebas`) admite como mucho 50 KB por fila (lo comprueba la
+  tabla), así que:
+  - las curvas van en **filas aparte** (`config.prueba = 'editorCurvas'`, una por variante y periodo): la estrategia y el QQQ día a
+    día (en diezmilésimas del dinero inicial) y 40 copias de la prueba A repartidas de peor a mejor por su dinero final, cada 5 días
+    (en milésimas; si no cabe, cada más días), todo como texto con diferencias. No cuentan como pruebas en el contador del registro
+    (`cuentaPruebas`) ni salen en el historial del Laboratorio. La fila de la prueba (`editorLote`) no cambia;
+  - las 1.000 medias, ordenadas y compactas, dentro de la fila del laboratorio de operaciones (`copias`, unos 2 KB por periodo).
+- **En «Resultados»** (`components/BuilderCurvas.js`), debajo de la tabla, una pestaña por periodo (y un selector si hay varias
+  estrategias). «Cómo creció el dinero, frente al azar» (laboratorio de cartera): la estrategia, el abanico de 40 copias y el QQQ
+  (solo referencia), la caída desde el máximo con la máxima marcada, las cifras frente al QQQ y la barra 0–100 con el 95 y la
+  estrategia. «Dónde queda tu estrategia entre las 1.000 copias» (laboratorio de operaciones): el histograma, la línea del 95 de
+  cada 100 y la estrategia en su valor. Cada subtítulo dice prueba, laboratorio, estrategia, periodo y si decide el veredicto o es
+  solo informativo. Las cifras son las guardadas (las mismas de la tabla). Las pruebas antiguas dicen «Esta prueba es antigua: la
+  curva no se guardó.» (y «… las copias al azar no se guardaron.») y enseñan sus cifras y la barra.
+- **Tamaño** (medido, 2 periodos de 5 años, 1 estrategia): fila de la prueba 4 KB (como antes), curvas unos 76 KB (35 y 41 KB por
+  periodo; con el QQQ, unos 5 KB más por periodo), medias unos 2 KB por periodo. Una prueba nueva típica: unos 90 KB por estrategia
+  (Postgres además comprime estos textos). La base ocupaba 176 MB el 24/10/2026 (154 MB son precios; `lab_pruebas`, 1 MB).

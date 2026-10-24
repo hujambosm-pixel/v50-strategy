@@ -18,6 +18,7 @@ import { textoAIso } from './CampoFecha'
 import { isoAMostrar } from './SelectorPeriodo'
 import Ayuda from './BuilderAyuda'
 import BuilderGuia from './BuilderGuia'
+import BuilderCurvas from './BuilderCurvas'
 import { AYUDA, AYUDA_GANA, COMO_LEER, textoOperaciones, textoCartera, textoSesgos } from '../lib/builder/ayuda'
 import { ETAPAS, OPCIONES_UNIVERSO, loteDesde, nombrePropuesto, erroresPorCampo, textoQueSePrueba, leeHecho, etapasDe, etapasConNotas, completo, encadena, congela, veredictoVariante, filasResultado, esSemanal, nombrePeriodo } from '../lib/builder/pruebaGuiada'
 import { PERIODOS_DEFECTO, MAX_PERIODOS, MAX_VARIANTES, REGLAS_UNIVERSO, comunNormal, esUniversoDinamico, nombreUniversoLote, nombreVariante } from '../lib/editor/lotes'
@@ -63,7 +64,7 @@ function Tarjeta({ titulo, children, estilo }) {
   return <div style={{ ...S.tarjeta, marginTop: 16, ...estilo }}><div style={S.cabeceraTarjeta}>{titulo}</div><div style={S.cuerpo}>{children}</div></div>
 }
 
-export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {}, apiFetch, version, onVolver, onNuevaPrueba, onCambio, deps: depsPrueba = null, estadoInicial = null }) {
+export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {}, apiFetch, version, onVolver, onNuevaPrueba, onCambio, deps: depsPrueba = null, estadoInicial = null, curvasInicial = null }) {
   const delEditor = useMemo(() => estrategias.filter(s => esDefinicionEditor(s.definition)), [estrategias])
   const deps = useMemo(() => {
     const ctx = depsPrueba?.ctx || { url: getSupaUrl(), headers: getSupaH() }
@@ -324,6 +325,8 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
           </tbody>
         </table>
       </div>
+      {/* V9.1051: la curva frente al azar y las copias del laboratorio de operaciones, con una pestaña por periodo */}
+      <BuilderCurvas fila={fila} est={est} resultados={resultados} veredictos={veredictos} {...(curvasInicial || {})}/>
       <div style={{ marginTop: 14, color: B.titulo }}>
         {veredictos.map(x => {
           const [tipo, txt] = CHIP_VEREDICTO(x.pasa)
