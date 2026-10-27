@@ -36,20 +36,29 @@ export const LINEA_CIFRAS = (sym) => `Compuesto: cada operación usa todo el din
 const signo = (v, d = 2) => v == null || !Number.isFinite(v) ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${fmt(Math.abs(v), d)} %`
 
 // ── El gráfico de precio con las franjas dentro, y los osciladores (solo en el navegador) ──
-const ALTO_PRECIO = 360, ALTO_FRANJA = 18, HUECO = 8, ANCHO_EJE = 72
+// V9.1060: los nombres de las franjas van en una columna fija a la izquierda del gráfico (fuera del dibujo), una por fila y alineada
+// con su franja; los osciladores dejan el mismo hueco a la izquierda para seguir alineados con las velas. H es el alto de la zona de
+// dibujo (sin el eje de fechas): el gráfico se crea con H + el eje y, si el eje mide otra cosa, se corrige al momento, así que cada
+// franja cae a la misma altura que su etiqueta. Sin el logo de lightweight-charts (tapaba las franjas): el enlace a TradingView va
+// debajo del gráfico.
+const ALTO_PRECIO = 360, ALTO_FRANJA = 18, HUECO = 8, ANCHO_EJE = 72, EJE_TIEMPO = 28, ANCHO_ETIQUETAS = 250
 export const altoGrafico = (nFranjas) => ALTO_PRECIO + (nFranjas ? HUECO + nFranjas * ALTO_FRANJA : 0)
 function Graficos({ r }) {
   const precio = useRef(null), osc = useRef([])
   const franjas = r.franjas, H = altoGrafico(franjas.length)
+  // La columna de las etiquetas (250 px; en pantallas estrechas encoge hasta 120) y su hueco, igual, delante de cada oscilador.
+  const columna = { flex: `0 1 ${ANCHO_ETIQUETAS}px`, minWidth: 120 }
   useEffect(() => {
     if (!precio.current || !r?.velas?.length) return
     let vivo = true, charts = []
     import('lightweight-charts').then(({ createChart, CrosshairMode, LineStyle, LineType }) => {
       if (!vivo || !precio.current) return
       // El eje de la derecha con el mismo ancho en todos: así los osciladores quedan alineados con las velas.
-      const opciones = (alto) => ({ height: alto, layout: { background: { color: B.fondo }, textColor: B.secundario, fontFamily: B.letra }, grid: { vertLines: { color: '#1b2430' }, horzLines: { color: '#1b2430' } },
+      const opciones = (alto) => ({ height: alto, layout: { background: { color: B.fondo }, textColor: B.secundario, fontFamily: B.letra, attributionLogo: false }, grid: { vertLines: { color: '#1b2430' }, horzLines: { color: '#1b2430' } },
         crosshair: { mode: CrosshairMode.Normal }, rightPriceScale: { borderColor: B.borde, minimumWidth: ANCHO_EJE }, timeScale: { borderColor: B.borde }, width: precio.current.clientWidth })
-      const ch = createChart(precio.current, opciones(H)); charts.push(ch)
+      const ch = createChart(precio.current, opciones(H + EJE_TIEMPO)); charts.push(ch)
+      const altoDibujo = ch.paneSize?.().height
+      if (altoDibujo > 0 && altoDibujo !== H) ch.resize(precio.current.clientWidth, H + EJE_TIEMPO + H - altoDibujo)
       const abajo = franjas.length ? (H - ALTO_PRECIO + 6) / H : 0.05
       const velas = ch.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' })
       ch.priceScale('right').applyOptions({ scaleMargins: { top: 0.05, bottom: abajo } })
@@ -102,19 +111,26 @@ function Graficos({ r }) {
   }, [r])
   return (
     <div>
-      <div style={{ position: 'relative' }}>
-        <div ref={precio} data-grafico="precio" data-franjas={franjas.length} style={{ width: '100%', minHeight: H }}/>
-        {franjas.map((f, i) => (
-          <div key={i} data-franja={f.nombre} title={f.frase} style={{ position: 'absolute', left: 4, top: ALTO_PRECIO + HUECO + i * ALTO_FRANJA + 1, height: ALTO_FRANJA - 2, display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'none', zIndex: 3,
-            fontSize: 11, lineHeight: 1, color: f.color || (f.tarjeta === 'filtro' ? MORADO : '#8db8ff'), background: 'rgba(13,17,23,0.8)', padding: '0 4px', borderRadius: 3, maxWidth: '45%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-            {f.nombre} · {f.cumple.filter(x => x === true).length} velas
-          </div>
-        ))}
+      <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+        {franjas.length > 0 && <div data-etiquetas-franjas style={{ ...columna, position: 'relative', height: H }}>
+          {franjas.map((f, i) => (
+            <div key={i} data-franja={f.nombre} title={`${f.nombre} · ${f.cumple.filter(x => x === true).length} velas${f.frase && f.frase !== f.nombre ? `\n${f.frase}` : ''}`}
+              style={{ position: 'absolute', left: 0, right: 8, top: ALTO_PRECIO + HUECO + i * ALTO_FRANJA, height: ALTO_FRANJA, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4,
+                fontSize: 12, lineHeight: `${ALTO_FRANJA}px`, color: f.color || (f.tarjeta === 'filtro' ? MORADO : '#8db8ff'), whiteSpace: 'nowrap' }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{f.nombre}</span>
+              <span style={{ flexShrink: 0, color: B.secundario }}>· {f.cumple.filter(x => x === true).length} velas</span>
+            </div>
+          ))}
+        </div>}
+        <div ref={precio} data-grafico="precio" data-franjas={franjas.length} style={{ flex: '1 1 0%', minWidth: 0, minHeight: H + EJE_TIEMPO }}/>
       </div>
       {r.osciladores.map((o, j) => (
-        <div key={j} data-oscilador={o.nombre} style={{ marginTop: 8 }}>
-          <div style={{ fontSize: 12, color: B.secundario }}>{o.nombre}{o.nivel != null ? ` · nivel ${aTexto(o.nivel)}` : ''}{o.lineas.length > 1 ? ' · MACD en azul, señal en naranja' : ''}</div>
-          <div ref={el => { osc.current[j] = el }} style={{ width: '100%', minHeight: 130 }}/>
+        <div key={j} data-oscilador={o.nombre} style={{ marginTop: 8, display: 'flex', alignItems: 'flex-start' }}>
+          {franjas.length > 0 && <div style={columna}/>}
+          <div style={{ flex: '1 1 0%', minWidth: 0 }}>
+            <div style={{ fontSize: 12, color: B.secundario }}>{o.nombre}{o.nivel != null ? ` · nivel ${aTexto(o.nivel)}` : ''}{o.lineas.length > 1 ? ' · MACD en azul, señal en naranja' : ''}</div>
+            <div ref={el => { osc.current[j] = el }} style={{ width: '100%', minHeight: 130 }}/>
+          </div>
         </div>
       ))}
     </div>
@@ -146,10 +162,10 @@ function Curva100({ curvas }) {
   )
 }
 // V9.1057: la fila «Comisiones pagadas»: lo que descuenta el núcleo de «Backtest de un valor» (lib/builder/ensayo.js cifrasRegla), con
-// su cuenta. Solo comisión fija por compra: «30 × 0,36 € = 10,80 € · 0,11 % del capital inicial».
+// su cuenta. Solo comisión fija por compra: «30 × 0,36 € = 10,80 €» (V9.1060: solo el importe, sin el % del capital inicial).
 export function textoComisiones(com) {
   const eur = (x) => `${fmt(x, 2)} €`, n = com.operaciones
-  const tras = `${eur(com.total)} · ${fmt(com.pct, 2)} % del capital inicial`
+  const tras = eur(com.total)
   if (!com.compra && !com.venta && !com.porcentaje) return '0,00 € · «Backtest de un valor» no tiene comisión'
   if (!com.venta && !com.porcentaje) return `${n} × ${eur(com.compra)} = ${tras}`
   const partes = [com.compra ? `${n} compras × ${eur(com.compra)}` : null, com.venta ? `${n} ventas × ${eur(com.venta)}` : null, com.porcentaje ? `${fmt(com.porcentaje, 2)} % del importe en cada compra y en cada venta` : null].filter(Boolean)
@@ -264,8 +280,11 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   if (error) return <div data-senales="error" style={{ color: ROJO, padding: '12px 4px' }}>{error}</div>
   const seg = (activo) => ({ fontFamily: B.letra, fontSize: 13, minHeight: 34, padding: '0 12px', cursor: 'pointer', border: `1px solid ${activo ? AZUL : B.borde}`, background: activo ? '#1f3350' : B.fondo, color: activo ? B.titulo : B.secundario, fontWeight: activo ? 600 : 400 })
   const nombreEnsayo = ensayo.aviso ? `Ensayo · ${ensayo.desde.slice(0, 4)}–${ensayo.hasta.slice(0, 4)}` : 'Ensayo · 2010–2015'
+  // V9.1060: la columna de las cifras empieza a la altura de la fila de controles; la fila, los avisos y el gráfico ocupan el ancho
+  // que queda. Si no caben (pantallas estrechas), la columna baja debajo del gráfico.
   return (
-    <div data-senales="ok">
+    <div data-senales="ok" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      <div data-columna-izquierda style={{ flex: '999 1 700px', minWidth: 0 }}>
       <div data-fila-arriba style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: B.titulo, fontFamily: B.letra, fontSize: B.base }}>Valor:
           <BuscadorValor valores={valoresLista} valor={simbolo} onCambia={setSimbolo}/>
@@ -299,8 +318,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
       {cargando && <div style={{ ...S.apagado, marginTop: 8 }}>Leyendo los precios guardados…</div>}
       {fallo && <div style={{ color: ROJO, marginTop: 8 }}>{fallo}</div>}
       {!cargando && !vs.length && !fallo && <div style={{ ...S.apagado, marginTop: 8 }}>Elige un valor para ver las señales.</div>}
-      {r && !errPrueba.length && <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start', marginTop: 10 }}>
-        <section data-columna-grafico style={{ flex: '999 1 620px', minWidth: 0 }}>
+      {r && !errPrueba.length && <section data-columna-grafico style={{ marginTop: 10, minWidth: 0 }}>
           <div data-contador style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', margin: '0 0 6px', color: B.texto, fontSize: 13 }}>
             <span><span style={{ color: VERDE }}>▲</span> compra · <span style={{ color: NARANJA }}>▼</span> vende</span>
             {r.medias.map(m => <span key={m.nombre} style={{ color: m.color }}>{m.discontinua ? '— —' : '—'} {m.nombre}</span>)}
@@ -312,9 +330,10 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
           </div>
           {r.avisos.map((a, k) => <div key={k} data-aviso-senales style={{ color: AMARILLO, fontSize: 13 }}>{a}</div>)}
           <Graficos r={r}/>
-          <div style={{ ...S.apagado, marginTop: 4 }}>De {fechaCorta(r.velas[0].date)} a {fechaCorta(r.velas[r.velas.length - 1].date)} · {r.velas.length} velas · {simbolo}{r.franjas.length ? ' · debajo de las velas, una franja por condición y por pieza (pintado = se cumple)' : ''}</div>
-        </section>
-        <aside data-columna-cifras style={{ flex: '1 1 320px', maxWidth: 400, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ ...S.apagado, marginTop: 4 }}>De {fechaCorta(r.velas[0].date)} a {fechaCorta(r.velas[r.velas.length - 1].date)} · {r.velas.length} velas · {simbolo}{r.franjas.length ? ' · debajo de las velas, una franja por condición y por pieza (pintado = se cumple), con su nombre a la izquierda' : ''} · gráfico: <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer" style={{ color: B.apagado }}>TradingView Lightweight Charts™</a></div>
+        </section>}
+      </div>
+      {r && !errPrueba.length && <aside data-columna-cifras style={{ flex: '1 1 320px', maxWidth: 400, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ ...S.tarjeta, padding: 12 }}>
             <div data-linea-cifras style={{ fontSize: 12, color: B.secundario, lineHeight: 1.5, marginBottom: 6 }}>{LINEA_CIFRAS(simbolo)} <Ayuda texto={AYUDA_CIFRAS} etiqueta="Las cifras"/></div>
             {cifras ? <>
@@ -327,8 +346,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
             <Curva100 curvas={cifras.curvas}/>
           </div>}
           <div style={{ fontSize: 12, color: B.apagado, lineHeight: 1.5 }}>Solo para orientarte: no se guarda nada.</div>
-        </aside>
-      </div>}
+      </aside>}
     </div>
   )
 }

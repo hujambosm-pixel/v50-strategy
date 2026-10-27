@@ -20,6 +20,7 @@ import BuilderCodigo from './BuilderCodigo'
 import { esDeCodigo, filaCopiaCodigo } from '../lib/builder/codigo'
 import BuilderGuia from './BuilderGuia'
 import { coincide, conNombres } from '../lib/builder/buscar'
+import BuscadorEstrategia from './BuscadorEstrategia'
 
 export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convertirla en plan']
 export const SUBTITULOS_PASOS = ['Cuándo compro, cuándo vendo y cuánto arriesgo', '¿Gana por algo más que suerte?', 'Dinero real, aportaciones e impuestos']
@@ -75,13 +76,14 @@ export const filaCopia = (s) => esDeCodigo(s) ? filaCopiaCodigo(s) : ({ id: null
 // el enlace «Backtest de un valor» (la pestaña donde se ejecutan y se ven en el gráfico). abrir ({ fila, n }): la página pide
 // abrir una estrategia (al pulsar su nombre en «Backtest de un valor»); cada n nuevo la abre. V9.1058: buscarInicial y
 // buscarCopiaInicial (para las pruebas de montaje): lo escrito en los buscadores de «Mi trabajo» y de «Desde una de mis estrategias».
-export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '', buscarCopiaInicial = '' }) {
+// V9.1060: copiaInicial (el id elegido para copiar) y copiaAbiertaInicial (la lista del buscador abierta), también para el montaje.
+export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '', buscarCopiaInicial = '', copiaInicial = '', copiaAbiertaInicial = false }) {
   const [datos, setDatos] = useState(() => datosIniciales || { lotes: [], pruebas: [], cargando: !datosIniciales, error: null })
   const [filasE, setFilasE] = useState(listasIniciales?.estrategias || null)
   const [filasP, setFilasP] = useState(listasIniciales?.pruebas || null)
   const [pestana, setPestana] = useState(pestanaInicial)
   const [filtro, setFiltro] = useState(filtroInicial)
-  const [aCopiar, setACopiar] = useState('')
+  const [aCopiar, setACopiar] = useState(copiaInicial)
   const [buscar, setBuscar] = useState(buscarInicial)   // V9.1058: el buscador de «Mi trabajo» (por nombre y por la frase de la regla)
   const [buscarCopia, setBuscarCopia] = useState(buscarCopiaInicial)   // y el de «Desde una de mis estrategias» (por nombre)
   const [plantillaId, setPlantillaId] = useState(null)
@@ -114,8 +116,11 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   const estrategiasEf = useMemo(() => [...estrategias.map(s => guardadas.find(g => String(g.id) === String(s.id)) || s), ...guardadas.filter(g => !estrategias.some(s => String(s.id) === String(g.id)))], [estrategias, guardadas])
   const delEditor = useMemo(() => estrategias.filter(s => esDefinicionEditor(s.definition)).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
   const deCodigo = useMemo(() => estrategias.filter(s => !esDefinicionEditor(s.definition) && s.code_js), [estrategias])   // en su orden, como en «Mis estrategias»
-  const delEditorB = delEditor.filter(s => coincide(buscarCopia, s.name)), deCodigoB = deCodigo.filter(s => coincide(buscarCopia, s.name))
-  const elegidaCopia = [...delEditorB, ...deCodigoB].find(s => String(s.id) === aCopiar) || delEditorB[0] || deCodigoB[0] || null
+  // V9.1060: un solo buscador. La elegida es la que se pulsó en la lista mientras su nombre siga escrito en la casilla; hasta
+  // entonces (o si se escribe otra cosa), «Copiar y editar» está desactivado.
+  const gruposCopia = [['De tarjetas', delEditor], ['De código', deCodigo]].filter(([, xs]) => xs.length).map(([titulo, estrategias]) => ({ titulo, estrategias }))
+  const elegidaCopia = [...delEditor, ...deCodigo].find(s => String(s.id) === String(aCopiar) && s.name === buscarCopia) || null
+  const sinCopia = !elegidaCopia && buscarCopia.trim() && ![...delEditor, ...deCodigo].some(s => coincide(buscarCopia, s.name))
   // Las plantillas disponibles (la desactivada no sale) y la elegida en el desplegable.
   const disponibles = PLANTILLAS.filter(p => !p.desactivada && p.definicion), plantilla = disponibles.find(p => p.id === plantillaId) || disponibles[0] || null
   // V9.1058: lo escrito en el buscador filtra las dos pestañas: las estrategias por nombre y por la frase de la regla; las pruebas por
@@ -167,6 +172,14 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
       style={{ ...S.boton, borderRadius: `${B.radioBoton}px ${B.radioBoton}px 0 0`, borderBottom: 'none', fontWeight: pestana === k ? 700 : 400,
         ...(pestana === k ? { background: B.tarjeta, color: B.titulo } : { background: 'transparent', color: B.secundario }) }}>{t}{n != null ? ` (${n})` : ''}</button>
   )
+  // V9.1060: el buscador de «Mi trabajo», en la cabecera de la primera columna de cada tabla (a la derecha de su título).
+  const conBuscador = (h) => (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <span>{h}</span>
+      <input type="search" aria-label="Buscar en Mi trabajo" placeholder="Buscar por nombre o por la regla…" value={buscar} onChange={e => setBuscar(e.target.value)} data-buscar="mi-trabajo"
+        style={{ ...campoSel, fontSize: 13, fontWeight: 400, padding: '4px 8px', flex: '1 1 200px', maxWidth: 300, minWidth: 0 }}/>
+    </span>
+  )
   return (
     <div style={S.pagina}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -199,15 +212,13 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
             <div style={{ marginTop: 'auto' }}><button style={S.boton} onClick={() => plantilla && abreEditor({ id: null, name: plantilla.definicion().nombre, definition: plantilla.definicion(), params: { ...plantilla.valores } })}>Usar esta plantilla</button></div>
           </div>
         </div>
-        <div data-tarjeta="copia" style={{ ...S.tarjeta, display: 'flex', flexDirection: 'column' }}>
-          <div style={S.cabeceraTarjeta}>Desde una de mis estrategias</div>
+        {/* V9.1060: sin «overflow: hidden», para que la lista del buscador no se corte en el borde de la tarjeta. */}
+        <div data-tarjeta="copia" style={{ ...S.tarjeta, overflow: 'visible', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ ...S.cabeceraTarjeta, borderRadius: `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0` }}>Desde una de mis estrategias</div>
           <div style={{ ...S.cuerpo, flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
             {delEditor.length || deCodigo.length ? (<>
-              <input type="search" aria-label="Buscar entre mis estrategias" placeholder="Buscar por nombre…" value={buscarCopia} onChange={e => setBuscarCopia(e.target.value)} data-buscar="copia" style={campoSel}/>
-              {elegidaCopia ? <select aria-label="Estrategia que copiar" value={String(elegidaCopia.id)} onChange={e => setACopiar(e.target.value)} style={campoSel}>
-                {delEditorB.length > 0 && <optgroup label="De tarjetas">{delEditorB.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}</optgroup>}
-                {deCodigoB.length > 0 && <optgroup label="De código">{deCodigoB.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}</optgroup>}
-              </select> : <div data-sin-copia style={S.secundario}>Ninguna estrategia con «{buscarCopia}».</div>}
+              <BuscadorEstrategia grupos={gruposCopia} texto={buscarCopia} onTexto={setBuscarCopia} elegida={aCopiar || null} onElige={s => setACopiar(String(s.id))} abiertoInicial={copiaAbiertaInicial}/>
+              {sinCopia && <div data-sin-copia style={S.secundario}>Ninguna estrategia con «{buscarCopia.trim()}».</div>}
               <div style={S.secundario}>Se abre una copia nueva. La original no cambia, ni sus pruebas.{elegidaCopia && !esDefinicionEditor(elegidaCopia.definition) ? ' Es de código: en la copia se cambian sus parámetros; el código se copia tal cual.' : ''}</div>
               <div style={{ marginTop: 'auto' }}><button style={elegidaCopia ? S.boton : S.botonDesactivado} disabled={!elegidaCopia} onClick={() => elegidaCopia && abreEditor(filaCopia(elegidaCopia))}>Copiar y editar</button></div>
             </>) : <div style={S.secundario}>Todavía no tienes estrategias. Empieza en blanco o desde una plantilla.</div>}
@@ -217,13 +228,9 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
 
       <div style={S.tituloSeccion}>Mi trabajo</div>
       <div style={{ ...S.subtituloSeccion }} data-que-es>{QUE_ES}</div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-        <div role="tablist" aria-label="Mi trabajo" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {pestanaBtn('estrategias', 'Mis estrategias', cuenta(buscadasE, filasE))}
-          {pestanaBtn('pruebas', 'Mis pruebas', cuenta(buscadasP, filasP))}
-        </div>
-        <input type="search" aria-label="Buscar en Mi trabajo" placeholder="Buscar por nombre o por la regla…" value={buscar} onChange={e => setBuscar(e.target.value)} data-buscar="mi-trabajo"
-          style={{ ...campoSel, marginLeft: 'auto', marginBottom: 6, width: 300, maxWidth: '100%' }}/>
+      <div role="tablist" aria-label="Mi trabajo" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {pestanaBtn('estrategias', 'Mis estrategias', cuenta(buscadasE, filasE))}
+        {pestanaBtn('pruebas', 'Mis pruebas', cuenta(buscadasP, filasP))}
       </div>
       <div style={{ ...S.tarjeta, borderTopLeftRadius: 0 }}>
         {datos.error && <div style={{ color: '#f2cc60', padding: '10px 16px' }}>{datos.error}</div>}
@@ -235,7 +242,7 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
           </div>
           <div style={{ overflowX: 'auto', maxHeight: 560, overflowY: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }} data-tabla="estrategias">
-              <thead><tr>{['Estrategia', 'Versión', 'Última prueba', 'Cómo le fue', 'Qué toca ahora'].map(h => <th key={h} style={cabecera}>{h}</th>)}</tr></thead>
+              <thead><tr>{['Estrategia', 'Versión', 'Última prueba', 'Cómo le fue', 'Qué toca ahora'].map((h, k) => <th key={h} style={{ ...cabecera, verticalAlign: 'middle' }}>{k ? h : conBuscador(h)}</th>)}</tr></thead>
               <tbody>
                 {visiblesE.map(f => (
                   <tr key={f.clave}>
@@ -261,7 +268,7 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
         </>) : (<>
           <div style={{ overflowX: 'auto', maxHeight: 560, overflowY: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }} data-tabla="pruebas">
-              <thead><tr>{['Prueba', 'Estrategias que incluye', 'Valores y periodos', 'Verificación de sesgos', 'Veredicto'].map(h => <th key={h} style={cabecera}>{h}</th>)}</tr></thead>
+              <thead><tr>{['Prueba', 'Estrategias que incluye', 'Valores y periodos', 'Verificación de sesgos', 'Veredicto'].map((h, k) => <th key={h} style={{ ...cabecera, verticalAlign: 'middle' }}>{k ? h : conBuscador(h)}</th>)}</tr></thead>
               <tbody>
                 {(buscadasP || []).map(f => (
                   <tr key={f.clave}>

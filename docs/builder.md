@@ -1028,3 +1028,34 @@ lo mismo que antes (comprobado con las 5 estrategias del editor, la batería, la
 - Las 5 estrategias del editor (AAPL y QQQ, diario y semanal, 2010–2015 y 2020–2021): intérprete, señales, cifras, laboratorio,
   calentamiento y exportar idénticos a V9.1058; ida y vuelta; montaje del editor, de «Señales en el gráfico» y del dibujo;
   comprobaciones comunes.
+
+## 26. Ajustes de pantalla: buscadores, franjas con su nombre a la izquierda y la columna de cifras (V9.1060)
+
+Solo colocación: ningún cálculo cambia (lib/ no se toca).
+
+- **Mi trabajo**: la casilla «Buscar por nombre o por la regla…» va en la fila de cabeceras de la tabla, a la derecha del título de
+  la primera columna («Estrategia» en «Mis estrategias», «Prueba» en «Mis pruebas»). Busca lo mismo que en V9.1058.
+- **Desde una de mis estrategias** (`components/BuscadorEstrategia.js`): un solo buscador, como el del catálogo de condiciones, en
+  lugar de la casilla + el desplegable. Se escribe y debajo salen las que coinciden por nombre (sin distinguir mayúsculas ni
+  acentos), agrupadas «De tarjetas» / «De código»; flechas, Enter y Escape (vuelve a la elegida), o clic. Con la casilla vacía (o con
+  el nombre de la elegida) y al pulsar en ella, salen todas. Al elegir una, su nombre queda escrito y se activa «Copiar y editar»;
+  hasta entonces, o si se escribe otra cosa, está desactivado; sin ninguna, «Ninguna estrategia con «…»». La tarjeta deja de cortar
+  lo que sobresale (la lista no se recorta en su borde).
+- **Señales en el gráfico · franjas**: los nombres («Supera el máximo de 20 velas · 266 velas»…) van en una columna fija de 250 px a
+  la izquierda del gráfico (en pantallas estrechas encoge hasta 120), uno por fila, con su color y a la altura de su franja; los
+  osciladores dejan el mismo hueco para seguir alineados con las velas. Para que la franja caiga justo en su fila, el gráfico se
+  crea con el alto de la zona de dibujo + el eje de fechas (28 px) y, si el eje mide otra cosa, se corrige al momento
+  (`paneSize`). Sin el logo de lightweight-charts (`attributionLogo: false`, tapaba las franjas): el enlace a TradingView que pide su
+  licencia va en la línea de debajo del gráfico.
+- **Comisiones pagadas**: solo el importe («30 × 0,36 € = 10,80 €»), sin el % del capital inicial.
+- **Columna de cifras** (tabla + «Cómo habría crecido 100»): empieza a la altura de la fila de controles (Valor / fechas / casillas);
+  la fila, los avisos y el gráfico ocupan el ancho restante. Si no caben las dos (menos de unos 1.040 px de ancho útil), la columna
+  baja debajo del gráfico.
+- Comprobado: montaje SWC (renderToString con estado) de «Mi trabajo» (las dos pestañas, la casilla en la cabecera, el mismo
+  filtrado con «TORTUGAS», «stop» y «v50» en los dos filtros), del buscador de copiar («v50» y «V50»: las 14 de código; «tortu» y
+  «TÓRTU»: Tortugas 20/10; «zzqq no existe»: el aviso y el botón desactivado; vacía y pulsada: las 88; elegida: activo) y de
+  «Señales en el gráfico»; con «Tortugas 20/10» en AAPL 2010–2015, las señales, las franjas (266, 30 y 627 velas) y las cifras
+  idénticas a V9.1059, la tabla igual salvo la fila de comisiones. En el navegador (los componentes compilados, sin la app): a
+  1440 px la columna de cifras empieza en la misma línea que los controles y nada se sale; a 1280, igual; a 1024 y 768 la columna
+  baja; cada franja (12 px) centrada en su etiqueta (18 px); teclado y ratón del buscador de copiar. Las 5 estrategias del editor
+  (AAPL y QQQ, diario y semanal) idénticas a V9.1059; ida y vuelta; comprobaciones comunes.
