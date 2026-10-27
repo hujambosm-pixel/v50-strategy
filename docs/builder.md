@@ -786,3 +786,51 @@ SIEMPRE de la regla de la pantalla (nunca con IA). Con errores: «Corrige lo que
 - Comprobado: las 4 estrategias del editor, cambiar y volver = lo guardado; ida y vuelta sin escribir nada; 4 casos semanales
   (AAPL, MSFT, QQQ) con las mismas compras (fecha y precio) y ventas que `backtestActivo`; gráficos con un caso en que la
   estrategia acaba exactamente donde la peor copia; comprobaciones comunes.
+
+## 20. Nuevo paso 1 con tres pestañas y cifras al momento (V9.1054)
+
+### Auditoría (solo lectura)
+
+- **Precios de 2010–2015**: la caché de la app (`precios_diarios`) tiene 329 valores; 206 tienen 2010–2015 completo. Los que no:
+  los que empezaron a cotizar después (TSLA desde 29/06/2010, META 2012, BTC-USD 17/09/2014, ETH-USD 2017…). GC=F está desde
+  2006. GLD NO está en la caché: no sale en la lista de valores de la pestaña (la lista son los valores con precios guardados);
+  se trae igual que cualquier otro con `node scripts/llenaCachePrecios.js --simbolo GLD --anios 30`, como IWM y DIA (§13).
+- **Las cifras de «Backtest de un valor»** salen de `lib/backtestActivo.js` (el núcleo: operaciones, comisiones, capital,
+  curvas) y de `calcMetrics` (lib/utils.js) en `pages/index.js`. Las dos son puras y funcionan en el navegador.
+
+### Cómo queda
+
+- El paso 1 tiene tres pestañas: **Tarjetas** (lo de antes, sin el panel de debajo), **Señales en el gráfico** y **Dibujo de la
+  regla** (el diagrama a todo el ancho). Con errores en la regla, las otras dos lo dicen («La regla tiene errores: corrígelos en
+  «Tarjetas»…»), la pestaña lleva ⚠ y no dibujan.
+- **Señales en el gráfico** (`components/BuilderSenales.js`, `lib/builder/ensayo.js`):
+  - Fila de arriba: valor; fechas «Ensayo · 2010–2015» (por defecto) u «Otras fechas»; las velas de la estrategia (solo se
+    muestran); una casilla por cada número de cada fila de las tarjetas (y de la orden en el máximo, los stops, el objetivo y la
+    salida por tiempo), escrita como la fila («Compro: Cierre > máximo de las [20] velas anteriores»). Si el valor tiene menos de
+    4 años antes de 2016, el ensayo es la primera mitad de su historia, con un aviso (BTC-USD: 17/09/2014 – 05/10/2020). Si las
+    fechas tocan 2016–2025, la nota «Estas fechas incluyen 2016–2025, los años que usa el paso 2 para la prueba contra el azar.»
+  - Las casillas son SOLO PARA PROBAR: se aplican a una copia (`aplicaPrueba`, con la misma regla que la casilla de las tarjetas:
+    un parámetro con nombre cambia su valor; si no, el número en su sitio). La cambiada sale en ámbar con «(guardado: X)». Solo si
+    algo es distinto de lo guardado salen «Volver a los guardados» y «Guardar estos valores en la estrategia» (regla de versiones
+    de siempre; después se sigue en esta pestaña con la estrategia guardada). Viven en el editor mientras está abierto; al salir y
+    volver a entrar, se empieza con los guardados.
+  - Gráfico a todo el ancho que dejan las cifras. Sobre el precio: las medias, el máximo y el mínimo de N velas en escalera
+    (`nuevoMaximo`, `nuevoMinimo`, `cercaMaximo`, con las mismas funciones que las condiciones) y las bandas de Bollinger. Los
+    osciladores, en paneles debajo, con el eje de la derecha del mismo ancho (72 px) para que queden alineados.
+  - Las franjas «Se cumple cada condición» van DENTRO del gráfico de precio (una serie de barras por condición, cada una en su
+    banda de altura): comparten exactamente su escala de tiempo, también al hacer zoom o moverse. Su nombre, encima, a la izquierda.
+  - A la derecha (como el boceto Paso1MetricasB): la línea «Compuesto: … Comisión: la de «Backtest de un valor».», la tabla «Tu
+    regla / Comprar y mantener [VALOR]» (CAGR · Max Drawdown · Win Rate · Factor de beneficio · Operaciones · Ganancia / pérdida
+    media · Tiempo invertido, en %), en gris con «Solo N operaciones: puede ser suerte.» si hay menos de 30, y «Cómo habría crecido
+    100 (en %, sin euros)». Nada se guarda.
+- **Las cifras = «Backtest de un valor»** (`cifrasRegla`): el mismo `backtestActivo` (con el intérprete del editor) sobre las velas
+  guardadas, 100 % del capital, 10.000 € (las cifras son en %) y la comisión de «Backtest de un valor» (la página se la pasa al
+  Builder); y la misma `calcMetrics` con los mismos argumentos. «Tu regla» es la columna Compuesta (CAGR compuesto y caída de la
+  curva compuesta). Los filtros del panel de «Backtest de un valor» no cuentan (no son de la estrategia). Con fechas que llegan a
+  hoy, la última vela puede diferir mientras el mercado está abierto (el servidor marca la vela en curso; aquí no hay ese dato).
+- Comprobado: «Retroceso líderes RSI2», «Copia editor 23» y «PRUEBA_BUILDER_1» sobre AAPL y QQQ, en 2010–2015 y 2020–2021, contra
+  el `pages/api/datos.js` real (con las mismas velas servidas como Yahoo) y las cifras calculadas como `pages/index.js`: las mismas
+  operaciones (fechas, precios, % y capital) y las 10 cifras idénticas al bit, con la comisión de 0,36 € y sin ella; las curvas
+  de «crecer 100» = las de su gráfico. Ensayo de AAPL y BTC-USD; casillas de las tres estrategias (probar cambia la copia; volver
+  = la guardada byte a byte); montaje de las tres pestañas; y en el navegador (página temporal con datos fijos): franjas y canales
+  dibujados, casilla resaltada, botones, recálculo y «Volver a los guardados», sin errores en la consola.

@@ -73,7 +73,7 @@ export const filaCopia = (s) => esDeCodigo(s) ? filaCopiaCodigo(s) : ({ id: null
 // «Código de la estrategia». onAbrirEstrategia(s, 'editor') las abre en el Editor clásico (la pestaña «Editor»). onBacktestValor:
 // el enlace «Backtest de un valor» (la pestaña donde se ejecutan y se ven en el gráfico). abrir ({ fila, n }): la página pide
 // abrir una estrategia (al pulsar su nombre en «Backtest de un valor»); cada n nuevo la abre.
-export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null, abrir = null }) {
+export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null }) {
   const [datos, setDatos] = useState(() => datosIniciales || { lotes: [], pruebas: [], cargando: !datosIniciales, error: null })
   const [filasE, setFilasE] = useState(listasIniciales?.estrategias || null)
   const [filasP, setFilasP] = useState(listasIniciales?.pruebas || null)
@@ -128,8 +128,11 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   const cargaVelas = useCallback(async (sym) => { const r = await fetch(`${getSupaUrl()}/rest/v1/rpc/leer_velas?p_simbolo=${encodeURIComponent(sym)}&p_desde=1990-01-01`, { headers: getSupaH() }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return deColumnasBd(await r.json()) }, [])
   useEffect(() => { if (abrir?.fila) { setPrueba(null); setGuia(false); setEditor({ fila: abrir.fila, n: abrir.n }) } }, [abrir?.n])
   // Guardada en el paso 1: la página recarga sus estrategias y se pasa al paso 2 con ella (la versión nueva, si se creó).
+  // V9.1054: «Guardar estos valores en la estrategia» (info.quedarse) sigue en el paso 1, en «Señales en el gráfico», con la estrategia
+  // guardada (la versión nueva, si se creó); así las casillas vuelven a enseñar los valores guardados.
   const alGuardar = (fila, info = {}) => {
     if (!info.sinCambios) { setGuardadas(g => [...g.filter(x => String(x.id) !== String(fila.id)), fila]); onGuardada?.(fila) }
+    if (info.quedarse) { setEditor({ fila, n: Date.now(), pestana: 'senales' }); return }
     setEditor(null); setPrueba({ estrategiaId: fila.id, n: Date.now() })
   }
 
@@ -142,7 +145,7 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   if (editor && esDeCodigo(editor.fila)) return <BuilderCodigo key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
     onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardarCodigo}/>
   if (editor) return <BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} lotes={datos.lotes} apiFetch={apiFetch}
-    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas}/>
+    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'}/>
   if (prueba) return <BuilderPrueba key={prueba.n} estrategias={estrategiasEf} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
     onVolver={() => { setPrueba(null); recarga() }} onNuevaPrueba={() => setPrueba({ n: Date.now() })} onCambio={recarga}/>
   const pestanaBtn = (k, t, n) => (
