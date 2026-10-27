@@ -12,7 +12,7 @@
 //   cargaSimbolos() → [símbolos] o [{ simbolo, nombre }] (V9.1058: el selector busca por ticker y por nombre); cargaVelas(simbolo) →
 //   velas diarias; comisiones: las de «Backtest de un valor».
 //   Para las pruebas de montaje: velasIniciales ({ simbolo: velas }), simbolosIniciales, simboloInicial, fechasInicial
-//   ({ desde, hasta }: «Otras fechas»), cifrasIniciales.
+//   ({ desde, hasta }: «Otras fechas»), cifrasIniciales, verZonaInicial (V9.1061: la zona gris del filtro, mostrada u oculta).
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import { calculaSenales } from '../lib/builder/senales'
@@ -36,18 +36,38 @@ export const LINEA_CIFRAS = (sym) => `Compuesto: cada operación usa todo el din
 const signo = (v, d = 2) => v == null || !Number.isFinite(v) ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${fmt(Math.abs(v), d)} %`
 
 // ── El gráfico de precio con las franjas dentro, y los osciladores (solo en el navegador) ──
-// V9.1060: los nombres de las franjas van en una columna fija a la izquierda del gráfico (fuera del dibujo), una por fila y alineada
-// con su franja; los osciladores dejan el mismo hueco a la izquierda para seguir alineados con las velas. H es el alto de la zona de
-// dibujo (sin el eje de fechas): el gráfico se crea con H + el eje y, si el eje mide otra cosa, se corrige al momento, así que cada
-// franja cae a la misma altura que su etiqueta. Sin el logo de lightweight-charts (tapaba las franjas): el enlace a TradingView va
-// debajo del gráfico.
-const ALTO_PRECIO = 360, ALTO_FRANJA = 18, HUECO = 8, ANCHO_EJE = 72, EJE_TIEMPO = 28, ANCHO_ETIQUETAS = 250
-export const altoGrafico = (nFranjas) => ALTO_PRECIO + (nFranjas ? HUECO + nFranjas * ALTO_FRANJA : 0)
-function Graficos({ r }) {
-  const precio = useRef(null), osc = useRef([])
-  const franjas = r.franjas, H = altoGrafico(franjas.length)
-  // La columna de las etiquetas (250 px; en pantallas estrechas encoge hasta 120) y su hueco, igual, delante de cada oscilador.
-  const columna = { flex: `0 1 ${ANCHO_ETIQUETAS}px`, minWidth: 120 }
+// V9.1061: el gráfico usa todo el ancho de su columna y el alto libre de la pantalla (como mínimo, MIN_PRECIO para las velas). El
+// nombre de cada franja va en una línea fina de texto justo ENCIMA de su franja, alineado a la izquierda (ya no en una columna
+// aparte): las velas, las franjas y los osciladores empiezan en el mismo borde izquierdo. H es el alto de la zona de dibujo (sin el
+// eje de fechas): el gráfico se crea con H + el eje y, si el eje mide otra cosa, se corrige al momento, así que cada franja cae a la
+// altura prevista. Sin el logo de lightweight-charts: el enlace a TradingView va debajo del gráfico. La zona gris del filtro, muy
+// suave y DETRÁS de las velas (se crea antes que ellas); verZona la enseña u oculta sin rehacer el gráfico.
+const ALTO_PRECIO = 360, MIN_PRECIO = 300, ETIQ = 14, BANDA = 10, FILA = ETIQ + BANDA + 2, HUECO = 8, ANCHO_EJE = 72, EJE_TIEMPO = 28, ALTO_OSC = 130
+export const altoGrafico = (nFranjas, precio = ALTO_PRECIO) => precio + (nFranjas ? HUECO + nFranjas * FILA : 0)
+export const COLOR_ZONA = 'rgba(139,155,173,0.045)'
+// El alto que queda libre para las velas: lo que se ve del contenedor que hace scroll (o de la ventana), menos lo que hay encima del
+// gráfico y lo que va debajo (las franjas, el eje, los osciladores y la línea de debajo).
+function altoLibre(el, abajo) {
+  let p = el.parentElement
+  while (p && !/(auto|scroll)/.test(getComputedStyle(p).overflowY)) p = p.parentElement
+  const arriba = p ? el.getBoundingClientRect().top - p.getBoundingClientRect().top + p.scrollTop : el.getBoundingClientRect().top + window.scrollY
+  const visto = p ? p.clientHeight : window.innerHeight
+  return Math.max(MIN_PRECIO, Math.floor(visto - arriba - abajo))
+}
+function Graficos({ r, verZona = true }) {
+  const caja = useRef(null), precio = useRef(null), osc = useRef([]), zonaSerie = useRef(null), verZonaR = useRef(verZona)
+  const franjas = r.franjas
+  const [altoPrecio, setAltoPrecio] = useState(ALTO_PRECIO)
+  const H = altoGrafico(franjas.length, altoPrecio)
+  useEffect(() => {
+    const abajo = (franjas.length ? HUECO + franjas.length * FILA : 0) + EJE_TIEMPO + r.osciladores.length * (ALTO_OSC + 26) + 44
+    let h = null
+    const mide = () => { if (!caja.current) return; const a = altoLibre(caja.current, abajo); setAltoPrecio(x => Math.abs(x - a) < 4 ? x : a) }
+    const tarde = () => { clearTimeout(h); h = setTimeout(mide, 150) }
+    mide(); window.addEventListener('resize', tarde)
+    return () => { clearTimeout(h); window.removeEventListener('resize', tarde) }
+  }, [franjas.length, r.osciladores.length])
+  useEffect(() => { verZonaR.current = verZona; zonaSerie.current?.applyOptions({ visible: verZona }) }, [verZona])
   useEffect(() => {
     if (!precio.current || !r?.velas?.length) return
     let vivo = true, charts = []
@@ -59,16 +79,18 @@ function Graficos({ r }) {
       const ch = createChart(precio.current, opciones(H + EJE_TIEMPO)); charts.push(ch)
       const altoDibujo = ch.paneSize?.().height
       if (altoDibujo > 0 && altoDibujo !== H) ch.resize(precio.current.clientWidth, H + EJE_TIEMPO + H - altoDibujo)
-      const abajo = franjas.length ? (H - ALTO_PRECIO + 6) / H : 0.05
+      const abajo = franjas.length ? (H - altoPrecio + 6) / H : 0.05
+      // La zona gris donde el filtro no deja comprar: solo en la parte del precio, antes que las velas (queda detrás).
+      zonaSerie.current = null
+      if (r.bloqueado.some(Boolean) && franjas.some(f => f.tarjeta === 'filtro')) {
+        const zona = ch.addHistogramSeries({ priceScaleId: 'zona', color: COLOR_ZONA, priceLineVisible: false, lastValueVisible: false, visible: verZonaR.current })
+        ch.priceScale('zona').applyOptions({ scaleMargins: { top: 0, bottom: abajo - 0.01 }, visible: false })
+        zona.setData(r.velas.map((v, k) => ({ time: v.date, value: r.bloqueado[k] ? 1 : 0 })))
+        zonaSerie.current = zona
+      }
       const velas = ch.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' })
       ch.priceScale('right').applyOptions({ scaleMargins: { top: 0.05, bottom: abajo } })
       velas.setData(r.velas.map(v => ({ time: v.date, open: v.open, high: v.high, low: v.low, close: v.close })))
-      // La zona gris donde el filtro no deja comprar: solo en la parte del precio.
-      if (r.bloqueado.some(Boolean) && franjas.some(f => f.tarjeta === 'filtro')) {
-        const zona = ch.addHistogramSeries({ priceScaleId: 'zona', color: 'rgba(139,155,173,0.16)', priceLineVisible: false, lastValueVisible: false })
-        ch.priceScale('zona').applyOptions({ scaleMargins: { top: 0, bottom: abajo - 0.01 }, visible: false })
-        zona.setData(r.velas.map((v, k) => ({ time: v.date, value: r.bloqueado[k] ? 1 : 0 })))
-      }
       const linea = (l, ancho = 2) => {
         const serie = () => ch.addLineSeries({ color: l.color, lineWidth: ancho, lineStyle: l.discontinua ? LineStyle.Dashed : LineStyle.Solid, lineType: l.escalera ? LineType.WithSteps : LineType.Simple, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
         // V9.1057: con tramos (el stop activo), una línea por tramo: una serie une sus puntos por encima de los huecos.
@@ -77,22 +99,29 @@ function Graficos({ r }) {
       }
       for (const m of r.medias) linea(m)
       for (const c of r.canales || []) linea(c)
-      // Las franjas: una serie de barras por condición, cada una en su banda de altura, en la MISMA escala de tiempo que las velas.
+      // Las franjas: una serie de barras por condición, cada una en su banda (debajo de la línea de su nombre), en la MISMA escala de
+      // tiempo que las velas.
       franjas.forEach((f, i) => {
-        const id = `franja${i}`, y0 = ALTO_PRECIO + HUECO + i * ALTO_FRANJA
+        const id = `franja${i}`, y0 = altoPrecio + HUECO + i * FILA + ETIQ
         const s = ch.addHistogramSeries({ priceScaleId: id, priceLineVisible: false, lastValueVisible: false, base: 0 })
-        ch.priceScale(id).applyOptions({ scaleMargins: { top: (y0 + 3) / H, bottom: 1 - (y0 + ALTO_FRANJA - 3) / H }, visible: false })
+        ch.priceScale(id).applyOptions({ scaleMargins: { top: y0 / H, bottom: 1 - (y0 + BANDA) / H }, visible: false })
         const color = f.color || (f.tarjeta === 'filtro' ? MORADO : AZUL)   // (las de venta y las piezas traen el suyo)
         s.setData(r.velas.map((v, k) => ({ time: v.date, value: 1, color: f.cumple[k] === true ? color : 'rgba(139,155,173,0.10)' })))
       })
-      // V9.1059: y un punto en la vela de cada swing (los máximos arriba, los mínimos abajo).
-      const marcas = [...r.compras.map(c => ({ time: c.date, position: 'belowBar', color: VERDE, shape: 'arrowUp', text: '' })), ...r.ventas.map(c => ({ time: c.date, position: 'aboveBar', color: NARANJA, shape: 'arrowDown', text: '' })),
-        ...(r.puntosSwing || []).map(p => ({ time: p.date, position: p.lado === 'max' ? 'aboveBar' : 'belowBar', color: p.lado === 'max' ? VERDE : NARANJA, shape: 'circle', size: 0.6, text: '' }))].sort((a, b) => a.time.localeCompare(b.time))
+      const marcas = [...r.compras.map(c => ({ time: c.date, position: 'belowBar', color: VERDE, shape: 'arrowUp', text: '' })), ...r.ventas.map(c => ({ time: c.date, position: 'aboveBar', color: NARANJA, shape: 'arrowDown', text: '' }))].sort((a, b) => a.time.localeCompare(b.time))
       velas.setMarkers(marcas)
+      // V9.1059: y un punto en la vela de cada swing (los máximos arriba, los mínimos abajo). V9.1061: un puntito de 2 px un poco por
+      // encima del máximo (o por debajo del mínimo), para no tapar la vela (las marcas de lightweight-charts no bajan de un tamaño).
+      for (const lado of ['max', 'min']) {
+        const ps = (r.puntosSwing || []).filter(p => p.lado === lado).sort((a, b) => a.date.localeCompare(b.date))
+        if (!ps.length) continue
+        const s = ch.addLineSeries({ color: lado === 'max' ? VERDE : NARANJA, lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+        s.setData(ps.map(p => ({ time: p.date, value: p.precio * (lado === 'max' ? 1.006 : 0.994) })))
+      }
       ch.timeScale().fitContent()
       r.osciladores.forEach((o, j) => {
         const el = osc.current[j]; if (!el) return
-        const c2 = createChart(el, opciones(130)); charts.push(c2)
+        const c2 = createChart(el, opciones(ALTO_OSC)); charts.push(c2)
         o.lineas.forEach((l, k) => {
           const s = c2.addLineSeries({ color: k ? NARANJA : AZUL, lineWidth: 2, priceLineVisible: false, lastValueVisible: false })
           s.setData(r.velas.map((v, i) => l.valores[i] != null ? { time: v.date, value: l.valores[i] } : { time: v.date }))
@@ -107,30 +136,25 @@ function Graficos({ r }) {
       ro?.observe(precio.current)
       charts.ro = ro
     })
-    return () => { vivo = false; charts.ro?.disconnect(); charts.forEach(c => c.remove()) }
-  }, [r])
+    return () => { vivo = false; zonaSerie.current = null; charts.ro?.disconnect(); charts.forEach(c => c.remove()) }
+  }, [r, H])
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-        {franjas.length > 0 && <div data-etiquetas-franjas style={{ ...columna, position: 'relative', height: H }}>
-          {franjas.map((f, i) => (
-            <div key={i} data-franja={f.nombre} title={`${f.nombre} · ${f.cumple.filter(x => x === true).length} velas${f.frase && f.frase !== f.nombre ? `\n${f.frase}` : ''}`}
-              style={{ position: 'absolute', left: 0, right: 8, top: ALTO_PRECIO + HUECO + i * ALTO_FRANJA, height: ALTO_FRANJA, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4,
-                fontSize: 12, lineHeight: `${ALTO_FRANJA}px`, color: f.color || (f.tarjeta === 'filtro' ? MORADO : '#8db8ff'), whiteSpace: 'nowrap' }}>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{f.nombre}</span>
-              <span style={{ flexShrink: 0, color: B.secundario }}>· {f.cumple.filter(x => x === true).length} velas</span>
-            </div>
-          ))}
-        </div>}
-        <div ref={precio} data-grafico="precio" data-franjas={franjas.length} style={{ flex: '1 1 0%', minWidth: 0, minHeight: H + EJE_TIEMPO }}/>
+    <div ref={caja}>
+      <div style={{ position: 'relative' }}>
+        <div ref={precio} data-grafico="precio" data-franjas={franjas.length} data-alto-precio={altoPrecio} style={{ width: '100%', minHeight: H + EJE_TIEMPO }}/>
+        {franjas.map((f, i) => (
+          <div key={i} data-franja={f.nombre} title={`${f.nombre} · ${f.cumple.filter(x => x === true).length} velas${f.frase && f.frase !== f.nombre ? `\n${f.frase}` : ''}`}
+            style={{ position: 'absolute', left: 2, top: altoPrecio + HUECO + i * FILA, height: ETIQ, maxWidth: `calc(100% - ${ANCHO_EJE + 8}px)`, display: 'flex', alignItems: 'center', gap: 4, pointerEvents: 'none', zIndex: 3,
+              fontSize: 11, lineHeight: `${ETIQ}px`, color: f.color || (f.tarjeta === 'filtro' ? MORADO : '#8db8ff'), background: 'rgba(15,20,25,0.85)', padding: '0 4px', borderRadius: 3, whiteSpace: 'nowrap', boxSizing: 'border-box' }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{f.nombre}</span>
+            <span style={{ flexShrink: 0, color: B.secundario }}>· {f.cumple.filter(x => x === true).length} velas</span>
+          </div>
+        ))}
       </div>
       {r.osciladores.map((o, j) => (
-        <div key={j} data-oscilador={o.nombre} style={{ marginTop: 8, display: 'flex', alignItems: 'flex-start' }}>
-          {franjas.length > 0 && <div style={columna}/>}
-          <div style={{ flex: '1 1 0%', minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: B.secundario }}>{o.nombre}{o.nivel != null ? ` · nivel ${aTexto(o.nivel)}` : ''}{o.lineas.length > 1 ? ' · MACD en azul, señal en naranja' : ''}</div>
-            <div ref={el => { osc.current[j] = el }} style={{ width: '100%', minHeight: 130 }}/>
-          </div>
+        <div key={j} data-oscilador={o.nombre} style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 12, color: B.secundario }}>{o.nombre}{o.nivel != null ? ` · nivel ${aTexto(o.nivel)}` : ''}{o.lineas.length > 1 ? ' · MACD en azul, señal en naranja' : ''}</div>
+          <div ref={el => { osc.current[j] = el }} style={{ width: '100%', minHeight: ALTO_OSC }}/>
         </div>
       ))}
     </div>
@@ -213,7 +237,7 @@ function Casilla({ valor, guardado, etiqueta, onCambia }) {
 }
 
 export default function BuilderSenales({ def, valores, guardado = null, intervalo = 'diario', error = null, cambios = {}, onCambios = () => {}, onGuardarValores = null, guardando = false, msgGuardar = null,
-  cargaSimbolos = null, cargaVelas = null, comisiones = null, velasIniciales = null, simbolosIniciales = null, simboloInicial = 'AAPL', fechasInicial = null, cifrasIniciales = null }) {
+  cargaSimbolos = null, cargaVelas = null, comisiones = null, velasIniciales = null, simbolosIniciales = null, simboloInicial = 'AAPL', fechasInicial = null, cifrasIniciales = null, verZonaInicial = true }) {
   const [simbolos, setSimbolos] = useState(simbolosIniciales || [simboloInicial])
   const valoresLista = useMemo(() => simbolos.map(s => typeof s === 'string' ? { simbolo: s, nombre: '' } : s), [simbolos])
   const [simbolo, setSimbolo] = useState(simboloInicial)
@@ -245,6 +269,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   // Las señales y las cifras, 250 ms después del último cambio.
   const [res, setRes] = useState(null)
   const [cifras, setCifras] = useState(cifrasIniciales)
+  const [verZona, setVerZona] = useState(verZonaInicial)   // V9.1061: el interruptor de la zona gris del filtro (en la leyenda)
   const [fCifras, setFCifras] = useState(null)
   const calcula = () => error || errPrueba.length || !vs.length ? null
     : calculaSenales({ def: prueba.def, valores: prueba.valores, velas: vs, referencias: ticker ? { [ticker]: velas[ticker] || [] } : {}, desde, hasta, intervalo })
@@ -324,13 +349,17 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
             {r.medias.map(m => <span key={m.nombre} style={{ color: m.color }}>{m.discontinua ? '— —' : '—'} {m.nombre}</span>)}
             {(r.canales || []).map(m => <span key={m.nombre} data-leyenda-canal={m.nombre} style={{ color: m.color }}>{m.discontinua ? '— —' : '—'} {m.nombre}</span>)}
             {(r.puntosSwing || []).length > 0 && <span data-leyenda-swings>● swing (la línea empieza al confirmarse)<Ayuda texto={NOTA_LINEA_SWING} etiqueta="Swings"/></span>}
-            {r.franjas.some(f => f.tarjeta === 'filtro') && <span><span style={{ display: 'inline-block', width: 14, height: 10, background: 'rgba(139,155,173,0.35)', marginRight: 4 }}/>filtro: no opero</span>}
+            {r.franjas.some(f => f.tarjeta === 'filtro') && (r.bloqueado.some(Boolean)
+              ? <label data-interruptor-zona title="Enseña u oculta la zona gris donde el filtro no deja comprar (la franja del filtro sigue igual)" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                <input type="checkbox" aria-label="Enseñar la zona gris donde el filtro no deja comprar" checked={verZona} onChange={e => setVerZona(e.target.checked)} style={{ margin: 0, cursor: 'pointer' }}/>
+                <span style={{ display: 'inline-block', width: 14, height: 10, background: 'rgba(139,155,173,0.35)' }}/>filtro: no opero</label>
+              : <span><span style={{ display: 'inline-block', width: 14, height: 10, background: 'rgba(139,155,173,0.35)', marginRight: 4 }}/>filtro: no opero</span>)}
             <Ayuda texto={AYUDA} etiqueta="Señales en el gráfico"/>
             <strong data-cuenta style={{ marginLeft: 'auto' }}>En este periodo: {r.compras.length} {r.compras.length === 1 ? 'compra' : 'compras'} · {r.ventas.length} {r.ventas.length === 1 ? 'venta' : 'ventas'}</strong>
           </div>
           {r.avisos.map((a, k) => <div key={k} data-aviso-senales style={{ color: AMARILLO, fontSize: 13 }}>{a}</div>)}
-          <Graficos r={r}/>
-          <div style={{ ...S.apagado, marginTop: 4 }}>De {fechaCorta(r.velas[0].date)} a {fechaCorta(r.velas[r.velas.length - 1].date)} · {r.velas.length} velas · {simbolo}{r.franjas.length ? ' · debajo de las velas, una franja por condición y por pieza (pintado = se cumple), con su nombre a la izquierda' : ''} · gráfico: <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer" style={{ color: B.apagado }}>TradingView Lightweight Charts™</a></div>
+          <Graficos r={r} verZona={verZona}/>
+          <div style={{ ...S.apagado, marginTop: 4 }}>De {fechaCorta(r.velas[0].date)} a {fechaCorta(r.velas[r.velas.length - 1].date)} · {r.velas.length} velas · {simbolo}{r.franjas.length ? ' · debajo de las velas, una franja por condición y por pieza (pintado = se cumple), con su nombre encima' : ''} · gráfico: <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer" style={{ color: B.apagado }}>TradingView Lightweight Charts™</a></div>
         </section>}
       </div>
       {r && !errPrueba.length && <aside data-columna-cifras style={{ flex: '1 1 320px', maxWidth: 400, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>

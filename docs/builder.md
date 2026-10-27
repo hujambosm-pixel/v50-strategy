@@ -1059,3 +1059,34 @@ Solo colocación: ningún cálculo cambia (lib/ no se toca).
   1440 px la columna de cifras empieza en la misma línea que los controles y nada se sale; a 1280, igual; a 1024 y 768 la columna
   baja; cada franja (12 px) centrada en su etiqueta (18 px); teclado y ratón del buscador de copiar. Las 5 estrategias del editor
   (AAPL y QQQ, diario y semanal) idénticas a V9.1059; ida y vuelta; comprobaciones comunes.
+
+## 27. Señales en el gráfico más grande y Dibujo de la regla que cabe en pantalla (V9.1061)
+
+Solo pantalla: ningún cálculo cambia (lib/ no se toca; las señales, las flechas, las franjas y las cifras, idénticas a V9.1060).
+
+- **Gráfico**: usa todo el ancho de su columna (a la izquierda de la de cifras) y el alto que queda libre en la pantalla: el
+  contenedor que hace scroll menos lo que hay encima del gráfico y lo que va debajo (franjas, eje, osciladores y la línea de
+  debajo); como mínimo, 300 px de velas. Se vuelve a medir al cambiar el tamaño de la ventana.
+- **Nombres de las franjas**: cada uno en una línea fina de texto (11 px) justo ENCIMA de su franja, alineado a la izquierda y con su
+  color; ya no en una columna aparte (V9.1060): las velas, las franjas y los osciladores empiezan en el mismo borde izquierdo y en la
+  misma escala de tiempo. Cada fila: 14 px de nombre + 10 px de franja + 2 px de aire.
+- **Zona gris del filtro**: mucho más suave (`rgba(139,155,173,0.045)`) y DETRÁS de las velas (se crea antes que ellas). En la leyenda,
+  una casilla «filtro: no opero» la enseña u oculta sin rehacer el gráfico (por defecto, enseñada). La franja del filtro, igual.
+- **Puntos de swing**: puntitos de 2 px un poco por encima del máximo (o por debajo del mínimo) de su vela, en una serie de puntos sin
+  línea; las marcas de lightweight-charts no bajan de un tamaño mínimo y tapaban las velas.
+- **Dibujo de la regla** (`colocaDibujo`, pura): cada rombo, a la medida de su texto (la línea a dy del centro tiene sitio para
+  W · (1 − 2(|dy| + 7) / H); se prueban varios altos) y el título partido en líneas («¿Supera el último máximo de swing / (2/2)
+  confirmado?» ya no se sale); cajas y óvalos, a lo ancho de su texto. Se mide el ancho de la tarjeta y se prueba: una fila; dos
+  filas partidas antes de «Compro» (la compra arriba; comprar, tener la acción, vender y los stops abajo) o antes de «Tengo la
+  acción»; menos hueco entre formas; textos más estrechos (40, 32, 26 y 22 letras). Entre las dos filas, una flecha más gruesa que
+  baja por la derecha y entra en la primera forma de abajo; la vuelta discontinua al principio va por debajo y sube por el borde
+  izquierdo. Si nada cabe, se encoge hasta el 80 % y, más estrecho, hace scroll.
+- Comprobado: montaje SWC (renderToString con estado) de «Señales en el gráfico» con «Tortugas 20/10» y «Swings 2/2» en AAPL
+  2010–2015 (señales, cifras, compras y ventas idénticas a V9.1060; los nombres encima de su franja; la casilla de la zona, marcada
+  por defecto y desmarcada con `verZonaInicial`) y del dibujo de las 6 estrategias del editor a 1.350 y 930 px de tarjeta (nunca más
+  ancho; cada línea dentro de su forma). En el navegador (los componentes compilados, sin la app): a 1440 y a 1024 px, sin
+  desplazamiento horizontal; el gráfico llega al pie de la pantalla (y a 300 px de velas en pantallas bajas); cada franja, pintada
+  en los 10 px de debajo de su nombre; con zoom (7 px por vela), 564 de 564 (Swings 2/2) y 363 de 363 (Tortugas) marcas de franja
+  en la x de su vela, del color que toca; la casilla quita y pone la zona sin rehacer el gráfico; el dibujo de Swings 2/2 (1.330 ×
+  634 px a 1440) y el de Tortugas, con TODO el texto dentro de su rombo o su caja (medido con getBBox), también a 1024. Las 6
+  estrategias del editor (AAPL y QQQ, diario y semanal) idénticas a V9.1060; ida y vuelta; comprobaciones comunes.

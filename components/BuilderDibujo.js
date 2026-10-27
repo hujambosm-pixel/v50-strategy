@@ -2,8 +2,10 @@
 // de izquierda a derecha, dibujado SIEMPRE a partir de la regla de la pantalla (las mismas lecturas de las tarjetas,
 // lib/builder/tarjetas.js; nunca con IA). Cada vela, al cierre → 1 · FILTRO (si hay) → 2 · COMPRO SI → [¿Llega al máximo de la
 // señal?] → Compro → Tengo la acción → 3 · VENDO SI → Vendo. Ramas «No» hacia abajo; la vuelta al principio, discontinua.
-// En cada rombo, como mucho 3 condiciones; si hay más, «y N más», que se despliega al pulsarlo. En pantallas estrechas, scroll.
-import { useState } from 'react'
+// En cada rombo, como mucho 3 condiciones; si hay más, «y N más», que se despliega al pulsarlo. V9.1061: se adapta al ancho de la
+// tarjeta: cada rombo y cada caja, a la medida de su texto (nada se sale); si no cabe en una fila, en dos (la compra arriba y lo que
+// pasa con la acción abajo, unidas por una flecha); y si tampoco, se encoge un poco o hace scroll.
+import { useState, useEffect, useRef } from 'react'
 import { B } from '../lib/builder/estilo'
 import { leeFiltro, leeCompra, leeVenta, leeOrden, leeProteccion, fraseFila, fraseStopTarjeta, nombreQuien, AJUSTES, leeModoStops } from '../lib/builder/tarjetas'
 
@@ -47,71 +49,154 @@ function parte(texto, n) {
   return out
 }
 
-export default function BuilderDibujo({ def, valores, error = null, expandidosInicial = null }) {
-  const [expandidos, setExpandidos] = useState(() => new Set(expandidosInicial || []))
-  if (error) return <div data-dibujo="error" style={{ color: '#ff8b8b', padding: '12px 4px' }}>{error}</div>
-  const c = contenidoDibujo(def, valores)
-  const alterna = (k) => setExpandidos(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
-  // ── Las piezas, de izquierda a derecha ──
-  const Y0 = 150, HUECO = 56
+// V9.1061: lo que ocupa un texto a LETRA px (una estimación por letra, un poco por arriba, para que nada se salga de su forma).
+export function anchoTexto(t, tam = LETRA, negrita = false) {
+  let w = 0
+  for (const ch of String(t)) w += /[il.,:;'|!·]/.test(ch) ? 0.3 : /[fjtrI()[\]/ ]/.test(ch) ? 0.38 : /[mwMW]/.test(ch) ? 0.9 : /[A-ZÁÉÍÓÚÑ¿?%=>+]/.test(ch) ? 0.7 : /[0-9]/.test(ch) ? 0.62 : 0.58
+  return w * tam * (negrita ? 1.08 : 1)
+}
+// El tamaño de un rombo para que TODAS sus líneas queden dentro: la línea a dy del centro tiene sitio para W · (1 − 2(|dy| + e) / H)
+// (e: medio alto de letra). Se prueba con varios altos y se queda el que menos ocupa (W + peso · H: con peso alto, rombos más planos).
+const MARGEN_ROMBO = 10, MEDIA_LETRA = 7
+export function tamanoRombo(anchos, peso = 0.5) {
+  const n = anchos.length, alcance = ((n - 1) / 2) * LINEA + MEDIA_LETRA
+  let mejor = null
+  for (let H = Math.max(110, Math.ceil(2 * alcance + 36)); H <= 640; H += 10) {
+    const W = Math.max(170, ...anchos.map((w, k) => (w + 2 * MARGEN_ROMBO) / (1 - 2 * (Math.abs((k - (n - 1) / 2) * LINEA) + MEDIA_LETRA) / H)))
+    if (!mejor || W + peso * H < mejor.ancho + peso * mejor.alto) mejor = { ancho: Math.ceil(W), alto: H }
+  }
+  return mejor
+}
+
+// La colocación (pura): los nodos, en una fila o en dos (la compra arriba; lo que pasa con la acción abajo), con los textos partidos
+// para que quepan en anchoDisp. Prueba, en este orden: una fila; partida antes de «Compro»; partida antes de «Tengo la acción»; y lo
+// mismo con menos hueco entre formas y con los textos más estrechos. Si nada cabe, la más estrecha (y el SVG se encoge un poco o hace
+// scroll).
+const MARGEN = 30
+export function colocaDibujo(c, { expandidos = new Set(), anchoDisp = 1200 } = {}) {
+  const intentos = []
+  for (const ancho of [40, 32, 26, 22]) for (const peso of [1.5, 0.5]) for (const hueco of [56, 36]) for (const corte of ancho === 40 ? [null, 'compro', 'dentro'] : ['compro', 'dentro']) intentos.push({ ancho, peso, hueco, corte })
+  let elegido = null
+  for (const it of intentos) {
+    const d = construye(c, expandidos, it.ancho, it.corte, it.hueco, it.peso)
+    if (d.ancho <= anchoDisp) { elegido = d; break }
+    if (!elegido || d.ancho < elegido.ancho) elegido = d
+  }
+  return elegido
+}
+const CAJA_NO = 44
+function construye(c, expandidos, anchoLinea, corte, HUECO, peso) {
   const nodos = []
+  const maxLineas = anchoLinea >= 40 ? 2 : 3
   const rombo = (clave, d, color) => {
     if (!d) return
     const visibles = expandidos.has(clave) ? d.lineas : d.lineas.slice(0, MAX), mas = d.lineas.length - visibles.length
-    // Cada condición, en una o dos líneas (si no cabe, «…» y el texto entero al pasar el ratón).
-    const enLineas = (x) => { const ls = parte(x.texto, 40), dos = ls.slice(0, 2); if (ls.length > 2) dos[1] = corta(dos[1] + ' ' + ls.slice(2).join(' '), 40); return dos.map((t, k) => ({ ...x, texto: t, completo: x.texto, sigue: k > 0 })) }
+    // Cada condición, en líneas de como mucho anchoLinea letras (si no cabe, «…» y el texto entero al pasar el ratón).
+    const enLineas = (x) => { const ls = parte(x.texto, anchoLinea), pocas = ls.slice(0, maxLineas); if (ls.length > maxLineas) pocas[maxLineas - 1] = corta(pocas[maxLineas - 1] + ' ' + ls.slice(maxLineas).join(' '), anchoLinea); return pocas.map((t, k) => ({ ...x, texto: t, completo: x.texto, sigue: k > 0 })) }
     const filas = [...visibles.flatMap(enLineas), ...(mas > 0 ? [{ texto: `y ${mas} más`, mas: true }] : []), ...(expandidos.has(clave) && d.lineas.length > MAX ? [{ texto: 'ver menos', menos: true }] : []), ...(d.proteccion || []).flatMap(enLineas)]
-    const ancho = 340, alto = Math.max(130, 76 + (filas.length + (d.modo ? 1 : 0)) * LINEA * 1.4)
-    nodos.push({ clave, tipo: 'rombo', color, ancho, alto, d, filas })
+    const cab = [...parte(d.titulo, Math.max(20, anchoLinea - 6)), ...(d.modo ? [`(${d.modo})`] : [])]
+    const t = tamanoRombo([...cab.map(l => anchoTexto(l, LETRA, true)), ...filas.map(f => anchoTexto(f.texto, LETRA - 0.5))], peso)
+    nodos.push({ clave, tipo: 'rombo', color, ...t, d, cab, filas })
   }
-  nodos.push({ clave: 'inicio', tipo: 'ovalo', ancho: 150, alto: 60, texto: ['Cada vela,', 'al cierre'], color: GRIS })
+  const caja = (clave, tipo, texto, color, minimo) => {
+    const ancho = Math.max(minimo, Math.ceil(Math.max(...texto.map(l => anchoTexto(l, LETRA, true))) + (tipo === 'ovalo' ? 56 : 28)))
+    nodos.push({ clave, tipo, ancho, alto: tipo === 'ovalo' && texto.length < 3 ? 60 : 24 + texto.length * LINEA + 16, texto, color })
+  }
+  caja('inicio', 'ovalo', ['Cada vela,', 'al cierre'], GRIS, 120)
   rombo('filtro', c.filtro, MORADO)
   rombo('compra', c.compra, AZUL)
   rombo('orden', c.orden, GRIS)
-  nodos.push({ clave: 'compro', tipo: 'caja', ancho: 190, alto: 64, texto: parte(c.compro, 22), color: VERDE })
-  nodos.push({ clave: 'dentro', tipo: 'caja', ancho: 150, alto: 64, texto: ['Tengo la acción'], color: GRIS })
+  caja('compro', 'caja', parte(c.compro, 22), VERDE, 170)
+  caja('dentro', 'caja', ['Tengo la acción'], GRIS, 150)
   rombo('venta', c.venta, NARANJA)
-  nodos.push({ clave: 'vendo', tipo: 'ovalo', ancho: 190, alto: 64, texto: parte('Vendo a la apertura de la vela siguiente', 22), color: NARANJA })
-  let x = 30
-  for (const n of nodos) { n.x = x; n.cx = x + n.ancho / 2; x += n.ancho + HUECO }
-  const ancho = x, altoMax = Math.max(...nodos.map(n => n.alto)), yNo = Y0 + altoMax / 2 + 70, alto = yNo + 120
+  caja('vendo', 'ovalo', parte('Vendo a la apertura de la vela siguiente', 22), NARANJA, 190)
+  // Las filas.
+  const k = corte ? nodos.findIndex(n => n.clave === corte) : -1
+  const filas = k > 0 ? [nodos.slice(0, k), nodos.slice(k)] : [nodos]
+  let anchoFilas = 0
+  for (const fila of filas) { let x = MARGEN; for (const n of fila) { n.x = x; n.cx = x + n.ancho / 2; x += n.ancho + HUECO } anchoFilas = Math.max(anchoFilas, x - HUECO + MARGEN) }
+  const dos = filas.length > 1
+  const ancho = anchoFilas
   const N = Object.fromEntries(nodos.map(n => [n.clave, n]))
+  const ramasCompra = ['filtro', 'compra', 'orden'].map(x => N[x]).filter(Boolean)
+  // Las alturas: cada fila centrada en su Y; debajo de cada una, sus cajas del «No».
+  const f1 = filas[0], alto1 = Math.max(...f1.map(n => n.alto)), Y0 = 50 + alto1 / 2, yNo1 = Y0 + alto1 / 2 + 36
+  let Y1 = Y0, yNo2 = yNo1
+  if (dos) { const alto2 = Math.max(...filas[1].map(n => n.alto)); Y1 = yNo1 + CAJA_NO + 44 + alto2 / 2; yNo2 = Y1 + alto2 / 2 + 36 }
+  for (const n of f1) n.y = Y0
+  if (dos) for (const n of filas[1]) n.y = Y1
+  const yVuelta = yNo2 + CAJA_NO + 26, alto = dos ? yVuelta + 20 : yNo2 + CAJA_NO + 24
   const flechas = [], etiquetas = []
-  nodos.forEach((n, k) => {
-    const sig = nodos[k + 1]; if (!sig) return
-    flechas.push({ d: `M${n.x + n.ancho},${Y0} L${sig.x - 4},${Y0}` })
-    if (n.tipo === 'rombo') etiquetas.push({ x: n.x + n.ancho + 8, y: Y0 - 8, t: 'Sí', color: SI })
+  for (const fila of filas) fila.forEach((n, j) => {
+    const sig = fila[j + 1]; if (!sig) return
+    flechas.push({ d: `M${n.x + n.ancho},${n.y} L${sig.x - 4},${sig.y}` })
+    if (n.tipo === 'rombo') etiquetas.push({ x: n.x + n.ancho + 8, y: n.y - 8, t: 'Sí', color: SI })
   })
+  // De una fila a la otra: a la derecha del último de arriba, baja por el pasillo y entra por arriba en el primero de abajo.
+  let xPaso = null
+  if (dos) {
+    const ult = f1[f1.length - 1], pri = filas[1][0], yPasillo = yNo1 + CAJA_NO + 22
+    xPaso = ult.x + ult.ancho + 24
+    flechas.push({ d: `M${ult.x + ult.ancho},${Y0} L${xPaso},${Y0} L${xPaso},${yPasillo} L${pri.cx},${yPasillo} L${pri.cx},${Y1 - pri.alto / 2 - 4}`, paso: true })
+    if (ult.tipo === 'rombo') etiquetas.push({ x: ult.x + ult.ancho + 6, y: Y0 - 8, t: 'Sí', color: SI })
+  }
   // Ramas «No» de la compra (filtro, compra, orden) a «No compro hoy», que vuelve al principio.
-  const ramasCompra = ['filtro', 'compra', 'orden'].map(k => N[k]).filter(Boolean)
-  const cajaNo = { x: ramasCompra[0].cx - 110, ancho: Math.max(240, ramasCompra[ramasCompra.length - 1].cx - ramasCompra[0].cx + 220), y: yNo, alto: 56 }
-  for (const r of ramasCompra) { flechas.push({ d: `M${r.cx},${Y0 + r.alto / 2} L${r.cx},${yNo - 4}` }); etiquetas.push({ x: r.cx + 8, y: Y0 + r.alto / 2 + 18, t: 'No', color: NO }) }
-  flechas.push({ d: `M${cajaNo.x},${yNo + 28} L${N.inicio.cx},${yNo + 28} L${N.inicio.cx},${Y0 + 34}` })
-  const v = N.venta, cajaSigo = { x: v.cx - 125, ancho: 250, y: yNo, alto: 56 }
-  flechas.push({ d: `M${v.cx},${Y0 + v.alto / 2} L${v.cx},${yNo - 4}` }); etiquetas.push({ x: v.cx + 8, y: Y0 + v.alto / 2 + 18, t: 'No', color: NO })
-  flechas.push({ d: `M${cajaSigo.x},${yNo + 28} L${N.dentro.cx},${yNo + 28} L${N.dentro.cx},${Y0 + 36}` })
-  const vuelta = `M${N.vendo.cx},${Y0 - 34} L${N.vendo.cx},26 L${N.inicio.cx},26 L${N.inicio.cx},${Y0 - 34}`
+  const izq = ramasCompra[0].cx - 110, der0 = Math.max(ramasCompra[0].cx + 130, ramasCompra[ramasCompra.length - 1].cx + 110)
+  const der = xPaso != null && ramasCompra.includes(f1[f1.length - 1]) ? Math.min(der0, xPaso - 12) : der0
+  const cajaNo = { x: izq, ancho: der - izq, y: yNo1, alto: CAJA_NO }
+  for (const r of ramasCompra) { flechas.push({ d: `M${r.cx},${Y0 + r.alto / 2} L${r.cx},${yNo1 - 4}` }); etiquetas.push({ x: r.cx + 8, y: Y0 + r.alto / 2 + 18, t: 'No', color: NO }) }
+  flechas.push({ d: `M${cajaNo.x},${yNo1 + CAJA_NO / 2} L${N.inicio.cx},${yNo1 + CAJA_NO / 2} L${N.inicio.cx},${Y0 + N.inicio.alto / 2 + 2}` })
+  const v = N.venta, cajaSigo = { x: v.cx - 125, ancho: 250, y: yNo2, alto: CAJA_NO }
+  flechas.push({ d: `M${v.cx},${v.y + v.alto / 2} L${v.cx},${yNo2 - 4}` }); etiquetas.push({ x: v.cx + 8, y: v.y + v.alto / 2 + 18, t: 'No', color: NO })
+  flechas.push({ d: `M${cajaSigo.x},${yNo2 + CAJA_NO / 2} L${N.dentro.cx},${yNo2 + CAJA_NO / 2} L${N.dentro.cx},${N.dentro.y + N.dentro.alto / 2 + 4}` })
+  // La vuelta al principio, discontinua: en una fila, por arriba; en dos, por debajo de todo y subiendo por el borde izquierdo.
+  const ve = N.vendo
+  const vuelta = dos ? `M${ve.cx},${ve.y + ve.alto / 2} L${ve.cx},${yVuelta} L12,${yVuelta} L12,26 L${N.inicio.cx},26 L${N.inicio.cx},${Y0 - N.inicio.alto / 2 - 4}`
+    : `M${ve.cx},${Y0 - ve.alto / 2} L${ve.cx},26 L${N.inicio.cx},26 L${N.inicio.cx},${Y0 - N.inicio.alto / 2 - 4}`
+  const textoVuelta = dos ? { x: (12 + ve.cx) / 2, y: yVuelta - 7 } : { x: (N.inicio.cx + ve.cx) / 2, y: 18 }
+  return { nodos, filas: filas.map(f => f.map(n => n.clave)), ancho, alto, flechas, etiquetas, cajaNo, cajaSigo, vuelta, textoVuelta, anchoLinea, hueco: HUECO, corte: dos ? corte : null }
+}
+
+export default function BuilderDibujo({ def, valores, error = null, expandidosInicial = null, anchoInicial = 1200 }) {
+  const [expandidos, setExpandidos] = useState(() => new Set(expandidosInicial || []))
+  const [anchoDisp, setAnchoDisp] = useState(anchoInicial)
+  const caja = useRef(null)
+  // El ancho disponible (el de la tarjeta), medido en el navegador.
+  useEffect(() => {
+    const el = caja.current; if (!el) return
+    const mide = () => { const w = Math.floor(el.clientWidth); if (w > 0) setAnchoDisp(x => Math.abs(x - w) < 2 ? x : w) }
+    mide()
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(mide) : null
+    ro?.observe(el)
+    return () => ro?.disconnect()
+  }, [error])
+  if (error) return <div data-dibujo="error" style={{ color: '#ff8b8b', padding: '12px 4px' }}>{error}</div>
+  const c = contenidoDibujo(def, valores)
+  const alterna = (k) => setExpandidos(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
+  const L = colocaDibujo(c, { expandidos, anchoDisp })
+  const { ancho, alto, cajaNo, cajaSigo } = L
   const texto = (lineas, cx, cy, color = B.titulo, peso = 600) => lineas.map((l, k) => <text key={k} x={cx} y={cy + (k - (lineas.length - 1) / 2) * LINEA + 4} textAnchor="middle" fontSize={LETRA} fontWeight={peso} fill={color}>{l}</text>)
   return (
-    <div data-dibujo="ok" style={{ overflowX: 'auto', paddingBottom: 6 }}>
-      <svg width={ancho} height={alto} viewBox={`0 0 ${ancho} ${alto}`} role="img" aria-label="Dibujo de la regla" style={{ display: 'block', fontFamily: B.letra }}>
+    <div ref={caja} data-dibujo="ok" data-filas-dibujo={L.filas.length} style={{ overflowX: ancho * 0.8 > anchoDisp ? 'auto' : 'hidden', paddingBottom: 6 }}>
+      {/* Si no cabe del todo, se encoge (hasta el 80 %); más estrecho que eso, scroll. */}
+      <svg width={ancho} height={alto} viewBox={`0 0 ${ancho} ${alto}`} role="img" aria-label="Dibujo de la regla" data-ancho-dibujo={ancho}
+        style={{ display: 'block', fontFamily: B.letra, width: '100%', maxWidth: ancho, minWidth: Math.ceil(ancho * 0.8), height: 'auto' }}>
         <defs><marker id="punta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill={B.secundario}/></marker></defs>
-        <path d={vuelta} fill="none" stroke={B.apagado} strokeDasharray="5 5" markerEnd="url(#punta)"/>
-        <text x={(N.inicio.cx + N.vendo.cx) / 2} y={18} textAnchor="middle" fontSize={LETRA} fill={B.secundario}>después de vender, vuelvo a empezar</text>
-        {flechas.map((f, k) => <path key={k} d={f.d} fill="none" stroke={B.secundario} strokeWidth="1.5" markerEnd="url(#punta)"/>)}
-        {etiquetas.map((e, k) => <text key={k} x={e.x} y={e.y} fontSize={LETRA} fontWeight="700" fill={e.color}>{e.t}</text>)}
-        {nodos.map(n => {
-          if (n.tipo === 'ovalo') return <g key={n.clave} data-nodo={n.clave}><rect x={n.x} y={Y0 - n.alto / 2} width={n.ancho} height={n.alto} rx={n.alto / 2} fill={B.tarjeta} stroke={n.color} strokeWidth="2"/>{texto(n.texto, n.cx, Y0)}</g>
-          if (n.tipo === 'caja') return <g key={n.clave} data-nodo={n.clave}><rect x={n.x} y={Y0 - n.alto / 2} width={n.ancho} height={n.alto} rx="8" fill={n.color === VERDE ? '#14301f' : B.tarjeta} stroke={n.color} strokeWidth="2"/>{texto(n.texto, n.cx, Y0)}</g>
-          const top = Y0 - n.alto / 2, pts = `${n.cx},${top} ${n.x + n.ancho},${Y0} ${n.cx},${top + n.alto} ${n.x},${Y0}`
-          const cab = [n.d.titulo, ...(n.d.modo ? [`(${n.d.modo})`] : [])]
-          const y1 = Y0 - ((cab.length + n.filas.length) * LINEA) / 2 + LINEA / 2
+        <path d={L.vuelta} fill="none" stroke={B.apagado} strokeDasharray="5 5" markerEnd="url(#punta)"/>
+        <text x={L.textoVuelta.x} y={L.textoVuelta.y} textAnchor="middle" fontSize={LETRA} fill={B.secundario}>después de vender, vuelvo a empezar</text>
+        {L.flechas.map((f, k) => <path key={k} d={f.d} data-flecha={f.paso ? 'paso' : undefined} fill="none" stroke={f.paso ? B.titulo : B.secundario} strokeWidth={f.paso ? 2 : 1.5} markerEnd="url(#punta)"/>)}
+        {L.etiquetas.map((e, k) => <text key={k} x={e.x} y={e.y} fontSize={LETRA} fontWeight="700" fill={e.color}>{e.t}</text>)}
+        {L.nodos.map(n => {
+          if (n.tipo === 'ovalo') return <g key={n.clave} data-nodo={n.clave}><rect x={n.x} y={n.y - n.alto / 2} width={n.ancho} height={n.alto} rx={Math.min(n.alto, n.ancho) / 2} fill={B.tarjeta} stroke={n.color} strokeWidth="2"/>{texto(n.texto, n.cx, n.y)}</g>
+          if (n.tipo === 'caja') return <g key={n.clave} data-nodo={n.clave}><rect x={n.x} y={n.y - n.alto / 2} width={n.ancho} height={n.alto} rx="8" fill={n.color === VERDE ? '#14301f' : B.tarjeta} stroke={n.color} strokeWidth="2"/>{texto(n.texto, n.cx, n.y)}</g>
+          const top = n.y - n.alto / 2, pts = `${n.cx},${top} ${n.x + n.ancho},${n.y} ${n.cx},${top + n.alto} ${n.x},${n.y}`
+          const total = n.cab.length + n.filas.length, y1 = n.y - ((total - 1) * LINEA) / 2
           return (
             <g key={n.clave} data-nodo={n.clave}>
               <polygon points={pts} fill={B.tarjeta} stroke={n.color} strokeWidth="2"/>
-              {cab.map((l, k) => <text key={'c' + k} x={n.cx} y={y1 + k * LINEA + 4} textAnchor="middle" fontSize={LETRA} fontWeight="700" fill={n.color}>{l}</text>)}
+              {n.cab.map((l, k) => <text key={'c' + k} x={n.cx} y={y1 + k * LINEA + 4} textAnchor="middle" fontSize={LETRA} fontWeight="700" fill={n.color}>{l}</text>)}
               {n.filas.map((f, k) => (
-                <text key={k} x={n.cx} y={y1 + (cab.length + k) * LINEA + 4} textAnchor="middle" fontSize={LETRA - 0.5} fill={f.mas || f.menos ? B.enlace : f.color || B.texto}
+                <text key={k} x={n.cx} y={y1 + (n.cab.length + k) * LINEA + 4} textAnchor="middle" fontSize={LETRA - 0.5} fill={f.mas || f.menos ? B.enlace : f.color || B.texto}
                   data-mas={f.mas ? 'si' : undefined} style={f.mas || f.menos ? { cursor: 'pointer', textDecoration: 'underline' } : undefined} onClick={f.mas || f.menos ? () => alterna(n.clave) : undefined}>
                   {f.texto}{!f.mas && !f.menos && <title>{f.completo || f.texto}</title>}
                 </text>
@@ -119,8 +204,8 @@ export default function BuilderDibujo({ def, valores, error = null, expandidosIn
             </g>
           )
         })}
-        <g data-nodo="noCompro"><rect x={cajaNo.x} y={yNo} width={cajaNo.ancho} height={cajaNo.alto} rx="8" fill={B.fondo} stroke={B.borde}/>{texto(['No compro hoy:', 'espero a la siguiente vela'], cajaNo.x + cajaNo.ancho / 2, yNo + 28, B.secundario, 500)}</g>
-        <g data-nodo="sigoDentro"><rect x={cajaSigo.x} y={yNo} width={cajaSigo.ancho} height={cajaSigo.alto} rx="8" fill={B.fondo} stroke={B.borde}/>{texto(['Sigo dentro:', 'miro la siguiente vela'], cajaSigo.x + cajaSigo.ancho / 2, yNo + 28, B.secundario, 500)}</g>
+        <g data-nodo="noCompro"><rect x={cajaNo.x} y={cajaNo.y} width={cajaNo.ancho} height={cajaNo.alto} rx="8" fill={B.fondo} stroke={B.borde}/>{texto(['No compro hoy:', 'espero a la siguiente vela'], cajaNo.x + cajaNo.ancho / 2, cajaNo.y + cajaNo.alto / 2, B.secundario, 500)}</g>
+        <g data-nodo="sigoDentro"><rect x={cajaSigo.x} y={cajaSigo.y} width={cajaSigo.ancho} height={cajaSigo.alto} rx="8" fill={B.fondo} stroke={B.borde}/>{texto(['Sigo dentro:', 'miro la siguiente vela'], cajaSigo.x + cajaSigo.ancho / 2, cajaSigo.y + cajaSigo.alto / 2, B.secundario, 500)}</g>
       </svg>
       {!c.venta.lineas.length && !c.venta.proteccion.length && <div style={{ color: '#ff8b8b', fontSize: 13 }}>Falta una forma de salir: una condición de venta, un stop o una salida por tiempo.</div>}
     </div>
