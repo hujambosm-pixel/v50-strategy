@@ -57,8 +57,10 @@ export default function EquityChart({
         trackSeries(sp500BHCurve,'sp')
       }
       const base=stCurve||coCurve||bhCurve||sp500BHCurve
+      // V9.1052: color en hexadecimal (el valor de --text3). lightweight-charts no entiende 'var(--…)': al pintar lanza
+      // «Cannot parse color» y el gráfico se queda sin ninguna línea (pasaba desde V9.992).
       if(base?.length)
-        chart.addLineSeries({color:'var(--text3)',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
+        chart.addLineSeries({color:'#6a8aa8',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false})
           .setData([{time:base[0].date,value:capitalIni},{time:base[base.length-1].date,value:capitalIni}])
       const addDD=(curve,date,dd,color)=>{
         if(!date||!dd||!curve?.length||!curve[0]) return

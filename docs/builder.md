@@ -738,3 +738,17 @@ SIEMPRE de la regla de la pantalla (nunca con IA). Con errores: «Corrige lo que
 - **Tamaño** (medido, 2 periodos de 5 años, 1 estrategia): fila de la prueba 4 KB (como antes), curvas unos 76 KB (35 y 41 KB por
   periodo; con el QQQ, unos 5 KB más por periodo), medias unos 2 KB por periodo. Una prueba nueva típica: unos 90 KB por estrategia
   (Postgres además comprime estos textos). La base ocupaba 176 MB el 24/10/2026 (154 MB son precios; `lab_pruebas`, 1 MB).
+
+## 18. Arreglo: las curvas de Equity de «Backtest de un valor» no se veían (V9.1052)
+
+- **Causa**: en V9.992 (contraste del texto secundario) el color de la línea punteada del capital inicial de
+  `components/EquityChart.js` pasó de `'#3d5a7a'` a `'var(--text3)'`. lightweight-charts (4.2.0) no entiende variables CSS: la
+  serie se crea sin error, pero al pintar lanza «Cannot parse color: var(--text3)» y el lienzo se queda vacío, así que no se veía
+  NINGUNA línea (Simple, Compuesta, B&H…) con ninguna estrategia ni valor. No viene de V9.1048–V9.1051: los datos que recibe el
+  gráfico son idénticos en V9.1047 y en V9.1052.
+- **Arreglo**: ese color pasa a `'#6a8aa8'` (el valor actual de `--text3`). Nada más; ningún cálculo cambia. Era el único color
+  `var(--…)` pasado a lightweight-charts en el proyecto.
+- **Comprobado**: `/api/datos` real (Yahoo) con «1 V50 EMA10/11» y «23 EMA20 breakouts» sobre AAPL y QQQ, código de V9.1047 y de
+  ahora: curvas iguales (315 puntos en cada una; Simple, Compuesta, B&H y SP500). El `EquityChart` real montado en el navegador con
+  esas curvas: el de V9.1051 no pinta nada (0 píxeles de las tres líneas, el error de arriba); el de V9.1052 pinta Simple,
+  Compuesta y B&H en los cuatro casos, sin errores.
