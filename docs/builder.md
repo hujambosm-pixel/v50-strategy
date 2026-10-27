@@ -937,3 +937,32 @@ Comprobado en V9.1056 desde la nueva ubicación: el mismo resultado que el arné
   vela con ruptura); comisiones: 10,80 € y el capital compuesto final rehecho a mano (25.150,27 frente a 25.165,58 sin comisión), y
   con 1 € + 2 € + 0,1 % la suma a mano (1.226,16 €); las 5 estrategias del editor en AAPL (diario y semanal, 2010–2015 y 2020–2021)
   iguales a V9.1056 salvo lo nuevo (las cifras, idénticas); ida y vuelta; montaje; comprobaciones comunes.
+
+## 24. Buscadores por texto (V9.1058)
+
+### Auditoría (solo lectura)
+
+- El selector «Valor» de «Señales en el gráfico» era un `<select>` con los tickers de `precios_simbolos` (389), sin nombres. El de
+  «Backtest de un valor» NO es el mismo componente (allí el valor sale de la lista de la barra lateral): no cambia.
+- Nombres: de los 389 valores con precios guardados, 382 tienen nombre en la lista de seguimiento (`watchlist.name`) o en el
+  universo (`universo_miembros.nombre`); los 7 que no (DIA, FI, IWM, MYL, QLD, QQQ, RIMM) se buscan por el ticker.
+
+### Cómo queda
+
+- `lib/builder/buscar.js` (puro): `coincide` (sin distinguir mayúsculas ni acentos; cada palabra escrita tiene que estar en alguno
+  de los textos), `filtraValores` (primero el ticker igual a lo escrito, luego los que empiezan por ello, luego el resto) y
+  `conNombres` (el nombre de la lista de seguimiento y, si no, el del universo).
+- **Valor** (`components/BuscadorValor.js`): casilla donde se escribe; la lista se abre debajo con «TICKER  Nombre» y se filtra
+  («NVDA», «nvidia», «semi»…). Flechas para moverse, Enter para elegir, Escape para dejarlo como estaba; con el ratón, clic en la
+  fila. Mientras no se escribe, enseña el valor elegido y su nombre al lado. `cargaSimbolos` devuelve ahora `{ simbolo, nombre }`
+  (BuilderPanel lee también `watchlist` y `universo_miembros`; si fallan, solo tickers).
+- **Mi trabajo**: casilla «Buscar por nombre o por la regla…» junto a las pestañas; filtra «Mis estrategias» por nombre y por la
+  frase de la regla (la misma que se ve debajo del nombre) y «Mis pruebas» por nombre y por las estrategias que incluyen. Las
+  pestañas y los filtros dicen cuántas quedan («3 de 89»); sin ninguna, «Nada con «…»».
+- **Desde una de mis estrategias**: casilla encima del desplegable que filtra por nombre; sin ninguna, «Ninguna estrategia con «…»»
+  y «Copiar y editar» desactivado.
+- Comprobado: `buscar.js` con casos a mano (acentos, mayúsculas, varias palabras, orden); montaje con estado (renderToString con lo
+  escrito): el selector con «NVIDIA» deja solo NVDA, con «zzz» lo dice; «Señales en el gráfico» con símbolos sueltos y con nombres;
+  «Mi trabajo» con «TORTUGAS», con «stop» (por la regla, en las dos pestañas de filtro) y con algo que no existe; «Mis pruebas» por
+  su nombre; el desplegable de copiar con «tortu» y sin nada; comprobaciones comunes. No probado en el navegador: el teclado y el
+  ratón del selector.

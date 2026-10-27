@@ -9,7 +9,8 @@
 // guarda. Se recalcula solo, 250 ms después del último cambio.
 //   def, valores: la estrategia en pantalla (con los cambios de «Tarjetas»); guardado: { def, valores } la guardada. cambios /
 //   onCambios: las casillas de prueba ({ clave: valor }), que viven en el editor mientras está abierto. onGuardarValores(): guarda.
-//   cargaSimbolos() → [símbolos]; cargaVelas(simbolo) → velas diarias; comisiones: las de «Backtest de un valor».
+//   cargaSimbolos() → [símbolos] o [{ simbolo, nombre }] (V9.1058: el selector busca por ticker y por nombre); cargaVelas(simbolo) →
+//   velas diarias; comisiones: las de «Backtest de un valor».
 //   Para las pruebas de montaje: velasIniciales ({ simbolo: velas }), simbolosIniciales, simboloInicial, fechasInicial
 //   ({ desde, hasta }: «Otras fechas»), cifrasIniciales.
 import { useState, useEffect, useRef, useMemo } from 'react'
@@ -20,6 +21,7 @@ import { validaDefinicion, valoresDe } from '../lib/editor/definicion'
 import { fechasEnsayo, tocaPaso2, NOTA_PASO2, camposDePrueba, valorCampo, aplicaPrueba, cifrasRegla, MIN_OPERACIONES } from '../lib/builder/ensayo'
 import { fmt } from '../lib/utils'
 import CampoFecha from './CampoFecha'
+import BuscadorValor from './BuscadorValor'
 import Ayuda from './BuilderAyuda'
 
 const VERDE = '#3fb950', NARANJA = '#f0883e', MORADO = '#a371f7', AZUL = '#58a6ff', AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE_CIFRA = '#7ee2a0', GRIS_BH = '#8b98a8'
@@ -194,6 +196,7 @@ function Casilla({ valor, guardado, etiqueta, onCambia }) {
 export default function BuilderSenales({ def, valores, guardado = null, intervalo = 'diario', error = null, cambios = {}, onCambios = () => {}, onGuardarValores = null, guardando = false, msgGuardar = null,
   cargaSimbolos = null, cargaVelas = null, comisiones = null, velasIniciales = null, simbolosIniciales = null, simboloInicial = 'AAPL', fechasInicial = null, cifrasIniciales = null }) {
   const [simbolos, setSimbolos] = useState(simbolosIniciales || [simboloInicial])
+  const valoresLista = useMemo(() => simbolos.map(s => typeof s === 'string' ? { simbolo: s, nombre: '' } : s), [simbolos])
   const [simbolo, setSimbolo] = useState(simboloInicial)
   const [velas, setVelas] = useState(velasIniciales || {})
   const [otras, setOtras] = useState(!!fechasInicial)
@@ -261,11 +264,9 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   return (
     <div data-senales="ok">
       <div data-fila-arriba style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: B.titulo, fontFamily: B.letra, fontSize: B.base }}>Valor:
-          <select aria-label="Valor" value={simbolo} onChange={e => setSimbolo(e.target.value)} style={{ fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '5px 8px', width: 'auto' }}>
-            {simbolos.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </label>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: B.titulo, fontFamily: B.letra, fontSize: B.base }}>Valor:
+          <BuscadorValor valores={valoresLista} valor={simbolo} onCambia={setSimbolo}/>
+        </span>
         <span role="group" aria-label="Fechas" style={{ display: 'inline-flex', alignItems: 'center' }}>
           <button data-fechas="ensayo" aria-pressed={!otras} onClick={() => setOtras(false)} style={{ ...seg(!otras), borderRadius: '6px 0 0 6px' }}>{nombreEnsayo}</button>
           <button data-fechas="otras" aria-pressed={otras} onClick={() => { setOtras(true); if (!desdeO) { setDesdeO(ensayo.desde); setHastaO(ensayo.hasta) } }} style={{ ...seg(otras), borderRadius: '0 6px 6px 0', borderLeft: 'none' }}>Otras fechas</button>
