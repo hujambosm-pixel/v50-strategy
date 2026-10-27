@@ -6,7 +6,7 @@
 //       debajo, la caída desde el máximo; las cifras frente al QQQ; y la barra 0–100 con el 95 y la estrategia.
 //   2 · «Dónde queda tu estrategia entre las 1.000 copias» (laboratorio de operaciones): el histograma de la ganancia media por
 //       operación de las copias, la línea de lo que hay que superar y la marca de la estrategia en su valor.
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import { nombrePeriodo, claveCurvas } from '../lib/builder/pruebaGuiada'
 import { comunNormal, nombreVariante } from '../lib/editor/lotes'
@@ -52,59 +52,106 @@ export function Barra({ percentil, total }) {
   )
 }
 
-// El dinero en el tiempo (estrategia, copias, QQQ) y, debajo, la caída desde el máximo.
+/// El ancho real del gráfico (V9.1053): el dibujo se hace a ese ancho, 1 unidad = 1 píxel, así las letras miden lo mismo (12 px)
+// en cualquier pantalla en vez de crecer con el ancho. Sin navegador (el montaje), 820.
+function useAncho(defecto = 820) {
+  const ref = useRef(null)
+  const [w, setW] = useState(defecto)
+  useEffect(() => {
+    const el = ref.current; if (!el) return
+    const mide = () => { const x = el.clientWidth; if (x > 0) setW(Math.round(x)) }
+    mide()
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(mide) : null
+    ro?.observe(el)
+    return () => ro?.disconnect()
+  }, [])
+  return [ref, w]
+}
+const LETRA = 12
+// Las etiquetas al final de las líneas, sin pisarse: de arriba abajo, cada una al menos SEP por debajo de la anterior; y si la
+// última se sale por abajo, se suben las de encima lo justo.
+const SEP = 16
+export function separaEtiquetas(etq, arriba, abajo) {
+  const xs = etq.map(e => ({ ...e })).sort((a, b) => a.y - b.y)
+  for (let k = 0; k < xs.length; k++) xs[k].y = Math.max(xs[k].y, arriba, k ? xs[k - 1].y + SEP : -Infinity)
+  for (let k = xs.length - 1, tope = abajo; k >= 0; k--) { xs[k].y = Math.min(xs[k].y, tope); tope = xs[k].y - SEP }
+  return xs
+}
+// Las marcas del eje en escala logarítmica (en euros): 1, 2 y 5 por cada potencia de 10 que caiga dentro (solo las de 1 si salen
+// demasiadas); si salen menos de tres, cuatro repartidas a la misma distancia.
+export function marcasLog(lo, hi) {
+  const out = []
+  for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) for (const m of [1, 2, 5]) { const v = m * 10 ** e; if (v >= lo && v <= hi) out.push(v) }
+  const solo1 = out.filter(v => Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9)
+  if (out.length > 6 && solo1.length >= 3) return solo1
+  if (out.length >= 3) return out
+  return [0, 1, 2, 3].map(k => lo * (hi / lo) ** (k / 3))
+}
+
+// El dinero en el tiempo (estrategia, copias, QQQ), en escala logarítmica (V9.1053: la misma distancia es el mismo %), y, debajo,
+// la caída desde el máximo.
 function GraficoCurvas({ c, maxDDReal, maxDDQqq }) {
-  const W = 820, IZQ = 64, DER = 150, H1 = 300, H2 = 120, ARR = 12, n = c.fechas.length
+  const [ref, W] = useAncho()
+  const IZQ = 72, DER = 150, H1 = 300, H2 = 120, ARR = 24, n = c.fechas.length
   const series = [...c.copias, c.estrategia, ...(c.qqq ? [c.qqq] : [])]
-  const vals = series.flat().filter(Number.isFinite), lo = Math.min(...vals), hi = Math.max(...vals)
+  const vals = series.flat().filter(v => Number.isFinite(v) && v > 0), lo = Math.min(...vals), hi = Math.max(...vals)
+  const L = Math.log, lLo = L(lo), lHi = L(hi)
   const x = (i) => IZQ + (n > 1 ? i / (n - 1) : 0) * (W - IZQ - DER)
-  const y = (v) => ARR + (1 - (v - lo) / ((hi - lo) || 1)) * (H1 - ARR - 24)
+  const y = (v) => ARR + (1 - (L(Math.max(v, lo)) - lLo) / ((lHi - lLo) || 1)) * (H1 - ARR - 24)
   const ruta = (s, fy = y, idx = null) => s.map((v, i) => v == null ? null : `${x(idx ? idx[i] : i).toFixed(1)},${fy(v).toFixed(1)}`).filter(Boolean).join(' ')
-  // Etiquetas al final de cada línea, sin pisarse.
   const fin = (s) => s.at(-1)
-  const etq = [{ t: 'Tu estrategia', v: fin(c.estrategia), color: AZUL }, ...(c.qqq ? [{ t: 'QQQ (solo referencia)', v: fin(c.qqq), color: CLARO }] : []), { t: 'copia: la mejor', v: fin(c.copias.at(-1)), color: B.apagado }, { t: 'copia: la peor', v: fin(c.copias[0]), color: B.apagado }]
-    .filter(e => Number.isFinite(e.v)).map(e => ({ ...e, y: y(e.v) })).sort((a, b) => a.y - b.y)
-  for (let k = 1; k < etq.length; k++) if (etq[k].y - etq[k - 1].y < 14) etq[k].y = etq[k - 1].y + 14
-  const ticks = [lo, lo + (hi - lo) / 3, lo + 2 * (hi - lo) / 3, hi]
+  const etq = separaEtiquetas([{ t: 'Tu estrategia', v: fin(c.estrategia), color: AZUL }, ...(c.qqq ? [{ t: 'QQQ (solo referencia)', v: fin(c.qqq), color: CLARO }] : []), { t: 'copia: la mejor', v: fin(c.copias.at(-1)), color: B.apagado }, { t: 'copia: la peor', v: fin(c.copias[0]), color: B.apagado }]
+    .filter(e => Number.isFinite(e.v)).map(e => ({ ...e, y: y(e.v) })), ARR, H1 - 30)
+  const eur = (v) => v / PUNTOS * c.capitalIni, aPuntos = (e) => e / c.capitalIni * PUNTOS
+  const ticks = marcasLog(eur(lo), eur(hi)).map(aPuntos)
   const anios = []; c.fechas.forEach((f, i) => { if (i === 0 || f.slice(0, 4) !== c.fechas[i - 1].slice(0, 4)) anios.push([i, f.slice(0, 4)]) })
   // Caídas
   const dE = caidas(c.estrategia), dQ = c.qqq ? caidas(c.qqq) : null
   const minDD = Math.min(-1, ...dE.serie.filter(Number.isFinite), ...(dQ ? dQ.serie.filter(Number.isFinite) : []))
   const y2 = (v) => H1 + 18 + (v / minDD) * (H2 - 20)
-  const xMax = dE.i >= 0 ? x(dE.i) : null
+  const xMax = dE.i >= 0 ? x(dE.i) : null, aLaIzq = xMax != null && xMax > W - DER - 60
   return (
-    <svg viewBox={`0 0 ${W} ${H1 + H2 + 30}`} width="100%" role="img" aria-label="Cómo creció el dinero, frente al azar" style={{ display: 'block', fontFamily: B.letra, marginTop: 8 }}>
-      {ticks.map((t, k) => <g key={k}><line x1={IZQ} x2={W - DER} y1={y(t)} y2={y(t)} stroke="#1b2430"/><text x={IZQ - 6} y={y(t) + 4} textAnchor="end" fontSize="11" fill={B.apagado}>{euros(t / PUNTOS * c.capitalIni)}</text></g>)}
-      {anios.map(([i, a]) => <text key={a} x={x(i)} y={H1 - 6} fontSize="11" fill={B.apagado}>{a}</text>)}
-      <g data-copias={c.copias.length}>{c.copias.map((s, k) => <polyline key={k} points={ruta(s, y, c.iCopias)} fill="none" stroke={GRIS} strokeWidth="0.8" strokeOpacity="0.7"/>)}</g>
-      {c.qqq && <polyline data-linea="qqq" points={ruta(c.qqq)} fill="none" stroke={CLARO} strokeWidth="1.4" strokeDasharray="5 4"/>}
-      <polyline data-linea="estrategia" points={ruta(c.estrategia)} fill="none" stroke={AZUL} strokeWidth="2.6"/>
-      {etq.map((e, k) => <text key={k} x={W - DER + 8} y={e.y + 4} fontSize="11.5" fill={e.color} fontWeight={e.color === AZUL ? 700 : 400}>{e.t}</text>)}
-      <text x={IZQ} y={H1 + 12} fontSize="12" fill={ROJO}>Caída desde el máximo</text>
-      <line x1={IZQ} x2={W - DER} y1={y2(0)} y2={y2(0)} stroke="#1b2430"/>
-      {dQ && <polyline points={ruta(dQ.serie, y2)} fill="none" stroke={B.apagado} strokeWidth="0.9"/>}
-      <polyline data-linea="caida" points={ruta(dE.serie, y2)} fill="none" stroke={ROJO} strokeWidth="1.6"/>
-      {xMax != null && <g data-caida-maxima><circle cx={xMax} cy={y2(dE.serie[dE.i])} r="3.5" fill={ROJO}/><text x={xMax + 6} y={y2(dE.serie[dE.i]) + 4} fontSize="12" fontWeight="700" fill={ROJO}>−{num1(maxDDReal).replace(/^-/, '')} %</text></g>}
-      <text x={W - DER + 8} y={y2(minDD / 2) + 4} fontSize="11" fill={B.apagado}>{dQ ? `QQQ: −${num1(maxDDQqq)} %` : ''}</text>
-    </svg>
+    <div ref={ref} style={{ width: '100%', marginTop: 8 }}>
+      <svg viewBox={`0 0 ${W} ${H1 + H2 + 30}`} width={W} height={H1 + H2 + 30} role="img" aria-label="Cómo creció el dinero, frente al azar (escala logarítmica)" style={{ display: 'block', fontFamily: B.letra }}>
+        <text data-escala="log" x={4} y={12} fontSize={LETRA} fill={B.apagado}>escala logarítmica</text>
+        {ticks.map((t, k) => <g key={k}><line x1={IZQ} x2={W - DER} y1={y(t)} y2={y(t)} stroke="#1b2430"/><text x={IZQ - 6} y={y(t) + 4} textAnchor="end" fontSize={LETRA} fill={B.apagado}>{euros(eur(t))}</text></g>)}
+        {anios.map(([i, a]) => <text key={a} x={x(i)} y={H1 - 6} fontSize={LETRA} fill={B.apagado}>{a}</text>)}
+        <g data-copias={c.copias.length}>{c.copias.map((s, k) => <polyline key={k} points={ruta(s, y, c.iCopias)} fill="none" stroke={GRIS} strokeWidth="0.8" strokeOpacity="0.7"/>)}</g>
+        {c.qqq && <polyline data-linea="qqq" points={ruta(c.qqq)} fill="none" stroke={CLARO} strokeWidth="1.4" strokeDasharray="5 4"/>}
+        <polyline data-linea="estrategia" points={ruta(c.estrategia)} fill="none" stroke={AZUL} strokeWidth="2.6"/>
+        {etq.map((e, k) => <text key={k} data-etiqueta={e.t} x={W - DER + 8} y={e.y + 4} fontSize={LETRA} fill={e.color} fontWeight={e.color === AZUL ? 700 : 400}>{e.t}</text>)}
+        <text x={IZQ} y={H1 + 12} fontSize={LETRA} fill={ROJO}>Caída desde el máximo</text>
+        <line x1={IZQ} x2={W - DER} y1={y2(0)} y2={y2(0)} stroke="#1b2430"/>
+        {dQ && <polyline points={ruta(dQ.serie, y2)} fill="none" stroke={B.apagado} strokeWidth="0.9"/>}
+        <polyline data-linea="caida" points={ruta(dE.serie, y2)} fill="none" stroke={ROJO} strokeWidth="1.6"/>
+        {xMax != null && <g data-caida-maxima><circle cx={xMax} cy={y2(dE.serie[dE.i])} r="3.5" fill={ROJO}/><text x={aLaIzq ? xMax - 6 : xMax + 6} textAnchor={aLaIzq ? 'end' : 'start'} y={y2(dE.serie[dE.i]) + 4} fontSize={LETRA} fontWeight="700" fill={ROJO}>−{num1(maxDDReal).replace(/^-/, '')} %</text></g>}
+        <text x={W - DER + 8} y={y2(minDD / 2) + 4} fontSize={LETRA} fill={B.apagado}>{dQ ? `QQQ: −${num1(maxDDQqq)} %` : ''}</text>
+      </svg>
+    </div>
   )
 }
 
 // El histograma de la ganancia media por operación de las copias.
 function Histograma({ medias, p95, media }) {
-  const h = histograma(medias, 32, [p95, media]), W = 820, IZQ = 40, DER = 20, H = 220, ABA = 40
+  const [ref, W] = useAncho()
+  const h = histograma(medias, 32, [p95, media]), IZQ = 40, DER = 20, H = 220, ABA = 40
   const maxN = Math.max(1, ...h.barras.map(b => b.n))
   const x = (v) => IZQ + (v - h.min) / ((h.max - h.min) || 1) * (W - IZQ - DER)
   const y = (k) => H - ABA - (k / maxN) * (H - ABA - 30)
   const ticks = [h.min, (h.min + h.max) / 2, h.max]
+  // El texto junto a una línea vertical va a su derecha o, en la mitad derecha, a su izquierda: así nunca se corta.
+  const lado = (xv) => xv > W / 2 ? { x: xv - 4, textAnchor: 'end' } : { x: xv + 4, textAnchor: 'start' }
+  const abajo = (xv) => xv < IZQ + 50 ? { x: xv, textAnchor: 'start' } : xv > W - DER - 50 ? { x: xv, textAnchor: 'end' } : { x: xv, textAnchor: 'middle' }
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Las copias al azar del laboratorio de operaciones" style={{ display: 'block', fontFamily: B.letra, marginTop: 8 }}>
-      <g data-barras={h.barras.length}>{h.barras.map((b, k) => <rect key={k} x={x(b.desde) + 0.5} y={y(b.n)} width={Math.max(0.5, x(b.hasta) - x(b.desde) - 1)} height={H - ABA - y(b.n)} fill={GRIS}/>)}</g>
-      <line x1={IZQ} x2={W - DER} y1={H - ABA} y2={H - ABA} stroke={B.borde}/>
-      {ticks.map((t, k) => <text key={k} x={x(t)} y={H - ABA + 16} textAnchor="middle" fontSize="11" fill={B.apagado}>{pctOp(t)}</text>)}
-      {Number.isFinite(p95) && <g data-p95><line x1={x(p95)} x2={x(p95)} y1={18} y2={H - ABA} stroke={AMARILLO} strokeWidth="1.6" strokeDasharray="5 4"/><text x={x(p95) + 4} y={14} fontSize="11.5" fill={AMARILLO}>95 de cada 100 (lo que hay que superar)</text></g>}
-      {Number.isFinite(media) && <g data-estrategia><line x1={x(media)} x2={x(media)} y1={30} y2={H - ABA} stroke={AZUL} strokeWidth="2.6"/><text x={x(media)} y={H - 6} textAnchor="middle" fontSize="11.5" fontWeight="700" fill={AZUL}>tu estrategia</text></g>}
-    </svg>
+    <div ref={ref} style={{ width: '100%', marginTop: 8 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label="Las copias al azar del laboratorio de operaciones" style={{ display: 'block', fontFamily: B.letra }}>
+        <g data-barras={h.barras.length}>{h.barras.map((b, k) => <rect key={k} x={x(b.desde) + 0.5} y={y(b.n)} width={Math.max(0.5, x(b.hasta) - x(b.desde) - 1)} height={H - ABA - y(b.n)} fill={GRIS}/>)}</g>
+        <line x1={IZQ} x2={W - DER} y1={H - ABA} y2={H - ABA} stroke={B.borde}/>
+        {ticks.map((t, k) => <text key={k} {...abajo(x(t))} y={H - ABA + 16} fontSize={LETRA} fill={B.apagado}>{pctOp(t)}</text>)}
+        {Number.isFinite(p95) && <g data-p95><line x1={x(p95)} x2={x(p95)} y1={18} y2={H - ABA} stroke={AMARILLO} strokeWidth="1.6" strokeDasharray="5 4"/><text data-texto-p95 {...lado(x(p95))} y={14} fontSize={LETRA} fill={AMARILLO}>95 de cada 100 (lo que hay que superar)</text></g>}
+        {Number.isFinite(media) && <g data-estrategia><line x1={x(media)} x2={x(media)} y1={30} y2={H - ABA} stroke={AZUL} strokeWidth="2.6"/><text {...abajo(x(media))} y={H - 6} fontSize={LETRA} fontWeight="700" fill={AZUL}>tu estrategia</text></g>}
+      </svg>
+    </div>
   )
 }
 

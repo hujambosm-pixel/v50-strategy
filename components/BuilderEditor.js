@@ -55,7 +55,8 @@ const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`
 // Las etiquetas de los campos con la letra del Builder (la hoja de estilos de la app pone a los label letra monoespaciada y pequeña).
 const etiquetaCampo = { display: 'inline-flex', flexDirection: 'row', alignItems: 'center', fontFamily: B.letra, fontSize: B.base, fontWeight: 600, color: B.titulo }
 const fechaCorta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
-const val = (x, valores) => typeof x === 'string' && x.startsWith('$') ? valores[x.slice(1)] : x
+const esParametro = (x) => typeof x === 'string' && x.startsWith('$')
+const val = (x, valores) => esParametro(x) ? valores[x.slice(1)] : x
 const AYUDA_FILTRO = 'Cada fila dice de quién es: un índice (QQQ, SPY…) o «Este valor». Se tienen que cumplir todas. Si no se cumplen, no compro nada, aunque se cumpla «Compro cuando…». No obligan a vender lo que ya tengo.'
 // La línea de ejecución dice lo que esté elegido en «Cómo compro» y en la vigilancia de los stops.
 export const lineaEjecucion = (def) => `La señal se mira al cierre de cada vela. ${leeOrden(def).modo === 'maximo' ? 'Se compra con la orden en el máximo de «Cómo compro»' : 'Se compra a la apertura de la vela siguiente'} y se vende a la apertura de la vela siguiente a la señal de venta (los stops y el objetivo, en cuanto el precio llega). Los stops y las salidas se vigilan ${vigilaDesdeLaCompra(def) ? 'ya en la vela de la compra' : 'desde la vela siguiente a la compra'}. Opciones poco habituales (orden límite, compra al cierre, optimizador): `
@@ -114,7 +115,9 @@ function Menu({ f, onCambia, abiertoInicial = false, onSubir = null, onBajar = n
 // debajo. quien / onQuien: el selector «de quién» de «Solo opero cuando…».
 // asa (V9.1049): las props de arrastre de la fila (onDragStart…) o null; onSubir / onBajar: los del menú «…»; avisoExtra: una nota
 // debajo (la de las filas de índice).
-function Fila({ f, errores, valores, tarjeta, color, onCambia, onQuita, quien, onQuien, menuAbierto = false, ayudaAbierta = false, intervalo = 'diario', asa = null, onSubir = null, onBajar = null, avisoExtra = null }) {
+// onValor(nombre, v) (V9.1053): cuando el número de la casilla es un parámetro con nombre («$ema»), se cambia su valor y la fila
+// sigue diciendo «$ema»; así, si se vuelve a dejar como estaba, la estrategia es la guardada, byte a byte.
+function Fila({ f, errores, valores, tarjeta, color, onCambia, onValor, onQuita, quien, onQuien, menuAbierto = false, ayudaAbierta = false, intervalo = 'diario', asa = null, onSubir = null, onBajar = null, avisoExtra = null }) {
   const p = f.cond.p || {}, decl = Object.fromEntries((CONDICIONES_EDITOR[f.cond.c]?.parametros || []).map(d => [d.clave, d]))
   const hay = Object.keys(errores).length > 0
   const campo = (c, j) => {
@@ -122,7 +125,7 @@ function Fila({ f, errores, valores, tarjeta, color, onCambia, onQuita, quien, o
     if (c.tipo === 'grupoFuerza') return <select key={j} style={mini} aria-label="Comparado con" value={GRUPOS_FUERZA[0].id} onChange={() => {}} title="El grupo de valores con el que se compara (hoy, solo el Nasdaq-100)">{GRUPOS_FUERZA.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}</select>
     if (c.tipo === 'op') return <select key={j} style={mini} aria-label="Símbolo" value={opDe(f)} onChange={e => onCambia(conOp(f, e.target.value))} title={AYUDA_CRUZA}>{opcionesOp(f.cond.c).map(o => <option key={o} value={o} disabled={opDesactivada(f, o)}>{o}</option>)}</select>
     if (c.tipo === 'media' || c.tipo === 'opcion') return <select key={j} style={mini} aria-label={decl[c.k]?.etiqueta} value={p[c.k] ?? decl[c.k]?.defecto} onChange={e => onCambia(conNumero(f, c.k, e.target.value))}>{(decl[c.k]?.opciones || []).map(o => <option key={o} value={o}>{o}</option>)}</select>
-    return <Numero key={j} valor={val(p[c.k], valores)} error={errores[c.k]} etiqueta={decl[c.k]?.etiqueta} onCambia={v => onCambia(conNumero(f, c.k, v))}/>
+    return <Numero key={j} valor={val(p[c.k], valores)} error={errores[c.k]} etiqueta={decl[c.k]?.etiqueta} onCambia={v => esParametro(p[c.k]) && onValor ? onValor(p[c.k].slice(1), v) : onCambia(conNumero(f, c.k, v))}/>
   }
   return (
     <div data-fila={f.cond.c} data-error={hay ? 'si' : undefined} style={{ border: `1px solid ${hay ? ROJO : B.borde}`, borderLeft: `3px solid ${hay ? ROJO : color}`, borderRadius: B.radioBoton, padding: '6px 8px', marginTop: 8, background: B.fondo }}>
@@ -171,6 +174,16 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   const orig = useRef(null); if (!orig.current) orig.current = estadoDe(fila)
   const { def, valores } = est
   const setDef = (d) => setEst(e => ({ ...e, def: typeof d === 'function' ? d(e.def) : d }))
+  // Un parámetro con nombre (V9.1053): se cambia su valor. Si vuelve al de la estrategia guardada y allí no estaba escrito (salía
+  // de su valor por defecto), se quita otra vez, para que los valores queden como los guardados.
+  const ponValor = (nombre, v) => setEst(e => {
+    const vs = { ...e.valores, [nombre]: v }
+    let porDefecto; try { porDefecto = valoresDe(orig.current.def, orig.current.valores)[nombre] } catch (_) {}
+    if (!(nombre in orig.current.valores) && v === porDefecto) delete vs[nombre]
+    return { ...e, valores: vs }
+  })
+  // Una casilla de número fuera de las filas (stops, orden, objetivo, tiempo): si lo guardado es un parámetro, su valor; si no, el número.
+  const numeroEn = (actual, v, escribe) => esParametro(actual) ? ponValor(actual.slice(1), v) : setDef(escribe)
   const intervalo = valores.intervalo === 'semanal' ? 'semanal' : 'diario'
   const [modoCompraUI, setModoCompraUI] = useState(() => leeCompra(def).modo || 'todas')
   const [modoVentaUI, setModoVentaUI] = useState(() => leeVenta(def).modo || 'alguna')
@@ -306,7 +319,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
       {error && <div data-error-proteccion style={{ color: ROJO, fontSize: 13, marginTop: 6 }}>{error}</div>}
     </div>
   )
-  const numStop = (k, s, ruta) => { const [, que, , ] = (CAMPOS_STOP_TARJETA[s.tipo] || []).find(([r]) => r.join('.') === ruta.join('.')) || []; return <Numero valor={numeroStop(s, ruta, valoresEf)} error={errProt.stops[k]?.[ruta.join('.')]} etiqueta={que} onCambia={v => setDef(d => ponNumeroStop(d, k, ruta, v))}/> }
+  const numStop = (k, s, ruta) => { const [, que, , ] = (CAMPOS_STOP_TARJETA[s.tipo] || []).find(([r]) => r.join('.') === ruta.join('.')) || []; return <Numero valor={numeroStop(s, ruta, valoresEf)} error={errProt.stops[k]?.[ruta.join('.')]} etiqueta={que} onCambia={v => numeroEn(ruta.reduce((x, c) => x?.[c], s), v, d => ponNumeroStop(d, k, ruta, v))}/> }
   const cuerpoStop = (s, k) => {
     if (s.tipo === 'porcentaje') return <>Vender si baja un {numStop(k, s, ['pct'])} % bajo la compra</>
     if (s.tipo === 'minimoVelas') return <>En el mínimo de las últimas {numStop(k, s, ['n'])} velas</>
@@ -424,7 +437,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
             {filtro.ok ? <>
               {filtro.filas.map((f, k) => <div key={k} {...(arrastre ? sobre('filtro', k) : {})}>{marca('filtro', k, MORADO)}<Fila f={f} errores={errFiltro[k]} valores={valoresEf} tarjeta="filtro" color={MORADO} quien={f.quien} onQuien={q => cambiaQuien(k, q)} menuAbierto={menuInicial?.tarjeta === 'filtro' && menuInicial.k === k} ayudaAbierta={ayudaInicial?.tarjeta === 'filtro' && ayudaInicial.k === k} intervalo={intervalo}
                 asa={asaDe('filtro', k)} {...subeBaja('filtro', k)} avisoExtra={f.quien !== 'valor' ? avisoInd : null}
-                onCambia={g => cambiaFiltro(filtro.filas.map((x, j) => j === k ? { ...g, quien: x.quien } : x))} onQuita={() => cambiaFiltro(filtro.filas.filter((_, j) => j !== k))}/></div>)}
+                onValor={ponValor} onCambia={g => cambiaFiltro(filtro.filas.map((x, j) => j === k ? { ...g, quien: x.quien } : x))} onQuita={() => cambiaFiltro(filtro.filas.filter((_, j) => j !== k))}/></div>)}
               {marca('filtro', filtro.filas.length, MORADO)}
               {!filtro.filas.length && vacia('Sin filtro: opera siempre que se cumpla «Compro cuando…». Añádelo desde el catálogo con «+» o arrastrándolo aquí.')}
               {filtro.filas.length > 1 && <div data-orden style={{ ...S.apagado, marginTop: 8 }}>{ORDEN_IGUAL}</div>}
@@ -437,7 +450,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
             {compra.ok ? <>
               {compra.filas.map((f, k) => <div key={k} {...(arrastre ? sobre('compra', k) : {})}>{marca('compra', k, AZUL)}<Fila f={f} errores={errCompra[k]} valores={valoresEf} tarjeta="compra" color={AZUL} menuAbierto={menuInicial?.tarjeta === 'compra' && menuInicial.k === k} ayudaAbierta={ayudaInicial?.tarjeta === 'compra' && ayudaInicial.k === k} intervalo={intervalo}
                 asa={asaDe('compra', k)} {...subeBaja('compra', k)}
-                onCambia={g => cambiaCompra(compra.filas.map((x, j) => j === k ? g : x))} onQuita={() => cambiaCompra(compra.filas.filter((_, j) => j !== k))}/></div>)}
+                onValor={ponValor} onCambia={g => cambiaCompra(compra.filas.map((x, j) => j === k ? g : x))} onQuita={() => cambiaCompra(compra.filas.filter((_, j) => j !== k))}/></div>)}
               {marca('compra', compra.filas.length, AZUL)}
               {!compra.filas.length && vacia('Añade condiciones desde el catálogo con «+» o arrastrándolas aquí.')}
               {compra.filas.length > 1 && <div data-orden style={{ ...S.apagado, marginTop: 8 }}>{ORDEN_IGUAL}</div>}
@@ -449,7 +462,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
             {venta.ok ? <>
               {venta.filas.map((f, k) => <div key={k} {...(arrastre ? sobre('venta', k) : {})}>{marca('venta', k, NARANJA)}<Fila f={f} errores={errVenta[k]} valores={valoresEf} tarjeta="venta" color={NARANJA} menuAbierto={menuInicial?.tarjeta === 'venta' && menuInicial.k === k} ayudaAbierta={ayudaInicial?.tarjeta === 'venta' && ayudaInicial.k === k} intervalo={intervalo}
                 asa={asaDe('venta', k)} {...subeBaja('venta', k)}
-                onCambia={g => cambiaVenta(venta.filas.map((x, j) => j === k ? g : x))} onQuita={() => cambiaVenta(venta.filas.filter((_, j) => j !== k))}/></div>)}
+                onValor={ponValor} onCambia={g => cambiaVenta(venta.filas.map((x, j) => j === k ? g : x))} onQuita={() => cambiaVenta(venta.filas.filter((_, j) => j !== k))}/></div>)}
               {marca('venta', venta.filas.length, NARANJA)}
               {!venta.filas.length && vacia('Sin condiciones de venta: sale solo por la protección de abajo. Añádelas desde el catálogo con «+» o arrastrándolas aquí.')}
               {venta.filas.length > 1 && <div data-orden style={{ ...S.apagado, marginTop: 8 }}>{ORDEN_VENTA}</div>}
@@ -466,12 +479,12 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                 <Ayuda texto={AYUDA_ORDEN} etiqueta="Cómo compro"/>
               </div>
               {orden.modo === 'maximo' && <div data-orden-maximo style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={linea}>Compro solo si el precio sube hasta el máximo de las últimas <Numero valor={typeof orden.velas === 'string' && orden.velas.startsWith('$') ? valoresEf[orden.velas.slice(1)] : orden.velas} error={errVelasOrden} etiqueta="Velas de la orden" onCambia={v => setDef(d => ponVelasOrden(d, v))}/> velas (1 = la vela de la señal).</div>
+                <div style={linea}>Compro solo si el precio sube hasta el máximo de las últimas <Numero valor={typeof orden.velas === 'string' && orden.velas.startsWith('$') ? valoresEf[orden.velas.slice(1)] : orden.velas} error={errVelasOrden} etiqueta="Velas de la orden" onCambia={v => numeroEn(orden.velas, v, d => ponVelasOrden(d, v))}/> velas (1 = la vela de la señal).</div>
                 {errVelasOrden && <div style={{ color: ROJO, fontSize: 13 }}>{errVelasOrden}</div>}
                 <div style={linea}>Si no llega, la orden <select style={mini} aria-label="Si no llega" value={orden.ajuste} onChange={e => setDef(d => ponAjuste(d, e.target.value))}>{AJUSTES.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></div>
                 <div>
                   <label style={{ ...etiquetaCampo, fontWeight: 400, gap: 6 }}><input type="checkbox" style={{ width: 'auto' }} checked={!!orden.cancelar} onChange={e => setDef(d => ponCancelar(d, e.target.checked ? { cond: copia(CANCELAR_DEFECTO), env: null } : null))}/> Cancelar la orden si…</label>
-                  {orden.cancelar && <Fila f={orden.cancelar} errores={errCancelar} valores={valoresEf} tarjeta="cancelar" color={AZUL} intervalo={intervalo} onCambia={g => setDef(d => ponCancelar(d, g))} onQuita={() => setDef(d => ponCancelar(d, null))}/>}
+                  {orden.cancelar && <Fila f={orden.cancelar} errores={errCancelar} valores={valoresEf} tarjeta="cancelar" color={AZUL} intervalo={intervalo} onValor={ponValor} onCambia={g => setDef(d => ponCancelar(d, g))} onQuita={() => setDef(d => ponCancelar(d, null))}/>}
                 </div>
                 <div style={S.apagado}>Ejemplo: la vela de la señal tiene máximo en 52 €: compro si en las velas siguientes llega a 52 €.</div>
               </div>}
@@ -513,7 +526,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                 </select>
                 {!prot.stops.length && prot.objetivo.estado === 'ninguno' && <div style={{ ...S.apagado, marginTop: 6 }}>Necesita un stop: se calcula a partir de lo que arriesgas hasta el stop.</div>}
                 {prot.objetivo.estado === 'veces' && <>
-                  <div style={linea}>Vender al ganar <Numero valor={objetivoValor} error={errProt.objetivo} etiqueta="Veces lo que arriesgo" onCambia={v => setDef(d => ponSalida(d, 'objetivo', 'multiploR', v))}/> veces lo que arriesgo</div>
+                  <div style={linea}>Vender al ganar <Numero valor={objetivoValor} error={errProt.objetivo} etiqueta="Veces lo que arriesgo" onCambia={v => numeroEn(prot.objetivo.valor, v, d => ponSalida(d, 'objetivo', 'multiploR', v))}/> veces lo que arriesgo</div>
                   {prot.stops.length > 0 && !errProt.objetivo && <div data-calculo style={{ ...S.apagado, marginTop: 4 }}>{calculoObjetivo}</div>}
                 </>}
               </>, errProt.objetivo)}
@@ -522,7 +535,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                   <option value="no">Ninguno</option><option value="si">Vender a las…</option>
                 </select>
                 {prot.tiempo.estado === 'velas' && <>
-                  <div style={linea}>Vender a las <Numero valor={tiempoN} error={errProt.tiempo} etiqueta="Velas" onCambia={v => setDef(d => ponSalida(d, 'tope', 'velas', v))}/> velas</div>
+                  <div style={linea}>Vender a las <Numero valor={tiempoN} error={errProt.tiempo} etiqueta="Velas" onCambia={v => numeroEn(prot.tiempo.valor, v, d => ponSalida(d, 'tope', 'velas', v))}/> velas</div>
                   <div data-equivalencia style={{ ...S.apagado, marginTop: 4 }}>= {errProt.tiempo ? '[?]' : aTexto(tiempoN)} {intervalo === 'semanal' ? 'semanas, porque las velas son semanales' : 'días de mercado, porque las velas son diarias'}</div>
                 </>}
               </>, errProt.tiempo)}

@@ -752,3 +752,37 @@ SIEMPRE de la regla de la pantalla (nunca con IA). Con errores: «Corrige lo que
   ahora: curvas iguales (315 puntos en cada una; Simple, Compuesta, B&H y SP500). El `EquityChart` real montado en el navegador con
   esas curvas: el de V9.1051 no pinta nada (0 píxeles de las tres líneas, el error de arriba); el de V9.1052 pinta Simple,
   Compuesta y B&H en los cuatro casos, sin errores.
+
+## 19. Arreglos pequeños del paso 1 y de los gráficos del paso 2 (V9.1053)
+
+### Auditoría (solo lectura)
+
+- **Comprobaciones comunes**: los scripts están en el scratchpad de la sesión `0c02b5f9` de Claude Code (`bateria.js`,
+  `prueba_cartera1000.js`, `huellas_lab.js`, `cargador.js`, `entorno_cache5.js`) y no en el repositorio; la base se lee con el
+  token de `supabase login` (Administrador de credenciales de Windows), siempre en solo lectura. Ejecutados en V9.1052: batería
+  52 de 52 y 44 de 44 byte a byte; LOTE_1–3 y CARTERA_1–3, 12 de 12; huellas PRUEBA_EDITOR_1 (a2cdfd85), RETROCESOS_1 (23c5006c) y
+  PRUEBA_BUILDER_1 · 2026-10-22 (0d6726ec).
+- **«Cambios sin guardar»**: no hay ningún texto con ese nombre; lo que depende de «hay cambios» es el aviso amarillo de versión
+  nueva («Al guardar se creará la versión 2…») y si «Guardar» escribe. Fallaba con los números que en la estrategia son un
+  parámetro con nombre (por ejemplo `$ema` en «Copia editor 23»): la casilla escribía el número fijo en la fila (`20` en lugar de
+  `$ema`), así que al volver a dejarlo como estaba la estrategia ya no era la guardada.
+- **«Subir» / «Bajar»**: existen, dentro del menú «…» de cada fila (debajo de «Darle la vuelta»), y solo salen cuando la tarjeta
+  tiene más de una fila. Se dejan ahí.
+- **Señales con velas semanales**: se dibujaban velas DIARIAS y la regla se calculaba sobre ellas (por ejemplo, PRUEBA_BUILDER_1
+  semanal en AAPL 2016–2021: 1.511 velas y 65 compras, cuando el backtest hace 16 sobre 313 semanas).
+
+### Cambios
+
+- Una casilla cuyo número es un parámetro con nombre cambia el valor del parámetro y la fila sigue diciendo `$nombre` (filas de
+  las tarjetas, cancelar la orden, stops, velas de la orden, objetivo y salida por tiempo). Si el parámetro salía de su valor por
+  defecto y se vuelve a ese valor, se quita otra vez de los valores. Así, volver a dejarlo como estaba = lo guardado, byte a byte:
+  sin aviso de versión y «Guardar» no escribe.
+- `lib/builder/senales.js`: con velas semanales construye las semanas desde las diarias (`semanalesDesdeDiarias`, como
+  `pages/api/datos.js`), del valor y del índice del filtro.
+- `components/BuilderCurvas.js`: los dos gráficos se dibujan a su ancho real (1 unidad = 1 píxel, medido con ResizeObserver), con
+  todas las letras a 12 px; la curva en escala logarítmica (marcas 1-2-5 en euros y la nota «escala logarítmica»); las etiquetas
+  del final de las líneas, al menos 16 px separadas (y, si se salen por abajo, suben); los textos junto a una línea vertical van a
+  su izquierda en la mitad derecha. Ninguna cifra cambia.
+- Comprobado: las 4 estrategias del editor, cambiar y volver = lo guardado; ida y vuelta sin escribir nada; 4 casos semanales
+  (AAPL, MSFT, QQQ) con las mismas compras (fecha y precio) y ventas que `backtestActivo`; gráficos con un caso en que la
+  estrategia acaba exactamente donde la peor copia; comprobaciones comunes.
