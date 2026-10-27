@@ -903,3 +903,37 @@ están en el scratchpad de la sesión 0c02b5f9 de Claude Code; conviene copiarla
 
 Comprobado en V9.1056 desde la nueva ubicación: el mismo resultado que el arnés de antes (guardián 0, build, batería 52/52 y
 44/44 byte a byte, 21 resultados de cartera idénticos, lotes y carteras 12 de 12 (6 con la versión anterior y 6 con la de ahora), las tres huellas).
+
+## 23. Señales en el gráfico: el stop cortado, franjas de las piezas y comisiones pagadas (V9.1057)
+
+### Auditoría (solo lectura)
+
+- **«Tortugas 20/10» en AAPL 2010–2015** (precios de la caché de la app): 30 operaciones, todas cerradas por el stop. Entre la venta
+  del 27/09/2012 (23,61) y la compra del 22/03/2013 NO hay operación abierta, y en julio–agosto de 2015 solo del 20 al 22 de julio.
+  El motor está bien: el historial del stop de cada operación cae dentro de sus fechas.
+- **La causa**: en «Señales en el gráfico» el stop iba en UNA serie con huecos (velas sin valor), y lightweight-charts une los
+  puntos de una serie por encima de los huecos: de ahí la línea plana hacia 23,5 hasta abril de 2013 y hacia 31,5 en 2015. En
+  «Backtest de un valor» (components/CandleChart.js) cada operación ya tiene su propia línea de stop, de su compra a su venta: en
+  el código no hay nada que una dos operaciones.
+- **Comisiones**: el núcleo (lib/nucleoBacktest.js) descuenta en la columna compuesta, en cada operación, la comisión de compra
+  (fija + % del importe) y la de venta (fija + % del importe de salida), y la anota en `comisionCompuesta` (solo si hay comisión).
+
+### Cómo queda
+
+- **Stop activo**: `calculaSenales` da, además de `valores`, `tramos` (uno por operación: [[índice, nivel], …]) y el gráfico dibuja
+  una línea por tramo: solo mientras hay operación abierta, sin unir la venta de una con la compra de la siguiente. Como las flechas,
+  solo cuentan las operaciones que empiezan en las fechas elegidas (antes, una que venía del calentamiento pintaba el stop al
+  principio del periodo sin estar en la lista).
+- **Franjas de las piezas** (`tarjeta: 'pieza'`, con su color, en la misma escala de tiempo que las velas): «Supera el máximo de N
+  velas» (con la orden en el nivel de ruptura: el máximo de la vela supera el de las N anteriores, la misma `maximoPrevio` y el
+  mismo «>» del motor), «Toca el stop» (con stops: la vela en que el motor vende por un stop; las salidas por stop son las que traen
+  su nivel, `stopPx`) y «Con operación abierta» (con la ruptura o con stops: de la compra a la venta, las dos incluidas).
+- **«Comisiones pagadas»** en la tabla de cifras: la suma de `comisionCompuesta` de las operaciones (`cifrasRegla` → `comisiones`),
+  y su % sobre el capital inicial (10.000 €). Con solo comisión fija por compra: «30 × 0,36 € = 10,80 € · 0,11 % del capital
+  inicial»; con venta o porcentaje, la cuenta entera («30 compras × 1,00 € + 30 ventas × 2,00 € + 0,10 % del importe en cada compra
+  y en cada venta = …»); sin comisión, «0,00 € · «Backtest de un valor» no tiene comisión».
+- Comprobado: Tortugas 20/10 en AAPL 2010–2015: 30 tramos, cada uno de la compra a la venta de su operación, nada en los dos
+  tramos del aviso; franjas contadas a mano (266 velas con ruptura, 30 toques, 627 velas con operación abierta; cada compra es una
+  vela con ruptura); comisiones: 10,80 € y el capital compuesto final rehecho a mano (25.150,27 frente a 25.165,58 sin comisión), y
+  con 1 € + 2 € + 0,1 % la suma a mano (1.226,16 €); las 5 estrategias del editor en AAPL (diario y semanal, 2010–2015 y 2020–2021)
+  iguales a V9.1056 salvo lo nuevo (las cifras, idénticas); ida y vuelta; montaje; comprobaciones comunes.

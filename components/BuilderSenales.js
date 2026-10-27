@@ -25,7 +25,7 @@ import Ayuda from './BuilderAyuda'
 const VERDE = '#3fb950', NARANJA = '#f0883e', MORADO = '#a371f7', AZUL = '#58a6ff', AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE_CIFRA = '#7ee2a0', GRIS_BH = '#8b98a8'
 const fechaCorta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 const ESPERA_MS = 250
-const AYUDA = 'Las flechas son las compras (▲ verde, en la vela en que se compra) y las ventas (▼ naranja) que hace el motor con esta regla en este valor y estas fechas: las mismas de «Backtest de un valor» y de la prueba del paso 2. Las franjas de debajo de las velas dicen, vela a vela, si se cumple cada condición (pintado = sí) y van en la misma escala de tiempo: cada marca queda justo debajo de su vela, también al hacer zoom. La zona gris es donde el filtro no deja comprar.'
+const AYUDA = 'Las flechas son las compras (▲ verde, en la vela en que se compra) y las ventas (▼ naranja) que hace el motor con esta regla en este valor y estas fechas: las mismas de «Backtest de un valor» y de la prueba del paso 2. Las franjas de debajo de las velas dicen, vela a vela, si se cumple cada condición y cada pieza (la ruptura, tocar el stop, tener una operación abierta; pintado = sí) y van en la misma escala de tiempo: cada marca queda justo debajo de su vela, también al hacer zoom. La zona gris es donde el filtro no deja comprar.'
 const AYUDA_ENSAYO = 'El ensayo son los años 2010–2015, ANTES de los que usa el paso 2 (2016–2025). Ajustar la regla mirando 2016–2025 y luego probarla en esos mismos años sería hacer trampa sin querer: la regla saldría bien porque se ha hecho a la medida de esos años. Ejemplo: si aquí cambias el máximo de 20 a 25 velas porque en 2010–2015 compra mejor, el paso 2 dirá después si eso funciona en años que no has mirado.'
 const AYUDA_CASILLAS = 'Cada casilla es un número de la regla. Cambiarla es solo para probar: el gráfico y las cifras se recalculan al momento, pero la estrategia no cambia. Ejemplo: con «Compro: máximo de 20 velas», escribe 25 y verás las compras con 25; la estrategia sigue con 20 hasta que pulses «Guardar estos valores en la estrategia». Al salir del paso 1 y volver a entrar, salen siempre los valores guardados.'
 const AYUDA_CIFRAS = 'Las mismas cifras que «Backtest de un valor» con este valor y estas fechas, con el 100 % del capital y su comisión (los filtros de su panel no cuentan: no son de la estrategia). Compuesto: cada operación usa todo el dinero acumulado. CAGR: lo que crece el dinero cada año, de media. Max Drawdown: la mayor caída desde un máximo. Win Rate: el % de operaciones que ganan. Factor de beneficio: lo ganado entre lo perdido (2 = se gana el doble de lo que se pierde). Tiempo invertido: el % del tiempo con la acción comprada. Ejemplo: CAGR 12 % con Tiempo invertido 40 % es crecer un 12 % al año estando dentro menos de la mitad del tiempo.'
@@ -58,8 +58,10 @@ function Graficos({ r }) {
         zona.setData(r.velas.map((v, k) => ({ time: v.date, value: r.bloqueado[k] ? 1 : 0 })))
       }
       const linea = (l, ancho = 2) => {
-        const s = ch.addLineSeries({ color: l.color, lineWidth: ancho, lineStyle: l.discontinua ? LineStyle.Dashed : LineStyle.Solid, lineType: l.escalera ? LineType.WithSteps : LineType.Simple, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
-        s.setData(r.velas.map((v, k) => l.valores[k] != null ? { time: v.date, value: l.valores[k] } : { time: v.date }))
+        const serie = () => ch.addLineSeries({ color: l.color, lineWidth: ancho, lineStyle: l.discontinua ? LineStyle.Dashed : LineStyle.Solid, lineType: l.escalera ? LineType.WithSteps : LineType.Simple, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+        // V9.1057: con tramos (el stop activo), una línea por tramo: una serie une sus puntos por encima de los huecos.
+        if (l.tramos) { for (const t of l.tramos) serie().setData(t.map(([k, x]) => ({ time: r.velas[k].date, value: x }))); return }
+        serie().setData(r.velas.map((v, k) => l.valores[k] != null ? { time: v.date, value: l.valores[k] } : { time: v.date }))
       }
       for (const m of r.medias) linea(m)
       for (const c of r.canales || []) linea(c)
@@ -68,7 +70,7 @@ function Graficos({ r }) {
         const id = `franja${i}`, y0 = ALTO_PRECIO + HUECO + i * ALTO_FRANJA
         const s = ch.addHistogramSeries({ priceScaleId: id, priceLineVisible: false, lastValueVisible: false, base: 0 })
         ch.priceScale(id).applyOptions({ scaleMargins: { top: (y0 + 3) / H, bottom: 1 - (y0 + ALTO_FRANJA - 3) / H }, visible: false })
-        const color = f.tarjeta === 'filtro' ? MORADO : AZUL
+        const color = f.color || (f.tarjeta === 'filtro' ? MORADO : AZUL)
         s.setData(r.velas.map((v, k) => ({ time: v.date, value: 1, color: f.cumple[k] === true ? color : 'rgba(139,155,173,0.10)' })))
       })
       const marcas = [...r.compras.map(c => ({ time: c.date, position: 'belowBar', color: VERDE, shape: 'arrowUp', text: '' })), ...r.ventas.map(c => ({ time: c.date, position: 'aboveBar', color: NARANJA, shape: 'arrowDown', text: '' }))].sort((a, b) => a.time.localeCompare(b.time))
@@ -99,7 +101,7 @@ function Graficos({ r }) {
         <div ref={precio} data-grafico="precio" data-franjas={franjas.length} style={{ width: '100%', minHeight: H }}/>
         {franjas.map((f, i) => (
           <div key={i} data-franja={f.nombre} title={f.frase} style={{ position: 'absolute', left: 4, top: ALTO_PRECIO + HUECO + i * ALTO_FRANJA + 1, height: ALTO_FRANJA - 2, display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'none', zIndex: 3,
-            fontSize: 11, lineHeight: 1, color: f.tarjeta === 'filtro' ? MORADO : '#8db8ff', background: 'rgba(13,17,23,0.8)', padding: '0 4px', borderRadius: 3, maxWidth: '45%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+            fontSize: 11, lineHeight: 1, color: f.color || (f.tarjeta === 'filtro' ? MORADO : '#8db8ff'), background: 'rgba(13,17,23,0.8)', padding: '0 4px', borderRadius: 3, maxWidth: '45%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
             {f.nombre} · {f.cumple.filter(x => x === true).length} velas
           </div>
         ))}
@@ -138,6 +140,16 @@ function Curva100({ curvas }) {
     </div>
   )
 }
+// V9.1057: la fila «Comisiones pagadas»: lo que descuenta el núcleo de «Backtest de un valor» (lib/builder/ensayo.js cifrasRegla), con
+// su cuenta. Solo comisión fija por compra: «30 × 0,36 € = 10,80 € · 0,11 % del capital inicial».
+export function textoComisiones(com) {
+  const eur = (x) => `${fmt(x, 2)} €`, n = com.operaciones
+  const tras = `${eur(com.total)} · ${fmt(com.pct, 2)} % del capital inicial`
+  if (!com.compra && !com.venta && !com.porcentaje) return '0,00 € · «Backtest de un valor» no tiene comisión'
+  if (!com.venta && !com.porcentaje) return `${n} × ${eur(com.compra)} = ${tras}`
+  const partes = [com.compra ? `${n} compras × ${eur(com.compra)}` : null, com.venta ? `${n} ventas × ${eur(com.venta)}` : null, com.porcentaje ? `${fmt(com.porcentaje, 2)} % del importe en cada compra y en cada venta` : null].filter(Boolean)
+  return `${partes.join(' + ')} = ${tras}`
+}
 export function TablaCifras({ c, simbolo }) {
   const poca = c.regla.operaciones < MIN_OPERACIONES
   const col = poca ? B.apagado : null
@@ -151,6 +163,7 @@ export function TablaCifras({ c, simbolo }) {
     ['Tiempo invertido', <span style={{ color: col || B.texto }}>{fmt(c.regla.tiempoInvertido, 0)} %</span>, '100 %'],
   ]
   const celda = { padding: '7px 6px', borderBottom: `1px solid ${B.borde}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
+  const com = c.comisiones
   return (
     <table data-cifras style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
       <thead><tr>
@@ -158,7 +171,8 @@ export function TablaCifras({ c, simbolo }) {
         <th scope="col" style={{ ...celda, fontSize: 12, color: poca ? B.apagado : B.secundario }}>Tu regla</th>
         <th scope="col" style={{ ...celda, fontSize: 12, color: B.secundario }}>Comprar y mantener {simbolo}</th>
       </tr></thead>
-      <tbody>{filas.map(([n, a, b]) => <tr key={n} data-fila-cifra={n}><td style={{ ...celda, textAlign: 'left', color: B.secundario }}>{n}</td><td style={celda}>{a}</td><td style={{ ...celda, color: b === '—' ? B.apagado : B.texto }}>{b}</td></tr>)}</tbody>
+      <tbody>{filas.map(([n, a, b]) => <tr key={n} data-fila-cifra={n}><td style={{ ...celda, textAlign: 'left', color: B.secundario }}>{n}</td><td style={celda}>{a}</td><td style={{ ...celda, color: b === '—' ? B.apagado : B.texto }}>{b}</td></tr>)}
+        {com && <tr data-fila-cifra="Comisiones pagadas"><td style={{ ...celda, textAlign: 'left', color: B.secundario }}>Comisiones pagadas</td><td colSpan={2} style={{ ...celda, color: B.texto }}>{textoComisiones(com)}</td></tr>}</tbody>
     </table>
   )
 }
@@ -293,7 +307,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
           </div>
           {r.avisos.map((a, k) => <div key={k} data-aviso-senales style={{ color: AMARILLO, fontSize: 13 }}>{a}</div>)}
           <Graficos r={r}/>
-          <div style={{ ...S.apagado, marginTop: 4 }}>De {fechaCorta(r.velas[0].date)} a {fechaCorta(r.velas[r.velas.length - 1].date)} · {r.velas.length} velas · {simbolo}{r.franjas.length ? ' · debajo de las velas, una franja por condición (pintado = se cumple)' : ''}</div>
+          <div style={{ ...S.apagado, marginTop: 4 }}>De {fechaCorta(r.velas[0].date)} a {fechaCorta(r.velas[r.velas.length - 1].date)} · {r.velas.length} velas · {simbolo}{r.franjas.length ? ' · debajo de las velas, una franja por condición y por pieza (pintado = se cumple)' : ''}</div>
         </section>
         <aside data-columna-cifras style={{ flex: '1 1 320px', maxWidth: 400, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ ...S.tarjeta, padding: 12 }}>
