@@ -823,7 +823,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
       // el precio, el discontinuo es la marca de las del usuario. Sin `grafico` no da ni una vuelta.
       for(const s of planGrafico.precio){
         try{
-          const op={color:s.color,lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false}
+          const op={color:s.color,lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,...(s.escalera?{lineType:1}:{})}   // V9.1059: escalera (el último swing)
           const serie=s.tipo==='histograma'?chart.addHistogramSeries(op):chart.addLineSeries(op)
           serie.setData(s.puntos)
           overlaySeriesRef.current.push(serie)

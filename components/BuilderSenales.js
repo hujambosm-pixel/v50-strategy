@@ -23,6 +23,7 @@ import { fmt } from '../lib/utils'
 import CampoFecha from './CampoFecha'
 import BuscadorValor from './BuscadorValor'
 import Ayuda from './BuilderAyuda'
+import { NOTA_LINEA_SWING } from '../lib/builder/fichas'
 
 const VERDE = '#3fb950', NARANJA = '#f0883e', MORADO = '#a371f7', AZUL = '#58a6ff', AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE_CIFRA = '#7ee2a0', GRIS_BH = '#8b98a8'
 const fechaCorta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
@@ -72,10 +73,12 @@ function Graficos({ r }) {
         const id = `franja${i}`, y0 = ALTO_PRECIO + HUECO + i * ALTO_FRANJA
         const s = ch.addHistogramSeries({ priceScaleId: id, priceLineVisible: false, lastValueVisible: false, base: 0 })
         ch.priceScale(id).applyOptions({ scaleMargins: { top: (y0 + 3) / H, bottom: 1 - (y0 + ALTO_FRANJA - 3) / H }, visible: false })
-        const color = f.color || (f.tarjeta === 'filtro' ? MORADO : AZUL)
+        const color = f.color || (f.tarjeta === 'filtro' ? MORADO : AZUL)   // (las de venta y las piezas traen el suyo)
         s.setData(r.velas.map((v, k) => ({ time: v.date, value: 1, color: f.cumple[k] === true ? color : 'rgba(139,155,173,0.10)' })))
       })
-      const marcas = [...r.compras.map(c => ({ time: c.date, position: 'belowBar', color: VERDE, shape: 'arrowUp', text: '' })), ...r.ventas.map(c => ({ time: c.date, position: 'aboveBar', color: NARANJA, shape: 'arrowDown', text: '' }))].sort((a, b) => a.time.localeCompare(b.time))
+      // V9.1059: y un punto en la vela de cada swing (los máximos arriba, los mínimos abajo).
+      const marcas = [...r.compras.map(c => ({ time: c.date, position: 'belowBar', color: VERDE, shape: 'arrowUp', text: '' })), ...r.ventas.map(c => ({ time: c.date, position: 'aboveBar', color: NARANJA, shape: 'arrowDown', text: '' })),
+        ...(r.puntosSwing || []).map(p => ({ time: p.date, position: p.lado === 'max' ? 'aboveBar' : 'belowBar', color: p.lado === 'max' ? VERDE : NARANJA, shape: 'circle', size: 0.6, text: '' }))].sort((a, b) => a.time.localeCompare(b.time))
       velas.setMarkers(marcas)
       ch.timeScale().fitContent()
       r.osciladores.forEach((o, j) => {
@@ -302,6 +305,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
             <span><span style={{ color: VERDE }}>▲</span> compra · <span style={{ color: NARANJA }}>▼</span> vende</span>
             {r.medias.map(m => <span key={m.nombre} style={{ color: m.color }}>{m.discontinua ? '— —' : '—'} {m.nombre}</span>)}
             {(r.canales || []).map(m => <span key={m.nombre} data-leyenda-canal={m.nombre} style={{ color: m.color }}>{m.discontinua ? '— —' : '—'} {m.nombre}</span>)}
+            {(r.puntosSwing || []).length > 0 && <span data-leyenda-swings>● swing (la línea empieza al confirmarse)<Ayuda texto={NOTA_LINEA_SWING} etiqueta="Swings"/></span>}
             {r.franjas.some(f => f.tarjeta === 'filtro') && <span><span style={{ display: 'inline-block', width: 14, height: 10, background: 'rgba(139,155,173,0.35)', marginRight: 4 }}/>filtro: no opero</span>}
             <Ayuda texto={AYUDA} etiqueta="Señales en el gráfico"/>
             <strong data-cuenta style={{ marginLeft: 'auto' }}>En este periodo: {r.compras.length} {r.compras.length === 1 ? 'compra' : 'compras'} · {r.ventas.length} {r.ventas.length === 1 ? 'venta' : 'ventas'}</strong>

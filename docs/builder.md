@@ -966,3 +966,65 @@ Comprobado en V9.1056 desde la nueva ubicación: el mismo resultado que el arné
   «Mi trabajo» con «TORTUGAS», con «stop» (por la regla, en las dos pestañas de filtro) y con algo que no existe; «Mis pruebas» por
   su nombre; el desplegable de copiar con «tortu» y sin nada; comprobaciones comunes. No probado en el navegador: el teclado y el
   ratón del selector.
+
+## 25. Swings confirmados (V9.1059)
+
+Toca el motor del editor, pero solo detrás de condiciones, tipos y campos NUEVOS: una definición que no los usa hace exactamente
+lo mismo que antes (comprobado con las 5 estrategias del editor, la batería, las carteras, los lotes y las huellas).
+
+### La definición (sin mirar el futuro)
+
+- **Máximo de swing**: la vela V cuyo máximo es ESTRICTAMENTE mayor que el de las L velas anteriores y que el de las R siguientes;
+  **mínimo de swing**, lo mismo con los mínimos (estrictamente menor). Un empate, o un dato que falte en la ventana, no es swing.
+  L y R de 1 a 20 (2 y 2 por defecto).
+- **Confirmación**: el swing existe a partir del CIERRE de la vela V + R. `swings(velas, lado, L, R)` (lib/condiciones/indicadores.js)
+  da la lista y, por vela, el último confirmado hasta su cierre (`porVela[t]`, que solo depende de las velas hasta t).
+  `ultimoSwing` (el confirmado hasta el cierre de t: el de las condiciones de la vela t) y `swingPrevio` (el del cierre de t − 1:
+  el de las órdenes y los stops, que actúan dentro de la vela t; y la línea del gráfico).
+
+### Piezas nuevas (grupo «Swings» del catálogo)
+
+- Condiciones (lib/condiciones/catalogo.js, con su ficha en lib/builder/fichas.js): **Mínimos crecientes** y **Máximos crecientes**
+  (`{ n, izquierda, derecha }`: los n últimos swings confirmados, cada uno más alto que el anterior; con menos de n, sin dato),
+  **El cierre supera el último máximo de swing** y **El cierre cae bajo el último mínimo de swing** (`{ izquierda, derecha }`).
+- **Orden en el último máximo de swing** (`entrada.orden = { tipo: 'swing', nivel: { izquierda, derecha } }`): compra en cuanto el
+  máximo de una vela SUPERA el último máximo de swing confirmado hasta el cierre de la anterior; a ese nivel, o a la apertura si
+  abre ya por encima. Cada swing se usa UNA vez: en cuanto el precio lo supera (con compra o sin ella: operación abierta, filtro…)
+  queda gastado hasta el swing siguiente (`ordenSwing`, que solo depende del precio). La señal es opcional, como con la ruptura.
+- **Stop bajo el último mínimo de swing confirmado** (`{ tipo: 'swingMinimo', izquierda, derecha }`): al comprar, el último mínimo
+  de swing confirmado hasta el cierre de la vela anterior; en cada vela se recalcula y solo sube; salta dentro de la vela a su
+  precio, o a la apertura si abre por debajo. Funciona con «manda el más alto» (el mismo camino que el stop que sube con el mínimo
+  de N velas).
+- Calentamiento y laboratorio del paso 2: L + R + 1 velas (la orden y el stop); las condiciones, (L + R + 1) × n.
+- **Exportar a code_js**: con cualquiera de estas piezas no exporta y lo explica (el motor copiado no sabe cuándo se confirma un
+  swing).
+
+### Dibujo
+
+- Un punto en la vela de cada swing (los máximos arriba, verdes; los mínimos abajo, naranjas) y la línea de su nivel («último
+  máximo / mínimo de swing (L/R)»), en escalera, que empieza en la vela SIGUIENTE a la confirmación (V + R + 1), nunca en V. En
+  «Señales en el gráfico» con la leyenda «● swing (la línea empieza al confirmarse)» y su «?»; en «Backtest de un valor», las series
+  del intérprete (`escalera: true`, que ahora pasa lib/graficoEstrategia.js y pinta CandleChart) y los eventos `swingMax` /
+  `swingMin` (puntos sin texto; el detalle, en el tooltip del razonamiento).
+- Franjas: las filas de filtro y compra con estas condiciones (como todas), las de «Vendo cuando…» con una condición de swing
+  (naranja) y la pieza «Supera el último máximo de swing (L/R)», además de «Toca el stop» y «Con operación abierta».
+- Casillas de prueba: L, R y n de cada fila, y L y R de la orden y del stop. Dibujo de la regla: el rombo «¿Supera el último máximo
+  de swing (L/R) confirmado?».
+
+### Comprobado
+
+- A mano: (a) máximos 100, 103, 107, 105, 102 con L = R = 2 → swing en 107 (3.ª vela), confirmado al cierre de la 5.ª, usable desde
+  la 6.ª (y sin la 5.ª, no existe); (b) empates → sin swing; (c) mínimos crecientes y no crecientes con n = 2 y 3, máximos con
+  empate (no crecen), el cierre bajo el último mínimo de swing; (d) la orden dentro de la vela (107), con salto en la apertura (109)
+  y con el máximo justo en el nivel (no compra); (e) un mismo swing no dispara dos compras, tampoco si se superó sin comprar;
+  (f) el stop bajo el mínimo de swing 90 → 92 (sube en la vela siguiente a la confirmación), con salto en la apertura (vende a 91) y
+  dentro de la vela (92), también con «manda el más alto».
+- «Swings 2/2» hecha con las funciones de las tarjetas (solo opero con mínimos crecientes; orden en el último máximo de swing; stop
+  bajo el último mínimo de swing; NO se ha guardado en la base) sobre AAPL 2020–2021: las mismas operaciones (fechas y precios) en
+  «Señales en el gráfico», «Backtest de un valor» y el paso 2; la línea empieza en V + R + 1 en los 64 máximos del periodo; las
+  series y los puntos pasan la normalización del gráfico sin avisos.
+- No mira el futuro: AAPL 2017–2022 cortado en 5 fechas: las cuatro condiciones (con varios L, R y n), los swings, la orden y las
+  operaciones cerradas antes de cada corte, idénticos; la abierta al corte, con la misma entrada.
+- Las 5 estrategias del editor (AAPL y QQQ, diario y semanal, 2010–2015 y 2020–2021): intérprete, señales, cifras, laboratorio,
+  calentamiento y exportar idénticos a V9.1058; ida y vuelta; montaje del editor, de «Señales en el gráfico» y del dibujo;
+  comprobaciones comunes.

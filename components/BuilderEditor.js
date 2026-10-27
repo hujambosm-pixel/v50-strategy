@@ -21,7 +21,7 @@ import { jsonCanonico } from '../lib/lotesLab'
 import { GRUPOS, buscaCatalogo, nombreCond, explicacionCond, filaNueva, soloDelValor, avisoSoloValor, ayudaFila, AYUDA_NO, AYUDA_CRUZA, leeCompra, escribeCompra, leeFiltro, escribeFiltro, cambiaIndice, INDICES, nombreQuien,
   leeVenta, escribeVenta, leeProteccion, AYUDA_QUIEN, opcionesQuien, leeOrden, ponModoOrden, ponAjuste, ponVelasOrden, CANCELAR_DEFECTO, ponCancelar, vigilaDesdeLaCompra, ponVigilancia, AJUSTES, fraseCompra, TIPOS_STOP, CAMPOS_STOP_TARJETA, numeroStop, anadeStopDef, cambiaTipoStopDef, quitaStopDef, ponNumeroStop, ponSalida, DEFECTO_PROTECCION,
   opcionesClasico, frasesClasico, fraseStopTarjeta, plantillaFila, opcionesOp, opDe, opDesactivada, conOp, conVuelta, conCruce, puedeVuelta, puedeCruce, conNumero, tieneLado, erroresFila, erroresProteccion, cuentaErroresProteccion, notaFila, fraseRegla,
-  datosSuficientes, aTexto, deTexto, mueve, ORDEN_IGUAL, ORDEN_VENTA, ORDEN_STOPS, ORDEN_STOPS_MAS_ALTO, AYUDA_MODO_STOPS, leeModoStops, ponModoStops, PIEZAS, aplicaPieza, avisoIndices, COMO_FILTRAR_INDICE, GRUPOS_FUERZA, avisoFila } from '../lib/builder/tarjetas'
+  datosSuficientes, aTexto, deTexto, mueve, ORDEN_IGUAL, ORDEN_VENTA, ORDEN_STOPS, ORDEN_STOPS_MAS_ALTO, AYUDA_MODO_STOPS, leeModoStops, ponModoStops, PIEZAS, aplicaPieza, ponNivelOrden, avisoIndices, COMO_FILTRAR_INDICE, GRUPOS_FUERZA, avisoFila } from '../lib/builder/tarjetas'
 import { partesNombre, planGuardado, avisoVersion } from '../lib/builder/versiones'
 import { PERIODOS_DEFECTO } from '../lib/editor/lotes'
 import Ayuda from './BuilderAyuda'
@@ -62,7 +62,7 @@ const esParametro = (x) => typeof x === 'string' && x.startsWith('$')
 const val = (x, valores) => esParametro(x) ? valores[x.slice(1)] : x
 const AYUDA_FILTRO = 'Cada fila dice de quién es: un índice (QQQ, SPY…) o «Este valor». Se tienen que cumplir todas. Si no se cumplen, no compro nada, aunque se cumpla «Compro cuando…». No obligan a vender lo que ya tengo.'
 // La línea de ejecución dice lo que esté elegido en «Cómo compro» y en la vigilancia de los stops.
-export const lineaEjecucion = (def) => `La señal se mira al cierre de cada vela. ${leeOrden(def).modo === 'maximo' ? 'Se compra con la orden en el máximo de «Cómo compro»' : leeOrden(def).modo === 'ruptura' ? 'Se compra en cuanto el precio supera el nivel de ruptura de «Cómo compro» (sin esperar al cierre)' : 'Se compra a la apertura de la vela siguiente'} y se vende a la apertura de la vela siguiente a la señal de venta (los stops y el objetivo, en cuanto el precio llega). Los stops y las salidas se vigilan ${vigilaDesdeLaCompra(def) ? 'ya en la vela de la compra' : 'desde la vela siguiente a la compra'}. Opciones poco habituales (orden límite, compra al cierre, optimizador): `
+export const lineaEjecucion = (def) => `La señal se mira al cierre de cada vela. ${leeOrden(def).modo === 'maximo' ? 'Se compra con la orden en el máximo de «Cómo compro»' : leeOrden(def).modo === 'ruptura' ? 'Se compra en cuanto el precio supera el nivel de ruptura de «Cómo compro» (sin esperar al cierre)' : leeOrden(def).modo === 'swing' ? 'Se compra en cuanto el precio supera el último máximo de swing confirmado de «Cómo compro» (sin esperar al cierre)' : 'Se compra a la apertura de la vela siguiente'} y se vende a la apertura de la vela siguiente a la señal de venta (los stops y el objetivo, en cuanto el precio llega). Los stops y las salidas se vigilan ${vigilaDesdeLaCompra(def) ? 'ya en la vela de la compra' : 'desde la vela siguiente a la compra'}. Opciones poco habituales (orden límite, compra al cierre, optimizador): `
 const AYUDA_VIGILANCIA = '«Ya en la vela de la compra»: si el mismo día de la compra el precio toca el stop o se cumple una salida, se vende ese día. «Desde la vela siguiente a la compra»: el día de la compra no se mira nada; los stops y las salidas cuentan a partir del día siguiente.'
 const AYUDA_ORDEN = 'Ejemplo: la vela de la señal tiene máximo en 52 €. Con la orden en el máximo, compro si en las velas siguientes el precio llega a 52 € (si una vela abre ya por encima, compro a la apertura). Si no llega, según lo elegido la orden se queda en 52 €, o baja cada vela al nuevo máximo si es más bajo (por ejemplo, a 51 €). Si se cumple la condición de cancelar (por ejemplo, el cierre queda por debajo de su EMA (20)), la orden se quita sin comprar.'
 
@@ -239,11 +239,15 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   const orden = leeOrden(def), errCancelar = orden.cancelar ? erroresFila(orden.cancelar, valoresEf, esquema) : {}
   const errVelasOrden = orden.modo === 'maximo' || orden.modo === 'ruptura' ? (v => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 250 ? null : 'El número de velas tiene que ser un número entero de 1 a 250 (por ejemplo, 1).')(typeof orden.velas === 'string' && orden.velas.startsWith('$') ? valoresEf[orden.velas.slice(1)] : orden.velas) : null
   const validacion = useMemo(() => { try { return validaDefinicion(def, valores) } catch (e) { return [`La definición no se puede leer: ${e.message}`] } }, [def, valores])
-  // V9.1055: con la orden en el nivel de ruptura, las filas de compra son opcionales.
-  const sinCompra = orden.modo === 'ruptura' ? false : !def.entrada?.senal || (compra.ok && !compra.filas.length), sinSalida = !(def.stops || []).length && !(def.salidas || []).length
+  // V9.1059: los números de la orden en el último máximo de swing (velas a la izquierda y a la derecha, de 1 a 20).
+  const numOrden = (x) => typeof x === 'string' && x.startsWith('$') ? valoresEf[x.slice(1)] : x
+  const errSwing = (x) => (v => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 20 ? null : 'Las velas del swing tienen que ser un número entero de 1 a 20 (por ejemplo, 2).')(numOrden(x))
+  const errSwingOrden = orden.modo === 'swing' ? { izquierda: errSwing(orden.izquierda), derecha: errSwing(orden.derecha) } : {}
+  // V9.1055: con la orden en el nivel de ruptura (V9.1059: o en el último máximo de swing), las filas de compra son opcionales.
+  const sinCompra = orden.modo === 'ruptura' || orden.modo === 'swing' ? false : !def.entrada?.senal || (compra.ok && !compra.filas.length), sinSalida = !(def.stops || []).length && !(def.salidas || []).length
   const errNombre = !est.nombre.trim() ? 'Ponle un nombre a la estrategia (por ejemplo, «Retrocesos con RSI»).' : null
   const n = (xs) => xs.reduce((a, e) => a + Object.keys(e).length, 0)
-  const nFiltro = n(errFiltro), nCompra = n(errCompra) + (sinCompra ? 1 : 0), nVenta = n(errVenta), nProt = cuentaErroresProteccion(errProt) + (sinSalida ? 1 : 0), nOrden = n([errCancelar]) + (errVelasOrden ? 1 : 0)
+  const nFiltro = n(errFiltro), nCompra = n(errCompra) + (sinCompra ? 1 : 0), nVenta = n(errVenta), nProt = cuentaErroresProteccion(errProt) + (sinSalida ? 1 : 0), nOrden = n([errCancelar]) + (errVelasOrden ? 1 : 0) + Object.values(errSwingOrden).filter(Boolean).length
   // Lo que la validación de siempre ve y las tarjetas no explican (una opción del Editor clásico): cuenta como error de allí.
   const errClasico = nFiltro + nCompra + nVenta + nProt + nOrden ? [] : validacion
   const zonas = [['«Solo opero cuando…»', nFiltro], ['«Compro cuando…»', nCompra], ['«Vendo cuando…»', nVenta], ['«Cómo compro»', nOrden], ['«Protección»', nProt], ['el Editor clásico', errClasico.length], ['el nombre', errNombre ? 1 : 0]].filter(([, k]) => k)
@@ -352,6 +356,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
     if (s.tipo === 'atr') return <>{numStop(k, s, ['k'])} veces el ATR de {numStop(k, s, ['periodo'])} velas bajo la compra</>
     if (s.tipo === 'atrCompra') return <>Stop a {numStop(k, s, ['k'])} × ATR ({numStop(k, s, ['periodo'])}) por debajo del precio de compra, con el ATR de la vela anterior a la compra; no se mueve</>
     if (s.tipo === 'minimoMovil') return <>Stop en el mínimo de las {numStop(k, s, ['n'])} velas anteriores; se recalcula en cada vela y solo sube</>
+    if (s.tipo === 'swingMinimo') return <>Stop bajo el último mínimo de swing confirmado ({numStop(k, s, ['izquierda'])} velas a la izquierda, {numStop(k, s, ['derecha'])} a la derecha); se recalcula en cada vela y solo sube</>
     if (s.tipo === 'nivel') return <>En el mínimo de la vela de la señal</>
     return <>Cuando una vela cierra bajo su <select style={mini} aria-label="Tipo de la media del stop" value={s.si.p.tipo} onChange={e => setDef(d => ponNumeroStop(d, k, ['si', 'p', 'tipo'], e.target.value))}><option value="SMA">SMA</option><option value="EMA">EMA</option></select> ({numStop(k, s, ['si', 'p', 'periodo'])}), sube al mínimo de las últimas {numStop(k, s, ['nivel', 'velas'])} velas</>
   }
@@ -422,7 +427,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                 return (
                   <div key={g.id} data-grupo={g.id} data-abierto={abierto ? 'si' : 'no'} style={{ marginTop: 10 }}>
                     <button aria-expanded={abierto} onClick={() => setAbiertos(a => ({ ...a, [g.id]: !abierto }))} style={{ ...S.enlace, color: B.titulo, fontWeight: 600, width: '100%', display: 'flex' }}>
-                      <span style={{ width: 16 }}>{abierto ? '▾' : '▸'}</span><span style={{ flex: 1 }}>{g.titulo}</span><span style={S.apagado}>{total}</span>
+                      <span style={{ width: 16 }}>{abierto ? '▾' : '▸'}</span><span style={{ flex: 1 }}>{g.titulo}</span><span style={S.apagado}>{total + (buscar.trim() ? 0 : PIEZAS.filter(p => p.grupo === g.id).length)}</span>
                     </button>
                     {abierto && g.conds.map(id => (
                       <div key={id} data-cond={id} draggable onDragStart={e => { e.dataTransfer.effectAllowed = 'copy'; try { e.dataTransfer.setData('text/plain', id) } catch (_) {} setAnadiendo(null); setArrastre({ tipo: 'cond', clave: id }) }} onDragEnd={acaba}
@@ -444,13 +449,20 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                         )}
                       </div>
                     ))}
+                    {/* V9.1059: las piezas del grupo (la orden y el stop de los swings), debajo de sus condiciones */}
+                    {abierto && !buscar.trim() && PIEZAS.filter(p => p.grupo === g.id).map(p => (
+                      <div key={p.id} data-pieza={p.id} style={{ padding: '6px 0 6px 16px', borderBottom: `1px solid ${B.borde}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ flex: 1 }}>{p.nombre}<Ayuda texto={`${p.explicacion} Va en «${p.donde}».`} etiqueta={p.nombre}/></span>
+                        <button style={{ ...S.boton, padding: '0 9px', fontWeight: 700 }} aria-label={`Añadir «${p.nombre}» a «${p.donde}»`} title={`Añadir a «${p.donde}»`} onClick={() => setDef(d => aplicaPieza(d, p.id))}>+</button>
+                      </div>
+                    ))}
                   </div>
                 )
               })}
               {/* V9.1055: las piezas de las Tortugas (no son condiciones: «+» las pone en «Cómo compro» o en «Protección») */}
               {!buscar.trim() && <div data-grupo="piezas" style={{ marginTop: 14 }}>
                 <div style={{ fontWeight: 600, color: B.titulo }}>Piezas de compra y de stop</div>
-                {PIEZAS.map(p => (
+                {PIEZAS.filter(p => !p.grupo).map(p => (
                   <div key={p.id} data-pieza={p.id} style={{ padding: '6px 0 6px 16px', borderBottom: `1px solid ${B.borde}`, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ flex: 1 }}>{p.nombre}<Ayuda texto={`${p.explicacion} Va en «${p.donde}».`} etiqueta={p.nombre}/></span>
                     <button style={{ ...S.boton, padding: '0 9px', fontWeight: 700 }} aria-label={`Añadir «${p.nombre}» a «${p.donde}»`} title={`Añadir a «${p.donde}»`} onClick={() => setDef(d => aplicaPieza(d, p.id))}>+</button>
@@ -505,7 +517,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                 asa={asaDe('compra', k)} {...subeBaja('compra', k)}
                 onValor={ponValor} onCambia={g => cambiaCompra(compra.filas.map((x, j) => j === k ? g : x))} onQuita={() => cambiaCompra(compra.filas.filter((_, j) => j !== k))}/></div>)}
               {marca('compra', compra.filas.length, AZUL)}
-              {!compra.filas.length && vacia(orden.modo === 'ruptura' ? 'Con la orden en el nivel de ruptura («Cómo compro»), las condiciones de aquí son opcionales: sin ninguna, la orden está puesta en cada vela.' : 'Añade condiciones desde el catálogo con «+» o arrastrándolas aquí.')}
+              {!compra.filas.length && vacia(orden.modo === 'swing' ? 'Con la orden en el último máximo de swing («Cómo compro»), las condiciones de aquí son opcionales: sin ninguna, la orden está puesta en cada swing nuevo.' : orden.modo === 'ruptura' ? 'Con la orden en el nivel de ruptura («Cómo compro»), las condiciones de aquí son opcionales: sin ninguna, la orden está puesta en cada vela.' : 'Añade condiciones desde el catálogo con «+» o arrastrándolas aquí.')}
               {compra.filas.length > 1 && <div data-orden style={{ ...S.apagado, marginTop: 8 }}>{ORDEN_IGUAL}</div>}
             </> : <div style={S.secundario}>{regla.partes.find(p => p.tipo === 'compra')?.texto} <span style={{ color: AMARILLO }}>Se cambia en el Editor clásico.</span></div>}
             {sinCompra && errorTarjeta('Falta la condición de compra: añade al menos una con «+» (por ejemplo, «Cierre frente a su media»).')}
@@ -529,6 +541,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                   <option value="apertura">A la apertura de la vela siguiente a la señal (lo normal)</option>
                   <option value="maximo">Con una orden en el máximo de la vela de la señal</option>
                   <option value="ruptura">Orden en el nivel de ruptura: en cuanto supera el máximo de las N velas anteriores</option>
+                  <option value="swing">Orden en el último máximo de swing: en cuanto supera el último máximo de swing confirmado</option>
                 </select>
                 <Ayuda texto={AYUDA_ORDEN} etiqueta="Cómo compro"/>
               </div>
@@ -536,6 +549,11 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                 <div style={linea}>Compro en cuanto el máximo de una vela supera el máximo de las <Numero valor={typeof orden.velas === 'string' && orden.velas.startsWith('$') ? valoresEf[orden.velas.slice(1)] : orden.velas} error={errVelasOrden} etiqueta="Velas anteriores de la ruptura" onCambia={v => numeroEn(orden.velas, v, d => ponVelasOrden(d, v))}/> velas anteriores (sin contar esa vela).</div>
                 {errVelasOrden && <div style={{ color: ROJO, fontSize: 13 }}>{errVelasOrden}</div>}
                 <div style={S.apagado}>Precio: ese nivel; si la vela abre ya por encima, a la apertura. Ejemplo: con 20, si el máximo de las 20 velas anteriores es 50 € y hoy llega a 50,40 €, compro a 50 €; si abre a 51 €, compro a 51 €.</div>
+              </div>}
+              {orden.modo === 'swing' && <div data-orden-swing style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={linea}>Compro en cuanto el máximo de una vela supera el último máximo de swing confirmado, con <Numero valor={numOrden(orden.izquierda)} error={errSwingOrden.izquierda} etiqueta="Velas a la izquierda del swing de la orden" onCambia={v => numeroEn(orden.izquierda, v, d => ponNivelOrden(d, 'izquierda', v))}/> velas a la izquierda y <Numero valor={numOrden(orden.derecha)} error={errSwingOrden.derecha} etiqueta="Velas a la derecha del swing de la orden" onCambia={v => numeroEn(orden.derecha, v, d => ponNivelOrden(d, 'derecha', v))}/> a la derecha.<Ayuda texto={PIEZAS.find(p => p.id === 'swing').explicacion} etiqueta="Orden en el último máximo de swing"/></div>
+                {(errSwingOrden.izquierda || errSwingOrden.derecha) && <div style={{ color: ROJO, fontSize: 13 }}>{errSwingOrden.izquierda || errSwingOrden.derecha}</div>}
+                <div style={S.apagado}>Precio: ese nivel; si la vela abre ya por encima, a la apertura. Cada máximo de swing se usa una vez: si el precio ya lo superó (con compra o sin ella), espera al siguiente.</div>
               </div>}
               {orden.modo === 'maximo' && <div data-orden-maximo style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={linea}>Compro solo si el precio sube hasta el máximo de las últimas <Numero valor={typeof orden.velas === 'string' && orden.velas.startsWith('$') ? valoresEf[orden.velas.slice(1)] : orden.velas} error={errVelasOrden} etiqueta="Velas de la orden" onCambia={v => numeroEn(orden.velas, v, d => ponVelasOrden(d, v))}/> velas (1 = la vela de la señal).</div>
