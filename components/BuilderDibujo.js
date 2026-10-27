@@ -5,7 +5,7 @@
 // En cada rombo, como mucho 3 condiciones; si hay más, «y N más», que se despliega al pulsarlo. En pantallas estrechas, scroll.
 import { useState } from 'react'
 import { B } from '../lib/builder/estilo'
-import { leeFiltro, leeCompra, leeVenta, leeOrden, leeProteccion, fraseFila, fraseStopTarjeta, nombreQuien, AJUSTES } from '../lib/builder/tarjetas'
+import { leeFiltro, leeCompra, leeVenta, leeOrden, leeProteccion, fraseFila, fraseStopTarjeta, nombreQuien, AJUSTES, leeModoStops } from '../lib/builder/tarjetas'
 
 const MORADO = '#a371f7', AZUL = '#58a6ff', NARANJA = '#f0883e', GRIS = '#9fb0c3', VERDE = '#3fb950', VERDE_AZULADO = '#3dd6c3', SI = '#56d364', NO = '#ff9b9b'
 const LETRA = 12, LINEA = 16, MAX = 3
@@ -20,17 +20,20 @@ export function contenidoDibujo(def, valores) {
   const proteccion = []
   if (prot.tiempo.estado === 'velas') proteccion.push({ texto: `como muy tarde a las ${v[String(prot.tiempo.valor).slice(1)] ?? prot.tiempo.valor} velas`, color: VERDE_AZULADO })
   for (const { s } of prot.stops) proteccion.push({ texto: fraseStopTarjeta(s, v), color: VERDE_AZULADO })
+  if (prot.stops.length > 1 && leeModoStops(def) === 'masAlto') proteccion.push({ texto: 'con varios stops, manda el más alto', color: VERDE_AZULADO })
   if (prot.objetivo.estado === 'veces') proteccion.push({ texto: `objetivo: ${String(v[String(prot.objetivo.valor).slice(1)] ?? prot.objetivo.valor).replace('.', ',')} veces lo que arriesgo`, color: VERDE_AZULADO })
   const ajuste = AJUSTES.find(([k]) => k === orden.ajuste)?.[1]
   return {
     filtro: filtro.ok && filtro.filas.length ? { titulo: '1 · FILTRO', modo: 'TODAS', lineas: lineas(filtro.filas, true) } : null,
-    compra: { titulo: `${filtro.ok && filtro.filas.length ? 2 : 1} · COMPRO SI`, modo: compra.filas.length > 1 ? (compra.modo === 'alguna' ? 'AL MENOS UNA' : 'TODAS') : null, lineas: compra.ok ? lineas(compra.filas) : [{ texto: 'la regla de compra del Editor clásico' }] },
-    orden: orden.modo === 'maximo' ? { titulo: '¿Llega al máximo de la señal?', modo: null, lineas: [
+    compra: { titulo: `${filtro.ok && filtro.filas.length ? 2 : 1} · COMPRO SI`, modo: compra.filas.length > 1 ? (compra.modo === 'alguna' ? 'AL MENOS UNA' : 'TODAS') : null, lineas: compra.ok ? (orden.modo === 'ruptura' && !compra.filas.length ? [{ texto: 'siempre: la orden está puesta en cada vela' }] : lineas(compra.filas)) : [{ texto: 'la regla de compra del Editor clásico' }] },
+    // V9.1055: la orden en el nivel de ruptura, su rombo.
+    orden: orden.modo === 'ruptura' ? { titulo: `¿Supera el máximo de las ${v[String(orden.velas).slice(1)] ?? orden.velas} velas anteriores?`, modo: null, lineas: [{ texto: 'compro a ese nivel; si la vela abre ya por encima, a la apertura' }] }
+    : orden.modo === 'maximo' ? { titulo: '¿Llega al máximo de la señal?', modo: null, lineas: [
       ...(ajuste ? [{ texto: `si no llega, la orden ${ajuste}` }] : []),
       ...(orden.cancelar ? [{ texto: `se cancela si ${fraseFila(orden.cancelar, v)}` }] : []),
     ] } : null,
     venta: { titulo: `${filtro.ok && filtro.filas.length ? 3 : 2} · VENDO SI`, modo: venta.filas.length > 1 ? (venta.modo === 'todas' ? 'TODAS' : 'BASTA UNA') : null, lineas: venta.ok ? lineas(venta.filas) : [], proteccion },
-    compro: orden.modo === 'maximo' ? 'Compro en el máximo de la señal' : 'Compro a la apertura de la vela siguiente',
+    compro: orden.modo === 'ruptura' ? 'Compro en el nivel de ruptura' : orden.modo === 'maximo' ? 'Compro en el máximo de la señal' : 'Compro a la apertura de la vela siguiente',
   }
 }
 

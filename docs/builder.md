@@ -834,3 +834,40 @@ SIEMPRE de la regla de la pantalla (nunca con IA). Con errores: «Corrige lo que
   de «crecer 100» = las de su gráfico. Ensayo de AAPL y BTC-USD; casillas de las tres estrategias (probar cambia la copia; volver
   = la guardada byte a byte); montaje de las tres pestañas; y en el navegador (página temporal con datos fijos): franjas y canales
   dibujados, casilla resaltada, botones, recálculo y «Volver a los guardados», sin errores en la consola.
+
+## 21. Piezas para la estrategia de las Tortugas (V9.1055)
+
+Toca el motor del editor (lib/editor/interprete.js), pero solo detrás de tipos y campos NUEVOS: una definición que no los usa
+hace exactamente lo mismo que antes (comprobado byte a byte con las estrategias del editor, la batería y las huellas).
+
+- **«Cómo compro» · Orden en el nivel de ruptura** (`entrada.orden = { tipo: 'ruptura', nivel: { velas: N } }`): en cada vela sin
+  posición, compra en cuanto su máximo SUPERA (estrictamente) el máximo de las N velas ANTERIORES (sin contar la actual; las mismas
+  `maximoPrevio` que «Nuevo máximo de N velas»). Precio: ese nivel; si la vela abre ya por encima, a la apertura. No hay orden viva
+  entre velas: el nivel se rehace en cada una. La señal («Compro cuando…») pasa a ser opcional (se mira al cierre de la vela
+  anterior, con el filtro); sin ninguna fila, la orden está puesta siempre. No admite «cancelar».
+- **Stop fijo por ATR** (`{ tipo: 'atrCompra', k, periodo }`): precio de compra − k × ATR (periodo) de la vela ANTERIOR a la compra
+  (sin mirar el futuro); se calcula una vez y no se mueve. El de antes (`atr`) usa el ATR de la vela de la señal y no cambia (con
+  la compra a la apertura, las dos son la misma vela); en las tarjetas se llama ahora «Según la volatilidad (ATR de la vela de la
+  señal)» para que no se confundan.
+- **Stop que sube con el mínimo de N velas** (`{ tipo: 'minimoMovil', n }`): el mínimo de las n velas anteriores (sin la actual),
+  recalculado en cada vela; solo sube. Al comprar, el de las n velas anteriores a la compra.
+- **Con varios stops · «Manda el más alto»** (`stopsModo: 'masAlto'`): en cada vela suben primero los stops que se mueven y el stop
+  activo es el mayor; salta dentro de la vela a su precio, o a la apertura si abre ya por debajo. El historial (`stopHistory`) anota
+  el stop activo al comprar y cada vez que cambia, y el riesgo del objetivo en R es el del stop activo al comprar. Sin el modo, los
+  stops se miran en su orden, como siempre.
+- **Dibujo sobre el precio**: el canal de compra (verde) y el mínimo de N velas (naranja) en «Señales en el gráfico» (en escalera)
+  y en «Backtest de un valor» (series del intérprete con su color); el stop activo (rojo), solo mientras hay operación: en
+  «Backtest de un valor» es la línea de stop de siempre (sale del historial); en «Señales en el gráfico», una línea en escalera.
+- **Catálogo**: «Piezas de compra y de stop», debajo de los grupos, con las tres, su «?» con ejemplo y «+» (no son condiciones:
+  «+» las pone en «Cómo compro» o en «Protección»). En «Protección», con dos stops o más, «Con varios stops: en su orden / manda el
+  más alto» con su «?». **Dibujo de la regla**: el rombo «¿Supera el máximo de las N velas anteriores?», «Compro en el nivel de
+  ruptura», y los stops con «manda el más alto». **Casillas de prueba**: la N de la ruptura y los números de los stops nuevos.
+- **Calentamiento** (lib/editor/historia.js) y **laboratorio del paso 2** (`calculablesDefinicion`): cuentan la N de la ruptura, el
+  ATR de la compra (periodo + 1) y la n del mínimo; sin señal, «siempre». **Exportar a code_js**: con estas piezas lo dice y no
+  exporta (el motor copiado no las tiene).
+- Comprobado: casos calculados a mano (ruptura dentro de la vela a 12; con el máximo justo en el nivel, no compra; ruptura con
+  salto, a la apertura 12,5; stop fijo por ATR que manda al principio en 99 y el mínimo de 3 velas que lo supera, 99,5 → 101 → 102,
+  venta a 102 dentro de la vela; la misma con la vela abriendo a 101, venta a la apertura); «Tortugas 20/10 · ATR 14 × 2» hecha con
+  las tarjetas sobre AAPL 2020–2021: las mismas 8 operaciones (fechas y precios) en «Señales en el gráfico», en «Backtest de un
+  valor» y en el laboratorio del paso 2; las 4 estrategias del editor en AAPL y QQQ, diario y semanal: intérprete, laboratorio y
+  calentamiento idénticos a V9.1054; ida y vuelta; montaje de las pantallas; comprobaciones comunes.
