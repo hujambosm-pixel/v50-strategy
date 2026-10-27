@@ -871,3 +871,35 @@ hace exactamente lo mismo que antes (comprobado byte a byte con las estrategias 
   las tarjetas sobre AAPL 2020–2021: las mismas 8 operaciones (fechas y precios) en «Señales en el gráfico», en «Backtest de un
   valor» y en el laboratorio del paso 2; las 4 estrategias del editor en AAPL y QQQ, diario y semanal: intérprete, laboratorio y
   calentamiento idénticos a V9.1054; ida y vuelta; montaje de las pantallas; comprobaciones comunes.
+
+## 22. Las comprobaciones comunes, en el repositorio (scripts/comprobaciones/)
+
+Hasta V9.1055 vivían en el scratchpad de una sesión de Claude Code. Ahora están en `scripts/comprobaciones/`, sin ninguna
+credencial ni ruta de la máquina:
+
+- `comunes.sh`: lo lanza todo y compara el árbol de trabajo con una copia de la versión anterior (por defecto HEAD; otra con el
+  primer argumento) que hace con `git archive` en `scripts/comprobaciones/.viejo/`. Pasos: guardián, build, batería, cartera,
+  lotes y huellas; cada salida en `scripts/comprobaciones/salida/<paso>.txt`. Termina en 0 si todo va bien. Unos 15 minutos.
+- `bateria.js`: la batería de V9.949, 52 respuestas de /api/multibacktest (13 configuraciones × listas V50 y Degiro × diario y
+  semanal) y 44 con `conCandidatos`, byte a byte. `entorno.js` simula Yahoo (fotos) y Supabase (las estrategias de la última
+  copia de `backups/`, solo lectura).
+- `cartera.js`: CARTERA_1–3 y las cuatro exploraciones, idénticas (21 resultados).
+- `lotes.js`: las huellas de LOTE_1–3 y CARTERA_1–3 frente a las de `lib/lotesLab.js`.
+- `huellas.js`: las huellas de PRUEBA_EDITOR_1 (a2cdfd85), RETROCESOS_1 (23c5006c) y PRUEBA_BUILDER_1 · 2026-10-22 (0d6726ec),
+  frente a las de `editor_lotes`. Lee la base en SOLO LECTURA con `scripts/guardian/lecturaBd.js` (el mismo acceso que el
+  guardián y la copia: el token de `supabase login` o `SUPABASE_ACCESS_TOKEN`, y el proyecto de `.env.local`).
+- `cargador.js`: carga el código con el SWC de Next, con dos árboles a la vez (antes y ahora).
+
+**Qué hace falta en la máquina** (no está en git): `npm install`; una copia en `backups/` (`npm run backup`), de donde salen las
+estrategias con su code_js; `supabase login` para `huellas.js`; y las fotos de precios `foto_v50.json`, `foto_degiro.json`,
+`foto_mom.json` y `yahoo_foto.json` (unos 57 MB: demasiado para un repositorio público) en `scripts/comprobaciones/datos/` o en la
+carpeta que diga `COMPROBACIONES_DATOS`. Las fotos tienen que ser SIEMPRE las mismas (son la referencia fija de la batería): hoy
+están en el scratchpad de la sesión 0c02b5f9 de Claude Code; conviene copiarlas a `scripts/comprobaciones/datos/` y guardarlas.
+
+**Lanzarlo:**
+
+    bash scripts/comprobaciones/comunes.sh
+    COMPROBACIONES_DATOS=/ruta/a/las/fotos bash scripts/comprobaciones/comunes.sh
+
+Comprobado en V9.1056 desde la nueva ubicación: el mismo resultado que el arnés de antes (guardián 0, build, batería 52/52 y
+44/44 byte a byte, 21 resultados de cartera idénticos, lotes y carteras 12 de 12 (6 con la versión anterior y 6 con la de ahora), las tres huellas).

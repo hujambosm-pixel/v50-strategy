@@ -31,3 +31,10 @@ backups/
 # "C:\Temp\vl.json" acabó como nombre de fichero, con el ':' convertido en U+F03A. El patrón lleva un
 # comodín porque ese carácter no es tecleable.
 C*Tempvl.json
+
+# Comprobaciones comunes (scripts/comprobaciones/, docs/builder.md §22): lo que es de esta máquina. datos/ son las fotos de precios
+# (unos 57 MB, demasiado para un repositorio público); .viejo/ es la copia de la versión anterior que hace comunes.sh; salida/,
+# lo que imprime cada paso.
+scripts/comprobaciones/datos/
+scripts/comprobaciones/.viejo/
+scripts/comprobaciones/salida/
