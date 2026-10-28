@@ -1348,3 +1348,18 @@ Toca el motor solo detrás de un tipo de orden NUEVO (`'supertrend'`): las estra
   mismas operaciones que «Backtest de un valor» semanal. Montaje SWC con estado (el editor con sus 🔗 y su «?», el paso 2 bloqueado en
   semanal, la tarjeta de la orden nueva; «Señales en el gráfico» con sus casillas, desplegables, ámbar y leyenda). En el navegador, el
   editor real: 3 / 3 / 3 → «Vendo» a 5 → 5 / 5 / 5; 🔗 la suelta; a 4 → 5 / 4 / 5; 🔗 la enlaza → 5 / 5 / 5. Comprobaciones comunes.
+
+## 34. El stop de la operación abierta en «Backtest de un valor» (V9.1068)
+
+Lo pendiente de §32: en «Backtest de un valor», la operación que sigue abierta al final del periodo se dibujaba entera con el stop
+del ÚLTIMO día (el núcleo la cierra el último día con un cierre ficticio que solo llevaba `stopPx`), una línea plana por encima del
+precio. Ahora lib/backtestActivo.js pide al intérprete el historial de la abierta (`historialAbierta`, como «Señales en el gráfico»)
+y lib/nucleoBacktest.js lo pasa al cierre ficticio (`stopHistory`, solo si la estrategia lo da: las de código, igual que antes).
+CandleChart ya dibujaba `stopHistory` vela a vela. Las cifras no cambian (el cierre ficticio sigue siendo el mismo).
+La multicartera (pages/api/multibacktest.js) tiene su propio cierre ficticio y no se toca: su «stop inicial» (lib/prioridadCartera.js)
+sigue leyendo lo mismo.
+
+- Comprobado: «SuperTrend 10/3», AAPL 2020–2021 (precios guardados): la abierta desde el 20/10/2021 lleva 20 niveles (139,56 →
+  167,16) y, vela a vela, es el stop del motor y el de «Señales en el gráfico» (antes, toda a 167,16); las cifras, las curvas y las
+  demás operaciones, idénticas a V9.1067; las 7 estrategias del editor (AAPL, diario y semanal, 2010–2015 y 2020–2021), iguales
+  salvo el historial de la abierta. Comprobaciones comunes.
