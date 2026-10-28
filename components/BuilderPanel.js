@@ -22,6 +22,7 @@ import BuilderGuia from './BuilderGuia'
 import { coincide, conNombres } from '../lib/builder/buscar'
 import Resaltado from './Resaltado'
 import BuscadorEstrategia from './BuscadorEstrategia'
+import ConLimpiar from './LimpiarBusqueda'
 
 export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convertirla en plan']
 export const SUBTITULOS_PASOS = ['Cuándo compro, cuándo vendo y cuánto arriesgo', '¿Gana por algo más que suerte?', 'Dinero real, aportaciones e impuestos']
@@ -107,6 +108,16 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
     } catch (e) { setDatos(d => ({ ...d, cargando: false, error: e.message })) }
   }, [datosIniciales])
   useEffect(() => { if (visible !== false) recarga() }, [visible, recarga])
+  // V9.1065: cada vez que se entra en el Builder, todas las búsquedas vacías (no se recuerda lo escrito; `entrada` lo dice al editor
+  // y a «Señales en el gráfico») y el cursor en la casilla de búsqueda de «Mi trabajo» (Mis estrategias), listo para escribir.
+  const casillaMiTrabajo = useRef(null), yaVisto = useRef(false)
+  const [entrada, setEntrada] = useState(0)
+  useEffect(() => {
+    if (visible === false) return
+    if (yaVisto.current) { setBuscar(''); setBuscarCopia(''); setACopiar(''); setEntrada(n => n + 1) }
+    yaVisto.current = true
+    if (!editor && !prueba && !guia) { setPestana('estrategias'); const h = setTimeout(() => casillaMiTrabajo.current?.focus({ preventScroll: true }), 0); return () => clearTimeout(h) }
+  }, [visible])
   useEffect(() => {
     if (listasIniciales) return
     let vivo = true
@@ -165,7 +176,7 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   if (editor && esDeCodigo(editor.fila)) return <BuilderCodigo key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
     onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardarCodigo}/>
   if (editor) return <BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} lotes={datos.lotes} apiFetch={apiFetch}
-    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'}/>
+    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'} entradaBuilder={entrada}/>
   if (prueba) return <BuilderPrueba key={prueba.n} estrategias={estrategiasEf} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
     onVolver={() => { setPrueba(null); recarga() }} onNuevaPrueba={() => setPrueba({ n: Date.now() })} onCambio={recarga}/>
   const pestanaBtn = (k, t, n) => (
@@ -177,8 +188,9 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   const conBuscador = (h) => (
     <span style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
       <span>{h}</span>
-      <input type="search" aria-label="Buscar en Mi trabajo" placeholder="Buscar por nombre o por la regla…" value={buscar} onChange={e => setBuscar(e.target.value)} data-buscar="mi-trabajo"
-        style={{ ...campoSel, fontSize: 13, fontWeight: 400, padding: '4px 8px', flex: '1 1 200px', maxWidth: 300, minWidth: 0 }}/>
+      <ConLimpiar valor={buscar} onLimpia={() => setBuscar('')} bloque estilo={{ flex: '1 1 200px', maxWidth: 300, minWidth: 0 }}>
+        <input ref={casillaMiTrabajo} type="text" role="searchbox" aria-label="Buscar en Mi trabajo" placeholder="Buscar por nombre o por la regla…" value={buscar} onChange={e => setBuscar(e.target.value)} data-buscar="mi-trabajo"
+          style={{ ...campoSel, fontSize: 13, fontWeight: 400, padding: '4px 8px', minWidth: 0 }}/></ConLimpiar>
     </span>
   )
   return (

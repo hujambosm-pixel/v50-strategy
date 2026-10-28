@@ -7,6 +7,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { MONO, fmt, fmtDate, numeroEs, textoEs } from '../lib/utils'
 import CampoFecha from './CampoFecha'
+import ConLimpiar from './LimpiarBusqueda'
 import { conclusiones as calculaConclusiones, activosPocaHistoria } from '../lib/conclusiones'
 import { edgeContraAzar, EDGE_N, EDGE_CORTO_MAX } from '../lib/edge'
 import { textoOptimizacion, textoParams as textoParamsExp, textoPeriodo, textoComisiones } from '../lib/exportaTexto'
@@ -184,7 +185,7 @@ export default function OptimizacionPanel({ strategies = [], watchlist = [], wlL
               {(wlLists || []).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>)}
           {cfg.modoActivos === 'seleccion' && (<>
-            <input placeholder="Buscar…" value={filtroSel} onChange={e => setFiltroSel(e.target.value)} style={{ ...entrada, width: '100%', marginBottom: 4 }} />
+            <ConLimpiar valor={filtroSel} onLimpia={() => setFiltroSel('')} bloque estilo={{ marginBottom: 4 }}><input placeholder="Buscar…" value={filtroSel} onChange={e => setFiltroSel(e.target.value)} style={{ ...entrada, width: '100%' }} /></ConLimpiar>{/* V9.1065 */}
             <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 4, padding: 4 }}>
               {activosWl.filter(w => !filtroSel || w.symbol.toLowerCase().includes(filtroSel.toLowerCase())).map(w => (
                 <label key={w.symbol} style={{ display: 'flex', gap: 6, fontSize: TAM, cursor: 'pointer' }}>

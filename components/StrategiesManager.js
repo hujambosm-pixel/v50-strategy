@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MONO } from '../lib/utils'
+import ConLimpiar from './LimpiarBusqueda'
 
 const SETUP_LABELS = {
   ema_cross_up:        'EMA Cruce ↑',
@@ -84,13 +85,13 @@ export default function StrategiesManager({ strategies, selectedStrategy, onSele
           {strategies.length} guardadas
         </span>
         <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-          <input
+          <ConLimpiar valor={search} onLimpia={()=>setSearch('')}><input
             value={search}
             onChange={e=>setSearch(e.target.value)}
             placeholder="Buscar…"
             style={{fontFamily:MONO,fontSize:11,padding:'3px 8px',background:'var(--bg3)',
               border:'1px solid var(--border)',borderRadius:4,color:'var(--text1)',width:140,outline:'none'}}
-          />
+          /></ConLimpiar>{/* V9.1065: la «×» común */}
           <button onClick={onReload} title="Recargar" disabled={loading}
             style={{fontFamily:MONO,fontSize:12,padding:'3px 8px',background:'transparent',
               border:'1px solid var(--border)',borderRadius:4,color:'var(--text3)',cursor:'pointer'}}>

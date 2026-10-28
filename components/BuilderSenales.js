@@ -13,7 +13,8 @@
 //   velas diarias; comisiones: las de «Backtest de un valor».
 //   Para las pruebas de montaje: velasIniciales ({ simbolo: velas }), simbolosIniciales, simboloInicial, fechasInicial
 //   ({ desde, hasta }: «Otras fechas»), cifrasIniciales, verZonaInicial (V9.1061: la zona gris del filtro, mostrada u oculta),
-//   verOpsInicial (V9.1063: las líneas de las operaciones, mostradas u ocultas).
+//   verOpsInicial (V9.1063: las líneas de las operaciones, mostradas u ocultas), ocultosIniciales (V9.1065: las claves ocultas de
+//   la leyenda). entrada (V9.1065): cambia cada vez que se vuelve a entrar en el Builder; entonces todo se enseña otra vez.
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import { calculaSenales } from '../lib/builder/senales'
@@ -47,7 +48,7 @@ const signo = (v, d = 2) => v == null || !Number.isFinite(v) ? '—' : `${v > 0 
 // aparte): las velas, las franjas y los osciladores empiezan en el mismo borde izquierdo. H es el alto de la zona de dibujo (sin el
 // eje de fechas): el gráfico se crea con H + el eje y, si el eje mide otra cosa, se corrige al momento, así que cada franja cae a la
 // altura prevista. Sin el logo de lightweight-charts: el enlace a TradingView va debajo del gráfico. La zona gris del filtro, muy
-// suave y DETRÁS de las velas (se crea antes que ellas); verZona la enseña u oculta sin rehacer el gráfico.
+// suave y DETRÁS de las velas (se crea antes que ellas); su casilla de la leyenda la enseña u oculta sin rehacer el gráfico.
 const ALTO_PRECIO = 360, MIN_PRECIO = 300, ETIQ = 14, BANDA = 10, FILA = ETIQ + BANDA + 2, HUECO = 8, ANCHO_EJE = 72, EJE_TIEMPO = 28, ALTO_OSC = 130
 export const altoGrafico = (nFranjas, precio = ALTO_PRECIO) => precio + (nFranjas ? HUECO + nFranjas * FILA : 0)
 export const COLOR_ZONA = 'rgba(139,155,173,0.045)'
@@ -60,8 +61,25 @@ function altoLibre(el, abajo) {
   const visto = p ? p.clientHeight : window.innerHeight
   return Math.max(MIN_PRECIO, Math.floor(visto - arriba - abajo))
 }
-function Graficos({ r, verZona = true, verOps = true }) {
-  const caja = useRef(null), precio = useRef(null), osc = useRef([]), zonaSerie = useRef(null), verZonaR = useRef(verZona), opsSeries = useRef([]), verOpsR = useRef(verOps)
+// V9.1065: cada elemento del gráfico tiene su casilla en la leyenda (por defecto, todo enseñado). `ocultos` es el conjunto de las
+// claves ocultas: 'flechas', 'operaciones', 'media:…', 'canal:…' (claveCanal: las dos bandas de Bollinger juntas, y las dos líneas
+// del SuperTrend; los dos tramos de los swings, por separado), 'puntosSwing', 'zona', 'franjas' y 'osc:…'. Ocultar o enseñar no
+// rehace el gráfico ni mueve el zoom: cada serie se crea una vez, apuntada con su clave, y solo cambia su `visible` (las flechas
+// son marcas de las velas: se quitan y se vuelven a poner); las etiquetas de las franjas y los paneles de osciladores, con display.
+// Los canales agrupados por su casilla, en su orden: [[clave, [canal, …]], …].
+export const gruposCanales = (canales) => { const g = new Map(); for (const c of canales) { const k = claveCanal(c); if (!g.has(k)) g.set(k, []); g.get(k).push(c) } return [...g] }
+// La casilla de un elemento: en línea y con la letra de la leyenda (el estilo global de label la pondría en columna y monoespaciada).
+function Interruptor({ clave, ocultos, onCambia, que, datos = {}, children }) {
+  return (
+    <label data-interruptor={clave} {...datos} title={`Enseña u oculta ${que}`} style={{ display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit' }}>
+      <input type="checkbox" aria-label={`Enseñar ${que}`} checked={!ocultos.has(clave)} onChange={e => onCambia(clave, e.target.checked)} style={{ margin: 0, cursor: 'pointer' }}/>
+      {children}
+    </label>
+  )
+}
+export const claveCanal = (c) => `canal:${c.tipo === 'bollinger' ? c.nombre.replace(/ · (superior|inferior)$/, '') : c.tipo === 'supertrend' ? c.nombre.replace(/ (alcista|bajista)$/, '') : c.nombre}`
+function Graficos({ r, ocultos = new Set() }) {
+  const caja = useRef(null), precio = useRef(null), osc = useRef([]), series = useRef(new Map()), ocultosR = useRef(ocultos), flechas = useRef(null)
   const franjas = r.franjas
   const [altoPrecio, setAltoPrecio] = useState(ALTO_PRECIO)
   const H = altoGrafico(franjas.length, altoPrecio)
@@ -73,8 +91,11 @@ function Graficos({ r, verZona = true, verOps = true }) {
     mide(); window.addEventListener('resize', tarde)
     return () => { clearTimeout(h); window.removeEventListener('resize', tarde) }
   }, [franjas.length, r.osciladores.length])
-  useEffect(() => { verZonaR.current = verZona; zonaSerie.current?.applyOptions({ visible: verZona }) }, [verZona])
-  useEffect(() => { verOpsR.current = verOps; opsSeries.current.forEach(s => s.applyOptions({ visible: verOps })) }, [verOps])
+  useEffect(() => {
+    ocultosR.current = ocultos
+    for (const [clave, ss] of series.current) for (const s of ss) s.applyOptions({ visible: !ocultos.has(clave) })
+    if (flechas.current) flechas.current.velas.setMarkers(ocultos.has('flechas') ? [] : flechas.current.marcas)
+  }, [ocultos])
   useEffect(() => {
     if (!precio.current || !r?.velas?.length) return
     let vivo = true, charts = []
@@ -87,57 +108,59 @@ function Graficos({ r, verZona = true, verOps = true }) {
       const altoDibujo = ch.paneSize?.().height
       if (altoDibujo > 0 && altoDibujo !== H) ch.resize(precio.current.clientWidth, H + EJE_TIEMPO + H - altoDibujo)
       const abajo = franjas.length ? (H - altoPrecio + 6) / H : 0.05
+      // V9.1065: cada serie, apuntada con la clave de su casilla y creada visible u oculta según la casilla.
+      series.current = new Map()
+      const apunta = (clave, s) => { if (!series.current.has(clave)) series.current.set(clave, []); series.current.get(clave).push(s); return s }
+      const visto = (clave) => !ocultosR.current.has(clave)
       // La zona gris donde el filtro no deja comprar: solo en la parte del precio, antes que las velas (queda detrás).
-      zonaSerie.current = null
       if (r.bloqueado.some(Boolean) && franjas.some(f => f.tarjeta === 'filtro')) {
-        const zona = ch.addHistogramSeries({ priceScaleId: 'zona', color: COLOR_ZONA, priceLineVisible: false, lastValueVisible: false, visible: verZonaR.current })
+        const zona = apunta('zona', ch.addHistogramSeries({ priceScaleId: 'zona', color: COLOR_ZONA, priceLineVisible: false, lastValueVisible: false, visible: visto('zona') }))
         ch.priceScale('zona').applyOptions({ scaleMargins: { top: 0, bottom: abajo - 0.01 }, visible: false })
         zona.setData(r.velas.map((v, k) => ({ time: v.date, value: r.bloqueado[k] ? 1 : 0 })))
-        zonaSerie.current = zona
       }
       const velas = ch.addCandlestickSeries({ upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' })
       ch.priceScale('right').applyOptions({ scaleMargins: { top: 0.05, bottom: abajo } })
       velas.setData(r.velas.map(v => ({ time: v.date, open: v.open, high: v.high, low: v.low, close: v.close })))
-      const linea = (l, ancho = 2) => {
-        const serie = () => ch.addLineSeries({ color: l.color, lineWidth: ancho, lineStyle: l.discontinua ? LineStyle.Dashed : LineStyle.Solid, lineType: l.escalera ? LineType.WithSteps : LineType.Simple, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+      const linea = (l, clave, ancho = 2) => {
+        const serie = () => apunta(clave, ch.addLineSeries({ color: l.color, lineWidth: ancho, lineStyle: l.discontinua ? LineStyle.Dashed : LineStyle.Solid, lineType: l.escalera ? LineType.WithSteps : LineType.Simple, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: visto(clave) }))
         // V9.1057: con tramos (el stop activo), una línea por tramo: una serie une sus puntos por encima de los huecos.
         if (l.tramos) { for (const t of l.tramos) serie().setData(t.map(([k, x]) => ({ time: r.velas[k].date, value: x }))); return }
         // V9.1062: los niveles de los swings, en tramos horizontales sueltos (lib/graficoPaneles.js tramosLinea); el punteado, tenue.
         if (l.segmentos) {
           const { puntos, sueltos } = tramosLinea(l.valores, r.velas.map(v => v.date), !!l.seguidos)   // V9.1064: el SuperTrend, por velas seguidas
-          const s = () => ch.addLineSeries({ color: l.color, lineWidth: ancho, lineStyle: l.punteada ? LineStyle.Dotted : LineStyle.Solid, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+          const s = () => apunta(clave, ch.addLineSeries({ color: l.color, lineWidth: ancho, lineStyle: l.punteada ? LineStyle.Dotted : LineStyle.Solid, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: visto(clave) }))
           if (puntos.length) s().setData(puntos)
           for (const p of sueltos) s().setData([p])
           return
         }
         serie().setData(r.velas.map((v, k) => l.valores[k] != null ? { time: v.date, value: l.valores[k] } : { time: v.date }))
       }
-      for (const m of r.medias) linea(m)
-      for (const c of r.canales || []) linea(c)
+      for (const m of r.medias) linea(m, `media:${m.nombre}`)
+      for (const c of r.canales || []) linea(c, claveCanal(c))
       // V9.1063: cada operación, una línea de la entrada a la salida (verde si gana, roja si pierde), la misma de «Backtest de un
-      // valor»; verOps la enseña u oculta sin rehacer el gráfico.
-      opsSeries.current = (r.operaciones || []).map(t => {
-        const l = lineaOperacion(t), s = ch.addLineSeries({ color: l.color, lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: verOpsR.current })
-        s.setData(l.puntos)
-        return s
-      })
+      // valor»; su casilla la enseña u oculta sin rehacer el gráfico.
+      for (const t of r.operaciones || []) {
+        const l = lineaOperacion(t)
+        apunta('operaciones', ch.addLineSeries({ color: l.color, lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: visto('operaciones') })).setData(l.puntos)
+      }
       // Las franjas: una serie de barras por condición, cada una en su banda (debajo de la línea de su nombre), en la MISMA escala de
       // tiempo que las velas.
       franjas.forEach((f, i) => {
         const id = `franja${i}`, y0 = altoPrecio + HUECO + i * FILA + ETIQ
-        const s = ch.addHistogramSeries({ priceScaleId: id, priceLineVisible: false, lastValueVisible: false, base: 0 })
+        const s = apunta('franjas', ch.addHistogramSeries({ priceScaleId: id, priceLineVisible: false, lastValueVisible: false, base: 0, visible: visto('franjas') }))
         ch.priceScale(id).applyOptions({ scaleMargins: { top: y0 / H, bottom: 1 - (y0 + BANDA) / H }, visible: false })
         const color = f.color || (f.tarjeta === 'filtro' ? MORADO : AZUL)   // (las de venta y las piezas traen el suyo)
         s.setData(r.velas.map((v, k) => ({ time: v.date, value: 1, color: f.cumple[k] === true ? color : 'rgba(139,155,173,0.10)' })))
       })
       const marcas = [...r.compras.map(c => ({ time: c.date, position: 'belowBar', color: VERDE, shape: 'arrowUp', text: '' })), ...r.ventas.map(c => ({ time: c.date, position: 'aboveBar', color: NARANJA, shape: 'arrowDown', text: '' }))].sort((a, b) => a.time.localeCompare(b.time))
-      velas.setMarkers(marcas)
+      flechas.current = { velas, marcas }
+      velas.setMarkers(visto('flechas') ? marcas : [])
       // V9.1059: y un punto en la vela de cada swing (los máximos arriba, los mínimos abajo). V9.1061: un puntito de 2 px un poco por
       // encima del máximo (o por debajo del mínimo), para no tapar la vela (las marcas de lightweight-charts no bajan de un tamaño).
       for (const lado of ['max', 'min']) {
         const ps = (r.puntosSwing || []).filter(p => p.lado === lado).sort((a, b) => a.date.localeCompare(b.date))
         if (!ps.length) continue
-        const s = ch.addLineSeries({ color: lado === 'max' ? VERDE : NARANJA, lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+        const s = apunta('puntosSwing', ch.addLineSeries({ color: lado === 'max' ? VERDE : NARANJA, lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: visto('puntosSwing') }))
         s.setData(ps.map(p => ({ time: p.date, value: p.precio * (lado === 'max' ? 1.006 : 0.994) })))
       }
       ch.timeScale().fitContent()
@@ -158,7 +181,7 @@ function Graficos({ r, verZona = true, verOps = true }) {
       ro?.observe(precio.current)
       charts.ro = ro
     })
-    return () => { vivo = false; zonaSerie.current = null; opsSeries.current = []; charts.ro?.disconnect(); charts.forEach(c => c.remove()) }
+    return () => { vivo = false; series.current = new Map(); flechas.current = null; charts.ro?.disconnect(); charts.forEach(c => c.remove()) }
   }, [r, H])
   return (
     <div ref={caja}>
@@ -166,7 +189,7 @@ function Graficos({ r, verZona = true, verOps = true }) {
         <div ref={precio} data-grafico="precio" data-franjas={franjas.length} data-alto-precio={altoPrecio} style={{ width: '100%', minHeight: H + EJE_TIEMPO }}/>
         {franjas.map((f, i) => (
           <div key={i} data-franja={f.nombre} title={`${f.nombre} · ${f.cumple.filter(x => x === true).length} velas${f.frase && f.frase !== f.nombre ? `\n${f.frase}` : ''}`}
-            style={{ position: 'absolute', left: 2, top: altoPrecio + HUECO + i * FILA, height: ETIQ, maxWidth: `calc(100% - ${ANCHO_EJE + 8}px)`, display: 'flex', alignItems: 'center', gap: 4, pointerEvents: 'none', zIndex: 3,
+            style={{ position: 'absolute', left: 2, top: altoPrecio + HUECO + i * FILA, height: ETIQ, maxWidth: `calc(100% - ${ANCHO_EJE + 8}px)`, display: ocultos.has('franjas') ? 'none' : 'flex', alignItems: 'center', gap: 4, pointerEvents: 'none', zIndex: 3,
               fontSize: 11, lineHeight: `${ETIQ}px`, color: f.color || (f.tarjeta === 'filtro' ? MORADO : '#8db8ff'), background: 'rgba(15,20,25,0.85)', padding: '0 4px', borderRadius: 3, whiteSpace: 'nowrap', boxSizing: 'border-box' }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{f.nombre}</span>
             <span style={{ flexShrink: 0, color: B.secundario }}>· {f.cumple.filter(x => x === true).length} velas</span>
@@ -174,7 +197,7 @@ function Graficos({ r, verZona = true, verOps = true }) {
         ))}
       </div>
       {r.osciladores.map((o, j) => (
-        <div key={j} data-oscilador={o.nombre} style={{ marginTop: 8 }}>
+        <div key={j} data-oscilador={o.nombre} style={{ marginTop: 8, display: ocultos.has(`osc:${o.nombre}`) ? 'none' : 'block' }}>
           <div style={{ fontSize: 12, color: B.secundario }}>{o.nombre}{o.nivel != null ? ` · nivel ${aTexto(o.nivel)}` : ''}{o.lineas.length > 1 ? ' · MACD en azul, señal en naranja' : ''}</div>
           <div ref={el => { osc.current[j] = el }} style={{ width: '100%', minHeight: ALTO_OSC }}/>
         </div>
@@ -217,11 +240,21 @@ export function textoComisiones(com) {
   const partes = [com.compra ? `${n} compras × ${eur(com.compra)}` : null, com.venta ? `${n} ventas × ${eur(com.venta)}` : null, com.porcentaje ? `${fmt(com.porcentaje, 2)} % del importe en cada compra y en cada venta` : null].filter(Boolean)
   return `${partes.join(' + ')} = ${tras}`
 }
+// V9.1065: la fila del crecimiento dice sobre cuántos años está calculada («CAGR (1,28a)», como «Backtest de un valor»). Con menos de
+// un año no se anualiza: «Rentabilidad del periodo (0,33a)», lo que creció el dinero en el periodo (las curvas de «Cómo habría crecido
+// 100»: la compuesta de la regla y la de comprar y mantener). Solo cambia cómo se enseña: las cuentas son las mismas.
+const AYUDA_PERIODO = 'Con un periodo de menos de un año no se anualiza: se enseña lo que creció el dinero en el periodo. Anualizar un periodo corto exagera: de 100 a 121 en 4 meses es un +21 % en el periodo; anualizado serían un +77 %, que no es lo que ganarías.'
+export const crecimiento = (c) => {
+  const anios = c.metricas?.anios ?? null, ultimo = (cs) => cs?.length ? cs[cs.length - 1].value - 100 : null
+  return anios != null && anios < 1 ? { corto: true, anios, regla: ultimo(c.curvas?.regla), bh: ultimo(c.curvas?.bh) } : { corto: false, anios, regla: c.regla.cagr, bh: c.bh.cagr }
+}
 export function TablaCifras({ c, simbolo }) {
   const poca = c.regla.operaciones < MIN_OPERACIONES
   const col = poca ? B.apagado : null
+  const cr = crecimiento(c), aniosTxt = cr.anios != null ? ` (${fmt(cr.anios, 2)}a)` : ''
+  const nombreCrec = cr.corto ? <>Rentabilidad del periodo{aniosTxt}<Ayuda texto={AYUDA_PERIODO} etiqueta="Rentabilidad del periodo"/><div data-nota-periodo style={{ fontSize: 11, color: B.apagado }}>periodo de menos de un año: no se anualiza</div></> : `CAGR${aniosTxt}`
   const filas = [
-    ['CAGR', <span style={{ color: col || (c.regla.cagr >= 0 ? VERDE_CIFRA : ROJO), fontWeight: 700 }}>{signo(c.regla.cagr)}</span>, signo(c.bh.cagr)],
+    [nombreCrec, <span style={{ color: col || (cr.regla >= 0 ? VERDE_CIFRA : ROJO), fontWeight: 700 }}>{signo(cr.regla)}</span>, signo(cr.bh), cr.corto ? 'Rentabilidad del periodo' : 'CAGR'],
     ['Max Drawdown', <span style={{ color: col || ROJO, fontWeight: 700 }}>{signo(c.regla.maxDD == null ? null : -c.regla.maxDD)}</span>, signo(c.bh.maxDD == null ? null : -c.bh.maxDD)],
     ['Win Rate', <strong style={{ color: col || B.titulo }}>{c.regla.winRate == null ? '—' : `${fmt(c.regla.winRate, 1)} %`}</strong>, '—'],
     ['Factor de beneficio', <strong style={{ color: col || B.titulo }}>{c.regla.factor == null ? '—' : fmt(c.regla.factor, 2)}</strong>, '—'],
@@ -238,7 +271,7 @@ export function TablaCifras({ c, simbolo }) {
         <th scope="col" style={{ ...celda, fontSize: 12, color: poca ? B.apagado : B.secundario }}>Tu regla</th>
         <th scope="col" style={{ ...celda, fontSize: 12, color: B.secundario }}>Comprar y mantener {simbolo}</th>
       </tr></thead>
-      <tbody>{filas.map(([n, a, b]) => <tr key={n} data-fila-cifra={n}><td style={{ ...celda, textAlign: 'left', color: B.secundario }}>{n}</td><td style={celda}>{a}</td><td style={{ ...celda, color: b === '—' ? B.apagado : B.texto }}>{b}</td></tr>)}
+      <tbody>{filas.map(([n, a, b, clave]) => <tr key={clave || n} data-fila-cifra={clave || n}><td style={{ ...celda, textAlign: 'left', color: B.secundario }}>{n}</td><td style={celda}>{a}</td><td style={{ ...celda, color: b === '—' ? B.apagado : B.texto }}>{b}</td></tr>)}
         {com && <tr data-fila-cifra="Comisiones pagadas"><td style={{ ...celda, textAlign: 'left', color: B.secundario }}>Comisiones pagadas</td><td colSpan={2} style={{ ...celda, color: B.texto }}>{textoComisiones(com)}</td></tr>}</tbody>
     </table>
   )
@@ -259,7 +292,7 @@ function Casilla({ valor, guardado, etiqueta, onCambia }) {
 }
 
 export default function BuilderSenales({ def, valores, guardado = null, intervalo = 'diario', error = null, cambios = {}, onCambios = () => {}, onGuardarValores = null, guardando = false, msgGuardar = null,
-  cargaSimbolos = null, cargaVelas = null, comisiones = null, velasIniciales = null, simbolosIniciales = null, simboloInicial = 'AAPL', fechasInicial = null, cifrasIniciales = null, verZonaInicial = true, verOpsInicial = true }) {
+  cargaSimbolos = null, cargaVelas = null, comisiones = null, velasIniciales = null, simbolosIniciales = null, simboloInicial = 'AAPL', fechasInicial = null, cifrasIniciales = null, verZonaInicial = true, verOpsInicial = true, ocultosIniciales = [], entrada = 0 }) {
   const [simbolos, setSimbolos] = useState(simbolosIniciales || [simboloInicial])
   const valoresLista = useMemo(() => simbolos.map(s => typeof s === 'string' ? { simbolo: s, nombre: '' } : s), [simbolos])
   const [simbolo, setSimbolo] = useState(simboloInicial)
@@ -291,8 +324,12 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   // Las señales y las cifras, 250 ms después del último cambio.
   const [res, setRes] = useState(null)
   const [cifras, setCifras] = useState(cifrasIniciales)
-  const [verZona, setVerZona] = useState(verZonaInicial)   // V9.1061: el interruptor de la zona gris del filtro (en la leyenda)
-  const [verOps, setVerOps] = useState(verOpsInicial)   // V9.1063: el de las líneas de las operaciones
+  // V9.1061: el interruptor de la zona gris del filtro; V9.1063: el de las líneas de las operaciones; V9.1065: uno por cada elemento
+  // del gráfico (las claves ocultas; ver Graficos). Al volver a entrar en el Builder (entrada cambia), todo enseñado otra vez.
+  const [ocultos, setOcultos] = useState(() => new Set([...(verZonaInicial ? [] : ['zona']), ...(verOpsInicial ? [] : ['operaciones']), ...ocultosIniciales]))
+  const cambiaVisto = (clave, visto) => setOcultos(o => { const x = new Set(o); if (visto) x.delete(clave); else x.add(clave); return x })
+  const entradaVista = useRef(entrada)
+  useEffect(() => { if (entrada !== entradaVista.current) { entradaVista.current = entrada; setOcultos(new Set()) } }, [entrada])
   const [fCifras, setFCifras] = useState(null)
   const calcula = () => error || errPrueba.length || !vs.length ? null
     : calculaSenales({ def: prueba.def, valores: prueba.valores, velas: vs, referencias: ticker ? { [ticker]: velas[ticker] || [] } : {}, desde, hasta, intervalo })
@@ -368,24 +405,25 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
       {!cargando && !vs.length && !fallo && <div style={{ ...S.apagado, marginTop: 8 }}>Elige un valor para ver las señales.</div>}
       {r && !errPrueba.length && <section data-columna-grafico style={{ marginTop: 10, minWidth: 0 }}>
           <div data-contador style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', margin: '0 0 6px', color: B.texto, fontSize: 13 }}>
-            <span><span style={{ color: VERDE }}>▲</span> compra · <span style={{ color: NARANJA }}>▼</span> vende</span>
-            {(r.operaciones || []).length > 0 && <label data-interruptor-operaciones title="Enseña u oculta la línea de cada operación, de la compra a la venta" style={{ display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit' }}>
-              <input type="checkbox" aria-label="Enseñar la línea de cada operación" checked={verOps} onChange={e => setVerOps(e.target.checked)} style={{ margin: 0, cursor: 'pointer' }}/>
-              <span><span style={{ color: COLOR_GANA }}>╱</span> gana · <span style={{ color: COLOR_PIERDE }}>╲</span> pierde</span></label>}
-            {r.medias.map(m => <span key={m.nombre} style={{ color: m.color }}>{m.discontinua ? '— —' : '—'} {m.nombre}</span>)}
-            {(r.canales || []).map(m => <span key={m.nombre} data-leyenda-canal={m.nombre} style={{ color: m.color }}>{m.punteada ? '┈┈' : m.discontinua ? '— —' : '—'} {m.nombre}</span>)}
+            <Interruptor clave="flechas" ocultos={ocultos} onCambia={cambiaVisto} que="las flechas de compra y venta"><span><span style={{ color: VERDE }}>▲</span> compra · <span style={{ color: NARANJA }}>▼</span> vende</span></Interruptor>
+            {(r.operaciones || []).length > 0 && <Interruptor clave="operaciones" ocultos={ocultos} onCambia={cambiaVisto} que="la línea de cada operación, de la compra a la venta" datos={{ 'data-interruptor-operaciones': '' }}>
+              <span><span style={{ color: COLOR_GANA }}>╱</span> gana · <span style={{ color: COLOR_PIERDE }}>╲</span> pierde</span></Interruptor>}
+            {r.medias.map(m => <Interruptor key={m.nombre} clave={`media:${m.nombre}`} ocultos={ocultos} onCambia={cambiaVisto} que={m.nombre}><span style={{ color: m.color }}>{m.discontinua ? '— —' : '—'} {m.nombre}</span></Interruptor>)}
+            {gruposCanales(r.canales || []).map(([clave, cs]) => <Interruptor key={clave} clave={clave} ocultos={ocultos} onCambia={cambiaVisto} que={clave.slice(6)}>
+              {cs.map((m, k) => <span key={m.nombre} data-leyenda-canal={m.nombre} style={{ color: m.color }}>{k ? ' · ' : ''}{m.punteada ? '┈┈' : m.discontinua ? '— —' : '—'} {m.nombre}</span>)}</Interruptor>)}
             {(r.canales || []).some(k => k.tipo === 'supertrend') && <span data-leyenda-supertrend>SuperTrend: <span style={{ color: '#3fb950' }}>alcista</span> · <span style={{ color: '#f85149' }}>bajista</span><Ayuda texto={AYUDA_SUPERTREND} etiqueta="SuperTrend"/></span>}
-            {(r.puntosSwing || []).length > 0 && <span data-leyenda-swings>● swing · ┈ hasta confirmarse · — desde que se puede usar<Ayuda texto={AYUDA_SWINGS} etiqueta="Swings"/></span>}
+            {(r.puntosSwing || []).length > 0 && <span data-leyenda-swings style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Interruptor clave="puntosSwing" ocultos={ocultos} onCambia={cambiaVisto} que="los puntos de swing"><span>● swing</span></Interruptor><span>· ┈ hasta confirmarse · — desde que se puede usar</span><Ayuda texto={AYUDA_SWINGS} etiqueta="Swings"/></span>}
             {r.franjas.some(f => f.tarjeta === 'filtro') && (r.bloqueado.some(Boolean)
-              ? <label data-interruptor-zona title="Enseña u oculta la zona gris donde el filtro no deja comprar (la franja del filtro sigue igual)" style={{ display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit' }}>
-                <input type="checkbox" aria-label="Enseñar la zona gris donde el filtro no deja comprar" checked={verZona} onChange={e => setVerZona(e.target.checked)} style={{ margin: 0, cursor: 'pointer' }}/>
-                <span style={{ display: 'inline-block', width: 14, height: 10, background: 'rgba(139,155,173,0.35)' }}/>filtro: no opero</label>
+              ? <Interruptor clave="zona" ocultos={ocultos} onCambia={cambiaVisto} que="la zona gris donde el filtro no deja comprar (la franja del filtro sigue igual)" datos={{ 'data-interruptor-zona': '' }}>
+                <span style={{ display: 'inline-block', width: 14, height: 10, background: 'rgba(139,155,173,0.35)' }}/>filtro: no opero</Interruptor>
               : <span><span style={{ display: 'inline-block', width: 14, height: 10, background: 'rgba(139,155,173,0.35)', marginRight: 4 }}/>filtro: no opero</span>)}
+            {r.franjas.length > 0 && <Interruptor clave="franjas" ocultos={ocultos} onCambia={cambiaVisto} que="las franjas de las condiciones y de las piezas (todas)"><span style={{ color: '#8db8ff' }}>▬ franjas</span></Interruptor>}
+            {r.osciladores.map(o => <Interruptor key={o.nombre} clave={`osc:${o.nombre}`} ocultos={ocultos} onCambia={cambiaVisto} que={`el panel de ${o.nombre}`}><span style={{ color: AZUL }}>▭ {o.nombre}</span></Interruptor>)}
             <Ayuda texto={AYUDA} etiqueta="Señales en el gráfico"/>
             <strong data-cuenta style={{ marginLeft: 'auto' }}>En este periodo: {r.compras.length} {r.compras.length === 1 ? 'compra' : 'compras'} · {r.ventas.length} {r.ventas.length === 1 ? 'venta' : 'ventas'}</strong>
           </div>
           {r.avisos.map((a, k) => <div key={k} data-aviso-senales style={{ color: AMARILLO, fontSize: 13 }}>{a}</div>)}
-          <Graficos r={r} verZona={verZona} verOps={verOps}/>
+          <Graficos r={r} ocultos={ocultos}/>
           <div style={{ ...S.apagado, marginTop: 4 }}>De {fechaCorta(r.velas[0].date)} a {fechaCorta(r.velas[r.velas.length - 1].date)} · {r.velas.length} velas · {simbolo}{r.franjas.length ? ' · debajo de las velas, una franja por condición y por pieza (pintado = se cumple), con su nombre encima' : ''} · gráfico: <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer" style={{ color: B.apagado }}>TradingView Lightweight Charts™</a></div>
         </section>}
       </div>

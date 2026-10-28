@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { MONO, fmt, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, AYUDA_CAGR } from '../lib/utils'
 import { getSupaUrl, getSupaH } from '../lib/supabase'
+import { BotonLimpiar } from './LimpiarBusqueda'
 
 // ── Supabase helpers ─────────────────────────────────────────
 async function _setItemLists(itemId, listIds) {
@@ -788,14 +789,11 @@ export default function WatchlistManager({
             style={{
               width: '100%', background: P.bg, border: `1px solid ${P.border}`,
               color: P.text, fontFamily: MONO, fontSize: 12,
-              padding: '5px 24px 5px 9px', borderRadius: 5,
+              padding: '5px 26px 5px 9px', borderRadius: 5,
               boxSizing: 'border-box', outline: 'none',
             }} />
-          {filterSearch
-            ? <span onClick={() => setFilterSearch('')}
-                style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)',
-                  cursor: 'pointer', color: P.textMuted, fontSize: 12 }}>✕</span>
-            : <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+          <BotonLimpiar visible={!!filterSearch} onLimpia={() => setFilterSearch('')}/>{/* V9.1065: la «×» común */}
+          {!filterSearch && <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
                 color: P.textMuted, fontSize: 11, pointerEvents: 'none' }}>⌕</span>}
         </div>
 

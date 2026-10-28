@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { MONO, fmt, AYUDA_CAGR } from '../lib/utils'
 import { getSupaUrl, getSupaH } from '../lib/supabase'
+import { BotonLimpiar } from './LimpiarBusqueda'
 
 // ── Carga métricas de ranking_results agrupadas por strategy_id ──
 async function loadRankingMetrics() {
@@ -228,13 +229,9 @@ export default function StrategyManager({
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{ width: 160, background: P.bg, border: `1px solid ${P.border}`, borderRadius: 4,
-              color: P.text, fontFamily: MONO, fontSize: 11, padding: '4px 22px 4px 8px', outline: 'none' }}
+              color: P.text, fontFamily: MONO, fontSize: 11, padding: '4px 26px 4px 8px', outline: 'none' }}
           />
-          {search && (
-            <span onClick={() => setSearch('')}
-              style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
-                cursor: 'pointer', color: P.textMuted, fontSize: 11 }}>✕</span>
-          )}
+          <BotonLimpiar visible={!!search} onLimpia={() => setSearch('')}/>{/* V9.1065: la «×» común */}
         </div>
 
         {/* Toggle habilitadas/todas */}

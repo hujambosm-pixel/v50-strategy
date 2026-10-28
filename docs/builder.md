@@ -1222,3 +1222,48 @@ estrategias del editor, con todo idéntico a V9.1063).
   exportar y calentamiento idénticos a V9.1063; ida y vuelta byte a byte. Montaje SWC con estado del editor (las filas, el stop con
   sus casillas, el catálogo con el grupo y su pieza), de «Señales en el gráfico» (leyenda, franjas, 6 compras · 5 ventas) y del
   dibujo de la regla. Comprobaciones comunes.
+
+## 31. Ajustes de pantalla: buscadores, ventanas «?», casillas de la leyenda y la fila del crecimiento (V9.1065)
+
+Solo pantalla: ningún cálculo cambia (lib/ no se toca; las cifras, idénticas a V9.1064).
+
+- **La «×» de los buscadores** (components/LimpiarBusqueda.js: `ConLimpiar`, que envuelve la casilla, y `BotonLimpiar`, para las
+  que ya van en un contenedor con position: relative): dentro de la casilla, a la derecha, solo con texto; al pulsarla se vacía y
+  vuelve la lista completa, con el foco en la casilla. La misma en los 13 buscadores de la app: catálogo de condiciones, «Mi
+  trabajo», «Desde una de mis estrategias» y «Valor» (Builder); el de condiciones (ConditionsManager) y el de estrategias
+  (StrategiesManager), el del panel de estrategias (StrategyManager), el de la lista de seguimiento (WatchlistManager), el de los
+  activos de la optimización (OptimizacionPanel) y, en pages/index.js, el de estrategias de la configuración, el de la lista de
+  seguimiento lateral, el del universo manual de la multicartera y «Filtrar activo…» de sus operaciones. Las «✕» propias que tenían
+  cuatro de ellos, cambiadas por la común. «Mi trabajo» pasa de type="search" a texto (role="searchbox"), sin la × del navegador.
+- **Al volver a entrar en el Builder** (BuilderPanel, cada vez que `visible` pasa a verse después de la primera): las búsquedas de
+  «Mi trabajo» y «Desde una de mis estrategias» vacías (y ninguna elegida para copiar); `entradaBuilder` se lo dice al editor (el
+  catálogo, vacío) y a «Señales en el gráfico» (`entrada`: todo enseñado otra vez). «Valor» ya salía vacío. Si se ve la lista (sin
+  editor, prueba ni guía), la pestaña «Mis estrategias» y el cursor en su casilla de búsqueda.
+- **Ventanas «?»** (components/BuilderAyuda.js, la única «?» de la app; el «ⓘ» de components/Tip.js no se toca): van en un portal
+  (document.body, posición fija: ninguna tarjeta las recorta). Se miden con su texto en una copia invisible: debajo del «?» si
+  caben, si no encima; si no caben en ninguno de los dos lados, se ensanchan (300, 420 y hasta 560 px, o lo que deje la pantalla
+  con 12 px de margen) y, si aun así no caben, van al lado con más sitio con desplazamiento vertical dentro. Se cierran al pulsar
+  fuera, con Escape, al desplazar la página o al cambiar el tamaño (desplazar el texto de la ventana no la cierra); al salir el ratón
+  hay 180 ms para pasar a la ventana.
+- **Casillas de la leyenda de «Señales en el gráfico»**, una por elemento, todas marcadas al entrar: flechas de compra y venta,
+  líneas de operación, cada media, cada canal (máximo / mínimo de N velas; las dos bandas de Bollinger juntas; los dos tramos de
+  cada swing por separado; las dos líneas del SuperTrend juntas; el stop activo), puntos de swing, zona gris del filtro, franjas
+  (todas, con sus nombres) y cada panel de oscilador. Cada serie se crea una vez, apuntada con la clave de su casilla, y solo cambia
+  su `visible`; las flechas (marcas de las velas) se quitan y se vuelven a poner; los nombres de las franjas y los paneles de
+  osciladores, con display. Así no se rehace el gráfico ni se mueve el zoom. Lo oculto no se guarda (`ocultosIniciales`, para el
+  montaje).
+- **La fila del crecimiento** de la tabla de cifras: «CAGR (5,99a)» con los años del periodo (`metricas.anios` de calcMetrics, como
+  «Backtest de un valor»). Con menos de un año, «Rentabilidad del periodo (0,33a)» sin anualizar en las dos columnas (lo que creció
+  el dinero: el final de las curvas de «Cómo habría crecido 100», la compuesta de la regla y la de comprar y mantener), con la nota
+  «periodo de menos de un año: no se anualiza» y su «?» (de 100 a 121 en 4 meses = +21 %; anualizado, +77 %).
+- Comprobado: montaje SWC con estado (la «×» con texto y sin ella en los cuatro del Builder y en ConditionsManager y
+  StrategiesManager; la ventana abierta; las casillas de «Swings 2/2» y de una regla con medias, Bollinger, máximo de 20 velas, RSI,
+  MACD y SuperTrend; ocultos el RSI, las franjas y las flechas). «Swings 2/2» en AAPL 01/07–31/10/2010: «Rentabilidad del periodo
+  (0,33a)», regla −1,81 %, comprar y mantener +21,13 % (antes, CAGR −5,40 % y +79,22 %); 2010–2015: «CAGR (5,99a)» (del 04/01/2010 al
+  31/12/2015), +10,98 % y +22,93 %, cifras idénticas a V9.1064. En el navegador (los componentes compilados, sin la app) a 1440 px:
+  al cargar, el cursor en «Mi trabajo»; la «×» de «Mi trabajo», «Desde una de mis estrategias» y «Valor» sale solo con texto, dentro
+  de la casilla, y al pulsarla vacía la búsqueda, vuelve la lista entera y deja el foco; las tres, iguales; salir y volver a entrar
+  deja las búsquedas vacías y el cursor en «Mi trabajo»; la «?» de «Estructura alcista» abajo a la izquierda, abajo a la derecha y
+  dentro de una tarjeta que recorta, entera (420 px, encima o debajo) y una el triple de larga junto al borde derecho, entera con
+  desplazamiento (560 px); se cierran con Escape y al pulsar fuera; cada casilla de la leyenda oculta y enseña sus series sin crear
+  ninguna nueva ni rehacer el gráfico. Ida y vuelta; comprobaciones comunes.

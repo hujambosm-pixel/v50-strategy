@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MONO } from '../lib/utils'
+import ConLimpiar from './LimpiarBusqueda'
 
 export const STRATEGY_ROLES = [
   { key: 'filter',     label: 'FILTER',     color: '#4a9eff' },
@@ -97,14 +98,14 @@ export default function ConditionsManager({ conditions, selectedCondition, onSel
           {conditions.length} registradas
         </span>
         <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-          {/* Search */}
-          <input
+          {/* Search (V9.1065: con la «×» común) */}
+          <ConLimpiar valor={search} onLimpia={()=>setSearch('')}><input
             value={search}
             onChange={e=>setSearch(e.target.value)}
             placeholder="Buscar…"
             style={{fontFamily:MONO,fontSize:11,padding:'3px 8px',background:'var(--bg3)',
               border:'1px solid var(--border)',borderRadius:4,color:'var(--text1)',width:140,outline:'none'}}
-          />
+          /></ConLimpiar>
           {/* Type filter */}
           <select value={filterType} onChange={e=>setFilterType(e.target.value)}
             style={{fontFamily:MONO,fontSize:11,padding:'3px 6px',background:'var(--bg3)',

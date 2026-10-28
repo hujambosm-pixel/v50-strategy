@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1064'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1065'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -60,6 +60,7 @@ import { preparaGuardado } from '../lib/editor/guardar'
 import WatchlistCondPanel from '../components/WatchlistCondPanel'
 import WatchlistManager from '../components/WatchlistManager'
 import StrategyManager from '../components/StrategyManager'
+import ConLimpiar, { BotonLimpiar } from '../components/LimpiarBusqueda'
 
 
 // ── FIFO computation for TradeLog ─────────────────────────────
@@ -6290,7 +6291,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1064</title>
+        <title>Trading Simulator V9.1065</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6379,7 +6380,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1064
+            <span className="dot"/>Trading Simulator V9.1065
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6577,10 +6578,9 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       placeholder="🔍 Buscar…"
                       value={strForm._search||''}
                       onChange={e=>setStrForm(p=>({...p,_search:e.target.value}))}
-                      style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 22px 4px 7px',borderRadius:4,boxSizing:'border-box'}}
+                      style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'4px 26px 4px 7px',borderRadius:4,boxSizing:'border-box'}}
                     />
-                    {strForm._search&&<span onClick={()=>setStrForm(p=>({...p,_search:''}))}
-                      style={{position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',cursor:'pointer',color:'#a8ccdf',fontSize:11}}>✕</span>}
+                    <BotonLimpiar visible={!!strForm._search} onLimpia={()=>setStrForm(p=>({...p,_search:''}))}/>{/* V9.1065: la «×» común */}
                   </div>
                 </div>
 
@@ -6729,10 +6729,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                       <div style={{position:'relative',flex:1,minWidth:0}}>
                         <input type="text" placeholder="Buscar…" value={wlSearch} onChange={e=>setWlSearch(e.target.value)}
                           style={{width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',
-                            fontFamily:MONO,fontSize:11,padding:'3px 20px 3px 7px',borderRadius:4,boxSizing:'border-box'}}/>
-                        {wlSearch&&<span onClick={()=>setWlSearch('')}
-                          style={{position:'absolute',right:5,top:'50%',transform:'translateY(-50%)',
-                            cursor:'pointer',color:'#a8ccdf',fontSize:10,lineHeight:1}}>✕</span>}
+                            fontFamily:MONO,fontSize:11,padding:'3px 26px 3px 7px',borderRadius:4,boxSizing:'border-box'}}/>
+                        <BotonLimpiar visible={!!wlSearch} onLimpia={()=>setWlSearch('')}/>{/* V9.1065: la «×» común */}
                       </div>
 
                       {/* ListFilter — selector de lista (multiselección) */}
@@ -7963,8 +7961,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 <div style={{display:mcUniverso==='manual'?'flex':'none',flexDirection:'column',flex:1,minHeight:0}}>
                   {/* Filtros */}
                   <div style={{padding:'5px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:4,alignItems:'center'}}>
-                    <input type="text" placeholder="🔍 Buscar..." value={mcSearch||''} onChange={e=>setMcSearch(e.target.value)}
-                      style={{flex:1,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:4,minWidth:0}}/>
+                    <ConLimpiar valor={mcSearch||''} onLimpia={()=>setMcSearch('')} bloque estilo={{flex:1,minWidth:0}}><input type="text" placeholder="🔍 Buscar..." value={mcSearch||''} onChange={e=>setMcSearch(e.target.value)}
+                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:4,minWidth:0}}/></ConLimpiar>{/* V9.1065 */}
                     <button onClick={()=>setMcOnlyFavs(f=>!f)}
                       style={{background:mcOnlyFavs?'rgba(255,209,102,0.15)':'transparent',border:`1px solid ${mcOnlyFavs?'#ffd166':'var(--border)'}`,color:mcOnlyFavs?'#ffd166':'var(--text3)',fontFamily:MONO,fontSize:12,padding:'3px 6px',borderRadius:4,cursor:'pointer',flexShrink:0}}>
                       ★
@@ -10619,10 +10617,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           </span>
                         )}
                         <div style={{display:'flex',gap:4,marginLeft:'auto',alignItems:'center',flexWrap:'wrap'}}>
-                          {!mcShowGantt&&<input value={mcTradeFilter} onChange={e=>setMcTradeFilter(e.target.value)}
+                          {!mcShowGantt&&<ConLimpiar valor={mcTradeFilter} onLimpia={()=>setMcTradeFilter('')}><input value={mcTradeFilter} onChange={e=>setMcTradeFilter(e.target.value)}
                             placeholder="Filtrar activo…"
                             style={{fontFamily:MONO,fontSize:11,padding:'2px 7px',borderRadius:3,
-                              background:'#0d1828',border:'1px solid #274462',color:'#e8f4ff',width:110}}/>}
+                              background:'#0d1828',border:'1px solid #274462',color:'#e8f4ff',width:110}}/></ConLimpiar>}{/* V9.1065 */}
                           {/* Sin deshabilitar: el bloque siempre resuelve UNA estrategia concreta, así
                               que siempre hay algo que exportar y algo que dibujar en el Gantt. */}
                           <button

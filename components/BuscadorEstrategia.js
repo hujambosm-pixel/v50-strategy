@@ -2,13 +2,14 @@
 // catálogo de condiciones: se escribe y debajo salen las que coinciden por nombre, sin distinguir mayúsculas ni acentos
 // (lib/builder/buscar.js), agrupadas «De tarjetas» / «De código». Con teclado (flechas, Enter, Escape) y con ratón. Con la casilla
 // vacía, o con el nombre de la elegida, al pulsar en ella se ven todas. Al elegir una, su nombre queda escrito en la casilla.
-// V9.1063: en cada resultado, las letras que coinciden con lo escrito, resaltadas (components/Resaltado.js).
+// V9.1063: en cada resultado, las letras que coinciden con lo escrito, resaltadas (components/Resaltado.js). V9.1065: la «×» que limpia.
 //   grupos: [{ titulo, estrategias: [{ id, name }] }]; texto / onTexto: lo escrito; elegida: el id elegido (o null); onElige(s).
 //   abiertoInicial (para las pruebas de montaje): con la lista abierta.
 import { useState, useRef, useEffect } from 'react'
 import { B } from '../lib/builder/estilo'
 import { coincide } from '../lib/builder/buscar'
 import Resaltado from './Resaltado'
+import { BotonLimpiar, SITIO_LIMPIAR } from './LimpiarBusqueda'
 
 export default function BuscadorEstrategia({ grupos = [], texto = '', onTexto = () => {}, elegida = null, onElige = () => {}, abiertoInicial = false, style = {} }) {
   const [abierto, setAbierto] = useState(abiertoInicial)
@@ -38,7 +39,8 @@ export default function BuscadorEstrategia({ grupos = [], texto = '', onTexto = 
         onClick={() => setAbierto(true)}
         onChange={e => { onTexto(e.target.value); setActivo(0); setAbierto(true) }}
         onBlur={() => setAbierto(false)} onKeyDown={tecla}
-        style={{ fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px', width: '100%', boxSizing: 'border-box' }}/>
+        style={{ fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px', paddingRight: SITIO_LIMPIAR, width: '100%', boxSizing: 'border-box' }}/>
+      <BotonLimpiar visible={!!texto} onLimpia={() => { onTexto(''); setActivo(0); setAbierto(true) }}/>
       {abierto && plana.length > 0 && <ul id="buscador-estrategia-lista" role="listbox" aria-label={`Mis estrategias: ${plana.length}`} data-lista-copia={plana.length}
         style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, margin: '4px 0 0', padding: 4, listStyle: 'none', maxHeight: 320, overflowY: 'auto',
           background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, boxShadow: '0 8px 24px rgba(0,0,0,0.45)' }}>
