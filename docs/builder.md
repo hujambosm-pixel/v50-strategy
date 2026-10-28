@@ -1429,3 +1429,22 @@ venta, su `capitalTras`). Una operación de 100 → 120 → 90 → vende a 110 d
   = «Backtest de un valor» en 2020–2021 (CAGR 26,43 %, 6 operaciones) y en los últimos 5 años (CAGR 7,81 %, 20 operaciones).
   Sintéticas a mano (una ruptura en la última vela compra si está cerrada y no si está en curso; la semana abierta en curso;
   `ordenaUnicas`). Montaje SWC idéntico a antes. Supabase, simulado en las pruebas (solo lectura). Comprobaciones comunes.
+
+## 38. Avisos de fecha final en «Backtest de un valor» y en el paso 1 (V9.1072)
+
+- **lib/avisoFechaFinal.js** (`avisoFechaFinal`, puro): un aviso ámbar encima del gráfico, con su «?» (components/BuilderAyuda.js).
+  Solo avisa. Dos casos que no se mezclan:
+  - «El periodo termina el 20/10/2026 porque elegiste Fechas.»: el periodo está en «Fechas» (en el paso 1, «Otras fechas») y la
+    fecha final es anterior a la última sesión esperada. La «?» explica que en «Fechas» el final no avanza solo y que «Últimos N años»
+    siempre llega a hoy.
+  - «Faltan velas: los precios de QQQ llegan hasta el 26/10/2026.»: el periodo pide llegar a hoy y la última vela es más antigua que
+    la última sesión esperada.
+  - Última sesión esperada: el último día de lunes a viernes ANTERIOR a hoy (la de hoy no se exige: puede no haber abierto). Fines de
+    semana sí; festivos no (un festivo puede dar un aviso de más, aceptado). En semanal, la última semana cerrada (la de esta semana
+    si hoy es sábado o domingo; si no, la anterior), comparada con el lunes de la última vela.
+- **Dónde**: «Backtest de un valor» (pages/index.js, encima del gráfico, con el periodo del panel y las velas del resultado; no con
+  «Probar en backtest», que usa las fechas de la optimización). Paso 1, «Señales en el gráfico»: solo con «Otras fechas» (el ensayo
+  tiene fechas fijas).
+- Comprobado: a mano (miércoles 28/10/2026 → sesión 27/10 y semana del 19/10; lunes 02/11 y domingo 01/11 → viernes 30/10; sábado
+  31/10 → semana del 26/10; los dos textos y los casos sin aviso); montaje SWC del paso 1 (Otras fechas hasta 31/12/2025 → «fechas»;
+  hasta hoy con velas hasta el 20/10 → «faltan»; el ensayo y velas al día → sin aviso). Comprobaciones comunes.

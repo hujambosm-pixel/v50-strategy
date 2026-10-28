@@ -22,6 +22,8 @@ import CandleChart from '../components/CandleChart'
 import FundamentalsPanel from '../components/FundamentalsPanel'
 import EquityChart from '../components/EquityChart'
 import Tip from '../components/Tip'
+import Ayuda from '../components/BuilderAyuda'
+import { avisoFechaFinal } from '../lib/avisoFechaFinal'
 import SettingsModal from '../components/SettingsModal'
 import OptimizacionPanel from '../components/OptimizacionPanel'
 import LaboratorioPanel from '../components/LaboratorioPanel'
@@ -33,7 +35,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1071'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1072'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -6305,7 +6307,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1071</title>
+        <title>Trading Simulator V9.1072</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6394,7 +6396,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1071
+            <span className="dot"/>Trading Simulator V9.1072
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8764,6 +8766,16 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
                   {/* Gráfico de velas */}
                   <div className="chart-wrap" ref={chartWrapRef} onContextMenu={e=>openCtx(e,'chart')} style={{padding:0,borderBottom:'1px solid var(--border)',...((result.isBareChart||sidePanel==='risk')?{flex:1,minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'}:{height:'calc(100vh - 64px)',minHeight:0,display:'flex',flexDirection:'column',overflow:'hidden'})}}>
+                    {/* V9.1071: el aviso ámbar de la fecha final (lib/avisoFechaFinal.js): «Fechas» con el final antes de la última
+                        sesión, o velas que no llegan a ella. Solo avisa. Con «Probar en backtest» (fechas de la optimización), no. */}
+                    {!result.isBareChart&&!(pruebaParams&&pruebaParams.estrategiaId===currentStratId)&&(()=>{
+                      const _cd=result.chartData||[]
+                      const _a=avisoFechaFinal({simbolo,modo:indPeriodMode==='range'?'fechas':'hoy',hasta:indHasta,intervalo:estrategiaIntervalo,
+                        ultima:_cd.length?_cd[_cd.length-1].date:null})
+                      return _a?<div data-aviso-fecha-final={_a.tipo} style={{flexShrink:0,display:'flex',alignItems:'center',gap:6,padding:'4px 10px',
+                        background:'rgba(242,204,96,0.08)',borderBottom:'1px solid rgba(242,204,96,0.35)',color:'#f2cc60',fontFamily:MONO,fontSize:12}}>
+                        {_a.texto}<Ayuda texto={_a.ayuda} etiqueta={_a.tipo==='fechas'?'Fecha final elegida':'Faltan velas'}/></div>:null
+                    })()}
                     <div style={{position:'relative',flex:1,minHeight:0,height:'100%',display:'flex',flexDirection:'column'}}>
                       {/* ── Barra de info integrada — una sola fila sobre el gráfico ── */}
                       <div style={{position:'absolute',top:0,left:0,right:0,zIndex:11,height:30,

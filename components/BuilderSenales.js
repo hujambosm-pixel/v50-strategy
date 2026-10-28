@@ -26,6 +26,8 @@ import { fmt } from '../lib/utils'
 import CampoFecha from './CampoFecha'
 import BuscadorValor from './BuscadorValor'
 import Ayuda from './BuilderAyuda'
+import { avisoFechaFinal } from '../lib/avisoFechaFinal'
+import { lunesDeSemana } from '../lib/velasSemanales'
 import { NOTA_LINEA_SWING } from '../lib/builder/fichas'
 import { tramosLinea, lineaOperacion, COLOR_GANA, COLOR_PIERDE } from '../lib/graficoPaneles'
 import { colocaMarcas } from '../lib/builder/marcas'
@@ -369,6 +371,10 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   const [fechaValida, setFechaValida] = useState({ desde: true, hasta: true })
   const errFechas = !otras ? null : !fechaValida.desde || !fechaValida.hasta ? 'Escribe las dos fechas completas (dd/mm/aaaa) para ver las señales.'
     : desde && hasta && desde > hasta ? 'La fecha de inicio es posterior a la de fin.' : null
+  // V9.1071: con «Otras fechas», el aviso ámbar de la fecha final (lib/avisoFechaFinal.js): la elegida antes de la última sesión, o
+  // velas que no llegan a ella. El ensayo tiene sus fechas fijas: sin aviso.
+  const avisoFin = useMemo(() => !otras || errFechas || !vs.length ? null : avisoFechaFinal({ simbolo, modo: 'fechas', hasta, intervalo, nombreModo: 'Otras fechas',
+    ultima: intervalo === 'semanal' ? lunesDeSemana(vs[vs.length - 1].date) : vs[vs.length - 1].date }), [otras, errFechas, vs, simbolo, hasta, intervalo])
   // Las señales y las cifras, 250 ms después del último cambio.
   const [res, setRes] = useState(null)
   const [cifras, setCifras] = useState(cifrasIniciales)
@@ -452,6 +458,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
       </div>
       <div style={{ ...S.apagado, marginTop: 6 }}>Las casillas son para probar: no cambian la estrategia hasta que pulses «Guardar estos valores en la estrategia». Al salir del paso 1 y volver a entrar, salen siempre los valores guardados.</div>
       {ensayo.aviso && !otras && <div data-aviso-ensayo style={{ color: AMARILLO, fontSize: 13, marginTop: 4 }}>{ensayo.aviso}</div>}
+      {avisoFin && <div data-aviso-fecha-final={avisoFin.tipo} style={{ color: AMARILLO, fontSize: 13, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>{avisoFin.texto}<Ayuda texto={avisoFin.ayuda} etiqueta={avisoFin.tipo === 'fechas' ? 'Fecha final elegida' : 'Faltan velas'}/></div>}
       {tocaPaso2(desde, hasta) && <div data-nota-paso2 style={{ color: AMARILLO, fontSize: 13, marginTop: 4 }}>{NOTA_PASO2}</div>}
       {msgGuardar && <div style={{ color: ROJO, marginTop: 4 }}>{msgGuardar}</div>}
       {errPrueba.length > 0 && <div data-error-prueba style={{ color: ROJO, marginTop: 6 }}>{errPrueba.map((e, k) => <div key={k}>{e}</div>)}</div>}
