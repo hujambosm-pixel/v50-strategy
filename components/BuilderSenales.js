@@ -18,7 +18,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import { calculaSenales } from '../lib/builder/senales'
-import { leeFiltro, aTexto, deTexto } from '../lib/builder/tarjetas'
+import { leeFiltro, aTexto, deTexto, combinacionesImposibles } from '../lib/builder/tarjetas'
 import { validaDefinicion, valoresDe } from '../lib/editor/definicion'
 import { fechasEnsayo, tocaPaso2, NOTA_PASO2, camposDePrueba, valorCampo, aplicaPrueba, cifrasRegla, MIN_OPERACIONES, MODOS_ORDEN } from '../lib/builder/ensayo'
 import { opcionesCasillas } from '../lib/builder/enlaces'
@@ -28,6 +28,7 @@ import BuscadorValor from './BuscadorValor'
 import Ayuda from './BuilderAyuda'
 import { NOTA_LINEA_SWING } from '../lib/builder/fichas'
 import { tramosLinea, lineaOperacion, COLOR_GANA, COLOR_PIERDE } from '../lib/graficoPaneles'
+import { colocaMarcas } from '../lib/builder/marcas'
 
 const VERDE = '#3fb950', NARANJA = '#f0883e', MORADO = '#a371f7', AZUL = '#58a6ff', AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE_CIFRA = '#7ee2a0', GRIS_BH = '#8b98a8'
 const fechaCorta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
@@ -35,7 +36,7 @@ const ESPERA_MS = 250
 // V9.1064: el «?» del SuperTrend de la leyenda.
 const AYUDA_SUPERTREND = 'La línea del SuperTrend: verde y por debajo del precio mientras la tendencia es alcista (es la banda inferior, que solo sube); roja y por encima mientras es bajista (la banda superior, que solo baja). Se corta en cada cambio de tendencia: cambia a alcista cuando una vela CIERRA por encima de la roja y a bajista cuando cierra por debajo de la verde. Ejemplo: con SuperTrend (10, 3), si la línea roja está en 105 € y una vela cierra a 106 €, desde esa vela la línea es verde, por debajo del precio. Todo con la vela cerrada.'
 // V9.1067: el «?» de los puntos de la señal.
-const AYUDA_PUNTO_SENAL = 'La señal se conoce al CIERRE de una vela: ahí va el punto (verde para la compra, naranja para la venta). La flecha va en la vela en que se compra o se vende de verdad. Con «apertura de la vela siguiente», la compra es en la vela de después del punto; con una orden en un nivel (el máximo, la ruptura, el swing o la línea del SuperTrend), el punto va en la vela en que se puso la orden o en que el precio la tocó. Una venta por un stop o un objetivo es dentro de la vela: el punto y la flecha, en la misma.'
+const AYUDA_PUNTO_SENAL = 'La señal se conoce al CIERRE de una vela: en esa vela va el punto, por encima de su máximo (verde para la compra, naranja para la venta). La flecha va en la vela en que se compra o se vende de verdad. Con «apertura de la vela siguiente», la compra es en la vela de después del punto; con una orden en un nivel (el máximo, la ruptura, el swing o la línea del SuperTrend), el punto va en la vela en que se puso la orden o en que el precio la tocó. Una venta por un stop o un objetivo es dentro de la vela: el punto y la flecha, en la misma.'
 // V9.1066: el «?» del stop activo cuando va en la línea del SuperTrend.
 const AYUDA_STOP_ST = 'La línea roja es el stop activo del motor, solo mientras hay una operación abierta. Con el stop en la línea del SuperTrend, el stop de cada vela es la línea del SuperTrend de la vela ANTERIOR (sube con ella y nunca baja): donde coinciden se dibuja solo la línea del SuperTrend, para no ver dos líneas casi pegadas y una vela desplazadas. El rojo aparece solo donde el stop va por otro sitio (por ejemplo, porque manda otro stop más alto). Ejemplo: si la línea verde está en 140,52 € el martes y sube a 142,27 € el miércoles, el stop del miércoles es 140,52 € y el del jueves, 142,27 €.'
 // V9.1062: el «?» de los swings de la leyenda: los dos tramos y el stop rojo.
@@ -103,7 +104,7 @@ function Graficos({ r, ocultos = new Set(), llaveZoom = '' }) {
   useEffect(() => {
     ocultosR.current = ocultos
     for (const [clave, ss] of series.current) for (const s of ss) s.applyOptions({ visible: !ocultos.has(clave) })
-    if (flechas.current) flechas.current.velas.setMarkers(ocultos.has('flechas') ? [] : flechas.current.marcas)
+    for (const f of flechas.current || []) f.serie.setMarkers(ocultos.has('flechas') ? [] : f.marcas)
   }, [ocultos])
   useEffect(() => {
     if (!precio.current || !r?.velas?.length) return
@@ -161,23 +162,25 @@ function Graficos({ r, ocultos = new Set(), llaveZoom = '' }) {
         const color = f.color || (f.tarjeta === 'filtro' ? MORADO : AZUL)   // (las de venta y las piezas traen el suyo)
         s.setData(r.velas.map((v, k) => ({ time: v.date, value: 1, color: f.cumple[k] === true ? color : 'rgba(139,155,173,0.10)' })))
       })
-      const marcas = [...r.compras.map(c => ({ time: c.date, position: 'belowBar', color: VERDE, shape: 'arrowUp', text: '' })), ...r.ventas.map(c => ({ time: c.date, position: 'aboveBar', color: NARANJA, shape: 'arrowDown', text: '' }))].sort((a, b) => a.time.localeCompare(b.time))
-      flechas.current = { velas, marcas }
-      velas.setMarkers(visto('flechas') ? marcas : [])
-      // V9.1059: y un punto en la vela de cada swing (los máximos arriba, los mínimos abajo). V9.1061: un puntito de 2 px un poco por
-      // encima del máximo (o por debajo del mínimo), para no tapar la vela (las marcas de lightweight-charts no bajan de un tamaño).
-      // V9.1067: un punto en la vela de la señal de cada compra (verde, en el cierre) y de cada venta (naranja), aparte de la flecha.
-      for (const lado of ['compra', 'venta']) {
-        const ps = (r.puntosSenal || []).filter(p => p.lado === lado).sort((a, b) => a.date.localeCompare(b.date)).filter((p, k, xs) => !k || xs[k - 1].date !== p.date)
-        if (!ps.length) continue
-        apunta('puntosSenal', ch.addLineSeries({ color: lado === 'compra' ? VERDE : NARANJA, lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 3, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: visto('puntosSenal') }))
-          .setData(ps.map(p => ({ time: p.date, value: p.precio })))
+      // V9.1069: cada marca a su precio, fuera de la vela y en su carril (lib/builder/marcas.js): los puntos de la señal y de los swings
+      // y las flechas, con un hueco de medio ATR y sin taparse cuando coinciden en una vela. Las flechas son marcas «inBar» (centradas en
+      // el precio del punto) sobre una serie invisible con un punto en cada compra (o venta): las de lightweight-charts «aboveBar» /
+      // «belowBar» van pegadas a la vela.
+      const sitio = colocaMarcas(r.velas, r)
+      flechas.current = []
+      for (const [lado, color, forma] of [['compra', VERDE, 'arrowUp'], ['venta', NARANJA, 'arrowDown']]) {
+        if (!sitio[lado].length) continue
+        const s = ch.addLineSeries({ color, lineVisible: false, pointMarkersVisible: false, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+        s.setData(sitio[lado])
+        const marcas = sitio[lado].map(p => ({ time: p.time, position: 'inBar', color, shape: forma, text: '' }))
+        flechas.current.push({ serie: s, marcas })
+        s.setMarkers(visto('flechas') ? marcas : [])
       }
-      for (const lado of ['max', 'min']) {
-        const ps = (r.puntosSwing || []).filter(p => p.lado === lado).sort((a, b) => a.date.localeCompare(b.date))
-        if (!ps.length) continue
-        const s = apunta('puntosSwing', ch.addLineSeries({ color: lado === 'max' ? VERDE : NARANJA, lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: visto('puntosSwing') }))
-        s.setData(ps.map(p => ({ time: p.date, value: p.precio * (lado === 'max' ? 1.006 : 0.994) })))
+      // V9.1059 / V9.1067: los puntos de la vela de cada swing (los máximos arriba, los mínimos abajo) y de la vela de la señal de cada
+      // compra (verde) y de cada venta (naranja): los dos, por encima de la vela.
+      for (const [tipo, color, radio, clave] of [['senalCompra', VERDE, 3, 'puntosSenal'], ['senalVenta', NARANJA, 3, 'puntosSenal'], ['swingMax', VERDE, 2, 'puntosSwing'], ['swingMin', NARANJA, 2, 'puntosSwing']]) {
+        if (!sitio[tipo].length) continue
+        apunta(clave, ch.addLineSeries({ color, lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: radio, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: visto(clave) })).setData(sitio[tipo])
       }
       const previo = zoom.current.llave === llaveZoom && zoom.current.rango ? zoom.current.rango : null
       if (!previo) ch.timeScale().fitContent()
@@ -336,6 +339,8 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   // V9.1067: las casillas con los parámetros enlazados (una por grupo) y, para probar, «Cómo compro» y las velas.
   const opciones = useMemo(() => opcionesCasillas(def, valores, sueltos || new Set()), [def, valores, sueltos])
   const prueba = useMemo(() => { try { return aplicaPrueba({ def, valores }, cambios, opciones) } catch (_) { return { def, valores } } }, [def, valores, cambios, opciones])
+  // V9.1069: con la forma de comprar de las casillas, las filas que nunca (o casi nunca) dejan comprar (lib/builder/tarjetas.js).
+  const imposibles = useMemo(() => { try { return combinacionesImposibles(prueba.def, valoresDe(prueba.def, prueba.valores)) } catch (_) { return [] } }, [prueba])
   const intervalo = cambios.intervalo === 'semanal' || cambios.intervalo === 'diario' ? cambios.intervalo : intervaloGuardado
   const errPrueba = useMemo(() => { if (error) return []; try { return validaDefinicion(prueba.def, prueba.valores) } catch (e) { return [e.message] } }, [prueba, error])
   const ticker = useMemo(() => { try { return leeFiltro(def).filas.find(f => f.quien !== 'valor')?.quien || def?.filtroMercado?.ticker || null } catch (_) { return def?.filtroMercado?.ticker || null } }, [def])
@@ -471,6 +476,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
             <strong data-cuenta style={{ marginLeft: 'auto' }}>En este periodo: {r.compras.length} {r.compras.length === 1 ? 'compra' : 'compras'} · {r.ventas.length} {r.ventas.length === 1 ? 'venta' : 'ventas'}</strong>
           </div>
           {r.avisos.map((a, k) => <div key={k} data-aviso-senales style={{ color: AMARILLO, fontSize: 13 }}>{a}</div>)}
+          {imposibles.map((x, k) => <div key={`imp${k}`} data-aviso-combinacion={x.nivel} style={{ color: AMARILLO, fontSize: 13 }}>⚠ {x.texto}</div>)}
           <Graficos r={r} ocultos={ocultos} llaveZoom={`${simbolo}|${desde}|${hasta}|${intervalo}`}/>
           <div style={{ ...S.apagado, marginTop: 4 }}>De {fechaCorta(r.velas[0].date)} a {fechaCorta(r.velas[r.velas.length - 1].date)} · {r.velas.length} velas · {simbolo}{r.franjas.length ? ' · debajo de las velas, una franja por condición y por pieza (pintado = se cumple), con su nombre encima' : ''} · gráfico: <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer" style={{ color: B.apagado }}>TradingView Lightweight Charts™</a></div>
         </section>}

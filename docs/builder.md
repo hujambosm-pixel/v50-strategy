@@ -1382,3 +1382,28 @@ venta, su `capitalTras`). Una operación de 100 → 120 → 90 → vende a 110 d
 - Antes → después (AAPL 2010–2015, comisión 0,36 €, compuesta): «SuperTrend 10/9» 0,00 → 14,67 %; «Tortugas 20/10» 10,25 → 15,67 %
   («Flotante» en «Backtest de un valor»: 13,01 %); «Swings 2/2» 9,76 → 15,56 % (12,72 %). «SuperTrend 10/3» AAPL 2020–2021: 12,37 →
   19,10 % (19,08 %); las demás cifras, iguales.
+
+## 36. Marcas más separadas y aviso de combinación imposible (V9.1070)
+
+- **Marcas en «Señales en el gráfico»** (lib/builder/marcas.js, `colocaMarcas`, puro; components/BuilderSenales.js las dibuja). Las
+  flechas de lightweight-charts 4.2 («aboveBar» / «belowBar») van pegadas a la vela y no dejan elegir el hueco, y el punto de la
+  señal iba en el cierre, encima del cuerpo. Ahora cada marca tiene su precio, en carriles fuera de la vela: por encima del máximo,
+  de abajo arriba, el punto de swing de máximos, el de la señal de compra, el de la señal de venta y la flecha de venta; por debajo
+  del mínimo, el punto de swing de mínimos y la flecha de compra. Solo ocupan carril las marcas de esa vela; el primero, a medio ATR
+  (14) de la vela, y cada uno a 0,7 ATR del anterior (sin ATR, el rango de la vela). Las flechas son marcas «inBar» (centradas en el
+  valor del punto) sobre una serie invisible. Los puntos de swing pasan de un 0,6 % fijo a medio ATR. «Backtest de un valor» no se
+  toca: es otro dibujo (CandleChart).
+- **Combinaciones que nunca compran** (lib/builder/tarjetas.js, `combinacionesImposibles`): filas de «Compro cuando…» (o de «Solo
+  opero cuando…» del valor) que piden en la vela de la señal lo contrario que la forma de comprar. Aviso en ámbar junto a la fila,
+  en «Comprobación» del editor y encima del gráfico de «Señales en el gráfico» (con «Cómo compro» de las casillas). No bloquea
+  guardar. Una fila con «NO» no cuenta; con «basta con una», solo si todas sus filas lo son.
+  - Nunca: orden en la línea del SuperTrend (N, M) con «El SuperTrend cambia a alcista» o «está alcista» con los mismos N y M (la
+    orden pide el SuperTrend bajista al cierre de la vela anterior); orden en el último máximo de swing (L / R) con «El cierre supera
+    el último máximo de swing» con los mismos L / R (ese cierre ya lo superó y cada swing se usa una vez: 0 compras en 30 años de
+    AAPL, NVDA, SAN.MC y ^GSPC con 6 pares L / R).
+  - Casi nunca (otro texto): orden en el último máximo de swing con «El SuperTrend cambia a alcista». NO es imposible: con 10/3 y
+    swing 2/2, 8 compras posibles en 30 años de AAPL (64 con 10/1); en 2010–2015 con 10/3, 0. Con otros N / M en la orden y en la
+    fila, sí compra (48 veces en AAPL con orden 10/3 y fila 10/2): sin aviso.
+- Comprobado: montaje SWC (el editor con la orden en el SuperTrend: un aviso junto a la fila y uno en «Comprobación»; guardada, sin
+  aviso; los casos de arriba, con NO, con «basta con una», con otros números y en el filtro); carriles a mano (ATR 4, vela 98–102:
+  104 · 106,8 · 109,6 · 112,4 arriba; 96 · 93,2 abajo); ida y vuelta 7 de 7. Comprobaciones comunes.

@@ -21,7 +21,7 @@ import { jsonCanonico } from '../lib/lotesLab'
 import { GRUPOS, buscaCatalogo, nombreCond, explicacionCond, filaNueva, soloDelValor, avisoSoloValor, ayudaFila, AYUDA_NO, AYUDA_CRUZA, leeCompra, escribeCompra, leeFiltro, escribeFiltro, cambiaIndice, INDICES, nombreQuien,
   leeVenta, escribeVenta, leeProteccion, AYUDA_QUIEN, opcionesQuien, leeOrden, ponModoOrden, ponAjuste, ponVelasOrden, CANCELAR_DEFECTO, ponCancelar, vigilaDesdeLaCompra, ponVigilancia, AJUSTES, fraseCompra, TIPOS_STOP, CAMPOS_STOP_TARJETA, numeroStop, anadeStopDef, cambiaTipoStopDef, quitaStopDef, ponNumeroStop, ponSalida, DEFECTO_PROTECCION,
   opcionesClasico, frasesClasico, fraseStopTarjeta, plantillaFila, opcionesOp, opDe, opDesactivada, conOp, conVuelta, conCruce, puedeVuelta, puedeCruce, conNumero, tieneLado, erroresFila, erroresProteccion, cuentaErroresProteccion, notaFila, fraseRegla,
-  datosSuficientes, aTexto, deTexto, mueve, ORDEN_IGUAL, ORDEN_VENTA, ORDEN_STOPS, ORDEN_STOPS_MAS_ALTO, AYUDA_MODO_STOPS, leeModoStops, ponModoStops, PIEZAS, aplicaPieza, ponNivelOrden, avisoIndices, COMO_FILTRAR_INDICE, GRUPOS_FUERZA, avisoFila } from '../lib/builder/tarjetas'
+  datosSuficientes, aTexto, deTexto, mueve, ORDEN_IGUAL, ORDEN_VENTA, ORDEN_STOPS, ORDEN_STOPS_MAS_ALTO, AYUDA_MODO_STOPS, leeModoStops, ponModoStops, PIEZAS, aplicaPieza, ponNivelOrden, avisoIndices, COMO_FILTRAR_INDICE, GRUPOS_FUERZA, avisoFila, combinacionesImposibles } from '../lib/builder/tarjetas'
 import { partesNombre, planGuardado, avisoVersion } from '../lib/builder/versiones'
 import { PERIODOS_DEFECTO } from '../lib/editor/lotes'
 import Ayuda from './BuilderAyuda'
@@ -140,7 +140,7 @@ function BotonEnlace({ estado, onClick }) {
     </span>
   )
 }
-function Fila({ f, errores, valores, tarjeta, color, onCambia, onValor, onQuita, quien, onQuien, menuAbierto = false, ayudaAbierta = false, intervalo = 'diario', asa = null, onSubir = null, onBajar = null, avisoExtra = null, enlace = null }) {
+function Fila({ f, errores, valores, tarjeta, color, onCambia, onValor, onQuita, quien, onQuien, menuAbierto = false, ayudaAbierta = false, intervalo = 'diario', asa = null, onSubir = null, onBajar = null, avisoExtra = null, enlace = null, avisoCombinacion = null }) {
   const p = f.cond.p || {}, decl = Object.fromEntries((CONDICIONES_EDITOR[f.cond.c]?.parametros || []).map(d => [d.clave, d]))
   const hay = Object.keys(errores).length > 0
   const campo = (c, j) => {
@@ -174,6 +174,7 @@ function Fila({ f, errores, valores, tarjeta, color, onCambia, onValor, onQuita,
       {onQuien && soloDelValor(f.cond.c) && <div data-solo-valor style={{ color: B.secundario, fontSize: 13, marginTop: 6 }}>{avisoSoloValor(f.cond.c)}</div>}
       {avisoFila(f.cond.c) && <div data-aviso-fila style={{ color: B.secundario, fontSize: 13, marginTop: 6 }}>{avisoFila(f.cond.c)}</div>}
       {avisoExtra && <div data-aviso-indices style={{ color: AMARILLO, fontSize: 13, marginTop: 6 }}>{avisoExtra}</div>}
+      {avisoCombinacion && <div data-aviso-combinacion={avisoCombinacion.nivel} style={{ color: AMARILLO, fontSize: 13, marginTop: 6 }}>⚠ {avisoCombinacion.texto}</div>}
       {hay && <div data-error-fila style={{ color: ROJO, fontSize: 13, marginTop: 6 }}>{Object.values(errores).map((e, k) => <div key={k}>{e}</div>)}</div>}
     </div>
   )
@@ -292,6 +293,9 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   const regla = fraseRegla({ def, filtro, compra: { ...compra, modo: modoC }, venta: { ...venta, modo: modoV }, prot, valores: valoresEf, malosFiltro: malos(errFiltro), malosCompra: malos(errCompra), malosVenta: malos(errVenta),
     malosProt: { ...errProt, stops: malos(errProt.stops) }, malosCancelar: malos([errCancelar])[0], ...frasesClasico(def, valoresEf, compra, filtro) })
   const datos = useMemo(() => { try { return datosSuficientes(def, valoresEf, intervalo, PERIODOS_DEFECTO[0].desde) } catch (_) { return null } }, [def, valoresEf, intervalo])
+  // V9.1069: las filas que, con esta forma de comprar, nunca (o casi nunca) dejan comprar: junto a la fila y en «Comprobación».
+  const imposibles = useMemo(() => { try { return combinacionesImposibles(def, valoresEf) } catch (_) { return [] } }, [def, valoresEf])
+  const imposible = (tarjeta, k) => imposibles.find(x => x.tarjeta === tarjeta && x.k === k) || null
   const cambiaRegla = jsonCanonico(paraHuella(def, valores)) !== jsonCanonico(paraHuella(orig.current.def, orig.current.valores))
   const plan = planGuardado({ fila, est, orig: orig.current, enPrueba, estrategias, cambiaRegla })
   const version = partesNombre(fila?.name).version
@@ -544,7 +548,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
           <Tarjeta titulo="Solo opero cuando…" color={MORADO} datos={{ 'data-tarjeta': 'filtro' }} soltar={soltarEn('filtro')} derecha={filtro.filas.length ? 'se cumplen todas' : 'opcional'}>
             {filtro.ok ? <>
               {filtro.filas.map((f, k) => <div key={k} {...(arrastre ? sobre('filtro', k) : {})}>{marca('filtro', k, MORADO)}<Fila enlace={boton(`filtro|${k}`)} f={f} errores={errFiltro[k]} valores={valoresEf} tarjeta="filtro" color={MORADO} quien={f.quien} onQuien={q => cambiaQuien(k, q)} menuAbierto={menuInicial?.tarjeta === 'filtro' && menuInicial.k === k} ayudaAbierta={ayudaInicial?.tarjeta === 'filtro' && ayudaInicial.k === k} intervalo={intervalo}
-                asa={asaDe('filtro', k)} {...subeBaja('filtro', k)} avisoExtra={f.quien !== 'valor' ? avisoInd : null}
+                asa={asaDe('filtro', k)} {...subeBaja('filtro', k)} avisoExtra={f.quien !== 'valor' ? avisoInd : null} avisoCombinacion={imposible('filtro', k)}
                 onValor={ponValor} onCambia={g => cambiaFiltro(filtro.filas.map((x, j) => j === k ? { ...g, quien: x.quien } : x))} onQuita={() => cambiaFiltro(filtro.filas.filter((_, j) => j !== k))}/></div>)}
               {marca('filtro', filtro.filas.length, MORADO)}
               {!filtro.filas.length && vacia('Sin filtro: opera siempre que se cumpla «Compro cuando…». Añádelo desde el catálogo con «+» o arrastrándolo aquí.')}
@@ -557,7 +561,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
           <Tarjeta titulo="Compro cuando…" color={AZUL} datos={{ 'data-tarjeta': 'compra' }} soltar={soltarEn('compra')} derecha={compra.ok ? enlaceModo(modoC, cambiaModoCompra) : null}>
             {compra.ok ? <>
               {compra.filas.map((f, k) => <div key={k} {...(arrastre ? sobre('compra', k) : {})}>{marca('compra', k, AZUL)}<Fila enlace={boton(`compra|${k}`)} f={f} errores={errCompra[k]} valores={valoresEf} tarjeta="compra" color={AZUL} menuAbierto={menuInicial?.tarjeta === 'compra' && menuInicial.k === k} ayudaAbierta={ayudaInicial?.tarjeta === 'compra' && ayudaInicial.k === k} intervalo={intervalo}
-                asa={asaDe('compra', k)} {...subeBaja('compra', k)}
+                asa={asaDe('compra', k)} {...subeBaja('compra', k)} avisoCombinacion={imposible('compra', k)}
                 onValor={ponValor} onCambia={g => cambiaCompra(compra.filas.map((x, j) => j === k ? g : x))} onQuita={() => cambiaCompra(compra.filas.filter((_, j) => j !== k))}/></div>)}
               {marca('compra', compra.filas.length, AZUL)}
               {!compra.filas.length && vacia(orden.modo === 'swing' ? 'Con la orden en el último máximo de swing («Cómo compro»), las condiciones de aquí son opcionales: sin ninguna, la orden está puesta en cada swing nuevo.' : orden.modo === 'ruptura' ? 'Con la orden en el nivel de ruptura («Cómo compro»), las condiciones de aquí son opcionales: sin ninguna, la orden está puesta en cada vela.' : 'Añade condiciones desde el catálogo con «+» o arrastrándolas aquí.')}
@@ -700,6 +704,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
               {datos?.falta && <li data-comprueba="faltan" style={{ color: ROJO }}>{datos.falta.sinDatos
                 ? `✕ ${nombreQuien(datos.falta.ticker)} todavía no está en los precios guardados de la app: el backtest lo descarga, pero los laboratorios de la prueba (paso 2) no lo pueden usar y el filtro no dejaría comprar nunca.`
                 : `✕ Para empezar el ${fechaCorta(datos.desdePeriodo)} hacen falta datos desde el ${fechaCorta(datos.falta.hace)}, y ${nombreQuien(datos.falta.ticker)} solo tiene desde el ${fechaCorta(datos.falta.tiene)}.`}</li>}
+              {imposibles.map((x, k) => <li key={`imp${k}`} data-comprueba="combinacion" data-nivel={x.nivel} style={{ color: AMARILLO }}>⚠ {x.texto}</li>)}
               {nErrores > 0 && <li data-comprueba="errores" style={{ color: ROJO }}>✕ {plural(nErrores, 'error', 'errores')} en {zonas.map(([z]) => z).join(', ').replace(/, ([^,]*)$/, ' y $1')}</li>}
               {errClasico.map((e, k) => <li key={k} data-error-clasico style={{ color: ROJO, fontSize: 13 }}>{e}</li>)}
             </ul>
