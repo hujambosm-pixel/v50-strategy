@@ -1302,3 +1302,49 @@ El motor no cambia (sin pedir el historial de la posición abierta, `interpreta`
   vacías, fuera de los datos y de una vela tecleadas: sus avisos, sin pantalla en negro; con el gráfico REAL en pantalla, zoom en las
   velas 300–360, cambiar el multiplicador de compra y luego el del stop rehace el gráfico y deja 300,24–360; cambiar la fecha de
   inicio reajusta (0–401). Ida y vuelta; comprobaciones comunes.
+
+## 33. Parámetros enlazados, «Cómo compro» para probar, señal y compra por separado y velas semanales en el paso 1 (V9.1067)
+
+Toca el motor solo detrás de un tipo de orden NUEVO (`'supertrend'`): las estrategias que no lo usan dan exactamente lo mismo.
+
+- **Parámetros enlazados** (lib/builder/enlaces.js, puro). Un «uso» es cada sitio que usa un indicador con números: una fila de «Solo
+  opero cuando…» (del valor), «Compro cuando…» o «Vendo cuando…», un stop o la orden. Familias: SuperTrend (N, M), swing (L / R),
+  cada tipo de media (su periodo), ATR, RSI, Bollinger y MACD. Los usos de la misma familia con los MISMOS números van enlazados
+  (`gruposDe`): en el editor, cambiar un número de uno lo cambia en todos los de su grupo (`propagaEnlaces`, dentro de `setDef`; solo
+  si cambia UN número de UN uso y la forma es la misma: añadir, quitar o mover filas no propaga) y se dibuja una sola línea. Cada
+  uso enlazable lleva un 🔗 con su «?» (el ejemplo de entrar con 10/3 y salir con 10/5): pulsarlo lo suelta (números propios, su línea
+  aparte con su leyenda); volver a pulsarlo lo enlaza y le pone los números del grupo de su familia (`enlazaUso`). En «Señales en el
+  gráfico», una sola casilla por grupo («SuperTrend ( 10 , 3 ) · compra, venta y stop»; campo `{ tipo: 'grupo', miembros }`, que
+  escribe en todos); en las filas de sus miembros esos números salen como «🔗». NO se guarda nada nuevo: al abrir una estrategia, los
+  usos con los mismos números salen enlazados y los distintos, sueltos (lo guardado no cambia ni un byte). Lo soltado vive solo en la
+  pantalla (`sueltos`; si se suelta una fila y se deja con los mismos números, al volver a abrir sale enlazada).
+- **«Cómo compro» en las casillas de arriba**: un desplegable con apertura de la vela siguiente, orden en el máximo de la vela de la
+  señal, orden en el nivel de ruptura, orden en el último máximo de swing y la NUEVA orden en la línea del SuperTrend (campo
+  `{ tipo: 'modoOrden' }`, que se aplica antes que los números), con los números de cada una (las velas del máximo o de la ruptura,
+  L / R del swing, N / M del SuperTrend; la orden no tiene un «cuántas velas espera»: no existe en el motor). Como las demás
+  casillas: solo para probar, en ámbar con «(guardado: …)», y se guarda con «Guardar estos valores en la estrategia».
+- **Orden en la línea del SuperTrend** (`entrada.orden = { tipo: 'supertrend', nivel: { periodo, k } }`; también en la tarjeta
+  «Cómo compro»): con el SuperTrend bajista al cierre de la vela anterior, compra en cuanto el máximo de la vela TOCA su línea (la
+  roja, por encima): a ese nivel, o a la apertura si abre ya por encima. Con el SuperTrend alcista no hay orden; se rehace en cada
+  vela; la señal es opcional (como con la ruptura). Al elegirla toma los números del SuperTrend que ya use la estrategia. Calentamiento
+  4 × N; no se exporta a code_js.
+- **Señal y compra por separado** («Señales en el gráfico»): un punto en la vela de la SEÑAL de cada compra (verde, en el cierre) y de
+  cada venta (naranja), y la flecha en la vela en que se compra o se vende. Compra: la última «señal» del motor hasta la compra (con
+  apertura siguiente, la vela de antes; con una orden en un nivel, la vela en que se puso o en que el precio la tocó). Venta: por una
+  condición o por tiempo a la apertura, la vela anterior; por un stop o un objetivo, la misma. En la leyenda, «● ● señal» con su
+  casilla y su «?». («Backtest de un valor» no se toca: es otro dibujo.)
+- **Velas semanales en el paso 1**: el editor ya dejaba elegir «Semanales» (arriba, junto al nombre). Ahora «Señales en el gráfico»
+  tiene el desplegable «Velas: [diarias ▾]» para probar (`cambios.intervalo`, se guarda con «Guardar estos valores»), y el gráfico y
+  las cifras van en semanal con el mismo núcleo que «Backtest de un valor». Aviso: «El paso 2 (prueba contra el azar) aún no admite
+  velas semanales.»; con la estrategia semanal, «Guardar y pasar al paso 2» queda desactivado (con ese motivo) y sale «Guardar» aparte.
+- Comprobado: la orden nueva a mano (las 14 velas de V9.1064: la 4.ª toca 104 → compra a 104; si abre a 104,2 → a 104,2; sin tocarla,
+  no; alcista, no); no mira el futuro (5 cortes); las 7 estrategias del editor iguales a V9.1066 (señales, intérprete, cifras y
+  exportar, diario y semanal), abren sin cambios y su ida y vuelta, byte a byte; enlazados: «SuperTrend 10/3» abre con un grupo
+  (compra, venta y stop), el multiplicador de «Vendo» a 5 cambia los tres y queda una línea, soltada y a 5 deja 3 / 5 / 3 y dos
+  líneas, volver a enlazarla la pone en 3; la casilla única cambia los tres; cada opción de «Cómo compro» probada en la casilla (con
+  «SuperTrend 10/3»: apertura 6 compras; máximo 6; ruptura 3; swing y línea del SuperTrend, 0, porque su fila «cambia a alcista»
+  pide lo contrario que la orden en la misma vela: con esas órdenes las filas de compra son opcionales); los puntos de señal en la
+  vela de antes de cada compra y en la misma de cada venta por stop; «Swings 2/2» y «SuperTrend 10/3» en semanal 2010–2015 con las
+  mismas operaciones que «Backtest de un valor» semanal. Montaje SWC con estado (el editor con sus 🔗 y su «?», el paso 2 bloqueado en
+  semanal, la tarjeta de la orden nueva; «Señales en el gráfico» con sus casillas, desplegables, ámbar y leyenda). En el navegador, el
+  editor real: 3 / 3 / 3 → «Vendo» a 5 → 5 / 5 / 5; 🔗 la suelta; a 4 → 5 / 4 / 5; 🔗 la enlaza → 5 / 5 / 5. Comprobaciones comunes.

@@ -20,7 +20,8 @@ import { B, S } from '../lib/builder/estilo'
 import { calculaSenales } from '../lib/builder/senales'
 import { leeFiltro, aTexto, deTexto } from '../lib/builder/tarjetas'
 import { validaDefinicion, valoresDe } from '../lib/editor/definicion'
-import { fechasEnsayo, tocaPaso2, NOTA_PASO2, camposDePrueba, valorCampo, aplicaPrueba, cifrasRegla, MIN_OPERACIONES } from '../lib/builder/ensayo'
+import { fechasEnsayo, tocaPaso2, NOTA_PASO2, camposDePrueba, valorCampo, aplicaPrueba, cifrasRegla, MIN_OPERACIONES, MODOS_ORDEN } from '../lib/builder/ensayo'
+import { opcionesCasillas } from '../lib/builder/enlaces'
 import { fmt } from '../lib/utils'
 import CampoFecha from './CampoFecha'
 import BuscadorValor from './BuscadorValor'
@@ -33,6 +34,8 @@ const fechaCorta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(
 const ESPERA_MS = 250
 // V9.1064: el «?» del SuperTrend de la leyenda.
 const AYUDA_SUPERTREND = 'La línea del SuperTrend: verde y por debajo del precio mientras la tendencia es alcista (es la banda inferior, que solo sube); roja y por encima mientras es bajista (la banda superior, que solo baja). Se corta en cada cambio de tendencia: cambia a alcista cuando una vela CIERRA por encima de la roja y a bajista cuando cierra por debajo de la verde. Ejemplo: con SuperTrend (10, 3), si la línea roja está en 105 € y una vela cierra a 106 €, desde esa vela la línea es verde, por debajo del precio. Todo con la vela cerrada.'
+// V9.1067: el «?» de los puntos de la señal.
+const AYUDA_PUNTO_SENAL = 'La señal se conoce al CIERRE de una vela: ahí va el punto (verde para la compra, naranja para la venta). La flecha va en la vela en que se compra o se vende de verdad. Con «apertura de la vela siguiente», la compra es en la vela de después del punto; con una orden en un nivel (el máximo, la ruptura, el swing o la línea del SuperTrend), el punto va en la vela en que se puso la orden o en que el precio la tocó. Una venta por un stop o un objetivo es dentro de la vela: el punto y la flecha, en la misma.'
 // V9.1066: el «?» del stop activo cuando va en la línea del SuperTrend.
 const AYUDA_STOP_ST = 'La línea roja es el stop activo del motor, solo mientras hay una operación abierta. Con el stop en la línea del SuperTrend, el stop de cada vela es la línea del SuperTrend de la vela ANTERIOR (sube con ella y nunca baja): donde coinciden se dibuja solo la línea del SuperTrend, para no ver dos líneas casi pegadas y una vela desplazadas. El rojo aparece solo donde el stop va por otro sitio (por ejemplo, porque manda otro stop más alto). Ejemplo: si la línea verde está en 140,52 € el martes y sube a 142,27 € el miércoles, el stop del miércoles es 140,52 € y el del jueves, 142,27 €.'
 // V9.1062: el «?» de los swings de la leyenda: los dos tramos y el stop rojo.
@@ -163,6 +166,13 @@ function Graficos({ r, ocultos = new Set(), llaveZoom = '' }) {
       velas.setMarkers(visto('flechas') ? marcas : [])
       // V9.1059: y un punto en la vela de cada swing (los máximos arriba, los mínimos abajo). V9.1061: un puntito de 2 px un poco por
       // encima del máximo (o por debajo del mínimo), para no tapar la vela (las marcas de lightweight-charts no bajan de un tamaño).
+      // V9.1067: un punto en la vela de la señal de cada compra (verde, en el cierre) y de cada venta (naranja), aparte de la flecha.
+      for (const lado of ['compra', 'venta']) {
+        const ps = (r.puntosSenal || []).filter(p => p.lado === lado).sort((a, b) => a.date.localeCompare(b.date)).filter((p, k, xs) => !k || xs[k - 1].date !== p.date)
+        if (!ps.length) continue
+        apunta('puntosSenal', ch.addLineSeries({ color: lado === 'compra' ? VERDE : NARANJA, lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 3, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: visto('puntosSenal') }))
+          .setData(ps.map(p => ({ time: p.date, value: p.precio })))
+      }
       for (const lado of ['max', 'min']) {
         const ps = (r.puntosSwing || []).filter(p => p.lado === lado).sort((a, b) => a.date.localeCompare(b.date))
         if (!ps.length) continue
@@ -286,6 +296,17 @@ export function TablaCifras({ c, simbolo }) {
   )
 }
 
+// V9.1067: el desplegable «Cómo compro» de las casillas de prueba: en ámbar y con «(guardado: …)» si es distinto del guardado.
+function CasillaModo({ valor, guardado, onCambia }) {
+  const distinto = guardado != null && valor !== guardado, nombre = (m) => MODOS_ORDEN.find(([k]) => k === m)?.[1] || m
+  return (<>
+    <select aria-label="Cómo compro" data-casilla-cambiada={distinto ? 'si' : undefined} value={valor || 'apertura'} onChange={e => onCambia(e.target.value)}
+      style={{ fontFamily: B.letra, fontSize: 14, padding: '3px 4px', borderRadius: 6, background: B.tarjeta, color: B.titulo, border: `1px solid ${distinto ? '#d9a53a' : B.borde}`, maxWidth: 300 }}>
+      {MODOS_ORDEN.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
+    </select>
+    {distinto && <span data-guardado style={{ fontSize: 12, color: '#e0c27a' }}>(guardado: {nombre(guardado)})</span>}
+  </>)
+}
 // Una casilla de prueba: el número con coma; si es distinto del guardado, en ámbar y con «(guardado: X)».
 function Casilla({ valor, guardado, etiqueta, onCambia }) {
   const [t, setT] = useState(aTexto(valor))
@@ -300,7 +321,7 @@ function Casilla({ valor, guardado, etiqueta, onCambia }) {
   </>)
 }
 
-export default function BuilderSenales({ def, valores, guardado = null, intervalo = 'diario', error = null, cambios = {}, onCambios = () => {}, onGuardarValores = null, guardando = false, msgGuardar = null,
+export default function BuilderSenales({ def, valores, guardado = null, intervalo: intervaloGuardado = 'diario', sueltos = null, error = null, cambios = {}, onCambios = () => {}, onGuardarValores = null, guardando = false, msgGuardar = null,
   cargaSimbolos = null, cargaVelas = null, comisiones = null, velasIniciales = null, simbolosIniciales = null, simboloInicial = 'AAPL', fechasInicial = null, cifrasIniciales = null, verZonaInicial = true, verOpsInicial = true, ocultosIniciales = [], entrada = 0 }) {
   const [simbolos, setSimbolos] = useState(simbolosIniciales || [simboloInicial])
   const valoresLista = useMemo(() => simbolos.map(s => typeof s === 'string' ? { simbolo: s, nombre: '' } : s), [simbolos])
@@ -312,7 +333,10 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   const [cargando, setCargando] = useState(false)
   const [fallo, setFallo] = useState(null)
   // La estrategia con las casillas de prueba (una copia: la de verdad no se toca).
-  const prueba = useMemo(() => { try { return aplicaPrueba({ def, valores }, cambios) } catch (_) { return { def, valores } } }, [def, valores, cambios])
+  // V9.1067: las casillas con los parámetros enlazados (una por grupo) y, para probar, «Cómo compro» y las velas.
+  const opciones = useMemo(() => opcionesCasillas(def, valores, sueltos || new Set()), [def, valores, sueltos])
+  const prueba = useMemo(() => { try { return aplicaPrueba({ def, valores }, cambios, opciones) } catch (_) { return { def, valores } } }, [def, valores, cambios, opciones])
+  const intervalo = cambios.intervalo === 'semanal' || cambios.intervalo === 'diario' ? cambios.intervalo : intervaloGuardado
   const errPrueba = useMemo(() => { if (error) return []; try { return validaDefinicion(prueba.def, prueba.valores) } catch (e) { return [e.message] } }, [prueba, error])
   const ticker = useMemo(() => { try { return leeFiltro(def).filas.find(f => f.quien !== 'valor')?.quien || def?.filtroMercado?.ticker || null } catch (_) { return def?.filtroMercado?.ticker || null } }, [def])
   useEffect(() => { if (!simbolosIniciales && cargaSimbolos) cargaSimbolos().then(xs => { if (xs?.length) setSimbolos(xs) }).catch(() => {}) }, [])
@@ -366,16 +390,14 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   const r = errFechas ? null : res || directo, conVelas = !!r?.velas?.length
 
   // Las casillas: valor en pantalla (con la prueba) y el guardado.
-  const filasCampos = useMemo(() => { try { return camposDePrueba(def) } catch (_) { return [] } }, [def])
+  const filasCampos = useMemo(() => { try { return camposDePrueba(prueba.def, opciones) } catch (_) { return [] } }, [prueba.def, opciones])
   const vg = useMemo(() => { try { return guardado ? valoresDe(guardado.def, guardado.valores) : null } catch (_) { return null } }, [guardado])
-  const enGuardado = (c) => guardado && vg ? valorCampo(guardado.def, vg, c) : null
+  const enGuardado = (c) => { if (!guardado || !vg) return null; try { return valorCampo(guardado.def, vg, c) } catch (_) { return null } }
   const casillas = filasCampos.flatMap(x => x.partes.filter(y => typeof y === 'object'))
   const distintos = casillas.filter(y => { const g = enGuardado(y.campo), v = valorCampo(prueba.def, prueba.valores, y.campo); return g != null && v !== g })
-  const volver = () => {
-    const out = {}
-    for (const y of casillas) { const g = enGuardado(y.campo), v = valorCampo(def, valores, y.campo); if (g != null && v !== g) out[y.clave] = g }
-    onCambios(out)
-  }
+  const velasCambiadas = intervalo !== intervaloGuardado
+  // Volver a los guardados: sin ningún cambio de prueba (los números, «Cómo compro» y las velas).
+  const volver = () => onCambios({})
 
   if (error) return <div data-senales="error" style={{ color: ROJO, padding: '12px 4px' }}>{error}</div>
   const seg = (activo) => ({ fontFamily: B.letra, fontSize: 13, minHeight: 34, padding: '0 12px', cursor: 'pointer', border: `1px solid ${activo ? AZUL : B.borde}`, background: activo ? '#1f3350' : B.fondo, color: activo ? B.titulo : B.secundario, fontWeight: activo ? 600 : 400 })
@@ -396,17 +418,24 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
         </span>
         {otras && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>Desde <CampoFecha valor={desde || ''} onCambio={setDesdeO} onValidez={v => setFechaValida(x => ({ ...x, desde: v }))} style={{ width: 110 }}/> hasta <CampoFecha valor={hasta || ''} onCambio={setHastaO} onValidez={v => setFechaValida(x => ({ ...x, hasta: v }))} style={{ width: 110 }}/>
           {errFechas && <span data-error-fechas style={{ color: ROJO, fontSize: 13 }}>{errFechas}</span>}</span>}
-        <span data-velas style={{ color: B.secundario }}>Velas: <strong style={{ color: B.titulo }}>{intervalo === 'semanal' ? 'semanales' : 'diarias'}</strong> (las de la estrategia)</span>
+        <span data-velas style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: B.secundario }}>Velas:
+          <select aria-label="Velas" data-casilla-cambiada={velasCambiadas ? 'si' : undefined} value={intervalo} onChange={e => onCambios({ ...cambios, intervalo: e.target.value })}
+            style={{ fontFamily: B.letra, fontSize: 14, padding: '3px 4px', borderRadius: 6, background: B.tarjeta, color: B.titulo, border: `1px solid ${velasCambiadas ? '#d9a53a' : B.borde}` }}>
+            <option value="diario">diarias</option><option value="semanal">semanales</option>
+          </select>
+          {velasCambiadas && <span data-guardado style={{ fontSize: 12, color: '#e0c27a' }}>(guardado: {intervaloGuardado === 'semanal' ? 'semanales' : 'diarias'})</span>}</span>
+        {intervalo === 'semanal' && <span data-aviso-semanal style={{ color: AMARILLO, fontSize: 13 }}>El paso 2 (prueba contra el azar) aún no admite velas semanales.</span>}
         {filasCampos.length > 0 && <span style={{ width: 1, height: 26, background: B.borde }}/>}
         {filasCampos.map((x, k) => (
           <span key={k} data-casillas={x.nombre} title={x.nombre} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', border: `1px solid ${x.partes.some(y => typeof y === 'object' && distintos.includes(y)) ? '#d9a53a' : B.borde}`, borderRadius: 8, background: B.fondo, fontSize: 13, color: B.secundario, whiteSpace: 'nowrap' }}>
             <span style={{ color: B.titulo, fontWeight: 600 }}>{x.bloque}:</span>
             {x.partes.map((y, j) => typeof y === 'string' ? <span key={j}>{y}</span>
+              : y.campo.tipo === 'modoOrden' ? <CasillaModo key={j} valor={valorCampo(prueba.def, prueba.valores, y.campo)} guardado={enGuardado(y.campo)} onCambia={v => onCambios({ ...cambios, modoOrden: v })}/>
               : <Casilla key={j} valor={valorCampo(prueba.def, prueba.valores, y.campo)} guardado={enGuardado(y.campo)} etiqueta={`${x.bloque} · ${y.etiqueta}`} onCambia={v => onCambios({ ...cambios, [y.clave]: v })}/>)}
           </span>
         ))}
         {filasCampos.length > 0 && <Ayuda texto={AYUDA_CASILLAS} etiqueta="Casillas de prueba"/>}
-        {distintos.length > 0 && <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
+        {(distintos.length > 0 || velasCambiadas) && <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
           <button data-boton="volver" style={S.boton} onClick={volver}>Volver a los guardados</button>
           {onGuardarValores && <button data-boton="guardar-valores" style={guardando || errPrueba.length ? S.botonDesactivado : S.botonVerde} disabled={guardando || !!errPrueba.length} onClick={onGuardarValores}>{guardando ? 'Guardando…' : 'Guardar estos valores en la estrategia'}</button>}
         </span>}
@@ -423,6 +452,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
       {conVelas && !errPrueba.length && <section data-columna-grafico style={{ marginTop: 10, minWidth: 0 }}>
           <div data-contador style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', margin: '0 0 6px', color: B.texto, fontSize: 13 }}>
             <Interruptor clave="flechas" ocultos={ocultos} onCambia={cambiaVisto} que="las flechas de compra y venta"><span><span style={{ color: VERDE }}>▲</span> compra · <span style={{ color: NARANJA }}>▼</span> vende</span></Interruptor>
+            {(r.puntosSenal || []).length > 0 && <span data-leyenda-senal style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Interruptor clave="puntosSenal" ocultos={ocultos} onCambia={cambiaVisto} que="los puntos de la señal"><span><span style={{ color: VERDE }}>●</span> <span style={{ color: NARANJA }}>●</span> señal</span></Interruptor><Ayuda texto={AYUDA_PUNTO_SENAL} etiqueta="Señal y compra"/></span>}
             {(r.operaciones || []).length > 0 && <Interruptor clave="operaciones" ocultos={ocultos} onCambia={cambiaVisto} que="la línea de cada operación, de la compra a la venta" datos={{ 'data-interruptor-operaciones': '' }}>
               <span><span style={{ color: COLOR_GANA }}>╱</span> gana · <span style={{ color: COLOR_PIERDE }}>╲</span> pierde</span></Interruptor>}
             {r.medias.map(m => <Interruptor key={m.nombre} clave={`media:${m.nombre}`} ocultos={ocultos} onCambia={cambiaVisto} que={m.nombre}><span style={{ color: m.color }}>{m.discontinua ? '— —' : '—'} {m.nombre}</span></Interruptor>)}

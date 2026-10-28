@@ -31,6 +31,7 @@ import BuilderSenales from './BuilderSenales'
 import { aplicaPrueba } from '../lib/builder/ensayo'
 import ConLimpiar from './LimpiarBusqueda'
 import ProteccionPanel from './ProteccionPanel'
+import { propagaEnlaces, estadoEnlaces, enlazaUso, AYUDA_ENLACE, opcionesCasillas } from '../lib/builder/enlaces'
 
 const AZUL = '#58a6ff', NARANJA = '#f0883e', MORADO = '#a371f7', ROJO = '#ff8b8b', AMARILLO = '#f2cc60'
 // V9.1049: Protección con su color, un verde azulado (ni el rojo de los errores ni el amarillo de los avisos; contraste alto sobre el
@@ -64,7 +65,11 @@ const esParametro = (x) => typeof x === 'string' && x.startsWith('$')
 const val = (x, valores) => esParametro(x) ? valores[x.slice(1)] : x
 const AYUDA_FILTRO = 'Cada fila dice de quién es: un índice (QQQ, SPY…) o «Este valor». Se tienen que cumplir todas. Si no se cumplen, no compro nada, aunque se cumpla «Compro cuando…». No obligan a vender lo que ya tengo.'
 // La línea de ejecución dice lo que esté elegido en «Cómo compro» y en la vigilancia de los stops.
-export const lineaEjecucion = (def) => `La señal se mira al cierre de cada vela. ${leeOrden(def).modo === 'maximo' ? 'Se compra con la orden en el máximo de «Cómo compro»' : leeOrden(def).modo === 'ruptura' ? 'Se compra en cuanto el precio supera el nivel de ruptura de «Cómo compro» (sin esperar al cierre)' : leeOrden(def).modo === 'swing' ? 'Se compra en cuanto el precio supera el último máximo de swing confirmado de «Cómo compro» (sin esperar al cierre)' : 'Se compra a la apertura de la vela siguiente'} y se vende a la apertura de la vela siguiente a la señal de venta (los stops y el objetivo, en cuanto el precio llega). Los stops y las salidas se vigilan ${vigilaDesdeLaCompra(def) ? 'ya en la vela de la compra' : 'desde la vela siguiente a la compra'}. Opciones poco habituales (orden límite, compra al cierre, optimizador): `
+// V9.1067: las velas semanales funcionan en el paso 1, pero no en el paso 2.
+export const AVISO_SEMANAL_PASO2 = 'El paso 2 (prueba contra el azar) aún no admite velas semanales: puedes guardarla y probarla en «Señales en el gráfico», pero no pasar al paso 2 mientras sea semanal.'
+// V9.1067: el «?» de la orden en la línea del SuperTrend.
+export const AYUDA_ORDEN_ST = 'Con el SuperTrend bajista, su línea va POR ENCIMA del precio (la roja). Esta orden compra en cuanto el máximo de una vela toca esa línea, sin esperar al cierre: a ese precio, o a la apertura si la vela abre ya por encima. Con el SuperTrend alcista no hay orden (su línea va por debajo). Ejemplo: con SuperTrend (10, 3), la línea roja al cierre de ayer está en 105 €; hoy el precio sube a 105,30 € → compro a 105 €; si hoy abre a 106 €, compro a 106 €. Las filas de «Compro cuando…» pasan a ser opcionales.'
+export const lineaEjecucion = (def) => `La señal se mira al cierre de cada vela. ${leeOrden(def).modo === 'maximo' ? 'Se compra con la orden en el máximo de «Cómo compro»' : leeOrden(def).modo === 'ruptura' ? 'Se compra en cuanto el precio supera el nivel de ruptura de «Cómo compro» (sin esperar al cierre)' : leeOrden(def).modo === 'swing' ? 'Se compra en cuanto el precio supera el último máximo de swing confirmado de «Cómo compro» (sin esperar al cierre)' : leeOrden(def).modo === 'supertrend' ? 'Se compra en cuanto el precio toca la línea del SuperTrend de «Cómo compro» (sin esperar al cierre)' : 'Se compra a la apertura de la vela siguiente'} y se vende a la apertura de la vela siguiente a la señal de venta (los stops y el objetivo, en cuanto el precio llega). Los stops y las salidas se vigilan ${vigilaDesdeLaCompra(def) ? 'ya en la vela de la compra' : 'desde la vela siguiente a la compra'}. Opciones poco habituales (orden límite, compra al cierre, optimizador): `
 const AYUDA_VIGILANCIA = '«Ya en la vela de la compra»: si el mismo día de la compra el precio toca el stop o se cumple una salida, se vende ese día. «Desde la vela siguiente a la compra»: el día de la compra no se mira nada; los stops y las salidas cuentan a partir del día siguiente.'
 const AYUDA_ORDEN = 'Ejemplo: la vela de la señal tiene máximo en 52 €. Con la orden en el máximo, compro si en las velas siguientes el precio llega a 52 € (si una vela abre ya por encima, compro a la apertura). Si no llega, según lo elegido la orden se queda en 52 €, o baja cada vela al nuevo máximo si es más bajo (por ejemplo, a 51 €). Si se cumple la condición de cancelar (por ejemplo, el cierre queda por debajo de su EMA (20)), la orden se quita sin comprar.'
 
@@ -122,7 +127,20 @@ function Menu({ f, onCambia, abiertoInicial = false, onSubir = null, onBajar = n
 // debajo (la de las filas de índice).
 // onValor(nombre, v) (V9.1053): cuando el número de la casilla es un parámetro con nombre («$ema»), se cambia su valor y la fila
 // sigue diciendo «$ema»; así, si se vuelve a dejar como estaba, la estrategia es la guardada, byte a byte.
-function Fila({ f, errores, valores, tarjeta, color, onCambia, onValor, onQuita, quien, onQuien, menuAbierto = false, ayudaAbierta = false, intervalo = 'diario', asa = null, onSubir = null, onBajar = null, avisoExtra = null }) {
+// V9.1067: el botón 🔗 de un uso enlazable (lib/builder/enlaces.js): enlazado (pulsar lo suelta) o suelto (pulsar lo enlaza); con su «?».
+function BotonEnlace({ estado, onClick }) {
+  if (!estado) return null
+  const enl = estado === 'enlazado'
+  return (
+    <span data-enlace={estado} style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+      <button type="button" onClick={onClick} aria-pressed={enl} aria-label={enl ? 'Enlazada: pulsa para soltarla y darle números propios' : 'Suelta: pulsa para enlazarla (toma los números del grupo)'}
+        title={enl ? 'Enlazada con las demás filas del mismo indicador: pulsa para soltarla' : 'Suelta (números propios): pulsa para enlazarla'}
+        style={{ ...S.enlace, padding: '0 3px', fontSize: 14, lineHeight: 1, opacity: enl ? 1 : 0.4, textDecoration: enl ? 'none' : 'line-through' }}>🔗</button>
+      <Ayuda texto={AYUDA_ENLACE} etiqueta="Parámetros enlazados"/>
+    </span>
+  )
+}
+function Fila({ f, errores, valores, tarjeta, color, onCambia, onValor, onQuita, quien, onQuien, menuAbierto = false, ayudaAbierta = false, intervalo = 'diario', asa = null, onSubir = null, onBajar = null, avisoExtra = null, enlace = null }) {
   const p = f.cond.p || {}, decl = Object.fromEntries((CONDICIONES_EDITOR[f.cond.c]?.parametros || []).map(d => [d.clave, d]))
   const hay = Object.keys(errores).length > 0
   const campo = (c, j) => {
@@ -146,6 +164,7 @@ function Fila({ f, errores, valores, tarjeta, color, onCambia, onValor, onQuita,
         )}
         {f.env === 'NO' && <span data-no style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}><span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#3b1d22', color: ROJO }}>NO</span><Ayuda texto={AYUDA_NO} etiqueta="NO"/></span>}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: B.titulo, fontWeight: 600, flexShrink: 0 }}>{plantillaFila(f.cond.c).map(campo)}</span>
+        {enlace}
         {f.env === 'cruza' && !tieneLado(f.cond.c) && <span style={{ fontSize: 12, color: B.secundario, flexShrink: 0 }}>(solo la vela en que empieza)</span>}
         <span style={{ marginLeft: 'auto', paddingLeft: 8, color: B.apagado, fontSize: 12 }}>{notaFila(f, valores, tarjeta, intervalo)}</span>
         <span style={{ flexShrink: 0 }}><Ayuda texto={ayudaFila(f)} etiqueta={nombreCond(f.cond.c)} abiertoInicial={ayudaAbierta}/></span>
@@ -174,11 +193,19 @@ function Tarjeta({ titulo, color, derecha, children, datos, soltar = null }) {
   )
 }
 
-export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, onVolver, onGuardada, onEditorClasico, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null, abiertosInicial = null, ayudaInicial = null, anadiendoInicial = null, arrastreInicial = null, cargaSimbolos = null, cargaVelas = null, comisiones = null, pestanaInicial = 'tarjetas', panelInicial = null, senalesInicial = null, dibujoInicial = null, cambiosInicial = null, entradaBuilder = 0 }) {
+export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, onVolver, onGuardada, onEditorClasico, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null, abiertosInicial = null, ayudaInicial = null, anadiendoInicial = null, arrastreInicial = null, cargaSimbolos = null, cargaVelas = null, comisiones = null, pestanaInicial = 'tarjetas', panelInicial = null, senalesInicial = null, dibujoInicial = null, cambiosInicial = null, entradaBuilder = 0, sueltosInicial = null }) {
   const [est, setEst] = useState(() => estadoInicial || estadoDe(fila))
   const orig = useRef(null); if (!orig.current) orig.current = estadoDe(fila)
   const { def, valores } = est
-  const setDef = (d) => setEst(e => ({ ...e, def: typeof d === 'function' ? d(e.def) : d }))
+  // V9.1067: los parámetros enlazados (lib/builder/enlaces.js): un número cambiado en un uso enlazado se cambia en todo su grupo.
+  // `sueltos`: los usos soltados (solo en pantalla: no se guarda). Al abrir, los usos con los mismos números salen enlazados.
+  const [sueltos, setSueltos] = useState(() => new Set(sueltosInicial || [])), sueltosR = useRef(sueltos)
+  sueltosR.current = sueltos
+  const setDef = (d) => setEst(e => { const nuevo = typeof d === 'function' ? d(e.def) : d; let v = {}; try { v = valoresDe(e.def, e.valores) } catch (_) {} return { ...e, def: propagaEnlaces(e.def, nuevo, v, sueltosR.current) } })
+  const tocaEnlace = (id, estado) => {
+    if (estado === 'enlazado') { setSueltos(s => new Set([...s, id])); return }
+    setEst(e => { let v = {}; try { v = valoresDe(e.def, e.valores) } catch (_) {} const r = enlazaUso(e.def, v, sueltosR.current, id); setSueltos(r.sueltos); return { ...e, def: r.def } })
+  }
   // Un parámetro con nombre (V9.1053): se cambia su valor. Si vuelve al de la estrategia guardada y allí no estaba escrito (salía
   // de su valor por defecto), se quita otra vez, para que los valores queden como los guardados.
   const ponValor = (nombre, v) => setEst(e => {
@@ -241,6 +268,9 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   const errFiltro = filtro.filas.map(f => erroresFila(f, valoresEf, esquema, f.quien))
   const errCompra = compra.filas.map(f => erroresFila(f, valoresEf, esquema)), errVenta = venta.filas.map(f => erroresFila(f, valoresEf, esquema))
   const errProt = erroresProteccion(prot, def, valoresEf)
+  // V9.1067: el estado de enlace de cada uso y su botón.
+  const enl = useMemo(() => { try { return estadoEnlaces(def, valoresEf, sueltos) } catch (_) { return {} } }, [def, valoresEf, sueltos])
+  const boton = (id) => <BotonEnlace estado={enl[id]} onClick={() => tocaEnlace(id, enl[id])}/>
   const orden = leeOrden(def), errCancelar = orden.cancelar ? erroresFila(orden.cancelar, valoresEf, esquema) : {}
   const errVelasOrden = orden.modo === 'maximo' || orden.modo === 'ruptura' ? (v => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 250 ? null : 'El número de velas tiene que ser un número entero de 1 a 250 (por ejemplo, 1).')(typeof orden.velas === 'string' && orden.velas.startsWith('$') ? valoresEf[orden.velas.slice(1)] : orden.velas) : null
   const validacion = useMemo(() => { try { return validaDefinicion(def, valores) } catch (e) { return [`La definición no se puede leer: ${e.message}`] } }, [def, valores])
@@ -249,7 +279,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   const errSwing = (x) => (v => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 20 ? null : 'Las velas del swing tienen que ser un número entero de 1 a 20 (por ejemplo, 2).')(numOrden(x))
   const errSwingOrden = orden.modo === 'swing' ? { izquierda: errSwing(orden.izquierda), derecha: errSwing(orden.derecha) } : {}
   // V9.1055: con la orden en el nivel de ruptura (V9.1059: o en el último máximo de swing), las filas de compra son opcionales.
-  const sinCompra = orden.modo === 'ruptura' || orden.modo === 'swing' ? false : !def.entrada?.senal || (compra.ok && !compra.filas.length), sinSalida = !(def.stops || []).length && !(def.salidas || []).length
+  const sinCompra = orden.modo === 'ruptura' || orden.modo === 'swing' || orden.modo === 'supertrend' ? false : !def.entrada?.senal || (compra.ok && !compra.filas.length), sinSalida = !(def.stops || []).length && !(def.salidas || []).length
   const errNombre = !est.nombre.trim() ? 'Ponle un nombre a la estrategia (por ejemplo, «Retrocesos con RSI»).' : null
   const n = (xs) => xs.reduce((a, e) => a + Object.keys(e).length, 0)
   const nFiltro = n(errFiltro), nCompra = n(errCompra) + (sinCompra ? 1 : 0), nVenta = n(errVenta), nProt = cuentaErroresProteccion(errProt) + (sinSalida ? 1 : 0), nOrden = n([errCancelar]) + (errVelasOrden ? 1 : 0) + Object.values(errSwingOrden).filter(Boolean).length
@@ -325,12 +355,19 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
     if (plan.metodo === 'ninguno') { onGuardada?.({ ...fila }, { sinCambios: true }); return }
     await guardaPlan(plan)
   }
+  // V9.1067: con velas semanales, guardar sin pasar al paso 2 (que aún no las admite): se sigue en «Señales en el gráfico».
+  const guardaSinPaso2 = async () => {
+    if (hayErrores || guardando) return
+    setMsg(null)
+    if (plan.metodo === 'ninguno') return
+    await guardaPlan(plan, { quedarse: true })
+  }
   // «Guardar estos valores en la estrategia» (V9.1054): las casillas de prueba pasan a la estrategia con la regla de versiones de
   // siempre (si está en una prueba, «· versión 2») y se sigue en «Señales en el gráfico» con la estrategia guardada.
   const guardaValores = async () => {
     if (guardando) return
     setMsgValores(null)
-    const est2 = { ...est, ...aplicaPrueba({ def: est.def, valores: est.valores }, cambiosPrueba) }
+    const est2 = { ...est, ...aplicaPrueba({ def: est.def, valores: est.valores }, cambiosPrueba, opcionesCasillas(est.def, valoresEf, sueltos)) }   // V9.1067: con los enlazados
     let errs = []; try { errs = validaDefinicion(est2.def, est2.valores) } catch (e) { errs = [e.message] }
     if (errs.length || errNombre) { setMsgValores(`No se puede guardar: ${errNombre || errs[0]}`); return }
     const cambia2 = jsonCanonico(paraHuella(est2.def, est2.valores)) !== jsonCanonico(paraHuella(orig.current.def, orig.current.valores))
@@ -388,7 +425,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
             borderBottom: `3px solid ${pestana === k ? AZUL : 'transparent'}`, color: pestana === k ? B.titulo : B.secundario, fontWeight: pestana === k ? 700 : 400 }}>{t}{k !== 'tarjetas' && hayErrores ? ' ⚠' : ''}</button>
         ))}
       </div>
-      {pestana === 'senales' && <ProteccionPanel nombre="Señales en el gráfico"><BuilderSenales entrada={entradaBuilder} def={def} valores={valoresEf} guardado={orig.current} intervalo={intervalo} error={hayErrores ? 'La regla tiene errores: corrígelos en «Tarjetas» (lo que está en rojo) para ver las señales y las cifras.' : null}
+      {pestana === 'senales' && <ProteccionPanel nombre="Señales en el gráfico"><BuilderSenales entrada={entradaBuilder} sueltos={sueltos} def={def} valores={valoresEf} guardado={orig.current} intervalo={intervalo} error={hayErrores ? 'La regla tiene errores: corrígelos en «Tarjetas» (lo que está en rojo) para ver las señales y las cifras.' : null}
         cambios={cambiosPrueba} onCambios={setCambiosPrueba} onGuardarValores={guardaValores} guardando={guardando} msgGuardar={msgValores} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} {...(senalesInicial || {})}/></ProteccionPanel>}
       {pestana === 'dibujo' && <ProteccionPanel nombre="Dibujo de la regla"><div data-pestana-dibujo style={{ ...S.tarjeta }}><div style={S.cuerpo}>
         <BuilderDibujo def={def} valores={valoresEf} error={hayErrores ? 'La regla tiene errores: corrígelos en «Tarjetas» (lo que está en rojo) para ver el dibujo.' : null} {...(dibujoInicial || {})}/>
@@ -413,7 +450,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
           </label>
           <div style={{ flexBasis: '100%', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <span data-estado style={S.secundario}>{estado}</span>
-            <span style={S.apagado}>La prueba del paso 2 solo admite velas diarias.</span>
+            <span style={S.apagado}>{intervalo === 'semanal' ? AVISO_SEMANAL_PASO2 : 'La prueba del paso 2 solo admite velas diarias; el paso 1 («Señales en el gráfico» y sus cifras), diarias o semanales.'}</span>
           </div>
           {errNombre && <div style={{ color: ROJO, fontSize: 13, flexBasis: '100%' }}>{errNombre}</div>}
         </div>
@@ -506,7 +543,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
         <div data-columna="tarjetas" style={{ flex: '3 1 440px', minWidth: 0 }}>
           <Tarjeta titulo="Solo opero cuando…" color={MORADO} datos={{ 'data-tarjeta': 'filtro' }} soltar={soltarEn('filtro')} derecha={filtro.filas.length ? 'se cumplen todas' : 'opcional'}>
             {filtro.ok ? <>
-              {filtro.filas.map((f, k) => <div key={k} {...(arrastre ? sobre('filtro', k) : {})}>{marca('filtro', k, MORADO)}<Fila f={f} errores={errFiltro[k]} valores={valoresEf} tarjeta="filtro" color={MORADO} quien={f.quien} onQuien={q => cambiaQuien(k, q)} menuAbierto={menuInicial?.tarjeta === 'filtro' && menuInicial.k === k} ayudaAbierta={ayudaInicial?.tarjeta === 'filtro' && ayudaInicial.k === k} intervalo={intervalo}
+              {filtro.filas.map((f, k) => <div key={k} {...(arrastre ? sobre('filtro', k) : {})}>{marca('filtro', k, MORADO)}<Fila enlace={boton(`filtro|${k}`)} f={f} errores={errFiltro[k]} valores={valoresEf} tarjeta="filtro" color={MORADO} quien={f.quien} onQuien={q => cambiaQuien(k, q)} menuAbierto={menuInicial?.tarjeta === 'filtro' && menuInicial.k === k} ayudaAbierta={ayudaInicial?.tarjeta === 'filtro' && ayudaInicial.k === k} intervalo={intervalo}
                 asa={asaDe('filtro', k)} {...subeBaja('filtro', k)} avisoExtra={f.quien !== 'valor' ? avisoInd : null}
                 onValor={ponValor} onCambia={g => cambiaFiltro(filtro.filas.map((x, j) => j === k ? { ...g, quien: x.quien } : x))} onQuita={() => cambiaFiltro(filtro.filas.filter((_, j) => j !== k))}/></div>)}
               {marca('filtro', filtro.filas.length, MORADO)}
@@ -519,7 +556,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
 
           <Tarjeta titulo="Compro cuando…" color={AZUL} datos={{ 'data-tarjeta': 'compra' }} soltar={soltarEn('compra')} derecha={compra.ok ? enlaceModo(modoC, cambiaModoCompra) : null}>
             {compra.ok ? <>
-              {compra.filas.map((f, k) => <div key={k} {...(arrastre ? sobre('compra', k) : {})}>{marca('compra', k, AZUL)}<Fila f={f} errores={errCompra[k]} valores={valoresEf} tarjeta="compra" color={AZUL} menuAbierto={menuInicial?.tarjeta === 'compra' && menuInicial.k === k} ayudaAbierta={ayudaInicial?.tarjeta === 'compra' && ayudaInicial.k === k} intervalo={intervalo}
+              {compra.filas.map((f, k) => <div key={k} {...(arrastre ? sobre('compra', k) : {})}>{marca('compra', k, AZUL)}<Fila enlace={boton(`compra|${k}`)} f={f} errores={errCompra[k]} valores={valoresEf} tarjeta="compra" color={AZUL} menuAbierto={menuInicial?.tarjeta === 'compra' && menuInicial.k === k} ayudaAbierta={ayudaInicial?.tarjeta === 'compra' && ayudaInicial.k === k} intervalo={intervalo}
                 asa={asaDe('compra', k)} {...subeBaja('compra', k)}
                 onValor={ponValor} onCambia={g => cambiaCompra(compra.filas.map((x, j) => j === k ? g : x))} onQuita={() => cambiaCompra(compra.filas.filter((_, j) => j !== k))}/></div>)}
               {marca('compra', compra.filas.length, AZUL)}
@@ -531,7 +568,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
 
           <Tarjeta titulo="Vendo cuando…" color={NARANJA} datos={{ 'data-tarjeta': 'venta' }} soltar={soltarEn('venta')} derecha={venta.ok ? enlaceModo(modoV, cambiaModoVenta) : null}>
             {venta.ok ? <>
-              {venta.filas.map((f, k) => <div key={k} {...(arrastre ? sobre('venta', k) : {})}>{marca('venta', k, NARANJA)}<Fila f={f} errores={errVenta[k]} valores={valoresEf} tarjeta="venta" color={NARANJA} menuAbierto={menuInicial?.tarjeta === 'venta' && menuInicial.k === k} ayudaAbierta={ayudaInicial?.tarjeta === 'venta' && ayudaInicial.k === k} intervalo={intervalo}
+              {venta.filas.map((f, k) => <div key={k} {...(arrastre ? sobre('venta', k) : {})}>{marca('venta', k, NARANJA)}<Fila enlace={boton(`venta|${k}`)} f={f} errores={errVenta[k]} valores={valoresEf} tarjeta="venta" color={NARANJA} menuAbierto={menuInicial?.tarjeta === 'venta' && menuInicial.k === k} ayudaAbierta={ayudaInicial?.tarjeta === 'venta' && ayudaInicial.k === k} intervalo={intervalo}
                 asa={asaDe('venta', k)} {...subeBaja('venta', k)}
                 onValor={ponValor} onCambia={g => cambiaVenta(venta.filas.map((x, j) => j === k ? g : x))} onQuita={() => cambiaVenta(venta.filas.filter((_, j) => j !== k))}/></div>)}
               {marca('venta', venta.filas.length, NARANJA)}
@@ -548,8 +585,10 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                   <option value="maximo">Con una orden en el máximo de la vela de la señal</option>
                   <option value="ruptura">Orden en el nivel de ruptura: en cuanto supera el máximo de las N velas anteriores</option>
                   <option value="swing">Orden en el último máximo de swing: en cuanto supera el último máximo de swing confirmado</option>
+                  <option value="supertrend">Orden en la línea del SuperTrend: en cuanto toca la línea roja de arriba</option>
                 </select>
                 <Ayuda texto={AYUDA_ORDEN} etiqueta="Cómo compro"/>
+                {boton('orden')}
               </div>
               {orden.modo === 'ruptura' && <div data-orden-ruptura style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={linea}>Compro en cuanto el máximo de una vela supera el máximo de las <Numero valor={typeof orden.velas === 'string' && orden.velas.startsWith('$') ? valoresEf[orden.velas.slice(1)] : orden.velas} error={errVelasOrden} etiqueta="Velas anteriores de la ruptura" onCambia={v => numeroEn(orden.velas, v, d => ponVelasOrden(d, v))}/> velas anteriores (sin contar esa vela).</div>
@@ -560,6 +599,10 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                 <div style={linea}>Compro en cuanto el máximo de una vela supera el último máximo de swing confirmado, con <Numero valor={numOrden(orden.izquierda)} error={errSwingOrden.izquierda} etiqueta="Velas a la izquierda del swing de la orden" onCambia={v => numeroEn(orden.izquierda, v, d => ponNivelOrden(d, 'izquierda', v))}/> velas a la izquierda y <Numero valor={numOrden(orden.derecha)} error={errSwingOrden.derecha} etiqueta="Velas a la derecha del swing de la orden" onCambia={v => numeroEn(orden.derecha, v, d => ponNivelOrden(d, 'derecha', v))}/> a la derecha.<Ayuda texto={PIEZAS.find(p => p.id === 'swing').explicacion} etiqueta="Orden en el último máximo de swing"/></div>
                 {(errSwingOrden.izquierda || errSwingOrden.derecha) && <div style={{ color: ROJO, fontSize: 13 }}>{errSwingOrden.izquierda || errSwingOrden.derecha}</div>}
                 <div style={S.apagado}>Precio: ese nivel; si la vela abre ya por encima, a la apertura. Cada máximo de swing se usa una vez: si el precio ya lo superó (con compra o sin ella), espera al siguiente.</div>
+              </div>}
+              {orden.modo === 'supertrend' && <div data-orden-supertrend style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>   {/* V9.1067 */}
+                <div style={linea}>Compro en cuanto el máximo de una vela toca la línea del SuperTrend (<Numero valor={numOrden(orden.periodo)} etiqueta="Velas del ATR del SuperTrend de la orden" onCambia={v => numeroEn(orden.periodo, v, d => ponNivelOrden(d, 'periodo', v))}/> velas del ATR, multiplicador <Numero valor={numOrden(orden.k)} etiqueta="Multiplicador del SuperTrend de la orden" onCambia={v => numeroEn(orden.k, v, d => ponNivelOrden(d, 'k', v))}/>) mientras está bajista.<Ayuda texto={AYUDA_ORDEN_ST} etiqueta="Orden en la línea del SuperTrend"/></div>
+                <div style={S.apagado}>Precio: esa línea; si la vela abre ya por encima, a la apertura. Con el SuperTrend alcista (la línea verde, por debajo) no hay orden.</div>
               </div>}
               {orden.modo === 'maximo' && <div data-orden-maximo style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={linea}>Compro solo si el precio sube hasta el máximo de las últimas <Numero valor={typeof orden.velas === 'string' && orden.velas.startsWith('$') ? valoresEf[orden.velas.slice(1)] : orden.velas} error={errVelasOrden} etiqueta="Velas de la orden" onCambia={v => numeroEn(orden.velas, v, d => ponVelasOrden(d, v))}/> velas (1 = la vela de la señal).</div>
@@ -590,7 +633,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
                         <select style={mini} aria-label="Tipo de stop" value={s.tipo} onChange={e => setDef(d => cambiaTipoStopDef(d, k, e.target.value))}>{TIPOS_STOP.map(t => <option key={t.tipo} value={t.tipo}>{t.nombre}</option>)}</select>
                         <button style={{ ...S.enlace, color: B.apagado, marginLeft: 'auto' }} aria-label="Quitar este stop" onClick={() => setDef(d => quitaStopDef(d, k))}>×</button>
                       </div>
-                      <div style={linea}>{cuerpoStop(s, k)}</div>
+                      <div style={linea}>{cuerpoStop(s, k)}{boton(`stop|${s.id || k}`)}</div>
                       <div style={{ ...S.apagado, marginTop: 4 }}>{TIPOS_STOP.find(t => t.tipo === s.tipo)?.ejemplo}</div>
                       {Object.values(errProt.stops[k] || {}).map((e, j) => <div key={j} style={{ color: ROJO, fontSize: 13, marginTop: 4 }}>{e}</div>)}
                     </> : <div style={S.secundario}>{k + 1}. {(t => t.charAt(0).toUpperCase() + t.slice(1))(fraseStopTarjeta(s, valoresEf))}. <span style={{ color: AMARILLO }}>(se cambia en el Editor clásico)</span></div>}
@@ -662,7 +705,12 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
             </ul>
           </Tarjeta>
           {plan.version && <div data-aviso="version" style={{ background: '#3a3220', border: `1px solid ${AMARILLO}`, borderRadius: B.radioBoton, padding: 12, marginBottom: 12, color: B.texto }}>{avisoVersion(plan.version)}</div>}
-          <button style={hayErrores || guardando ? S.botonDesactivado : S.botonVerde} disabled={hayErrores || guardando} onClick={guarda}>{guardando ? 'Guardando…' : 'Guardar y pasar al paso 2'}</button>
+          {intervalo === 'semanal' ? <div data-semanal-paso2 style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button style={S.botonDesactivado} disabled title={AVISO_SEMANAL_PASO2}>Guardar y pasar al paso 2</button>
+            <button style={hayErrores || guardando ? S.botonDesactivado : S.botonVerde} disabled={hayErrores || guardando} onClick={guardaSinPaso2}>{guardando ? 'Guardando…' : 'Guardar'}</button>
+            <span data-aviso="semanal" style={{ color: AMARILLO, fontSize: 13 }}>{AVISO_SEMANAL_PASO2}</span>
+          </div>
+          : <button style={hayErrores || guardando ? S.botonDesactivado : S.botonVerde} disabled={hayErrores || guardando} onClick={guarda}>{guardando ? 'Guardando…' : 'Guardar y pasar al paso 2'}</button>}
           {hayErrores && <div data-aviso="corrige" style={{ ...S.secundario, marginTop: 6 }}>Corrige lo que está en rojo para continuar.</div>}
           {msg && <div style={{ color: ROJO, marginTop: 6 }}>{msg}</div>}
         </div>
