@@ -33,6 +33,8 @@ const fechaCorta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(
 const ESPERA_MS = 250
 // V9.1064: el «?» del SuperTrend de la leyenda.
 const AYUDA_SUPERTREND = 'La línea del SuperTrend: verde y por debajo del precio mientras la tendencia es alcista (es la banda inferior, que solo sube); roja y por encima mientras es bajista (la banda superior, que solo baja). Se corta en cada cambio de tendencia: cambia a alcista cuando una vela CIERRA por encima de la roja y a bajista cuando cierra por debajo de la verde. Ejemplo: con SuperTrend (10, 3), si la línea roja está en 105 € y una vela cierra a 106 €, desde esa vela la línea es verde, por debajo del precio. Todo con la vela cerrada.'
+// V9.1066: el «?» del stop activo cuando va en la línea del SuperTrend.
+const AYUDA_STOP_ST = 'La línea roja es el stop activo del motor, solo mientras hay una operación abierta. Con el stop en la línea del SuperTrend, el stop de cada vela es la línea del SuperTrend de la vela ANTERIOR (sube con ella y nunca baja): donde coinciden se dibuja solo la línea del SuperTrend, para no ver dos líneas casi pegadas y una vela desplazadas. El rojo aparece solo donde el stop va por otro sitio (por ejemplo, porque manda otro stop más alto). Ejemplo: si la línea verde está en 140,52 € el martes y sube a 142,27 € el miércoles, el stop del miércoles es 140,52 € y el del jueves, 142,27 €.'
 // V9.1062: el «?» de los swings de la leyenda: los dos tramos y el stop rojo.
 const AYUDA_SWINGS = `${NOTA_LINEA_SWING} El stop activo (rojo) solo se dibuja mientras hay una operación abierta; donde coincide con el mínimo de swing en vigor, se ve solo el rojo.`
 const AYUDA = 'Las flechas son las compras (▲ verde, en la vela en que se compra) y las ventas (▼ naranja) que hace el motor con esta regla en este valor y estas fechas: las mismas de «Backtest de un valor» y de la prueba del paso 2. Las franjas de debajo de las velas dicen, vela a vela, si se cumple cada condición y cada pieza (la ruptura, tocar el stop, tener una operación abierta; pintado = sí) y van en la misma escala de tiempo: cada marca queda justo debajo de su vela, también al hacer zoom. La zona gris es donde el filtro no deja comprar.'
@@ -78,7 +80,11 @@ function Interruptor({ clave, ocultos, onCambia, que, datos = {}, children }) {
   )
 }
 export const claveCanal = (c) => `canal:${c.tipo === 'bollinger' ? c.nombre.replace(/ · (superior|inferior)$/, '') : c.tipo === 'supertrend' ? c.nombre.replace(/ (alcista|bajista)$/, '') : c.nombre}`
-function Graficos({ r, ocultos = new Set() }) {
+// V9.1066: el zoom y la posición se mantienen al recalcular (un número, una opción, una fila…): el gráfico se rehace, pero vuelve al
+// rango visible que tenía. Solo se reajusta a todo el periodo si cambia `llaveZoom` (el valor, las fechas o el tipo de velas).
+function Graficos({ r, ocultos = new Set(), llaveZoom = '' }) {
+  const zoom = useRef({ llave: null, rango: null }), llaveR = useRef(llaveZoom)
+  llaveR.current = llaveZoom
   const caja = useRef(null), precio = useRef(null), osc = useRef([]), series = useRef(new Map()), ocultosR = useRef(ocultos), flechas = useRef(null)
   const franjas = r.franjas
   const [altoPrecio, setAltoPrecio] = useState(ALTO_PRECIO)
@@ -163,7 +169,8 @@ function Graficos({ r, ocultos = new Set() }) {
         const s = apunta('puntosSwing', ch.addLineSeries({ color: lado === 'max' ? VERDE : NARANJA, lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: visto('puntosSwing') }))
         s.setData(ps.map(p => ({ time: p.date, value: p.precio * (lado === 'max' ? 1.006 : 0.994) })))
       }
-      ch.timeScale().fitContent()
+      const previo = zoom.current.llave === llaveZoom && zoom.current.rango ? zoom.current.rango : null
+      if (!previo) ch.timeScale().fitContent()
       r.osciladores.forEach((o, j) => {
         const el = osc.current[j]; if (!el) return
         const c2 = createChart(el, opciones(ALTO_OSC)); charts.push(c2)
@@ -175,7 +182,9 @@ function Graficos({ r, ocultos = new Set() }) {
         c2.timeScale().fitContent()
       })
       // Los osciladores se mueven con el gráfico de precio (tienen las mismas velas, también los huecos sin dato).
-      ch.timeScale().subscribeVisibleLogicalRangeChange(rg => { if (rg) charts.slice(1).forEach(c => c.timeScale().setVisibleLogicalRange(rg)) })
+      ch.timeScale().subscribeVisibleLogicalRangeChange(rg => { if (!rg) return; zoom.current = { llave: llaveR.current, rango: { from: rg.from, to: rg.to } }; charts.slice(1).forEach(c => c.timeScale().setVisibleLogicalRange(rg)) })
+      if (previo) ch.timeScale().setVisibleLogicalRange(previo)
+      zoom.current = { llave: llaveZoom, rango: previo }
       const ajusta = () => charts.forEach(c => c.applyOptions({ width: precio.current?.clientWidth || 600 }))
       const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(ajusta) : null
       ro?.observe(precio.current)
@@ -321,6 +330,11 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   const vs = velas[simbolo] || []
   const ensayo = useMemo(() => fechasEnsayo(vs, simbolo), [vs, simbolo])
   const desde = otras ? (desdeO || ensayo.desde) : ensayo.desde, hasta = otras ? (hastaO || ensayo.hasta) : ensayo.hasta
+  // V9.1066: con «Otras fechas», mientras una fecha esté vacía o a medio escribir, o la de inicio sea posterior a la de fin, un
+  // aviso junto a las fechas y no se calcula nada (antes, una fecha al revés tumbaba la app entera).
+  const [fechaValida, setFechaValida] = useState({ desde: true, hasta: true })
+  const errFechas = !otras ? null : !fechaValida.desde || !fechaValida.hasta ? 'Escribe las dos fechas completas (dd/mm/aaaa) para ver las señales.'
+    : desde && hasta && desde > hasta ? 'La fecha de inicio es posterior a la de fin.' : null
   // Las señales y las cifras, 250 ms después del último cambio.
   const [res, setRes] = useState(null)
   const [cifras, setCifras] = useState(cifrasIniciales)
@@ -331,7 +345,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   const entradaVista = useRef(entrada)
   useEffect(() => { if (entrada !== entradaVista.current) { entradaVista.current = entrada; setOcultos(new Set()) } }, [entrada])
   const [fCifras, setFCifras] = useState(null)
-  const calcula = () => error || errPrueba.length || !vs.length ? null
+  const calcula = () => error || errPrueba.length || !vs.length || errFechas ? null
     : calculaSenales({ def: prueba.def, valores: prueba.valores, velas: vs, referencias: ticker ? { [ticker]: velas[ticker] || [] } : {}, desde, hasta, intervalo })
   const directo = useMemo(() => velasIniciales && !res ? (() => { try { return calcula() } catch (_) { return null } })() : null, [])
   const primera = useRef(true)
@@ -340,15 +354,16 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
     let vivo = true
     const h = setTimeout(async () => {
       try { if (vivo) setRes(calcula()) } catch (e) { if (vivo) setFallo(`No se pudo calcular: ${e.message}`) }
-      if (error || errPrueba.length || !vs.length) return
+      if (error || errPrueba.length || !vs.length || errFechas) return
       try {
         const c = await cifrasRegla({ def: prueba.def, valores: prueba.valores, intervalo, simbolo, velas: { ...velas, [simbolo]: vs }, desde, hasta, comisiones })
         if (vivo) { setCifras(c); setFCifras(null) }
       } catch (e) { if (vivo) { setCifras(null); setFCifras(`No se pudieron calcular las cifras: ${e.message}`) } }
     }, ESPERA_MS)
     return () => { vivo = false; clearTimeout(h) }
-  }, [prueba, vs, desde, hasta, error, errPrueba.length, velas[ticker], velas['^GSPC'], comisiones])
-  const r = res || directo
+  }, [prueba, vs, desde, hasta, error, errPrueba.length, velas[ticker], velas['^GSPC'], comisiones, errFechas])
+  // V9.1066: sin velas en el periodo (fuera de los datos del valor), solo su aviso: ni gráfico ni cifras.
+  const r = errFechas ? null : res || directo, conVelas = !!r?.velas?.length
 
   // Las casillas: valor en pantalla (con la prueba) y el guardado.
   const filasCampos = useMemo(() => { try { return camposDePrueba(def) } catch (_) { return [] } }, [def])
@@ -379,7 +394,8 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
           <button data-fechas="otras" aria-pressed={otras} onClick={() => { setOtras(true); if (!desdeO) { setDesdeO(ensayo.desde); setHastaO(ensayo.hasta) } }} style={{ ...seg(otras), borderRadius: '0 6px 6px 0', borderLeft: 'none' }}>Otras fechas</button>
           <Ayuda texto={AYUDA_ENSAYO} etiqueta="Ensayo"/>
         </span>
-        {otras && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>Desde <CampoFecha valor={desde || ''} onCambio={setDesdeO} style={{ width: 110 }}/> hasta <CampoFecha valor={hasta || ''} onCambio={setHastaO} style={{ width: 110 }}/></span>}
+        {otras && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>Desde <CampoFecha valor={desde || ''} onCambio={setDesdeO} onValidez={v => setFechaValida(x => ({ ...x, desde: v }))} style={{ width: 110 }}/> hasta <CampoFecha valor={hasta || ''} onCambio={setHastaO} onValidez={v => setFechaValida(x => ({ ...x, hasta: v }))} style={{ width: 110 }}/>
+          {errFechas && <span data-error-fechas style={{ color: ROJO, fontSize: 13 }}>{errFechas}</span>}</span>}
         <span data-velas style={{ color: B.secundario }}>Velas: <strong style={{ color: B.titulo }}>{intervalo === 'semanal' ? 'semanales' : 'diarias'}</strong> (las de la estrategia)</span>
         {filasCampos.length > 0 && <span style={{ width: 1, height: 26, background: B.borde }}/>}
         {filasCampos.map((x, k) => (
@@ -403,14 +419,16 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
       {cargando && <div style={{ ...S.apagado, marginTop: 8 }}>Leyendo los precios guardados…</div>}
       {fallo && <div style={{ color: ROJO, marginTop: 8 }}>{fallo}</div>}
       {!cargando && !vs.length && !fallo && <div style={{ ...S.apagado, marginTop: 8 }}>Elige un valor para ver las señales.</div>}
-      {r && !errPrueba.length && <section data-columna-grafico style={{ marginTop: 10, minWidth: 0 }}>
+      {r && !conVelas && !errPrueba.length && r.avisos.map((a, k) => <div key={k} data-aviso-senales style={{ color: AMARILLO, fontSize: 13, marginTop: 8 }}>{a}</div>)}
+      {conVelas && !errPrueba.length && <section data-columna-grafico style={{ marginTop: 10, minWidth: 0 }}>
           <div data-contador style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', margin: '0 0 6px', color: B.texto, fontSize: 13 }}>
             <Interruptor clave="flechas" ocultos={ocultos} onCambia={cambiaVisto} que="las flechas de compra y venta"><span><span style={{ color: VERDE }}>▲</span> compra · <span style={{ color: NARANJA }}>▼</span> vende</span></Interruptor>
             {(r.operaciones || []).length > 0 && <Interruptor clave="operaciones" ocultos={ocultos} onCambia={cambiaVisto} que="la línea de cada operación, de la compra a la venta" datos={{ 'data-interruptor-operaciones': '' }}>
               <span><span style={{ color: COLOR_GANA }}>╱</span> gana · <span style={{ color: COLOR_PIERDE }}>╲</span> pierde</span></Interruptor>}
             {r.medias.map(m => <Interruptor key={m.nombre} clave={`media:${m.nombre}`} ocultos={ocultos} onCambia={cambiaVisto} que={m.nombre}><span style={{ color: m.color }}>{m.discontinua ? '— —' : '—'} {m.nombre}</span></Interruptor>)}
             {gruposCanales(r.canales || []).map(([clave, cs]) => <Interruptor key={clave} clave={clave} ocultos={ocultos} onCambia={cambiaVisto} que={clave.slice(6)}>
-              {cs.map((m, k) => <span key={m.nombre} data-leyenda-canal={m.nombre} style={{ color: m.color }}>{k ? ' · ' : ''}{m.punteada ? '┈┈' : m.discontinua ? '— —' : '—'} {m.nombre}</span>)}</Interruptor>)}
+              {cs.map((m, k) => <span key={m.nombre} data-leyenda-canal={m.nombre} style={{ color: m.color }}>{k ? ' · ' : ''}{m.punteada ? '┈┈' : m.discontinua ? '— —' : '—'} {m.nombre}{m.conSuperTrend ? ' (donde no es la línea del SuperTrend)' : ''}</span>)}</Interruptor>)}
+            {(r.canales || []).some(k => k.conSuperTrend) && <Ayuda texto={AYUDA_STOP_ST} etiqueta="Stop activo"/>}
             {(r.canales || []).some(k => k.tipo === 'supertrend') && <span data-leyenda-supertrend>SuperTrend: <span style={{ color: '#3fb950' }}>alcista</span> · <span style={{ color: '#f85149' }}>bajista</span><Ayuda texto={AYUDA_SUPERTREND} etiqueta="SuperTrend"/></span>}
             {(r.puntosSwing || []).length > 0 && <span data-leyenda-swings style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Interruptor clave="puntosSwing" ocultos={ocultos} onCambia={cambiaVisto} que="los puntos de swing"><span>● swing</span></Interruptor><span>· ┈ hasta confirmarse · — desde que se puede usar</span><Ayuda texto={AYUDA_SWINGS} etiqueta="Swings"/></span>}
             {r.franjas.some(f => f.tarjeta === 'filtro') && (r.bloqueado.some(Boolean)
@@ -423,11 +441,11 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
             <strong data-cuenta style={{ marginLeft: 'auto' }}>En este periodo: {r.compras.length} {r.compras.length === 1 ? 'compra' : 'compras'} · {r.ventas.length} {r.ventas.length === 1 ? 'venta' : 'ventas'}</strong>
           </div>
           {r.avisos.map((a, k) => <div key={k} data-aviso-senales style={{ color: AMARILLO, fontSize: 13 }}>{a}</div>)}
-          <Graficos r={r} ocultos={ocultos}/>
+          <Graficos r={r} ocultos={ocultos} llaveZoom={`${simbolo}|${desde}|${hasta}|${intervalo}`}/>
           <div style={{ ...S.apagado, marginTop: 4 }}>De {fechaCorta(r.velas[0].date)} a {fechaCorta(r.velas[r.velas.length - 1].date)} · {r.velas.length} velas · {simbolo}{r.franjas.length ? ' · debajo de las velas, una franja por condición y por pieza (pintado = se cumple), con su nombre encima' : ''} · gráfico: <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer" style={{ color: B.apagado }}>TradingView Lightweight Charts™</a></div>
         </section>}
       </div>
-      {r && !errPrueba.length && <aside data-columna-cifras style={{ flex: '1 1 320px', maxWidth: 400, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {conVelas && !errPrueba.length && <aside data-columna-cifras style={{ flex: '1 1 320px', maxWidth: 400, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ ...S.tarjeta, padding: 12 }}>
             <div data-linea-cifras style={{ fontSize: 12, color: B.secundario, lineHeight: 1.5, marginBottom: 6 }}>{LINEA_CIFRAS(simbolo)} <Ayuda texto={AYUDA_CIFRAS} etiqueta="Las cifras"/></div>
             {cifras ? <>

@@ -1267,3 +1267,38 @@ Solo pantalla: ningún cálculo cambia (lib/ no se toca; las cifras, idénticas 
   dentro de una tarjeta que recorta, entera (420 px, encima o debajo) y una el triple de larga junto al borde derecho, entera con
   desplazamiento (560 px); se cierran con Escape y al pulsar fuera; cada casilla de la leyenda oculta y enseña sus series sin crear
   ninguna nueva ni rehacer el gráfico. Ida y vuelta; comprobaciones comunes.
+
+## 32. Fechas al revés, protección de los paneles, stop del SuperTrend en el dibujo y zoom que se mantiene (V9.1066)
+
+El motor no cambia (sin pedir el historial de la posición abierta, `interpreta` da exactamente lo mismo que antes).
+
+- **Fechas**: con «Otras fechas», si la de inicio es posterior a la de fin sale junto a las fechas «La fecha de inicio es posterior a
+  la de fin.»; con una fecha vacía o a medio escribir, «Escribe las dos fechas completas (dd/mm/aaaa) para ver las señales.»; en los
+  dos casos no se calcula nada (ni gráfico ni cifras). Sin velas en el periodo (antes o después de los datos del valor, o un fin de
+  semana) sale solo el aviso «No hay velas de este valor en esas fechas.». Antes, en esos casos, `r.velas[0].date` tumbaba la app
+  entera («Application error: a client-side exception has occurred»). Con 1 o 2 velas se dibuja normal.
+- **Protección de los paneles** (components/ProteccionPanel.js, un límite de errores de React): «Señales en el gráfico», «Dibujo de
+  la regla», el editor por tarjetas, el de código, «Probarla contra el azar», la guía y el Builder entero (pages/index.js). Si algo
+  falla al pintar, sale dentro del panel «No se pudo enseñar «…»», el detalle y el botón «Volver a intentar» (vuelve a montarlo).
+- **Auditoría del stop del SuperTrend** («SuperTrend 10/3», AAPL 2020–2021, precios guardados): el MOTOR estaba bien (la línea del
+  SuperTrend de la vela anterior, solo sube). (a) En julio–agosto de 2021 la propia línea del SuperTrend se queda en 140,52 del 14/07
+  al 12/08 (la banda inferior final no baja y las básicas salían más bajas) y el stop la sigue con una vela de retraso (142,27 el
+  13/08 → stop 142,27 el 16/08). (b) Desde el 20/10/2021, la operación abierta al final se dibujaba entera con el stop del ÚLTIMO
+  día (167,16): una línea plana por encima del precio. Ahora `interpreta(…, { historialAbierta: true })` (solo lo pide «Señales en el
+  gráfico») añade a la posición abierta su `stopHistory` y se dibuja vela a vela (139,56 → 167,16): el rojo es, en cada vela, el
+  stop del motor (0 velas distintas en 2020–2021). Pendiente: «Backtest de un valor» dibuja la abierta con el mismo defecto (el
+  núcleo la cierra el último día solo con `stopPx`); arreglarlo cambia la respuesta del backtest.
+- Donde el stop activo ES la línea del SuperTrend de la vela anterior (el stop en su línea), no se pinta el rojo (quedaban dos líneas
+  casi pegadas y una vela desplazadas): solo la línea del SuperTrend. El rojo queda donde el stop va por otro sitio; la leyenda dice
+  «stop activo (donde no es la línea del SuperTrend)» con su «?». Con un mínimo de swing en vigor bajo el stop sigue mandando el stop
+  real (V9.1062).
+- **Zoom**: `Graficos` guarda el rango visible (con la llave valor | desde | hasta | velas) y, al rehacer el gráfico por un número,
+  una opción o una fila, lo vuelve a poner en vez de reajustar a todo el periodo; con otra llave, se reajusta.
+- Comprobado: montaje SWC con estado (V9.1065 se rompía con «Desde» posterior a «Hasta», fuera de los datos y con 0 velas; ahora,
+  sus avisos; 1 y 2 velas, dibujadas); el motor idéntico; el stop dibujado = el del motor vela a vela; «SuperTrend 10/3» con las
+  mismas 6 compras y 5 ventas; las 7 estrategias del editor iguales salvo el stop de la abierta (y, en «Swings 2/2» 2020–2021, el
+  mínimo de swing que se quita bajo él) y el rojo tapado por el SuperTrend. En el navegador (los componentes compilados, sin la app)
+  a 1440 px: un panel que falla enseña su aviso y «Volver a intentar» lo recupera sin tocar el resto; fechas al revés, a medias,
+  vacías, fuera de los datos y de una vela tecleadas: sus avisos, sin pantalla en negro; con el gráfico REAL en pantalla, zoom en las
+  velas 300–360, cambiar el multiplicador de compra y luego el del stop rehace el gráfico y deja 300,24–360; cambiar la fecha de
+  inicio reajusta (0–401). Ida y vuelta; comprobaciones comunes.

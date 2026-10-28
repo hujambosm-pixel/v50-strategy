@@ -30,6 +30,7 @@ import BuilderDibujo from './BuilderDibujo'
 import BuilderSenales from './BuilderSenales'
 import { aplicaPrueba } from '../lib/builder/ensayo'
 import ConLimpiar from './LimpiarBusqueda'
+import ProteccionPanel from './ProteccionPanel'
 
 const AZUL = '#58a6ff', NARANJA = '#f0883e', MORADO = '#a371f7', ROJO = '#ff8b8b', AMARILLO = '#f2cc60'
 // V9.1049: Protección con su color, un verde azulado (ni el rojo de los errores ni el amarillo de los avisos; contraste alto sobre el
@@ -387,11 +388,11 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
             borderBottom: `3px solid ${pestana === k ? AZUL : 'transparent'}`, color: pestana === k ? B.titulo : B.secundario, fontWeight: pestana === k ? 700 : 400 }}>{t}{k !== 'tarjetas' && hayErrores ? ' ⚠' : ''}</button>
         ))}
       </div>
-      {pestana === 'senales' && <BuilderSenales entrada={entradaBuilder} def={def} valores={valoresEf} guardado={orig.current} intervalo={intervalo} error={hayErrores ? 'La regla tiene errores: corrígelos en «Tarjetas» (lo que está en rojo) para ver las señales y las cifras.' : null}
-        cambios={cambiosPrueba} onCambios={setCambiosPrueba} onGuardarValores={guardaValores} guardando={guardando} msgGuardar={msgValores} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} {...(senalesInicial || {})}/>}
-      {pestana === 'dibujo' && <div data-pestana-dibujo style={{ ...S.tarjeta }}><div style={S.cuerpo}>
+      {pestana === 'senales' && <ProteccionPanel nombre="Señales en el gráfico"><BuilderSenales entrada={entradaBuilder} def={def} valores={valoresEf} guardado={orig.current} intervalo={intervalo} error={hayErrores ? 'La regla tiene errores: corrígelos en «Tarjetas» (lo que está en rojo) para ver las señales y las cifras.' : null}
+        cambios={cambiosPrueba} onCambios={setCambiosPrueba} onGuardarValores={guardaValores} guardando={guardando} msgGuardar={msgValores} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} {...(senalesInicial || {})}/></ProteccionPanel>}
+      {pestana === 'dibujo' && <ProteccionPanel nombre="Dibujo de la regla"><div data-pestana-dibujo style={{ ...S.tarjeta }}><div style={S.cuerpo}>
         <BuilderDibujo def={def} valores={valoresEf} error={hayErrores ? 'La regla tiene errores: corrígelos en «Tarjetas» (lo que está en rojo) para ver el dibujo.' : null} {...(dibujoInicial || {})}/>
-      </div></div>}
+      </div></div></ProteccionPanel>}
       {pestana === 'tarjetas' && <>
       {clasico.length > 0 && (
         <div data-aviso="clasico" style={{ border: `1px solid ${AMARILLO}`, borderRadius: B.radioBoton, padding: 12, marginBottom: 14 }}>

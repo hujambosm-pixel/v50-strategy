@@ -23,6 +23,7 @@ import { coincide, conNombres } from '../lib/builder/buscar'
 import Resaltado from './Resaltado'
 import BuscadorEstrategia from './BuscadorEstrategia'
 import ConLimpiar from './LimpiarBusqueda'
+import ProteccionPanel from './ProteccionPanel'
 
 export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convertirla en plan']
 export const SUBTITULOS_PASOS = ['Cuándo compro, cuándo vendo y cuánto arriesgo', '¿Gana por algo más que suerte?', 'Dinero real, aportaciones e impuestos']
@@ -167,18 +168,19 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
     setEditor(null); setPrueba({ estrategiaId: fila.id, n: Date.now() })
   }
 
-  if (guia) return <BuilderGuia onVolver={() => setGuia(false)}/>
+  // V9.1066: cada pantalla del Builder, con su protección (si algo falla, un aviso dentro con «Volver a intentar»).
+  if (guia) return <ProteccionPanel nombre="Guía de las pruebas"><BuilderGuia onVolver={() => setGuia(false)}/></ProteccionPanel>
   // Una de código, guardada: vuelve a «Mi trabajo» (el paso 2 no la admite).
   const alGuardarCodigo = (fila) => {
     setGuardadas(g => [...g.filter(x => String(x.id) !== String(fila.id)), fila]); onGuardada?.(fila)
     setEditor(null); recarga()
   }
-  if (editor && esDeCodigo(editor.fila)) return <BuilderCodigo key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
-    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardarCodigo}/>
-  if (editor) return <BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} lotes={datos.lotes} apiFetch={apiFetch}
-    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'} entradaBuilder={entrada}/>
-  if (prueba) return <BuilderPrueba key={prueba.n} estrategias={estrategiasEf} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
-    onVolver={() => { setPrueba(null); recarga() }} onNuevaPrueba={() => setPrueba({ n: Date.now() })} onCambio={recarga}/>
+  if (editor && esDeCodigo(editor.fila)) return <ProteccionPanel nombre="Estrategia de código"><BuilderCodigo key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
+    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardarCodigo}/></ProteccionPanel>
+  if (editor) return <ProteccionPanel nombre="Editor por tarjetas"><BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} lotes={datos.lotes} apiFetch={apiFetch}
+    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'} entradaBuilder={entrada}/></ProteccionPanel>
+  if (prueba) return <ProteccionPanel nombre="Probarla contra el azar"><BuilderPrueba key={prueba.n} estrategias={estrategiasEf} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
+    onVolver={() => { setPrueba(null); recarga() }} onNuevaPrueba={() => setPrueba({ n: Date.now() })} onCambio={recarga}/></ProteccionPanel>
   const pestanaBtn = (k, t, n) => (
     <button key={k} role="tab" aria-selected={pestana === k} onClick={() => setPestana(k)}
       style={{ ...S.boton, borderRadius: `${B.radioBoton}px ${B.radioBoton}px 0 0`, borderBottom: 'none', fontWeight: pestana === k ? 700 : 400,
