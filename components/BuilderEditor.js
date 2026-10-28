@@ -357,6 +357,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
     if (s.tipo === 'atrCompra') return <>Stop a {numStop(k, s, ['k'])} × ATR ({numStop(k, s, ['periodo'])}) por debajo del precio de compra, con el ATR de la vela anterior a la compra; no se mueve</>
     if (s.tipo === 'minimoMovil') return <>Stop en el mínimo de las {numStop(k, s, ['n'])} velas anteriores; se recalcula en cada vela y solo sube</>
     if (s.tipo === 'swingMinimo') return <>Stop bajo el último mínimo de swing confirmado ({numStop(k, s, ['izquierda'])} velas a la izquierda, {numStop(k, s, ['derecha'])} a la derecha); se recalcula en cada vela y solo sube</>
+    if (s.tipo === 'supertrend') return <>Stop en la línea del SuperTrend ({numStop(k, s, ['periodo'])} velas del ATR, multiplicador {numStop(k, s, ['k'])}); se recalcula en cada vela y solo sube<Ayuda texto={PIEZAS.find(p => p.id === 'supertrend').explicacion} etiqueta="Stop en la línea del SuperTrend"/></>   // V9.1064
     if (s.tipo === 'nivel') return <>En el mínimo de la vela de la señal</>
     return <>Cuando una vela cierra bajo su <select style={mini} aria-label="Tipo de la media del stop" value={s.si.p.tipo} onChange={e => setDef(d => ponNumeroStop(d, k, ['si', 'p', 'tipo'], e.target.value))}><option value="SMA">SMA</option><option value="EMA">EMA</option></select> ({numStop(k, s, ['si', 'p', 'periodo'])}), sube al mínimo de las últimas {numStop(k, s, ['nivel', 'velas'])} velas</>
   }

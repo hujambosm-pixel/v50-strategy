@@ -30,6 +30,8 @@ import { tramosLinea, lineaOperacion, COLOR_GANA, COLOR_PIERDE } from '../lib/gr
 const VERDE = '#3fb950', NARANJA = '#f0883e', MORADO = '#a371f7', AZUL = '#58a6ff', AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE_CIFRA = '#7ee2a0', GRIS_BH = '#8b98a8'
 const fechaCorta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 const ESPERA_MS = 250
+// V9.1064: el «?» del SuperTrend de la leyenda.
+const AYUDA_SUPERTREND = 'La línea del SuperTrend: verde y por debajo del precio mientras la tendencia es alcista (es la banda inferior, que solo sube); roja y por encima mientras es bajista (la banda superior, que solo baja). Se corta en cada cambio de tendencia: cambia a alcista cuando una vela CIERRA por encima de la roja y a bajista cuando cierra por debajo de la verde. Ejemplo: con SuperTrend (10, 3), si la línea roja está en 105 € y una vela cierra a 106 €, desde esa vela la línea es verde, por debajo del precio. Todo con la vela cerrada.'
 // V9.1062: el «?» de los swings de la leyenda: los dos tramos y el stop rojo.
 const AYUDA_SWINGS = `${NOTA_LINEA_SWING} El stop activo (rojo) solo se dibuja mientras hay una operación abierta; donde coincide con el mínimo de swing en vigor, se ve solo el rojo.`
 const AYUDA = 'Las flechas son las compras (▲ verde, en la vela en que se compra) y las ventas (▼ naranja) que hace el motor con esta regla en este valor y estas fechas: las mismas de «Backtest de un valor» y de la prueba del paso 2. Las franjas de debajo de las velas dicen, vela a vela, si se cumple cada condición y cada pieza (la ruptura, tocar el stop, tener una operación abierta; pintado = sí) y van en la misma escala de tiempo: cada marca queda justo debajo de su vela, también al hacer zoom. La zona gris es donde el filtro no deja comprar.'
@@ -102,7 +104,7 @@ function Graficos({ r, verZona = true, verOps = true }) {
         if (l.tramos) { for (const t of l.tramos) serie().setData(t.map(([k, x]) => ({ time: r.velas[k].date, value: x }))); return }
         // V9.1062: los niveles de los swings, en tramos horizontales sueltos (lib/graficoPaneles.js tramosLinea); el punteado, tenue.
         if (l.segmentos) {
-          const { puntos, sueltos } = tramosLinea(l.valores, r.velas.map(v => v.date))
+          const { puntos, sueltos } = tramosLinea(l.valores, r.velas.map(v => v.date), !!l.seguidos)   // V9.1064: el SuperTrend, por velas seguidas
           const s = () => ch.addLineSeries({ color: l.color, lineWidth: ancho, lineStyle: l.punteada ? LineStyle.Dotted : LineStyle.Solid, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
           if (puntos.length) s().setData(puntos)
           for (const p of sueltos) s().setData([p])
@@ -372,6 +374,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
               <span><span style={{ color: COLOR_GANA }}>╱</span> gana · <span style={{ color: COLOR_PIERDE }}>╲</span> pierde</span></label>}
             {r.medias.map(m => <span key={m.nombre} style={{ color: m.color }}>{m.discontinua ? '— —' : '—'} {m.nombre}</span>)}
             {(r.canales || []).map(m => <span key={m.nombre} data-leyenda-canal={m.nombre} style={{ color: m.color }}>{m.punteada ? '┈┈' : m.discontinua ? '— —' : '—'} {m.nombre}</span>)}
+            {(r.canales || []).some(k => k.tipo === 'supertrend') && <span data-leyenda-supertrend>SuperTrend: <span style={{ color: '#3fb950' }}>alcista</span> · <span style={{ color: '#f85149' }}>bajista</span><Ayuda texto={AYUDA_SUPERTREND} etiqueta="SuperTrend"/></span>}
             {(r.puntosSwing || []).length > 0 && <span data-leyenda-swings>● swing · ┈ hasta confirmarse · — desde que se puede usar<Ayuda texto={AYUDA_SWINGS} etiqueta="Swings"/></span>}
             {r.franjas.some(f => f.tarjeta === 'filtro') && (r.bloqueado.some(Boolean)
               ? <label data-interruptor-zona title="Enseña u oculta la zona gris donde el filtro no deja comprar (la franja del filtro sigue igual)" style={{ display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit' }}>

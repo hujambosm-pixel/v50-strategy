@@ -1167,3 +1167,58 @@ Solo pantalla: ningún cálculo del motor cambia (lo demás de «Señales en el 
   componentes compilados, sin la app) a 1440 px con «Swings 2/2» en AAPL jul–oct 2010: una línea roja (21/07 → 11/08) y una verde
   (la abierta, 11/10 → 29/10); la casilla las quita y las pone sin rehacer el gráfico; «NVÍ» y «inc» en «Valor», resaltados; sin
   desplazamiento horizontal. Comprobaciones comunes.
+
+## 30. Indicador SuperTrend en el editor por tarjetas (V9.1064)
+
+Toca el motor del editor, pero solo detrás de condiciones, un tipo de stop y funciones NUEVAS: lo de antes no cambia (las 6
+estrategias del editor, con todo idéntico a V9.1063).
+
+### La definición (la de TradingView, `ta.supertrend`)
+
+- `supertrend(velas, N, M)` (lib/condiciones/indicadores.js): con el ATR de Wilder de N velas (`atr`, el mismo `calcATR` de
+  lib/backtester.js que ya usaba el motor: TR de la primera vela = máximo − mínimo, semilla con la media de los N primeros TR y luego
+  (ATR anterior × (N − 1) + TR) / N, como `ta.atr`), las bandas básicas (máximo + mínimo) / 2 ∓ M × ATR; la inferior final toma la
+  básica si es mayor que la final anterior o si el cierre anterior cayó bajo la final anterior (si no, se queda: solo sube en
+  tendencia); la superior, lo simétrico. Tendencia: en la primera vela con ATR, bajista (como TradingView); después, de bajista a
+  alcista cuando el cierre supera la superior final, y de alcista a bajista cuando cae bajo la inferior final. Línea: la inferior en
+  alcista, la superior en bajista. Con la vela cerrada; sin ATR o con un dato que falte, null y vuelve a empezar.
+- `supertrendPrevio`: la línea al cierre de la vela anterior (la del stop, que actúa dentro de la vela).
+
+### Piezas nuevas (grupo nuevo «SuperTrend» del catálogo)
+
+- Condiciones (`{ periodo: N, k: M }`, 10 y 3 por defecto; N de 1 a 200, M de 0,1 a 20), con ficha y «?» con ejemplo en euros:
+  **El SuperTrend está alcista** («Solo opero cuando…» y «Compro cuando…»), **El SuperTrend cambia a alcista** (solo en la vela del
+  cambio; sin dato si la anterior no tiene SuperTrend) y **El SuperTrend cambia a bajista** (para «Vendo cuando…»; con su franja
+  naranja, como las de swing). Calentamiento 4 × N (lo que tarda la media de Wilder en olvidar el principio).
+- **Stop en la línea del SuperTrend** (`{ tipo: 'supertrend', periodo, k }`; pieza del grupo y tipo del desplegable de «Protección»,
+  con sus dos casillas): al comprar, la línea al cierre de la vela anterior; en cada vela se recalcula y solo sube; salta dentro de
+  la vela a su precio, o a la apertura si abre por debajo. Funciona con «manda el más alto» (el camino de los stops que suben). Si al
+  comprar el SuperTrend está bajista, la línea va por encima del precio y vende en la apertura siguiente (lo dice su «?»).
+- Casillas de prueba de N y M en la fila de arriba de «Señales en el gráfico» (las filas y el stop). **Exportar a code_js**: no exporta
+  y explica por qué (el motor copiado no tiene el cálculo).
+
+### Dibujo
+
+- En «Señales en el gráfico» y en «Backtest de un valor», la línea sobre el precio en dos series: verde (`#3fb950`, la banda
+  inferior) en tendencia alcista y roja (`#f85149`, la superior) en bajista, cortadas en cada cambio: `tramosLinea(…, seguidos)`
+  (lib/graficoPaneles.js) parte por velas seguidas con valor aunque el valor cambie; en «Backtest de un valor» llegan del intérprete
+  como `supertrend10_3a` / `supertrend10_3b` con `tramos` y `seguidos` (que pasa lib/graficoEstrategia.js). Leyenda: las dos líneas y
+  «SuperTrend: alcista · bajista» con su «?». El stop rojo (#ff7b72) va un escalón por detrás de la línea (es la de la vela anterior).
+
+### Comprobado
+
+- A mano, 14 velas de 2 € de máximo a mínimo (ATR (3) = 2 desde la 3.ª), M = 1: bandas finales inferior 100, 101, 102, 103, 103, 103,
+  103 (en las velas 6–8 la básica baja a 102,5 / 102,2 / 101,5 y la final no), 100…; superior 104, 104, 104, 107 (el cierre anterior
+  104,5 la superó), 106,5…; tendencia bajista al empezar, alcista en la 4 (cierra 104,5 > 104), bajista en la 8 (102,8 < 103),
+  alcista en la 12 (103,6 > 103); «cambia a alcista» solo en 4 y 12, «a bajista» solo en 8. Stop: compra a 105, stop 102 → 103 (no
+  baja); la vela 8 abre a 104 y toca 103 → vende a 103; si abre a 102,9 → vende a 102,9; igual con «manda el más alto».
+- AAPL 2015–2022: la tendencia, idéntica a la cuenta de `ta.supertrend` escrita aparte (10/3 y 7/2,5). No mira el futuro: 5 cortes,
+  bandas, tendencia y línea (10/3, 7/2,5, 14/1,5) y las operaciones cerradas iguales; la abierta, con la misma entrada.
+- «SuperTrend 10/3» hecha con las tarjetas (compro cuando cambia a alcista; vendo cuando cambia a bajista; stop en la línea; NO se ha
+  guardado en la base), AAPL 2020–2021: las mismas operaciones (fechas y precios) en «Señales en el gráfico», «Backtest de un valor»
+  y el paso 2 (6, la última abierta al final); verde siempre bajo el cierre y roja siempre encima, nunca las dos en una vela; el
+  normalizador del gráfico la acepta sin descartes.
+- Las 6 estrategias del editor (AAPL, diario y semanal, 2010–2015 y 2020–2021): señales, intérprete (con su gráfico), cifras,
+  exportar y calentamiento idénticos a V9.1063; ida y vuelta byte a byte. Montaje SWC con estado del editor (las filas, el stop con
+  sus casillas, el catálogo con el grupo y su pieza), de «Señales en el gráfico» (leyenda, franjas, 6 compras · 5 ventas) y del
+  dibujo de la regla. Comprobaciones comunes.
