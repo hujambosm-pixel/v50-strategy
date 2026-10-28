@@ -1090,3 +1090,58 @@ Solo pantalla: ningún cálculo cambia (lib/ no se toca; las señales, las flech
   en la x de su vela, del color que toca; la casilla quita y pone la zona sin rehacer el gráfico; el dibujo de Swings 2/2 (1.330 ×
   634 px a 1440) y el de Tortugas, con TODO el texto dentro de su rombo o su caja (medido con getBBox), también a 1024. Las 6
   estrategias del editor (AAPL y QQQ, diario y semanal) idénticas a V9.1060; ida y vuelta; comprobaciones comunes.
+
+## 28. Swings: «Estructura alcista» y dibujo en tramos (V9.1062)
+
+Toca el motor solo detrás de una condición NUEVA y de funciones nuevas: «Mínimos crecientes» y el resto no cambian (las 6 estrategias
+del editor, «Swings 2/2» y «Tortugas 20/10» incluidas, con las mismas operaciones y cifras).
+
+### La condición «Estructura alcista» (grupo «Swings»)
+
+- `estructuraAlcista` (lib/condiciones/catalogo.js; `{ n, izquierda, derecha }`, K = n de 2 a 10, por defecto 2/2/2) sobre
+  `estructuraAlcistaSwing(velas, L, R, K)` (lib/condiciones/indicadores.js): en la vela t, los K últimos mínimos de swing confirmados
+  hasta su cierre son cada uno más alto que el anterior Y los K se confirmaron DESPUÉS de la última **rotura** (la última vela cuyo
+  CIERRE quedó por debajo del último mínimo de swing confirmado entonces; un cierre igual no rompe). Así una rotura la apaga en esa
+  misma vela (cerrada) y no vuelve hasta que se confirmen otra vez K mínimos crecientes: un solo mínimo nuevo, aunque sea más alto
+  que el roto, no basta. Con menos de K mínimos confirmados en total, sin dato. Solo mira las velas hasta t.
+- Ficha y «?» (lib/builder/fichas.js) con el ejemplo 10, 12, 14 → cierre a 13,90 → mínimo de 13 → 13,50, y la diferencia con
+  «Mínimos crecientes» (que sigue cumpliéndose al cerrar a 13,90 y se apaga solo al confirmarse el 13). Vale en «Solo opero cuando…»
+  y en «Compro cuando…». Calentamiento (L + R + 1) × K. Está en `CONDICIONES_SWING`: no se exporta a code_js (el mensaje la nombra).
+
+### El dibujo de los swings
+
+- Sin las líneas en escalera del «último máximo / mínimo de swing». `lineasSwing(velas, lado, L, R)` da, por vela, dos niveles:
+  **punteado** (tenue, `rgba(…, 0.55)`) de la vela del swing a la que lo confirma (V … V + R) y **sólido** desde la vela siguiente
+  (V + R + 1) hasta la vela cuyo máximo lo supera (un máximo de swing) o cuyo mínimo lo perfora (un mínimo), esa incluida, o hasta la
+  confirmación del swing siguiente, lo que llegue antes. Sin nivel en vigor, nada. El punteado se dibuja hacia atrás desde la
+  confirmación a propósito (como el punto); el sólido solo depende de las velas hasta cada vela.
+- **Stop activo** (rojo): como antes, solo con operación abierta. Donde coincide con el mínimo de swing en vigor, el naranja no se
+  pinta (se ve solo el rojo): en «Señales en el gráfico» con su línea del stop; en «Backtest de un valor», `stopPorVela`
+  (lib/editor/interprete.js), con la misma regla que el gráfico (el último nivel del historial con fecha hasta la vela).
+- Cómo se pinta (lightweight-charts une los puntos de una serie por encima de los huecos): `tramosLinea` (lib/graficoPaneles.js)
+  parte la línea en rachas de velas seguidas con el mismo nivel; el último punto de cada tramo va transparente (el trozo que sale de
+  un punto lleva su color) y un tramo de una sola vela va en su propia serie (una rayita del ancho de la vela). En «Backtest de un
+  valor» llegan como dos series por lado del intérprete (`swingMax2_2p` punteada y `swingMax2_2` sólida) con `tramos: true` y
+  `punteada: true`, que ahora pasan lib/graficoEstrategia.js y pinta CandleChart.
+- Leyenda de «Señales en el gráfico»: «┈┈ máximo de swing (L/R), sin confirmar» y «— … en vigor» de cada lado, y «● swing · ┈ hasta
+  confirmarse · — desde que se puede usar» con su «?» (el dibujo y el stop rojo).
+- El interruptor «filtro: no opero» de la leyenda, en línea y con la letra del resto (el estilo global de `label` lo ponía en
+  columna y en monoespaciada).
+
+### Comprobado
+
+- A mano (L = R = 2, K = 2): mínimos 10, 12, 14 confirmados → se cumple; un cierre a 13,9 → deja de cumplirse en esa vela
+  («Mínimos crecientes» sigue); un mínimo nuevo de 13 confirmado → sigue sin cumplirse («Mínimos crecientes» se apaga entonces);
+  13 y 13,5 (dos mínimos crecientes nuevos) → vuelve a cumplirse; tras la rotura, un solo mínimo nuevo más alto (14,5) no basta, con
+  el segundo (14,8) sí. Tramos: punteado del 10 en las velas 2–4, sólido de la 5 a la 9; el del 14, de la 15 a la 17 (la que lo
+  perfora); nada hasta el 13 en vigor.
+- No mira el futuro: AAPL 2017–2022 cortado en 5 fechas: la condición (K, L, R = 2/2/2, 3/3/2, 2/1/4, 4/5/5), el tramo sólido y las
+  operaciones cerradas de una regla con «Estructura alcista» en la compra y en la venta, idénticos; la abierta, con la misma entrada.
+- Las 6 estrategias del editor (AAPL, diario y semanal, 2010–2015, 2020–2021 y jul–oct 2010): señales, flechas, franjas, zona del
+  filtro, puntos de swing, medias, el stop y el resto de canales, intérprete (operaciones, posición abierta, series que no son de
+  swing, eventos, órdenes), cifras y exportar idénticos a V9.1061; ida y vuelta byte a byte. Las series nuevas pasan el normalizador
+  sin descartes. Montaje SWC con estado de «Señales en el gráfico», del editor (la fila, el catálogo con «estruct») y del dibujo.
+- En el navegador (los componentes compilados, sin la app) a 1440 px con «Swings 2/2» en AAPL jul–oct 2010: cada sólido empieza
+  en la vela siguiente a la confirmación y acaba en la rotura o en el swing siguiente; los punteados, del swing a la confirmación;
+  ninguna escalera salvo el stop; el naranja no se pinta donde coincide con el rojo (ago. y oct.); sin desplazamiento horizontal;
+  el interruptor del filtro, en línea. Comprobaciones comunes.

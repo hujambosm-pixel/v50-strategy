@@ -24,10 +24,13 @@ import CampoFecha from './CampoFecha'
 import BuscadorValor from './BuscadorValor'
 import Ayuda from './BuilderAyuda'
 import { NOTA_LINEA_SWING } from '../lib/builder/fichas'
+import { tramosLinea } from '../lib/graficoPaneles'
 
 const VERDE = '#3fb950', NARANJA = '#f0883e', MORADO = '#a371f7', AZUL = '#58a6ff', AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE_CIFRA = '#7ee2a0', GRIS_BH = '#8b98a8'
 const fechaCorta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 const ESPERA_MS = 250
+// V9.1062: el «?» de los swings de la leyenda: los dos tramos y el stop rojo.
+const AYUDA_SWINGS = `${NOTA_LINEA_SWING} El stop activo (rojo) solo se dibuja mientras hay una operación abierta; donde coincide con el mínimo de swing en vigor, se ve solo el rojo.`
 const AYUDA = 'Las flechas son las compras (▲ verde, en la vela en que se compra) y las ventas (▼ naranja) que hace el motor con esta regla en este valor y estas fechas: las mismas de «Backtest de un valor» y de la prueba del paso 2. Las franjas de debajo de las velas dicen, vela a vela, si se cumple cada condición y cada pieza (la ruptura, tocar el stop, tener una operación abierta; pintado = sí) y van en la misma escala de tiempo: cada marca queda justo debajo de su vela, también al hacer zoom. La zona gris es donde el filtro no deja comprar.'
 const AYUDA_ENSAYO = 'El ensayo son los años 2010–2015, ANTES de los que usa el paso 2 (2016–2025). Ajustar la regla mirando 2016–2025 y luego probarla en esos mismos años sería hacer trampa sin querer: la regla saldría bien porque se ha hecho a la medida de esos años. Ejemplo: si aquí cambias el máximo de 20 a 25 velas porque en 2010–2015 compra mejor, el paso 2 dirá después si eso funciona en años que no has mirado.'
 const AYUDA_CASILLAS = 'Cada casilla es un número de la regla. Cambiarla es solo para probar: el gráfico y las cifras se recalculan al momento, pero la estrategia no cambia. Ejemplo: con «Compro: máximo de 20 velas», escribe 25 y verás las compras con 25; la estrategia sigue con 20 hasta que pulses «Guardar estos valores en la estrategia». Al salir del paso 1 y volver a entrar, salen siempre los valores guardados.'
@@ -95,6 +98,14 @@ function Graficos({ r, verZona = true }) {
         const serie = () => ch.addLineSeries({ color: l.color, lineWidth: ancho, lineStyle: l.discontinua ? LineStyle.Dashed : LineStyle.Solid, lineType: l.escalera ? LineType.WithSteps : LineType.Simple, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
         // V9.1057: con tramos (el stop activo), una línea por tramo: una serie une sus puntos por encima de los huecos.
         if (l.tramos) { for (const t of l.tramos) serie().setData(t.map(([k, x]) => ({ time: r.velas[k].date, value: x }))); return }
+        // V9.1062: los niveles de los swings, en tramos horizontales sueltos (lib/graficoPaneles.js tramosLinea); el punteado, tenue.
+        if (l.segmentos) {
+          const { puntos, sueltos } = tramosLinea(l.valores, r.velas.map(v => v.date))
+          const s = () => ch.addLineSeries({ color: l.color, lineWidth: ancho, lineStyle: l.punteada ? LineStyle.Dotted : LineStyle.Solid, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+          if (puntos.length) s().setData(puntos)
+          for (const p of sueltos) s().setData([p])
+          return
+        }
         serie().setData(r.velas.map((v, k) => l.valores[k] != null ? { time: v.date, value: l.valores[k] } : { time: v.date }))
       }
       for (const m of r.medias) linea(m)
@@ -347,10 +358,10 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
           <div data-contador style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', margin: '0 0 6px', color: B.texto, fontSize: 13 }}>
             <span><span style={{ color: VERDE }}>▲</span> compra · <span style={{ color: NARANJA }}>▼</span> vende</span>
             {r.medias.map(m => <span key={m.nombre} style={{ color: m.color }}>{m.discontinua ? '— —' : '—'} {m.nombre}</span>)}
-            {(r.canales || []).map(m => <span key={m.nombre} data-leyenda-canal={m.nombre} style={{ color: m.color }}>{m.discontinua ? '— —' : '—'} {m.nombre}</span>)}
-            {(r.puntosSwing || []).length > 0 && <span data-leyenda-swings>● swing (la línea empieza al confirmarse)<Ayuda texto={NOTA_LINEA_SWING} etiqueta="Swings"/></span>}
+            {(r.canales || []).map(m => <span key={m.nombre} data-leyenda-canal={m.nombre} style={{ color: m.color }}>{m.punteada ? '┈┈' : m.discontinua ? '— —' : '—'} {m.nombre}</span>)}
+            {(r.puntosSwing || []).length > 0 && <span data-leyenda-swings>● swing · ┈ hasta confirmarse · — desde que se puede usar<Ayuda texto={AYUDA_SWINGS} etiqueta="Swings"/></span>}
             {r.franjas.some(f => f.tarjeta === 'filtro') && (r.bloqueado.some(Boolean)
-              ? <label data-interruptor-zona title="Enseña u oculta la zona gris donde el filtro no deja comprar (la franja del filtro sigue igual)" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+              ? <label data-interruptor-zona title="Enseña u oculta la zona gris donde el filtro no deja comprar (la franja del filtro sigue igual)" style={{ display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit' }}>
                 <input type="checkbox" aria-label="Enseñar la zona gris donde el filtro no deja comprar" checked={verZona} onChange={e => setVerZona(e.target.checked)} style={{ margin: 0, cursor: 'pointer' }}/>
                 <span style={{ display: 'inline-block', width: 14, height: 10, background: 'rgba(139,155,173,0.35)' }}/>filtro: no opero</label>
               : <span><span style={{ display: 'inline-block', width: 14, height: 10, background: 'rgba(139,155,173,0.35)', marginRight: 4 }}/>filtro: no opero</span>)}

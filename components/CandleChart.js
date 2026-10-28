@@ -823,10 +823,12 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
       // el precio, el discontinuo es la marca de las del usuario. Sin `grafico` no da ni una vuelta.
       for(const s of planGrafico.precio){
         try{
-          const op={color:s.color,lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,...(s.escalera?{lineType:1}:{})}   // V9.1059: escalera (el último swing)
+          const op={color:s.color,lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false,...(s.escalera?{lineType:1}:{}),...(s.punteada?{lineStyle:LineStyle.Dotted}:{})}   // V9.1059: escalera; V9.1062: punteada (el swing sin confirmar)
           const serie=s.tipo==='histograma'?chart.addHistogramSeries(op):chart.addLineSeries(op)
           serie.setData(s.puntos)
           overlaySeriesRef.current.push(serie)
+          // V9.1062: los tramos de una sola vela (lib/graficoPaneles.js tramosLinea), cada uno en su serie.
+          for(const p of s.sueltos||[]){ const x=chart.addLineSeries(op); x.setData([p]); overlaySeriesRef.current.push(x) }
         }catch(e){ console.warn('[CandleChart] no se pudo dibujar una serie declarada:',s.clave,e?.message) }
       }
 
