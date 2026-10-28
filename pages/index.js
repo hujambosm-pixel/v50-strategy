@@ -33,13 +33,14 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1068'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1069'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
 const LaboratorioPanelMemo = memo(LaboratorioPanel)
 const CarteraPanelMemo = memo(CarteraPanel)
 import { payloadPrueba } from '../lib/optimizacion'
+import { curvasVelaAVela, caidaMaxima } from '../lib/ddVelaAVela'
 import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart, AssetSignalChart } from '../components/BacktestCharts'
 import dynamic from 'next/dynamic'
 const McMonthlyGainsChart = dynamic(() => import('../components/McMonthlyGainsChart'), { ssr: false })
@@ -1076,6 +1077,9 @@ export default function Home() {
   const [showStrategy,setShowStrategy]=useState(false),[showBH,setShowBH]=useState(true)
   const [showSP500,setShowSP500]=useState(false),[showCompound,setShowCompound]=useState(true)
   const [showBacktestFloat,setShowBacktestFloat]=useState(true)
+  // V9.1069: las comisiones y la asignación con que se pidió el último backtest de «Backtest de un valor», para su fila «Max
+  // Drawdown (vela a vela)» (lib/ddVelaAVela.js necesita la comisión de compra de cada operación).
+  const condBacktestRef=useRef({comisiones:null,allocationPct:100})
   const [watchlist,setWatchlist]=useState(WATCHLIST_DEFAULT)
   const [wlLoading,setWlLoading]=useState(true)
   const [wlLists,setWlLists]=useState([])             // [{id,name,position}] from watchlist_lists
@@ -4707,6 +4711,7 @@ export default function Home() {
       savedRangeRef.current=null   // reset zoom so recentMonths is applied on new load
       isNewResultRef.current=true  // tell CandleChart to ignore savedRange on first mount
       setChartViewFull(false)
+      condBacktestRef.current={comisiones:body.comisiones??null,allocationPct:Number(body.allocation_pct)||100}
       setResult(json)
       setDisplayedSimbolo(sym) // sync display name only once chart data is ready
     }catch(e){setError(e.message)}finally{setLoading(false)}
@@ -5769,6 +5774,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     })
   },[backtestFloatCurve,result])
   const [maxDDFloatCompound,maxDDFloatCompoundDate]=useMemo(()=>computeMaxDD(backtestFloatCompoundCurve),[backtestFloatCompoundCurve])
+  // V9.1069: la fila «Max Drawdown (vela a vela)»: la operación abierta marcada a mercado al cierre de cada vela, con las mismas
+  // cuentas que buildTrades (lib/ddVelaAVela.js), igual que «Señales en el gráfico» del paso 1. No depende del interruptor
+  // «Flotante» (que sigue mandando en el gráfico); sin operaciones, 0.
+  const ddVelaAVela=useMemo(()=>{
+    if(!result?.chartData?.length||!result?.trades?.length) return {compound:0,simple:0}
+    const cap=Number(capitalIni),c=curvasVelaAVela(result.trades,result.chartData,cap,condBacktestRef.current)
+    return {compound:caidaMaxima(c.compuesta,cap).maxDD,simple:caidaMaxima(c.simple,cap).maxDD}
+  },[result,capitalIni])
   // Load settings from Supabase on mount (overrides localStorage if newer)
   // Also apply ui defaults from localStorage (safe: runs client-side only)
   useEffect(()=>{
@@ -5945,7 +5958,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       {label:'Ganancia (€)',          compound:v(fmt(m.ganComp,2,'€'),cC),  bh:v(fmt(m.ganBH,2,'€'),cBH), simple:v(fmt(m.ganSimple,2,'€'),cS)},
       {label:'Ganancia (%)',          compound:v(fmt(m.ganComp/Number(capitalIni)*100,2,'%'),cC), bh:v(fmt(m.ganBH/Number(capitalIni)*100,2,'%'),cBH), simple:v(fmt(m.ganTotalPct,2,'%'),cS)},
       {label:`CAGR (${fmt(m.anios,2)}a)`, compound:v(fmt(m.cagrC,2,'%'),m.cagrC>=0?'#00e5a0':'#ff4d6d'), bh:v(fmt(m.cagrBH,2,'%'),m.cagrBH>=0?'#00e5a0':'#ff4d6d'), simple:v(fmt(m.cagrS,2,'%'),m.cagrS>=0?'#00e5a0':'#ff4d6d')},
-      {label:'Max Drawdown (%)',      compound:v(fmt(showBacktestFloat&&maxDDFloatCompound?maxDDFloatCompound:m.ddComp,2,'%'),'#ff4d6d'), bh:v(fmt(maxDDBH,2,'%'),'#ff4d6d'), simple:v(fmt(showBacktestFloat&&maxDDFloat?maxDDFloat:m.ddSimple,2,'%'),'#ff4d6d')},
+      {label:'Max Drawdown (vela a vela)', compound:v(fmt(ddVelaAVela.compound,2,'%'),'#ff4d6d'), bh:v(fmt(maxDDBH,2,'%'),'#ff4d6d'), simple:v(fmt(ddVelaAVela.simple,2,'%'),'#ff4d6d')},
     ]
   }
 
@@ -6292,7 +6305,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1068</title>
+        <title>Trading Simulator V9.1069</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6381,7 +6394,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1068
+            <span className="dot"/>Trading Simulator V9.1069
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

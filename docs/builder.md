@@ -1363,3 +1363,22 @@ sigue leyendo lo mismo.
   167,16) y, vela a vela, es el stop del motor y el de «Señales en el gráfico» (antes, toda a 167,16); las cifras, las curvas y las
   demás operaciones, idénticas a V9.1067; las 7 estrategias del editor (AAPL, diario y semanal, 2010–2015 y 2020–2021), iguales
   salvo el historial de la abierta. Comprobaciones comunes.
+
+## 35. Max Drawdown vela a vela en el paso 1 y en «Backtest de un valor» (V9.1069)
+
+El Max Drawdown de «Señales en el gráfico» salía de calcMetrics (lib/utils.js, `ddComp`), que solo mira el dinero de las
+operaciones CERRADAS: «SuperTrend 10/9» en AAPL 2010–2015 (una operación, ganadora) daba 0,00 %. Ahora (lib/ddVelaAVela.js,
+`curvasVelaAVela` y `caidaMaxima`) la curva de la regla se calcula vela a vela, con la operación abierta marcada a mercado al cierre
+de cada vela y las mismas cuentas que buildTrades (capital compuesto que deja la anterior, comisión de compra, acciones; el día de la
+venta, su `capitalTras`). Una operación de 100 → 120 → 90 → vende a 110 da −25 %, no 0.
+
+- Paso 1 (lib/builder/ensayo.js, cifrasRegla): la fila «Max Drawdown (vela a vela)» y la línea de la regla de «Cómo habría crecido
+  100» (antes, a escalones y con ~300 puntos; ahora una por vela, y el último valor es el mismo).
+- «Backtest de un valor» (pages/index.js): la fila «Max Drawdown (vela a vela)», en Compuesta y en Simple, con la misma función, y ya
+  no depende del interruptor «Flotante» (que sigue mandando en el gráfico). Antes, con «Flotante», la compuesta era una aproximación
+  (la curva muestreada y las acciones de la simple).
+- NO cambian: calcMetrics (`ddComp`/`ddSimple`, que usan el ranking, la optimización y las carteras), el Max Drawdown de
+  comprar y mantener (el de siempre), los laboratorios, la multicartera, la batería V9.949, las huellas ni CARTERA_1–3.
+- Antes → después (AAPL 2010–2015, comisión 0,36 €, compuesta): «SuperTrend 10/9» 0,00 → 14,67 %; «Tortugas 20/10» 10,25 → 15,67 %
+  («Flotante» en «Backtest de un valor»: 13,01 %); «Swings 2/2» 9,76 → 15,56 % (12,72 %). «SuperTrend 10/3» AAPL 2020–2021: 12,37 →
+  19,10 % (19,08 %); las demás cifras, iguales.
