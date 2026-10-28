@@ -1407,3 +1407,25 @@ venta, su `capitalTras`). Una operación de 100 → 120 → 90 → vende a 110 d
 - Comprobado: montaje SWC (el editor con la orden en el SuperTrend: un aviso junto a la fila y uno en «Comprobación»; guardada, sin
   aviso; los casos de arriba, con NO, con «basta con una», con otros números y en el filtro); carriles a mano (ATR 4, vela 98–102:
   104 · 106,8 · 109,6 · 112,4 arriba; 96 · 93,2 abajo); ida y vuelta 7 de 7. Comprobaciones comunes.
+
+## 37. El paso 1 con los mismos precios que «Backtest de un valor» (V9.1071)
+
+- **Por qué.** El paso 1 leía las velas solo de la caché de Supabase (`rpc/leer_velas` desde 1990, components/BuilderPanel.js): sin
+  la vela de hoy, con el retraso de cada valor según cuándo se usó por última vez en un backtest (el 28/10/2026, QQQ llegaba al 26/10)
+  y sin los valores que no están en la caché (SAN.MC, que además no salía en la lista). «Backtest de un valor» terminaba el 20/10 por
+  otra cosa: su periodo guardado está en «Fechas» con fin 20/10/2026 (no es un fallo de precios; los ajustes no se tocan).
+- **pages/api/velas.js** (nuevo, GET `?simbolo=`, con sesión): `diariasConCache` (lo guardado más lo último de Yahoo, guardando lo
+  cerrado que falte; si la caché falla, la descarga de Yahoo de siempre), la última vela marcada en curso con `marcaDiariaEnCurso`, y
+  `semanaAbierta` (el lunes de la semana que aún no ha cerrado, con `semanaEnCurso`). Ordenadas y sin fechas repetidas (`ordenaUnicas`).
+  Ventana de 40 años (desde 1986, antes que cualquier vela guardada) con **`tramoAnterior: false`** (opción nueva de `diariasConCache`,
+  por defecto true: los backtests no cambian): devuelve lo guardado desde donde empiece y no descarga ni guarda años antiguos. Un valor
+  que no está en la caché se descarga entero y se guarda, como haría un backtest.
+- **El paso 1**: `cargaVelas` pide /api/velas; la lista de valores suma la lista de seguimiento y el universo a los de la caché.
+  Semanales: `calculaSenales` y `cifrasRegla` aceptan `semanasAbiertas` ({ símbolo: lunes }): esa semana va en curso, como en
+  `fetchAVDetalle`. Las señales no deciden con una vela en curso (`soloCerradas`, como el núcleo); el gráfico sí la dibuja.
+- Comprobado: última vela del paso 1, antes → después: ^GSPC 27/10 → 28/10, AAPL 27/10 → 28/10, NVDA 27/10 → 28/10, SAN.MC no
+  estaba → 28/10, QQQ 26/10 → 28/10; lo guardado, idéntico byte a byte a lo que daba `leer_velas`. Ensayo 2010–2015 con AAPL (Tortugas
+  20/10, Swings 2/2, SuperTrend 10/3; diarias y semanales): cifras, curvas y señales idénticas a antes. SuperTrend 10/3, AAPL: paso 1
+  = «Backtest de un valor» en 2020–2021 (CAGR 26,43 %, 6 operaciones) y en los últimos 5 años (CAGR 7,81 %, 20 operaciones).
+  Sintéticas a mano (una ruptura en la última vela compra si está cerrada y no si está en curso; la semana abierta en curso;
+  `ordenaUnicas`). Montaje SWC idéntico a antes. Supabase, simulado en las pruebas (solo lectura). Comprobaciones comunes.

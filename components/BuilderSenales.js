@@ -10,7 +10,7 @@
 //   def, valores: la estrategia en pantalla (con los cambios de «Tarjetas»); guardado: { def, valores } la guardada. cambios /
 //   onCambios: las casillas de prueba ({ clave: valor }), que viven en el editor mientras está abierto. onGuardarValores(): guarda.
 //   cargaSimbolos() → [símbolos] o [{ simbolo, nombre }] (V9.1058: el selector busca por ticker y por nombre); cargaVelas(simbolo) →
-//   velas diarias; comisiones: las de «Backtest de un valor».
+//   velas diarias (V9.1071: o { velas, semanaAbierta }, lo que da pages/api/velas.js); comisiones: las de «Backtest de un valor».
 //   Para las pruebas de montaje: velasIniciales ({ simbolo: velas }), simbolosIniciales, simboloInicial, fechasInicial
 //   ({ desde, hasta }: «Otras fechas»), cifrasIniciales, verZonaInicial (V9.1061: la zona gris del filtro, mostrada u oculta),
 //   verOpsInicial (V9.1063: las líneas de las operaciones, mostradas u ocultas), ocultosIniciales (V9.1065: las claves ocultas de
@@ -330,6 +330,8 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   const valoresLista = useMemo(() => simbolos.map(s => typeof s === 'string' ? { simbolo: s, nombre: '' } : s), [simbolos])
   const [simbolo, setSimbolo] = useState(simboloInicial)
   const [velas, setVelas] = useState(velasIniciales || {})
+  // V9.1071: { símbolo: lunes de la semana aún abierta, o null }: con velas semanales, esa semana va en curso (como en el backtest).
+  const [abiertas, setAbiertas] = useState({})
   const [otras, setOtras] = useState(!!fechasInicial)
   const [desdeO, setDesdeO] = useState(fechasInicial?.desde || null)
   const [hastaO, setHastaO] = useState(fechasInicial?.hasta || null)
@@ -352,7 +354,10 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
     const pide = [simbolo, ...(ticker ? [ticker] : []), '^GSPC'].filter((s, k, xs) => !velas[s] && xs.indexOf(s) === k)
     if (!pide.length) return
     setCargando(true); setFallo(null)
-    Promise.all(pide.map(s => cargaVelas(s).then(v => [s, v]).catch(e => s === '^GSPC' ? [s, []] : Promise.reject(e)))).then(rs => { if (vivo) setVelas(x => ({ ...x, ...Object.fromEntries(rs) })) })
+    // V9.1071: cargaVelas devuelve { velas, semanaAbierta } (pages/api/velas.js) o, en las pruebas de montaje, las velas.
+    Promise.all(pide.map(s => cargaVelas(s).then(v => [s, v]).catch(e => s === '^GSPC' ? [s, []] : Promise.reject(e)))).then(rs => { if (vivo) {
+      setVelas(x => ({ ...x, ...Object.fromEntries(rs.map(([s, v]) => [s, Array.isArray(v) ? v : v?.velas || []])) }))
+      setAbiertas(x => ({ ...x, ...Object.fromEntries(rs.map(([s, v]) => [s, Array.isArray(v) ? null : v?.semanaAbierta || null])) })) } })
       .catch(e => { if (vivo) setFallo(`No se pudieron leer los precios guardados: ${e.message}`) }).finally(() => { if (vivo) setCargando(false) })
     return () => { vivo = false }
   }, [simbolo, ticker])
@@ -375,7 +380,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   useEffect(() => { if (entrada !== entradaVista.current) { entradaVista.current = entrada; setOcultos(new Set()) } }, [entrada])
   const [fCifras, setFCifras] = useState(null)
   const calcula = () => error || errPrueba.length || !vs.length || errFechas ? null
-    : calculaSenales({ def: prueba.def, valores: prueba.valores, velas: vs, referencias: ticker ? { [ticker]: velas[ticker] || [] } : {}, desde, hasta, intervalo })
+    : calculaSenales({ def: prueba.def, valores: prueba.valores, velas: vs, referencias: ticker ? { [ticker]: velas[ticker] || [] } : {}, desde, hasta, intervalo, semanasAbiertas: abiertas, simbolo })
   const directo = useMemo(() => velasIniciales && !res ? (() => { try { return calcula() } catch (_) { return null } })() : null, [])
   const primera = useRef(true)
   useEffect(() => {
@@ -385,12 +390,12 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
       try { if (vivo) setRes(calcula()) } catch (e) { if (vivo) setFallo(`No se pudo calcular: ${e.message}`) }
       if (error || errPrueba.length || !vs.length || errFechas) return
       try {
-        const c = await cifrasRegla({ def: prueba.def, valores: prueba.valores, intervalo, simbolo, velas: { ...velas, [simbolo]: vs }, desde, hasta, comisiones })
+        const c = await cifrasRegla({ def: prueba.def, valores: prueba.valores, intervalo, simbolo, velas: { ...velas, [simbolo]: vs }, desde, hasta, comisiones, semanasAbiertas: abiertas })
         if (vivo) { setCifras(c); setFCifras(null) }
       } catch (e) { if (vivo) { setCifras(null); setFCifras(`No se pudieron calcular las cifras: ${e.message}`) } }
     }, ESPERA_MS)
     return () => { vivo = false; clearTimeout(h) }
-  }, [prueba, vs, desde, hasta, error, errPrueba.length, velas[ticker], velas['^GSPC'], comisiones, errFechas])
+  }, [prueba, vs, desde, hasta, error, errPrueba.length, velas[ticker], velas['^GSPC'], comisiones, errFechas, abiertas])
   // V9.1066: sin velas en el periodo (fuera de los datos del valor), solo su aviso: ni gráfico ni cifras.
   const r = errFechas ? null : res || directo, conVelas = !!r?.velas?.length
 

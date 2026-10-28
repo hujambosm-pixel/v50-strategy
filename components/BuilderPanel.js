@@ -12,7 +12,6 @@ import { construyeMisEstrategias, construyeMisPruebas, filtraEstrategias, FILTRO
 import { esDefinicionEditor } from '../lib/editor/fuente'
 import { listarPruebas } from '../lib/registroLab'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
-import { deColumnasBd } from '../lib/cachePrecios'
 import { B, S } from '../lib/builder/estilo'
 import BuilderPrueba from './BuilderPrueba'
 import BuilderEditor, { ReglaPorBloques } from './BuilderEditor'
@@ -155,9 +154,12 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   const cargaSimbolos = useCallback(async () => {
     const lee = async (q) => { try { const r = await fetch(`${getSupaUrl()}/rest/v1/${q}`, { headers: getSupaH() }); return r.ok ? await r.json() : [] } catch (_) { return [] } }
     const [ss, wl, un] = await Promise.all([lee('precios_simbolos?select=simbolo&order=simbolo.asc'), lee('watchlist?select=symbol,name'), lee('universo_miembros?select=simbolo_yahoo,nombre')])
-    return conNombres(ss.map(x => x.simbolo), wl, un)
+    // V9.1071: también los de la lista de seguimiento y del universo aunque no estén en la caché: /api/velas los descarga.
+    return conNombres([...new Set([...ss.map(x => x.simbolo), ...wl.map(w => w?.symbol), ...un.map(u => u?.simbolo_yahoo)].filter(Boolean))].sort(), wl, un)
   }, [])
-  const cargaVelas = useCallback(async (sym) => { const r = await fetch(`${getSupaUrl()}/rest/v1/rpc/leer_velas?p_simbolo=${encodeURIComponent(sym)}&p_desde=1990-01-01`, { headers: getSupaH() }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return deColumnasBd(await r.json()) }, [])
+  // V9.1071: las velas, por el mismo camino que «Backtest de un valor» (pages/api/velas.js: la caché más lo último de Yahoo).
+  // Devuelve { velas, semanaAbierta, origen }.
+  const cargaVelas = useCallback(async (sym) => { const r = await apiFetch(`/api/velas?simbolo=${encodeURIComponent(sym)}`); if (!r.ok) throw new Error(`HTTP ${r.status}`); return await r.json() }, [apiFetch])
   useEffect(() => { if (abrir?.fila) { setPrueba(null); setGuia(false); setEditor({ fila: abrir.fila, n: abrir.n }) } }, [abrir?.n])
   // Guardada en el paso 1: la página recarga sus estrategias y se pasa al paso 2 con ella (la versión nueva, si se creó).
   // V9.1054: «Guardar estos valores en la estrategia» (info.quedarse) sigue en el paso 1, en «Señales en el gráfico», con la estrategia
