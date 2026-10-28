@@ -12,7 +12,8 @@
 //   cargaSimbolos() → [símbolos] o [{ simbolo, nombre }] (V9.1058: el selector busca por ticker y por nombre); cargaVelas(simbolo) →
 //   velas diarias; comisiones: las de «Backtest de un valor».
 //   Para las pruebas de montaje: velasIniciales ({ simbolo: velas }), simbolosIniciales, simboloInicial, fechasInicial
-//   ({ desde, hasta }: «Otras fechas»), cifrasIniciales, verZonaInicial (V9.1061: la zona gris del filtro, mostrada u oculta).
+//   ({ desde, hasta }: «Otras fechas»), cifrasIniciales, verZonaInicial (V9.1061: la zona gris del filtro, mostrada u oculta),
+//   verOpsInicial (V9.1063: las líneas de las operaciones, mostradas u ocultas).
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import { calculaSenales } from '../lib/builder/senales'
@@ -24,7 +25,7 @@ import CampoFecha from './CampoFecha'
 import BuscadorValor from './BuscadorValor'
 import Ayuda from './BuilderAyuda'
 import { NOTA_LINEA_SWING } from '../lib/builder/fichas'
-import { tramosLinea } from '../lib/graficoPaneles'
+import { tramosLinea, lineaOperacion, COLOR_GANA, COLOR_PIERDE } from '../lib/graficoPaneles'
 
 const VERDE = '#3fb950', NARANJA = '#f0883e', MORADO = '#a371f7', AZUL = '#58a6ff', AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE_CIFRA = '#7ee2a0', GRIS_BH = '#8b98a8'
 const fechaCorta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
@@ -57,8 +58,8 @@ function altoLibre(el, abajo) {
   const visto = p ? p.clientHeight : window.innerHeight
   return Math.max(MIN_PRECIO, Math.floor(visto - arriba - abajo))
 }
-function Graficos({ r, verZona = true }) {
-  const caja = useRef(null), precio = useRef(null), osc = useRef([]), zonaSerie = useRef(null), verZonaR = useRef(verZona)
+function Graficos({ r, verZona = true, verOps = true }) {
+  const caja = useRef(null), precio = useRef(null), osc = useRef([]), zonaSerie = useRef(null), verZonaR = useRef(verZona), opsSeries = useRef([]), verOpsR = useRef(verOps)
   const franjas = r.franjas
   const [altoPrecio, setAltoPrecio] = useState(ALTO_PRECIO)
   const H = altoGrafico(franjas.length, altoPrecio)
@@ -71,6 +72,7 @@ function Graficos({ r, verZona = true }) {
     return () => { clearTimeout(h); window.removeEventListener('resize', tarde) }
   }, [franjas.length, r.osciladores.length])
   useEffect(() => { verZonaR.current = verZona; zonaSerie.current?.applyOptions({ visible: verZona }) }, [verZona])
+  useEffect(() => { verOpsR.current = verOps; opsSeries.current.forEach(s => s.applyOptions({ visible: verOps })) }, [verOps])
   useEffect(() => {
     if (!precio.current || !r?.velas?.length) return
     let vivo = true, charts = []
@@ -110,6 +112,13 @@ function Graficos({ r, verZona = true }) {
       }
       for (const m of r.medias) linea(m)
       for (const c of r.canales || []) linea(c)
+      // V9.1063: cada operación, una línea de la entrada a la salida (verde si gana, roja si pierde), la misma de «Backtest de un
+      // valor»; verOps la enseña u oculta sin rehacer el gráfico.
+      opsSeries.current = (r.operaciones || []).map(t => {
+        const l = lineaOperacion(t), s = ch.addLineSeries({ color: l.color, lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: verOpsR.current })
+        s.setData(l.puntos)
+        return s
+      })
       // Las franjas: una serie de barras por condición, cada una en su banda (debajo de la línea de su nombre), en la MISMA escala de
       // tiempo que las velas.
       franjas.forEach((f, i) => {
@@ -147,7 +156,7 @@ function Graficos({ r, verZona = true }) {
       ro?.observe(precio.current)
       charts.ro = ro
     })
-    return () => { vivo = false; zonaSerie.current = null; charts.ro?.disconnect(); charts.forEach(c => c.remove()) }
+    return () => { vivo = false; zonaSerie.current = null; opsSeries.current = []; charts.ro?.disconnect(); charts.forEach(c => c.remove()) }
   }, [r, H])
   return (
     <div ref={caja}>
@@ -248,7 +257,7 @@ function Casilla({ valor, guardado, etiqueta, onCambia }) {
 }
 
 export default function BuilderSenales({ def, valores, guardado = null, intervalo = 'diario', error = null, cambios = {}, onCambios = () => {}, onGuardarValores = null, guardando = false, msgGuardar = null,
-  cargaSimbolos = null, cargaVelas = null, comisiones = null, velasIniciales = null, simbolosIniciales = null, simboloInicial = 'AAPL', fechasInicial = null, cifrasIniciales = null, verZonaInicial = true }) {
+  cargaSimbolos = null, cargaVelas = null, comisiones = null, velasIniciales = null, simbolosIniciales = null, simboloInicial = 'AAPL', fechasInicial = null, cifrasIniciales = null, verZonaInicial = true, verOpsInicial = true }) {
   const [simbolos, setSimbolos] = useState(simbolosIniciales || [simboloInicial])
   const valoresLista = useMemo(() => simbolos.map(s => typeof s === 'string' ? { simbolo: s, nombre: '' } : s), [simbolos])
   const [simbolo, setSimbolo] = useState(simboloInicial)
@@ -281,6 +290,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   const [res, setRes] = useState(null)
   const [cifras, setCifras] = useState(cifrasIniciales)
   const [verZona, setVerZona] = useState(verZonaInicial)   // V9.1061: el interruptor de la zona gris del filtro (en la leyenda)
+  const [verOps, setVerOps] = useState(verOpsInicial)   // V9.1063: el de las líneas de las operaciones
   const [fCifras, setFCifras] = useState(null)
   const calcula = () => error || errPrueba.length || !vs.length ? null
     : calculaSenales({ def: prueba.def, valores: prueba.valores, velas: vs, referencias: ticker ? { [ticker]: velas[ticker] || [] } : {}, desde, hasta, intervalo })
@@ -357,6 +367,9 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
       {r && !errPrueba.length && <section data-columna-grafico style={{ marginTop: 10, minWidth: 0 }}>
           <div data-contador style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', margin: '0 0 6px', color: B.texto, fontSize: 13 }}>
             <span><span style={{ color: VERDE }}>▲</span> compra · <span style={{ color: NARANJA }}>▼</span> vende</span>
+            {(r.operaciones || []).length > 0 && <label data-interruptor-operaciones title="Enseña u oculta la línea de cada operación, de la compra a la venta" style={{ display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit' }}>
+              <input type="checkbox" aria-label="Enseñar la línea de cada operación" checked={verOps} onChange={e => setVerOps(e.target.checked)} style={{ margin: 0, cursor: 'pointer' }}/>
+              <span><span style={{ color: COLOR_GANA }}>╱</span> gana · <span style={{ color: COLOR_PIERDE }}>╲</span> pierde</span></label>}
             {r.medias.map(m => <span key={m.nombre} style={{ color: m.color }}>{m.discontinua ? '— —' : '—'} {m.nombre}</span>)}
             {(r.canales || []).map(m => <span key={m.nombre} data-leyenda-canal={m.nombre} style={{ color: m.color }}>{m.punteada ? '┈┈' : m.discontinua ? '— —' : '—'} {m.nombre}</span>)}
             {(r.puntosSwing || []).length > 0 && <span data-leyenda-swings>● swing · ┈ hasta confirmarse · — desde que se puede usar<Ayuda texto={AYUDA_SWINGS} etiqueta="Swings"/></span>}
@@ -369,7 +382,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
             <strong data-cuenta style={{ marginLeft: 'auto' }}>En este periodo: {r.compras.length} {r.compras.length === 1 ? 'compra' : 'compras'} · {r.ventas.length} {r.ventas.length === 1 ? 'venta' : 'ventas'}</strong>
           </div>
           {r.avisos.map((a, k) => <div key={k} data-aviso-senales style={{ color: AMARILLO, fontSize: 13 }}>{a}</div>)}
-          <Graficos r={r} verZona={verZona}/>
+          <Graficos r={r} verZona={verZona} verOps={verOps}/>
           <div style={{ ...S.apagado, marginTop: 4 }}>De {fechaCorta(r.velas[0].date)} a {fechaCorta(r.velas[r.velas.length - 1].date)} · {r.velas.length} velas · {simbolo}{r.franjas.length ? ' · debajo de las velas, una franja por condición y por pieza (pintado = se cumple), con su nombre encima' : ''} · gráfico: <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer" style={{ color: B.apagado }}>TradingView Lightweight Charts™</a></div>
         </section>}
       </div>

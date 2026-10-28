@@ -2,11 +2,13 @@
 // catálogo de condiciones: se escribe y debajo salen las que coinciden por nombre, sin distinguir mayúsculas ni acentos
 // (lib/builder/buscar.js), agrupadas «De tarjetas» / «De código». Con teclado (flechas, Enter, Escape) y con ratón. Con la casilla
 // vacía, o con el nombre de la elegida, al pulsar en ella se ven todas. Al elegir una, su nombre queda escrito en la casilla.
+// V9.1063: en cada resultado, las letras que coinciden con lo escrito, resaltadas (components/Resaltado.js).
 //   grupos: [{ titulo, estrategias: [{ id, name }] }]; texto / onTexto: lo escrito; elegida: el id elegido (o null); onElige(s).
 //   abiertoInicial (para las pruebas de montaje): con la lista abierta.
 import { useState, useRef, useEffect } from 'react'
 import { B } from '../lib/builder/estilo'
 import { coincide } from '../lib/builder/buscar'
+import Resaltado from './Resaltado'
 
 export default function BuscadorEstrategia({ grupos = [], texto = '', onTexto = () => {}, elegida = null, onElige = () => {}, abiertoInicial = false, style = {} }) {
   const [abierto, setAbierto] = useState(abiertoInicial)
@@ -48,7 +50,7 @@ export default function BuscadorEstrategia({ grupos = [], texto = '', onTexto = 
               <li key={s.id} id={`buscador-estrategia-${i}`} ref={el => { filas.current[i] = el }} role="option" aria-selected={i === activo} data-opcion-copia={s.name}
                 onMouseDown={e => { e.preventDefault(); elige(s) }} onMouseEnter={() => setActivo(i)}
                 style={{ padding: '5px 8px 5px 14px', borderRadius: 4, cursor: 'pointer', background: i === activo ? '#1f3350' : 'transparent', color: String(s.id) === String(elegida) ? '#7ee2a0' : B.titulo,
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</li>
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><Resaltado texto={s.name} consulta={consulta}/></li>
             )
           }),
         ])}

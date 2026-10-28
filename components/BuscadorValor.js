@@ -1,11 +1,13 @@
 // components/BuscadorValor.js — el selector «Valor» de «Señales en el gráfico» con buscador (V9.1058; docs/builder.md, §24): se
 // escribe y la lista se filtra por ticker o por nombre («NVDA», «nvidia»), sin distinguir mayúsculas ni acentos
 // (lib/builder/buscar.js). Con teclado (flechas, Enter, Escape) y con ratón. Mientras no se escribe, enseña el valor elegido.
+// V9.1063: en cada resultado, las letras que coinciden con lo escrito, resaltadas (components/Resaltado.js).
 //   valores: [{ simbolo, nombre }]; valor: el símbolo elegido; onCambia(simbolo). textoInicial (para las pruebas de montaje): lo
 //   escrito, con la lista abierta.
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { B } from '../lib/builder/estilo'
 import { filtraValores } from '../lib/builder/buscar'
+import Resaltado from './Resaltado'
 
 const MAX_FILAS = 200
 export default function BuscadorValor({ valores = [], valor, onCambia = () => {}, etiqueta = 'Valor', textoInicial = null }) {
@@ -41,8 +43,8 @@ export default function BuscadorValor({ valores = [], valor, onCambia = () => {}
           <li key={v.simbolo} id={`buscador-valor-${k}`} ref={el => { filas.current[k] = el }} role="option" aria-selected={k === activo} data-opcion-valor={v.simbolo}
             onMouseDown={e => { e.preventDefault(); elige(v.simbolo) }} onMouseEnter={() => setActivo(k)}
             style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', background: k === activo ? '#1f3350' : 'transparent' }}>
-            <span style={{ color: v.simbolo === valor ? '#7ee2a0' : B.titulo, fontWeight: 600, minWidth: '7ch' }}>{v.simbolo}</span>
-            <span style={{ color: B.secundario, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.nombre}</span>
+            <span style={{ color: v.simbolo === valor ? '#7ee2a0' : B.titulo, fontWeight: 600, minWidth: '7ch' }}><Resaltado texto={v.simbolo} consulta={texto}/></span>
+            <span style={{ color: B.secundario, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><Resaltado texto={v.nombre} consulta={texto}/></span>
           </li>
         ))}
         {!lista.length && <li style={{ padding: '5px 8px', color: B.apagado }}>Ningún valor con «{texto}».</li>}

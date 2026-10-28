@@ -16,7 +16,7 @@ import { calcEMA, calcSMA, calcRSI, calcMACD, calcBollinger, calcVolumeAvg } fro
 // añadir un tipo hay que tocar los dos.
 import { CATALOGO_INDICADORES, TIPOS_DISPONIBLES, rotuloIndicador, nuevoIndicador } from '../lib/indicadores'
 import { planDeclarado, planPaneles, flechasDeOperaciones, marcasRazonamiento, quitaDuplicados, campoEnVela,
-         etiquetasDeNiveles, altoPanelDe, ALTO_PANEL_MIN, ALTO_PANEL_MAX, coma } from '../lib/graficoPaneles'
+         etiquetasDeNiveles, altoPanelDe, ALTO_PANEL_MIN, ALTO_PANEL_MAX, coma, lineaOperacion, COLOR_GANA } from '../lib/graficoPaneles'
 
 // ── Detección del indicador de una estrategia ─────────────────────────
 // INALCANZABLE HOY, A PROPÓSITO. Todo este bloque cuelga de la prop `definition`, y los dos únicos
@@ -878,8 +878,9 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
       trades.forEach(t=>{
         if(!t.entryDate||!t.exitDate) return
         if(visuals?.lines!==false){
-          const ls=chart.addLineSeries({color:t.pnlPct>=0?(visuals?.linesColor||'#00e5a0'):'#ff4d6d',lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
-          ls.setData([{time:t.entryDate,value:t.entryPrice},{time:t.exitDate,value:t.exitPrice}])
+          const l=lineaOperacion(t,visuals?.linesColor||COLOR_GANA)   // V9.1063: la misma de «Señales en el gráfico» (lib/graficoPaneles.js)
+          const ls=chart.addLineSeries({color:l.color,lineWidth:2,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+          ls.setData(l.puntos)
         }
         if(visuals?.entryLine!==false){
           const entryLine=chart.addLineSeries({color:visuals?.entryLineColor||'rgba(255,255,255,0.65)',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})

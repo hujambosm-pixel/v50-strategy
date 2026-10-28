@@ -1145,3 +1145,25 @@ del editor, «Swings 2/2» y «Tortugas 20/10» incluidas, con las mismas operac
   en la vela siguiente a la confirmación y acaba en la rotura o en el swing siguiente; los punteados, del swing a la confirmación;
   ninguna escalera salvo el stop; el naranja no se pinta donde coincide con el rojo (ago. y oct.); sin desplazamiento horizontal;
   el interruptor del filtro, en línea. Comprobaciones comunes.
+
+## 29. Operaciones en «Señales en el gráfico» y letras resaltadas en los buscadores (V9.1063)
+
+Solo pantalla: ningún cálculo del motor cambia (lo demás de «Señales en el gráfico», idéntico a V9.1062).
+
+- **Operaciones en «Señales en el gráfico»**: cada operación, una línea de la entrada a la salida, verde si gana y roja si pierde,
+  con la MISMA función que «Backtest de un valor» (`lineaOperacion` en lib/graficoPaneles.js; CandleChart la usa ahora, sin cambiar
+  lo que pinta). `calculaSenales` da `operaciones`: las de las flechas (compra y venta en el periodo) y la abierta hasta el cierre
+  de la última vela; `pnlPct` sin comisión, solo para el color. En la leyenda, la casilla «╱ gana · ╲ pierde» las enseña u oculta
+  sin rehacer el gráfico (por defecto, enseñadas; `verOpsInicial` para el montaje).
+- **Buscadores** («Mi trabajo», «Desde una de mis estrategias» y «Valor»): según se escribe, en cada resultado las letras que
+  coinciden salen resaltadas con el color del buscador del catálogo de condiciones, sin distinguir mayúsculas ni acentos
+  (`trozosResaltados` en lib/builder/buscar.js, que marca cada palabra de lo escrito donde aparezca, y components/Resaltado.js). En
+  «Mi trabajo»: el nombre, la frase de la regla cuando sale como texto (las de tarjetas salen por bloques y no se resaltan) y, en
+  «Mis pruebas», el nombre y las estrategias que incluye. En «Valor»: el ticker y el nombre.
+- Comprobado: `trozosResaltados` a mano («tortu» y «TÓRTU» → [Tortu]gas, «lideres rsi» → [líderes] [RSI]2, «osc» → [Ósc]ar, vacío
+  sin marcas); las 6 estrategias del editor (AAPL, diario y semanal, 3 periodos): todo lo demás de «Señales en el gráfico» idéntico a
+  V9.1062 y cada línea con las fechas y los precios de sus flechas (557 operaciones); montaje SWC con estado de «Señales en el
+  gráfico» (casilla marcada y desmarcada), de los dos buscadores y de «Mi trabajo» (las dos pestañas). En el navegador (los
+  componentes compilados, sin la app) a 1440 px con «Swings 2/2» en AAPL jul–oct 2010: una línea roja (21/07 → 11/08) y una verde
+  (la abierta, 11/10 → 29/10); la casilla las quita y las pone sin rehacer el gráfico; «NVÍ» y «inc» en «Valor», resaltados; sin
+  desplazamiento horizontal. Comprobaciones comunes.

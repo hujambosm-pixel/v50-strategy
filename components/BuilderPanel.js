@@ -20,6 +20,7 @@ import BuilderCodigo from './BuilderCodigo'
 import { esDeCodigo, filaCopiaCodigo } from '../lib/builder/codigo'
 import BuilderGuia from './BuilderGuia'
 import { coincide, conNombres } from '../lib/builder/buscar'
+import Resaltado from './Resaltado'
 import BuscadorEstrategia from './BuscadorEstrategia'
 
 export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convertirla en plan']
@@ -84,7 +85,7 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   const [pestana, setPestana] = useState(pestanaInicial)
   const [filtro, setFiltro] = useState(filtroInicial)
   const [aCopiar, setACopiar] = useState(copiaInicial)
-  const [buscar, setBuscar] = useState(buscarInicial)   // V9.1058: el buscador de «Mi trabajo» (por nombre y por la frase de la regla)
+  const [buscar, setBuscar] = useState(buscarInicial)   // V9.1058: el buscador de «Mi trabajo» (por nombre y por la frase de la regla; V9.1063: resaltado)
   const [buscarCopia, setBuscarCopia] = useState(buscarCopiaInicial)   // y el de «Desde una de mis estrategias» (por nombre)
   const [plantillaId, setPlantillaId] = useState(null)
   const [prueba, setPrueba] = useState(vistaInicial && !vistaInicial.guia && !vistaInicial.editor ? { ...vistaInicial, n: 0 } : null)   // la pantalla del paso 2, si está abierta
@@ -248,9 +249,9 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
                   <tr key={f.clave}>
                     <td style={{ ...celda, maxWidth: 520, minWidth: 260 }}>
                       <button style={{ ...S.enlace, color: B.titulo, fontWeight: 600 }} onClick={() => abreEditor(f.estrategia)}
-                        title={f.origen === 'editor' ? 'Abrir en el editor por tarjetas' : 'Abrir: sus parámetros y su código'}>{f.nombre}</button>
+                        title={f.origen === 'editor' ? 'Abrir en el editor por tarjetas' : 'Abrir: sus parámetros y su código'}><Resaltado texto={f.nombre} consulta={buscar}/></button>
                       {f.partes ? <div data-regla-fila style={{ marginTop: 4 }}><ReglaPorBloques partes={f.partes} tamano={12}/></div>
-                        : f.subtitulo && <div data-regla-fila style={{ ...S.apagado, whiteSpace: 'normal', marginTop: 2 }}>{f.subtitulo}</div>}
+                        : f.subtitulo && <div data-regla-fila style={{ ...S.apagado, whiteSpace: 'normal', marginTop: 2 }}><Resaltado texto={f.subtitulo} consulta={buscar}/></div>}
                       {f.desactivada && <div style={S.apagado}>Desactivada</div>}
                     </td>
                     <td style={{ ...celda, whiteSpace: 'nowrap', color: B.secundario }}>{f.version}</td>
@@ -272,9 +273,9 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
               <tbody>
                 {(buscadasP || []).map(f => (
                   <tr key={f.clave}>
-                    <td style={celda}>{f.planes ? <span style={{ color: B.titulo, fontWeight: 600 }}>{f.nombre}</span>
-                      : <button style={{ ...S.enlace, color: B.titulo, fontWeight: 600 }} onClick={() => abrePrueba(f.id)} title="Abrir los resultados de esta prueba">{f.nombre}</button>}</td>
-                    <td style={{ ...celda, maxWidth: 260 }}>{f.planes ? <span style={S.apagado}>{f.nota}</span> : <>{f.estrategias.length}: {f.estrategias.join(' · ')}</>}</td>
+                    <td style={celda}>{f.planes ? <span style={{ color: B.titulo, fontWeight: 600 }}><Resaltado texto={f.nombre} consulta={buscar}/></span>
+                      : <button style={{ ...S.enlace, color: B.titulo, fontWeight: 600 }} onClick={() => abrePrueba(f.id)} title="Abrir los resultados de esta prueba"><Resaltado texto={f.nombre} consulta={buscar}/></button>}</td>
+                    <td style={{ ...celda, maxWidth: 260 }}>{f.planes ? <span style={S.apagado}>{f.nota}</span> : <>{f.estrategias.length}: <Resaltado texto={f.estrategias.join(' · ')} consulta={buscar}/></>}</td>
                     <td style={celda}>{f.valores}<div style={S.apagado}>{f.periodos}</div></td>
                     <td style={celda}>{f.sesgos.texto}</td>
                     <td style={{ ...celda, maxWidth: 380 }}>{f.veredictos.map(v => (
