@@ -1606,3 +1606,22 @@ venta, su `capitalTras`). Una operación de 100 → 120 → 90 → vende a 110 d
   - GC=F: 65 operaciones · CAGR 3,56 % · Max Drawdown 10,80 % · Win Rate 35,38 % · Factor 1,56 · Tiempo invertido 29,86 % (comprar y
     mantener: CAGR −0,88 %, Max DD 43,40 %).
 - Comprobaciones comunes.
+
+## 41. El trailing con «manda el más alto» (V9.1079) y «Últimos N años» en el paso 1 (V9.1080)
+
+**Parte A · el trailing con «manda el más alto» (V9.1079)**
+- La causa (lib/editor/interprete.js): con «manda el más alto», cada vela solo subían los stops que tienen una serie que sube
+  (subeStop: mínimo de N velas, swing, SuperTrend, EMA); el cálculo del trailing estaba solo en la rama de «en su orden». Así el trailing
+  se quedaba vacío toda la operación y mandaban los demás stops (si no había otro, la operación no se cerraba nunca por stop).
+- A quién afecta (Supabase, solo lectura, el 29/10/2026): a nadie. De 92 estrategias (84 activas), solo 2 usan «manda el más alto»
+  («Línea bajista + EMA10» y «Tortugas 20/10») y ninguna tiene trailing; las de código no tienen esa opción. Ningún lote congelado
+  (editor_lotes, 4), ninguna prueba del laboratorio (lab_pruebas, 59) ni backtest_results guarda «manda el más alto».
+- El arreglo: el cálculo del trailing pasa a subeTrailing (el mismo código) y la rama de «manda el más alto» lo llama también, como a
+  los demás stops que suben. Con «manda el más alto» el historial es el del stop activo (lo anota esa rama); con «en su orden», el
+  trailing hace exactamente lo de antes.
+- La prueba (scripts/comprobaciones/sinteticas.js, que corre comunes.sh): compra a 100; stop fijo del 8 % (92); trailing «cierre −
+  1 × ATR (1)» mirado en cada vela, con candidatos 90,5, 94, 96, 95 y 98 → manda 92, 94, 96, 96 (el 95 no lo baja) y 98; la vela que
+  baja a 97 vende a 98, y la que abre a 97,50, a 97,50. (Con el trailing de siempre, el del mínimo de la vela, un candidato más bajo
+  que el stop vigente no puede darse sin que la vela toque el stop; por eso la prueba usa el de «cierre − k × ATR».) Antes del
+  arreglo: ninguna venta (el stop se quedaba en 92). Después: todo como a mano.
+- Comprobado: nada congelado cambia (batería, CARTERA, lotes y huellas iguales). Comprobaciones comunes.
