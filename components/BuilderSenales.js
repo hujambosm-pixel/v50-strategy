@@ -1,5 +1,6 @@
 // components/BuilderSenales.js — la pestaña «Señales en el gráfico» del paso 1 (V9.1050; V9.1054: docs/builder.md, §20).
-// Arriba, en una fila: el valor (cualquiera con precios guardados), las fechas («Ensayo · 2010–2015» por defecto, u «Otras fechas»),
+// Arriba, en una fila: el valor (cualquiera con precios guardados), las fechas («Ensayo · 2010–2015» por defecto, «Últimos N años»
+// (V9.1080) u «Otras fechas»),
 // las velas de la estrategia (solo se muestran) y una casilla por cada número de la regla, SOLO PARA PROBAR: no tocan la estrategia
 // (la casilla cambiada dice «(guardado: X)»; V9.1073: «Volver a los guardados» y «Guardar en la estrategia» van en la barra de
 // arriba del paso 1, components/BuilderEditor.js, y cuentan también los cambios de las tarjetas). Debajo, el gráfico de precio (lightweight-charts) con las medias y los canales de la regla, la zona
@@ -12,7 +13,7 @@
 //   cargaSimbolos() → [símbolos] o [{ simbolo, nombre }] (V9.1058: el selector busca por ticker y por nombre); cargaVelas(simbolo) →
 //   velas diarias (V9.1071: o { velas, semanaAbierta }, lo que da pages/api/velas.js); comisiones: las de «Backtest de un valor».
 //   Para las pruebas de montaje: velasIniciales ({ simbolo: velas }), simbolosIniciales, simboloInicial, fechasInicial
-//   ({ desde, hasta }: «Otras fechas»), cifrasIniciales, verZonaInicial (V9.1061: la zona gris del filtro, mostrada u oculta),
+//   ({ desde, hasta }: «Otras fechas»), aniosInicial (V9.1080: N de «Últimos N años»; sin él, el ensayo), cifrasIniciales, verZonaInicial (V9.1061: la zona gris del filtro, mostrada u oculta),
 //   verOpsInicial (V9.1063: las líneas de las operaciones, mostradas u ocultas), ocultosIniciales (V9.1065: las claves ocultas de
 //   la leyenda). entrada (V9.1065): cambia cada vez que se vuelve a entrar en el Builder; entonces todo se enseña otra vez.
 import { useState, useEffect, useRef, useMemo } from 'react'
@@ -26,7 +27,8 @@ import { fmt, MONO } from '../lib/utils'
 import CampoFecha from './CampoFecha'
 import BuscadorValor from './BuscadorValor'
 import Ayuda from './BuilderAyuda'
-import { avisoFechaFinal } from '../lib/avisoFechaFinal'
+import { avisoFechaFinal, fechaCorta as fechaCortaAviso } from '../lib/avisoFechaFinal'
+import { normalizaPeriodo } from '../lib/periodo'
 import { lunesDeSemana } from '../lib/velasSemanales'
 import { NOTA_LINEA_SWING, QUE_ES_LINEA_BAJISTA } from '../lib/builder/fichas'
 import { tramosLinea, lineaOperacion, COLOR_GANA, COLOR_PIERDE } from '../lib/graficoPaneles'
@@ -51,6 +53,8 @@ const AYUDA_ETIQUETAS = 'Cada operación lleva arriba su resultado: (precio de v
 const AYUDA_SWINGS = `${NOTA_LINEA_SWING} El stop activo (rojo) solo se dibuja mientras hay una operación abierta; donde coincide con el mínimo de swing en vigor, se ve solo el rojo.`
 const AYUDA = 'Las flechas son las compras (▲ verde, en la vela en que se compra) y las ventas (▼ naranja) que hace el motor con esta regla en este valor y estas fechas: las mismas de «Backtest de un valor» y de la prueba del paso 2. Las franjas de debajo de las velas dicen, vela a vela, si se cumple cada condición y cada pieza (la ruptura, tocar el stop, tener una operación abierta; pintado = sí) y van en la misma escala de tiempo: cada marca queda justo debajo de su vela, también al hacer zoom. La zona gris es donde el filtro no deja comprar.'
 const AYUDA_ENSAYO = 'El ensayo son los años 2010–2015, ANTES de los que usa el paso 2 (2016–2025). Ajustar la regla mirando 2016–2025 y luego probarla en esos mismos años sería hacer trampa sin querer: la regla saldría bien porque se ha hecho a la medida de esos años. Ejemplo: si aquí cambias el máximo de 20 a 25 velas porque en 2010–2015 compra mejor, el paso 2 dirá después si eso funciona en años que no has mirado.'
+// V9.1080: «Últimos N años», como en «Backtest de un valor» (lib/periodo.js normalizaPeriodo: desde hoy − N años hasta hoy).
+const AYUDA_ANIOS = (ejemplo) => `Últimos N años: desde hoy hacia atrás. Ejemplo: N = 5 → del ${ejemplo} al último día con cotización. Son las mismas fechas que «Últimos N años» en «Backtest de un valor», así que las dos pantallas se pueden comparar. No se guarda en la estrategia.`
 const AYUDA_CASILLAS = 'Cada casilla es un número de la regla. Cambiarla es solo para probar: el gráfico y las cifras se recalculan al momento, pero la estrategia no cambia. Ejemplo: con «Compro: máximo de 20 velas», escribe 25 y verás las compras con 25; la estrategia sigue con 20 hasta que pulses «Guardar en la estrategia» (arriba). Al salir del paso 1 y volver a entrar, salen siempre los valores guardados.'
 const AYUDA_CIFRAS = 'Las mismas cifras que «Backtest de un valor» con este valor y estas fechas, con el 100 % del capital y su comisión (los filtros de su panel no cuentan: no son de la estrategia). Compuesto: cada operación usa todo el dinero acumulado. CAGR: lo que crece el dinero cada año, de media. Max Drawdown: la mayor caída desde un máximo, con la operación abierta valorada al cierre de cada vela (no solo al vender). Win Rate: el % de operaciones que ganan. Factor de beneficio: lo ganado entre lo perdido (2 = se gana el doble de lo que se pierde). Tiempo invertido: el % del tiempo con la acción comprada. Ejemplo: CAGR 12 % con Tiempo invertido 40 % es crecer un 12 % al año estando dentro menos de la mitad del tiempo.'
 export const LINEA_CIFRAS = (sym) => `Compuesto: cada operación usa todo el dinero acumulado. Referencia: comprar y mantener ${sym} en las mismas fechas. Comisión: la de «Backtest de un valor».`
@@ -421,7 +425,7 @@ function Casilla({ valor, guardado, etiqueta, onCambia }) {
 }
 
 export default function BuilderSenales({ def, valores, guardado = null, intervalo: intervaloGuardado = 'diario', sueltos = null, error = null, cambios = {}, onCambios = () => {},
-  cargaSimbolos = null, cargaVelas = null, comisiones = null, velasIniciales = null, simbolosIniciales = null, simboloInicial = 'AAPL', fechasInicial = null, cifrasIniciales = null, verZonaInicial = true, verOpsInicial = true, ocultosIniciales = [], entrada = 0 }) {
+  cargaSimbolos = null, cargaVelas = null, comisiones = null, velasIniciales = null, simbolosIniciales = null, simboloInicial = 'AAPL', fechasInicial = null, aniosInicial = null, cifrasIniciales = null, verZonaInicial = true, verOpsInicial = true, ocultosIniciales = [], entrada = 0 }) {
   const [simbolos, setSimbolos] = useState(simbolosIniciales || [simboloInicial])
   const valoresLista = useMemo(() => simbolos.map(s => typeof s === 'string' ? { simbolo: s, nombre: '' } : s), [simbolos])
   const [simbolo, setSimbolo] = useState(simboloInicial)
@@ -429,6 +433,9 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   // V9.1071: { símbolo: lunes de la semana aún abierta, o null }: con velas semanales, esa semana va en curso (como en el backtest).
   const [abiertas, setAbiertas] = useState({})
   const [otras, setOtras] = useState(!!fechasInicial)
+  // V9.1080: «Últimos N años» (anios) y su N (5 por defecto); solo en pantalla: no se guarda ni lo toca «Volver a los guardados».
+  const [anios, setAnios] = useState(!fechasInicial && aniosInicial != null)
+  const [nAnios, setNAnios] = useState(aniosInicial ?? 5)
   const [desdeO, setDesdeO] = useState(fechasInicial?.desde || null)
   const [hastaO, setHastaO] = useState(fechasInicial?.hasta || null)
   const [cargando, setCargando] = useState(false)
@@ -459,16 +466,19 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   }, [simbolo, ticker])
   const vs = velas[simbolo] || []
   const ensayo = useMemo(() => fechasEnsayo(vs, simbolo), [vs, simbolo])
-  const desde = otras ? (desdeO || ensayo.desde) : ensayo.desde, hasta = otras ? (hastaO || ensayo.hasta) : ensayo.hasta
+  const errAnios = anios && !(Number.isInteger(nAnios) && nAnios >= 1 && nAnios <= 50) ? 'El número de años tiene que ser un número entero de 1 a 50 (por ejemplo, 5).' : null
+  const ultimos = useMemo(() => anios && !errAnios ? normalizaPeriodo({ years: nAnios }) : null, [anios, nAnios, errAnios])
+  const desde = otras ? (desdeO || ensayo.desde) : ultimos ? ultimos.desde : ensayo.desde, hasta = otras ? (hastaO || ensayo.hasta) : ultimos ? ultimos.hasta : ensayo.hasta
   // V9.1066: con «Otras fechas», mientras una fecha esté vacía o a medio escribir, o la de inicio sea posterior a la de fin, un
   // aviso junto a las fechas y no se calcula nada (antes, una fecha al revés tumbaba la app entera).
   const [fechaValida, setFechaValida] = useState({ desde: true, hasta: true })
-  const errFechas = !otras ? null : !fechaValida.desde || !fechaValida.hasta ? 'Escribe las dos fechas completas (dd/mm/aaaa) para ver las señales.'
-    : desde && hasta && desde > hasta ? 'La fecha de inicio es posterior a la de fin.' : null
+  const errFechas = errAnios || (!otras ? null : !fechaValida.desde || !fechaValida.hasta ? 'Escribe las dos fechas completas (dd/mm/aaaa) para ver las señales.'
+    : desde && hasta && desde > hasta ? 'La fecha de inicio es posterior a la de fin.' : null)
   // V9.1071: con «Otras fechas», el aviso ámbar de la fecha final (lib/avisoFechaFinal.js): la elegida antes de la última sesión, o
   // velas que no llegan a ella. El ensayo tiene sus fechas fijas: sin aviso.
-  const avisoFin = useMemo(() => !otras || errFechas || !vs.length ? null : avisoFechaFinal({ simbolo, modo: 'fechas', hasta, intervalo, nombreModo: 'Otras fechas',
-    ultima: intervalo === 'semanal' ? lunesDeSemana(vs[vs.length - 1].date) : vs[vs.length - 1].date }), [otras, errFechas, vs, simbolo, hasta, intervalo])
+  // V9.1080: con «Últimos N años» (llega a hoy), el aviso «Faltan velas…» si la última vela es anterior a la última sesión.
+  const avisoFin = useMemo(() => !(otras || anios) || errFechas || !vs.length ? null : avisoFechaFinal({ simbolo, modo: anios ? 'hoy' : 'fechas', hasta, intervalo, nombreModo: 'Otras fechas',
+    ultima: intervalo === 'semanal' ? lunesDeSemana(vs[vs.length - 1].date) : vs[vs.length - 1].date }), [otras, anios, errFechas, vs, simbolo, hasta, intervalo])
   // Las señales y las cifras, 250 ms después del último cambio.
   const [res, setRes] = useState(null)
   const [cifras, setCifras] = useState(cifrasIniciales)
@@ -520,10 +530,15 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
           <BuscadorValor valores={valoresLista} valor={simbolo} onCambia={setSimbolo}/>
         </span>
         <span role="group" aria-label="Fechas" style={{ display: 'inline-flex', alignItems: 'center' }}>
-          <button data-fechas="ensayo" aria-pressed={!otras} onClick={() => setOtras(false)} style={{ ...seg(!otras), borderRadius: '6px 0 0 6px' }}>{nombreEnsayo}</button>
-          <button data-fechas="otras" aria-pressed={otras} onClick={() => { setOtras(true); if (!desdeO) { setDesdeO(ensayo.desde); setHastaO(ensayo.hasta) } }} style={{ ...seg(otras), borderRadius: '0 6px 6px 0', borderLeft: 'none' }}>Otras fechas</button>
+          <button data-fechas="ensayo" aria-pressed={!otras && !anios} onClick={() => { setOtras(false); setAnios(false) }} style={{ ...seg(!otras && !anios), borderRadius: '6px 0 0 6px' }}>{nombreEnsayo}</button>
+          <button data-fechas="anios" aria-pressed={anios && !otras} onClick={() => { setOtras(false); setAnios(true) }} style={{ ...seg(anios && !otras), borderRadius: 0, borderLeft: 'none' }}>Últimos N años</button>
+          <button data-fechas="otras" aria-pressed={otras} onClick={() => { setOtras(true); setAnios(false); if (!desdeO) { setDesdeO(ensayo.desde); setHastaO(ensayo.hasta) } }} style={{ ...seg(otras), borderRadius: '0 6px 6px 0', borderLeft: 'none' }}>Otras fechas</button>
           <Ayuda texto={AYUDA_ENSAYO} etiqueta="Ensayo"/>
         </span>
+        {anios && !otras && <span data-anios style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>Últimos <input type="text" inputMode="numeric" aria-label="Número de años" aria-invalid={!!errAnios} value={String(nAnios ?? '')} onChange={e => { const t = e.target.value.trim(); setNAnios(/^\d+$/.test(t) ? Number(t) : t) }}
+            style={{ width: 44, fontFamily: B.letra, fontSize: 14, padding: '3px 6px', borderRadius: 6, background: B.tarjeta, color: B.titulo, border: `1px solid ${errAnios ? ROJO : B.borde}` }}/> años{ultimos && <span style={{ color: B.secundario }}>· del {fechaCortaAviso(ultimos.desde)} al {fechaCortaAviso(ultimos.hasta)}</span>}
+          <Ayuda texto={AYUDA_ANIOS(fechaCortaAviso(normalizaPeriodo({ years: 5 }).desde))} etiqueta="Últimos N años"/>
+          {errAnios && <span data-error-fechas style={{ color: ROJO, fontSize: 13 }}>{errAnios}</span>}</span>}
         {otras && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>Desde <CampoFecha valor={desde || ''} onCambio={setDesdeO} onValidez={v => setFechaValida(x => ({ ...x, desde: v }))} style={{ width: 110 }}/> hasta <CampoFecha valor={hasta || ''} onCambio={setHastaO} onValidez={v => setFechaValida(x => ({ ...x, hasta: v }))} style={{ width: 110 }}/>
           {errFechas && <span data-error-fechas style={{ color: ROJO, fontSize: 13 }}>{errFechas}</span>}</span>}
         <span data-velas style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: B.secundario }}>Velas:
@@ -545,7 +560,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
         {filasCampos.length > 0 && <Ayuda texto={AYUDA_CASILLAS} etiqueta="Casillas de prueba"/>}
       </div>
       <div style={{ ...S.apagado, marginTop: 6 }}>Las casillas son para probar: no cambian la estrategia hasta que pulses «Guardar en la estrategia», arriba. Al salir del paso 1 y volver a entrar, salen siempre los valores guardados.</div>
-      {ensayo.aviso && !otras && <div data-aviso-ensayo style={{ color: AMARILLO, fontSize: 13, marginTop: 4 }}>{ensayo.aviso}</div>}
+      {ensayo.aviso && !otras && !anios && <div data-aviso-ensayo style={{ color: AMARILLO, fontSize: 13, marginTop: 4 }}>{ensayo.aviso}</div>}
       {avisoFin && <div data-aviso-fecha-final={avisoFin.tipo} style={{ color: AMARILLO, fontSize: 13, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>{avisoFin.texto}<Ayuda texto={avisoFin.ayuda} etiqueta={avisoFin.tipo === 'fechas' ? 'Fecha final elegida' : 'Faltan velas'}/></div>}
       {tocaPaso2(desde, hasta) && <div data-nota-paso2 style={{ color: AMARILLO, fontSize: 13, marginTop: 4 }}>{NOTA_PASO2}</div>}
       {errPrueba.length > 0 && <div data-error-prueba style={{ color: ROJO, marginTop: 6 }}>{errPrueba.map((e, k) => <div key={k}>{e}</div>)}</div>}

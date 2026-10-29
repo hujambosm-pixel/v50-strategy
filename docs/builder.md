@@ -1625,3 +1625,18 @@ venta, su `capitalTras`). Una operación de 100 → 120 → 90 → vende a 110 d
   que el stop vigente no puede darse sin que la vela toque el stop; por eso la prueba usa el de «cierre − k × ATR».) Antes del
   arreglo: ninguna venta (el stop se quedaba en 92). Después: todo como a mano.
 - Comprobado: nada congelado cambia (batería, CARTERA, lotes y huellas iguales). Comprobaciones comunes.
+
+**Parte B · «Últimos N años» en el paso 1 (V9.1080)**
+- Auditoría: «Backtest de un valor» pide `years` al servidor (pages/api/datos.js → lib/backtestActivo.js), que lo traduce con
+  normalizaPeriodo (lib/periodo.js): inicio = hoy − N años, fin = hoy; las velas, las del valor, recortadas a ese periodo con su
+  calentamiento. El `modo` que devuelve solo sale en el registro. Se reutiliza tal cual, sin tocarla.
+- «Señales en el gráfico» (components/BuilderSenales.js): entre «Ensayo · 2010–2015» y «Otras fechas», el botón «Últimos N años» con
+  su casilla (5 por defecto, de 1 a 50), las fechas que salen («del 29/10/2021 al 29/10/2026») y su «?» con el ejemplo. Las fechas son
+  normalizaPeriodo({ years: N }) y van al cálculo de siempre (calculaSenales y cifrasRegla), con las velas de /api/velas. Llega a hoy,
+  así que sale el aviso «Faltan velas…» (lib/avisoFechaFinal.js, modo 'hoy') si la última vela es anterior a la última sesión. Por
+  defecto sigue el ensayo; la elección vive solo en pantalla: no se guarda en la estrategia y «Volver a los guardados» no la toca.
+- Comprobado: la prueba 2 de scripts/comprobaciones/sinteticas.js (velas inventadas de 2012 a ayer, «Línea bajista + EMA10»): las dos
+  pantallas, del 29/10/2021 al 29/10/2026, primera vela 29/10/2021 y última 28/10/2026, 97 operaciones, el mismo CAGR, el mismo Max
+  Drawdown y el mismo comprar y mantener. Montaje SWC con estado (por defecto el ensayo; con N = 5 en AAPL: del 29/10/2021, 45
+  operaciones y «Faltan velas…», porque los precios guardados de las pruebas llegan al 07/10/2026; con N = 0, el aviso de la casilla y
+  sin cálculo; «Otras fechas» igual que antes). Comprobaciones comunes.
