@@ -27,17 +27,18 @@ export function contenidoDibujo(def, valores) {
   const ajuste = AJUSTES.find(([k]) => k === orden.ajuste)?.[1]
   return {
     filtro: filtro.ok && filtro.filas.length ? { titulo: '1 · FILTRO', modo: 'TODAS', lineas: lineas(filtro.filas, true) } : null,
-    compra: { titulo: `${filtro.ok && filtro.filas.length ? 2 : 1} · COMPRO SI`, modo: compra.filas.length > 1 ? (compra.modo === 'alguna' ? 'AL MENOS UNA' : 'TODAS') : null, lineas: compra.ok ? ((orden.modo === 'ruptura' || orden.modo === 'swing') && !compra.filas.length ? [{ texto: 'siempre: la orden está puesta en cada vela' }] : lineas(compra.filas)) : [{ texto: 'la regla de compra del Editor clásico' }] },
+    compra: { titulo: `${filtro.ok && filtro.filas.length ? 2 : 1} · COMPRO SI`, modo: compra.filas.length > 1 ? (compra.modo === 'alguna' ? 'AL MENOS UNA' : 'TODAS') : null, lineas: compra.ok ? ((orden.modo === 'ruptura' || orden.modo === 'swing' || orden.modo === 'lineaBajista') && !compra.filas.length ? [{ texto: 'siempre: la orden está puesta en cada vela' }] : lineas(compra.filas)) : [{ texto: 'la regla de compra del Editor clásico' }] },
     // V9.1055: la orden en el nivel de ruptura, su rombo.
-    // V9.1059: la orden en el último máximo de swing, su rombo.
-    orden: orden.modo === 'swing' ? { titulo: `¿Supera el último máximo de swing (${v[String(orden.izquierda).slice(1)] ?? orden.izquierda}/${v[String(orden.derecha).slice(1)] ?? orden.derecha}) confirmado?`, modo: null, lineas: [{ texto: 'compro a ese nivel; si la vela abre ya por encima, a la apertura' }, { texto: 'cada swing, una sola vez' }] }
+    // V9.1059: la orden en el último máximo de swing, su rombo. V9.1077: y la orden en la línea de tendencia bajista.
+    orden: orden.modo === 'lineaBajista' ? { titulo: `¿Supera la línea de tendencia bajista (swing ${v[String(orden.izquierda).slice(1)] ?? orden.izquierda}/${v[String(orden.derecha).slice(1)] ?? orden.derecha}, máximos de las ${v[String(orden.velas).slice(1)] ?? orden.velas} últimas velas)?`, modo: null, lineas: [{ texto: 'compro en la línea; si la vela abre ya por encima, a la apertura' }, { texto: orden.siSube === 'invalidar' ? 'si el último máximo sube, no hay línea' : 'si el último máximo sube, se une con el anterior más alto' }, { texto: 'cada línea, una sola vez' }] }
+    : orden.modo === 'swing' ? { titulo: `¿Supera el último máximo de swing (${v[String(orden.izquierda).slice(1)] ?? orden.izquierda}/${v[String(orden.derecha).slice(1)] ?? orden.derecha}) confirmado?`, modo: null, lineas: [{ texto: 'compro a ese nivel; si la vela abre ya por encima, a la apertura' }, { texto: 'cada swing, una sola vez' }] }
     : orden.modo === 'ruptura' ? { titulo: `¿Supera el máximo de las ${v[String(orden.velas).slice(1)] ?? orden.velas} velas anteriores?`, modo: null, lineas: [{ texto: 'compro a ese nivel; si la vela abre ya por encima, a la apertura' }] }
     : orden.modo === 'maximo' ? { titulo: '¿Llega al máximo de la señal?', modo: null, lineas: [
       ...(ajuste ? [{ texto: `si no llega, la orden ${ajuste}` }] : []),
       ...(orden.cancelar ? [{ texto: `se cancela si ${fraseFila(orden.cancelar, v)}` }] : []),
     ] } : null,
     venta: { titulo: `${filtro.ok && filtro.filas.length ? 3 : 2} · VENDO SI`, modo: venta.filas.length > 1 ? (venta.modo === 'todas' ? 'TODAS' : 'BASTA UNA') : null, lineas: venta.ok ? lineas(venta.filas) : [], proteccion },
-    compro: orden.modo === 'swing' ? 'Compro en el último máximo de swing' : orden.modo === 'ruptura' ? 'Compro en el nivel de ruptura' : orden.modo === 'maximo' ? 'Compro en el máximo de la señal' : 'Compro a la apertura de la vela siguiente',
+    compro: orden.modo === 'lineaBajista' ? 'Compro en la línea de tendencia bajista' : orden.modo === 'swing' ? 'Compro en el último máximo de swing' : orden.modo === 'ruptura' ? 'Compro en el nivel de ruptura' : orden.modo === 'maximo' ? 'Compro en el máximo de la señal' : 'Compro a la apertura de la vela siguiente',
   }
 }
 

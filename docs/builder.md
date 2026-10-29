@@ -1567,3 +1567,24 @@ venta, su `capitalTras`). Una operación de 100 → 120 → 90 → vende a 110 d
   - La orden en la línea en E1: compra en la 16 a 68,33 (la línea; abre a 67). Tarjetas: «+» de la orden y del stop, leeOrden, aviso
     «casi nunca». Montaje SWC con estado (las tres pestañas, con la compra a la apertura y con la orden en la línea). Comprobaciones
     comunes.
+
+**Parte B · el dibujo (V9.1077)**
+- «Señales en el gráfico» (lib/builder/senales.js, lineasBajistasDe y calculaSenales; components/BuilderSenales.js):
+  - Línea AMARILLA: la vigente en la última vela y cada una que se rompe, desde su ancla Q hasta la última vela o la de la rotura.
+    GRISES y discontinuas: las que se rehacen con un máximo nuevo o se invalidan sin romperse, de Q a su última vela vigente. Cada
+    línea es un tramo de dos puntos (una recta en la escala de las velas); solo lo que cae en el periodo.
+  - Puntos ÁMBAR en los dos máximos de swing de cada línea (marcas.js: carril «lineaMax», justo encima del de los swings).
+  - Recuadro ÁMBAR en cada vela de rotura (un SVG encima del gráfico, redibujado al mover el zoom como las etiquetas): la primera vela
+    que cierra por encima o, con «Orden en la línea», la primera cuyo máximo la supera (lineaBajista da ahora también roturaOrden).
+  - «Stop EMA (N)»: rojo punteado y en escalera, por operación, con la cuenta del motor (solo sube); el stop activo (el mayor, con
+    «manda el más alto») sigue aparte, encima. La EMA del stop, como media.
+  - Leyenda: casillas de «línea bajista vigente o rota», «líneas bajistas anteriores», «stop EMA», «máximos de la línea» y «vela de
+    rotura», con un «?» que lo explica. Con la orden en la línea, franja «Supera la línea bajista».
+- «Dibujo de la regla» (components/BuilderDibujo.js): la fila dice siempre qué pasa si el último máximo sube («se une con el anterior
+  más alto» o «no hay línea»); con la orden en la línea, su rombo («¿Supera la línea de tendencia bajista…?») y «Compro en la línea de
+  tendencia bajista». Los stops, con sus frases de las tarjetas.
+- Ningún cálculo cambia: solo el dibujo (lineaBajista anota además roturaOrden).
+- Comprobado: E2 a mano (3–8 gris de la 3 a la 15; 8–14 amarilla de la 8 a la 18, en 63,67; puntos en 3, 8 y 14; recuadro en la 18);
+  E5 (stop EMA 74 en la 18; activo 62 de la 5 a la 17 y 74 en la 18); orden en la línea en E1 (franja y recuadro en la 16); AAPL
+  2010–2015 en diario (60 compras, 69 amarillas, 51 grises, 68 roturas) y semanal (9 compras); montaje SWC con velas y con las casillas
+  ocultas; las pruebas de la parte A siguen igual. Comprobaciones comunes.

@@ -28,12 +28,13 @@ import BuscadorValor from './BuscadorValor'
 import Ayuda from './BuilderAyuda'
 import { avisoFechaFinal } from '../lib/avisoFechaFinal'
 import { lunesDeSemana } from '../lib/velasSemanales'
-import { NOTA_LINEA_SWING } from '../lib/builder/fichas'
+import { NOTA_LINEA_SWING, QUE_ES_LINEA_BAJISTA } from '../lib/builder/fichas'
 import { tramosLinea, lineaOperacion, COLOR_GANA, COLOR_PIERDE } from '../lib/graficoPaneles'
 import { colocaMarcas } from '../lib/builder/marcas'
 import { colorSigno, colorWinRate, colorFactor, COLOR_SUBE, COLOR_BAJA, COLOR_DRAWDOWN, COLOR_OPERACIONES, COLOR_TIEMPO, AYUDA_MAX_DD } from '../lib/coloresCifras'
 
 const VERDE = '#3fb950', NARANJA = '#f0883e', MORADO = '#a371f7', AZUL = '#58a6ff', AMARILLO = '#f2cc60', ROJO = '#ff8b8b', GRIS_BH = '#8b98a8'
+const AMBAR = '#f0a020'   // V9.1077: los máximos de la línea bajista y el recuadro de la vela de rotura
 const fechaCorta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 const ESPERA_MS = 250
 // V9.1064: el «?» del SuperTrend de la leyenda.
@@ -42,6 +43,8 @@ const AYUDA_SUPERTREND = 'La línea del SuperTrend: verde y por debajo del preci
 const AYUDA_PUNTO_SENAL = 'La señal se conoce al CIERRE de una vela: en esa vela va el punto, por encima de su máximo (verde para la compra, naranja para la venta). La flecha va en la vela en que se compra o se vende de verdad. Con «apertura de la vela siguiente», la compra es en la vela de después del punto; con una orden en un nivel (el máximo, la ruptura, el swing o la línea del SuperTrend), el punto va en la vela en que se puso la orden o en que el precio la tocó. Una venta por un stop o un objetivo es dentro de la vela: el punto y la flecha, en la misma.'
 // V9.1066 / V9.1074: el «?» del stop activo (ya no se oculta donde coincide con la línea del SuperTrend).
 const AYUDA_STOP = 'La línea roja punteada es el stop activo del motor, vela a vela, solo mientras hay una operación abierta. Va siempre encima de las demás líneas, también de la del SuperTrend. Con el stop en la línea del SuperTrend, el stop de cada vela es la línea del SuperTrend de la vela ANTERIOR (sube con ella y nunca baja): por eso el rojo va casi pegado a la línea verde y una vela por detrás. Ejemplo: si la línea verde está en 140,52 € el martes y sube a 142,27 € el miércoles, el stop del miércoles es 140,52 € y el del jueves, 142,27 €. Si al final del periodo sigue la operación abierta, su stop sale en el eje de precios en rojo («Stop 142,27»).'
+// V9.1077: el «?» de la línea de tendencia bajista de la leyenda.
+const AYUDA_LINEA = `${QUE_ES_LINEA_BAJISTA} En el gráfico: AMARILLA la línea vigente en la última vela y cada una que se rompe, desde su ancla hasta la última vela o la de la rotura; GRIS y discontinua las que se rehicieron con un máximo nuevo o se invalidaron sin romperse. Puntos ámbar: los dos máximos de swing de cada línea. Recuadro ámbar: la vela de la rotura (la que cierra por encima; con «Orden en la línea», la primera cuyo máximo la supera). El stop EMA (rojo punteado, en escalera) solo sube: cada cierre bajo la EMA con la operación abierta lo sube, desde la vela siguiente, al mínimo de esa vela.`
 // V9.1074: el «?» de las etiquetas de cada operación.
 const AYUDA_ETIQUETAS = 'Cada operación lleva arriba su resultado: (precio de venta / precio de compra − 1) × 100, la misma cuenta que las etiquetas de «Backtest de un valor». Verde si gana, rojo si pierde. La que sigue abierta al final, con el cierre de la última vela y «(abierta)». Ejemplo: compras a 100 € y vendes a 98,40 € → «−1,6 %».'
 // V9.1062: el «?» de los swings de la leyenda: los dos tramos y el stop rojo.
@@ -122,12 +125,28 @@ function dibujaEtiquetas(svg, ch, velas, ops) {
     svg.appendChild(g)
   })
 }
+// V9.1077: un recuadro ámbar alrededor de cada vela de rotura de la línea bajista (de su máximo a su mínimo, con un margen), redibujado
+// como las etiquetas al mover el gráfico o cambiar su tamaño.
+function dibujaRecuadros(svg, ch, velas, cajas) {
+  if (!svg) return
+  while (svg.firstChild) svg.removeChild(svg.firstChild)
+  const ts = ch.timeScale(), ancho = ts.width(), paso = Math.max(4, ts.options().barSpacing || 6)
+  svg.setAttribute('width', String(ancho))
+  for (const c of cajas) {
+    const x = ts.timeToCoordinate(c.date), y1 = velas.priceToCoordinate(c.high), y2 = velas.priceToCoordinate(c.low)
+    if (x == null || y1 == null || y2 == null || x < 0 || x > ancho) continue
+    const el = document.createElementNS(NS, 'rect')
+    for (const [k, val] of Object.entries({ x: x - paso / 2 - 2, y: Math.min(y1, y2) - 3, width: paso + 4, height: Math.abs(y2 - y1) + 6, rx: 2, fill: 'none', stroke: AMBAR, 'stroke-width': 1.5, 'data-rotura': c.date })) el.setAttribute(k, String(val))
+    svg.appendChild(el)
+  }
+}
 // V9.1066: el zoom y la posición se mantienen al recalcular (un número, una opción, una fila…): el gráfico se rehace, pero vuelve al
 // rango visible que tenía. Solo se reajusta a todo el periodo si cambia `llaveZoom` (el valor, las fechas o el tipo de velas).
 function Graficos({ r, ocultos = new Set(), llaveZoom = '' }) {
   const zoom = useRef({ llave: null, rango: null }), llaveR = useRef(llaveZoom)
   llaveR.current = llaveZoom
   const caja = useRef(null), precio = useRef(null), osc = useRef([]), series = useRef(new Map()), ocultosR = useRef(ocultos), flechas = useRef(null)
+  const recuadros = useRef(null)   // V9.1077: el SVG de los recuadros de las velas de rotura de la línea bajista
   const etiquetas = useRef(null), redibuja = useRef(null), precioStop = useRef(null)   // V9.1074: el SVG de las etiquetas de las operaciones, cómo redibujarlas y la etiqueta del stop en el eje
   const franjas = r.franjas
   const [altoPrecio, setAltoPrecio] = useState(ALTO_PRECIO)
@@ -222,7 +241,7 @@ function Graficos({ r, ocultos = new Set(), llaveZoom = '' }) {
       }
       // V9.1059 / V9.1067: los puntos de la vela de cada swing (los máximos arriba, los mínimos abajo) y de la vela de la señal de cada
       // compra (verde) y de cada venta (naranja): los dos, por encima de la vela.
-      for (const [tipo, color, radio, clave] of [['senalCompra', VERDE, 3, 'puntosSenal'], ['senalVenta', NARANJA, 3, 'puntosSenal'], ['swingMax', VERDE, 2, 'puntosSwing'], ['swingMin', NARANJA, 2, 'puntosSwing']]) {
+      for (const [tipo, color, radio, clave] of [['senalCompra', VERDE, 3, 'puntosSenal'], ['senalVenta', NARANJA, 3, 'puntosSenal'], ['swingMax', VERDE, 2, 'puntosSwing'], ['swingMin', NARANJA, 2, 'puntosSwing'], ['lineaMax', AMBAR, 3, 'puntosLinea']]) {   // V9.1077: lineaMax
         if (!sitio[tipo].length) continue
         apunta(clave, ch.addLineSeries({ color, lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: radio, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: visto(clave) })).setData(sitio[tipo])
       }
@@ -231,6 +250,8 @@ function Graficos({ r, ocultos = new Set(), llaveZoom = '' }) {
       // V9.1074: las etiquetas de las operaciones, redibujadas al mover el gráfico, al cambiar su tamaño y al enseñarlas u ocultarlas.
       redibuja.current = () => {
         if (!vivo) return
+        // V9.1077: los recuadros de las velas de rotura (se enseñan u ocultan con display, como las etiquetas).
+        if ((r.roturasLinea || []).length) setTimeout(() => { if (vivo) dibujaRecuadros(recuadros.current, ch, velas, r.roturasLinea) }, 30)
         const quita = ocultosR.current.has('etiquetas')
         ch.priceScale('right').applyOptions({ scaleMargins: { top: arriba(), bottom: abajo } })
         if (quita) { if (etiquetas.current) while (etiquetas.current.firstChild) etiquetas.current.removeChild(etiquetas.current.firstChild); return }
@@ -264,6 +285,7 @@ function Graficos({ r, ocultos = new Set(), llaveZoom = '' }) {
     <div ref={caja}>
       <div style={{ position: 'relative' }}>
         <div ref={precio} data-grafico="precio" data-franjas={franjas.length} data-alto-precio={altoPrecio} style={{ width: '100%', minHeight: H + EJE_TIEMPO }}/>
+        {(r.roturasLinea || []).length > 0 && <svg ref={recuadros} data-roturas={r.roturasLinea.length} height={ETQ_BANDA + altoPrecio} style={{ position: 'absolute', left: 0, top: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 2, display: ocultos.has('roturas') ? 'none' : 'block' }}/>}
         {(r.operaciones || []).length > 0 && <svg ref={etiquetas} data-etiquetas-ops={r.operaciones.length} height={ETQ_BANDA + altoPrecio} style={{ position: 'absolute', left: 0, top: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 2, display: ocultos.has('etiquetas') ? 'none' : 'block' }}/>}
         {franjas.map((f, i) => (
           <div key={i} data-franja={f.nombre} title={`${f.nombre} · ${f.cumple.filter(x => x === true).length} velas${f.frase && f.frase !== f.nombre ? `\n${f.frase}` : ''}`}
@@ -543,6 +565,10 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
               {cs.map((m, k) => <span key={m.nombre} data-leyenda-canal={m.nombre} style={{ color: m.color }}>{k ? ' · ' : ''}{m.punteada ? '┈┈' : m.discontinua ? '— —' : '—'} {m.nombre}</span>)}</Interruptor>)}
             {(r.canales || []).some(k => k.tipo === 'stop') && <Ayuda texto={AYUDA_STOP} etiqueta="Stop activo"/>}
             {(r.canales || []).some(k => k.tipo === 'supertrend') && <span data-leyenda-supertrend>SuperTrend: <span style={{ color: '#3fb950' }}>alcista</span> · <span style={{ color: '#f85149' }}>bajista</span><Ayuda texto={AYUDA_SUPERTREND} etiqueta="SuperTrend"/></span>}
+            {(r.puntosLinea || []).length + (r.roturasLinea || []).length > 0 && <span data-leyenda-linea style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>   {/* V9.1077 */}
+              {(r.puntosLinea || []).length > 0 && <Interruptor clave="puntosLinea" ocultos={ocultos} onCambia={cambiaVisto} que="los máximos de swing de la línea bajista"><span><span style={{ color: AMBAR }}>●</span> máximos de la línea</span></Interruptor>}
+              {(r.roturasLinea || []).length > 0 && <Interruptor clave="roturas" ocultos={ocultos} onCambia={cambiaVisto} que="el recuadro de la vela de rotura de la línea bajista"><span><span style={{ color: AMBAR }}>▭</span> vela de rotura</span></Interruptor>}
+              <Ayuda texto={AYUDA_LINEA} etiqueta="Línea de tendencia bajista"/></span>}
             {(r.puntosSwing || []).length > 0 && <span data-leyenda-swings style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Interruptor clave="puntosSwing" ocultos={ocultos} onCambia={cambiaVisto} que="los puntos de swing"><span>● swing</span></Interruptor><span>· ┈ hasta confirmarse · — desde que se puede usar</span><Ayuda texto={AYUDA_SWINGS} etiqueta="Swings"/></span>}
             {r.franjas.some(f => f.tarjeta === 'filtro') && (r.bloqueado.some(Boolean)
               ? <Interruptor clave="zona" ocultos={ocultos} onCambia={cambiaVisto} que="la zona gris donde el filtro no deja comprar (la franja del filtro sigue igual)" datos={{ 'data-interruptor-zona': '' }}>
