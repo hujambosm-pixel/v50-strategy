@@ -162,11 +162,12 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   const cargaVelas = useCallback(async (sym) => { const r = await apiFetch(`/api/velas?simbolo=${encodeURIComponent(sym)}`); if (!r.ok) throw new Error(`HTTP ${r.status}`); return await r.json() }, [apiFetch])
   useEffect(() => { if (abrir?.fila) { setPrueba(null); setGuia(false); setEditor({ fila: abrir.fila, n: abrir.n }) } }, [abrir?.n])
   // Guardada en el paso 1: la página recarga sus estrategias y se pasa al paso 2 con ella (la versión nueva, si se creó).
-  // V9.1054: «Guardar estos valores en la estrategia» (info.quedarse) sigue en el paso 1, en «Señales en el gráfico», con la estrategia
-  // guardada (la versión nueva, si se creó); así las casillas vuelven a enseñar los valores guardados.
+  // V9.1054: «Guardar estos valores en la estrategia» (info.quedarse) sigue en el paso 1 con la estrategia guardada (la versión nueva,
+  // si se creó); así las casillas vuelven a enseñar los valores guardados. V9.1073: «Guardar en la estrategia», en la barra de arriba,
+  // sigue en la pestaña donde se estaba (info.pestana).
   const alGuardar = (fila, info = {}) => {
     if (!info.sinCambios) { setGuardadas(g => [...g.filter(x => String(x.id) !== String(fila.id)), fila]); onGuardada?.(fila) }
-    if (info.quedarse) { setEditor({ fila, n: Date.now(), pestana: 'senales' }); return }
+    if (info.quedarse) { setEditor({ fila, n: Date.now(), pestana: info.pestana || 'senales' }); return }
     setEditor(null); setPrueba({ estrategiaId: fila.id, n: Date.now() })
   }
 

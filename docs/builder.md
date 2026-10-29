@@ -1448,3 +1448,30 @@ venta, su `capitalTras`). Una operación de 100 → 120 → 90 → vende a 110 d
 - Comprobado: a mano (miércoles 28/10/2026 → sesión 27/10 y semana del 19/10; lunes 02/11 y domingo 01/11 → viernes 30/10; sábado
   31/10 → semana del 26/10; los dos textos y los casos sin aviso); montaje SWC del paso 1 (Otras fechas hasta 31/12/2025 → «fechas»;
   hasta hoy con velas hasta el 20/10 → «faltan»; el ensayo y velas al día → sin aviso). Comprobaciones comunes.
+
+## 39. Paso 1: barra arriba, colores comunes, stop visible, etiquetas por operación y caída máxima en la curva (V9.1073)
+
+**Parte A · la barra de arriba y la tabla de cifras**
+- **Barra** (components/BuilderEditor.js), en la fila del título «Paso 1 · Crear la estrategia» (fija al desplazarse), a la izquierda
+  de «Guía: cómo se prueba una estrategia», en las tres pestañas:
+  - El estado: «✓ Sin cambios: ves la estrategia guardada»; «● Probando cambios sin guardar: …» (ámbar) con la lista corta de lo
+    cambiado, en las tarjetas o en las casillas de prueba (las 3 primeras y «y N más»; todas, al pasar el ratón); con una estrategia
+    nueva, «● Estrategia nueva: todavía sin guardar».
+  - «Volver a los guardados»: siempre visible, desactivado sin cambios. Deshace las tarjetas Y las casillas: la estrategia queda byte
+    a byte como está guardada (estadoDe(fila), sin casillas, sin usos soltados).
+  - «Guardar en la estrategia»: siempre visible, desactivado sin cambios o con errores. Es guardaValores (las tarjetas con las
+    casillas, la misma regla de «· versión N»; el aviso de la versión, en su título) y se sigue en la pestaña donde se estaba
+    (BuilderPanel.js alGuardar, info.pestana).
+  - Se quitan los botones de abajo de «Señales en el gráfico» y el «Guardar» de las velas semanales. «Guardar y pasar al paso 2» se queda.
+- **lib/builder/barraCambios.js** (puro): conCasillas (las casillas sobre las tarjetas; unas velas iguales a las de las tarjetas no
+  son un cambio), hayCambios (definición, valores, velas —sin escribir son diarias—, nombre y descripción, en JSON canónico) y
+  listaCambios («SuperTrend · Periodo: 12 (guardado 10)», «fila nueva: Compro: RSI», «fila quitada: …», «velas semanales (guardado
+  diarias)», «nombre …»; si cambia otra cosa, «otros cambios en la regla»).
+- **lib/coloresCifras.js**: las reglas de color de la tabla RESUMEN de «Backtest de un valor» (buildUnifiedRows), que ahora las usa
+  de ahí sin cambiar ningún color, y también las cifras del paso 1, en las dos columnas: CAGR verde/rojo por el signo, Max Drawdown
+  rojo, Win Rate verde desde el 50 %, Factor de beneficio verde desde 1, Operaciones y Tiempo invertido amarillos.
+- «Max Drawdown (vela a vela)» pasa a «Max Drawdown» en las dos pantallas, con su «?» (AYUDA_MAX_DD). La línea de encima de las
+  cifras del paso 1 («Compuesto…») pasa al «?» del título de la tabla, con un ejemplo.
+- Comprobado: montaje SWC (barra sin cambios en las tres pestañas; con una casilla cambiada; con tarjetas y casilla; semanales sin
+  «Guardar»; estrategia nueva); «Volver» deja la definición y los valores byte a byte como los guardados; los colores comunes dan lo
+  mismo que las fórmulas de antes para negativos, cero, umbrales, NaN y null. Comprobaciones comunes.

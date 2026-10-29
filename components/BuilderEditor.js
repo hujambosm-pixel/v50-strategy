@@ -10,6 +10,9 @@
 // una prueba congelada y cambia su regla, se crea una versión nueva (lib/builder/versiones.js).
 // V9.1054: todo eso es la pestaña «Tarjetas»; al lado, «Señales en el gráfico» (components/BuilderSenales.js, con las cifras de
 // «Backtest de un valor» y las casillas para probar números sin tocar la estrategia) y «Dibujo de la regla» (components/BuilderDibujo.js).
+// V9.1073: arriba, en la fila del título y en las tres pestañas, la barra del estado («Sin cambios» o «Probando cambios sin guardar»,
+// con la lista corta: lib/builder/barraCambios.js), «Volver a los guardados» (deshace las tarjetas Y las casillas) y «Guardar en la
+// estrategia» (guardaValores: las tarjetas con las casillas; se sigue en la misma pestaña).
 //   fila: la estrategia de partida ({ id?, name, description, definition, params, copiaDe? }). lotes: las filas de editor_lotes.
 //   onEditorClasico(fila): abre lo que se está editando en el Editor clásico.
 //   Para las pruebas de montaje: estadoInicial (lo editado: { def, valores, nombre, descripcion }), enPruebaInicial (los nombres
@@ -28,10 +31,10 @@ import Ayuda from './BuilderAyuda'
 import BuilderGuia from './BuilderGuia'
 import BuilderDibujo from './BuilderDibujo'
 import BuilderSenales from './BuilderSenales'
-import { aplicaPrueba } from '../lib/builder/ensayo'
 import ConLimpiar from './LimpiarBusqueda'
 import ProteccionPanel from './ProteccionPanel'
 import { propagaEnlaces, estadoEnlaces, enlazaUso, AYUDA_ENLACE, opcionesCasillas } from '../lib/builder/enlaces'
+import { conCasillas, hayCambios, listaCambios, resumenCambios } from '../lib/builder/barraCambios'
 
 const AZUL = '#58a6ff', NARANJA = '#f0883e', MORADO = '#a371f7', ROJO = '#ff8b8b', AMARILLO = '#f2cc60'
 // V9.1049: Protección con su color, un verde azulado (ni el rojo de los errores ni el amarillo de los avisos; contraste alto sobre el
@@ -299,6 +302,13 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   const cambiaRegla = jsonCanonico(paraHuella(def, valores)) !== jsonCanonico(paraHuella(orig.current.def, orig.current.valores))
   const plan = planGuardado({ fila, est, orig: orig.current, enPrueba, estrategias, cambiaRegla })
   const version = partesNombre(fila?.name).version
+  // V9.1073: la barra de arriba. conPrueba: las tarjetas con las casillas de prueba (lo que guardaría «Guardar en la estrategia»).
+  const conPrueba = useMemo(() => { try { return conCasillas(est, cambiosPrueba, opcionesCasillas(est.def, valoresEf, sueltos)) } catch (_) { return est } }, [est, cambiosPrueba, valoresEf, sueltos])
+  const errConPrueba = useMemo(() => { try { return validaDefinicion(conPrueba.def, conPrueba.valores) } catch (e) { return [e.message] } }, [conPrueba])
+  const cambiado = hayCambios(orig.current, conPrueba), nueva = !fila?.id
+  const cambiosBarra = useMemo(() => cambiado ? listaCambios(orig.current, conPrueba) : [], [cambiado, conPrueba])
+  const planBarra = (cambiado || nueva) ? planGuardado({ fila, est: conPrueba, orig: orig.current, enPrueba, estrategias, cambiaRegla: jsonCanonico(paraHuella(conPrueba.def, conPrueba.valores)) !== jsonCanonico(paraHuella(orig.current.def, orig.current.valores)) }) : null
+  const puedeGuardarBarra = (cambiado || nueva) && !hayErrores && !errConPrueba.length && !guardando
   const estado = fila?.copiaDe ? `Copia de «${fila.copiaDe}». La original y sus pruebas no cambian.`
     : !fila?.id ? 'Estrategia nueva · todavía sin guardar'
     : `Versión ${version} · ${enPrueba.length ? `probada en ${enPrueba.length > 1 ? 'las pruebas' : 'la prueba'} ${enPrueba.map(x => `«${x}»`).join(', ')}` : 'sin probar todavía'}`
@@ -359,25 +369,24 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
     if (plan.metodo === 'ninguno') { onGuardada?.({ ...fila }, { sinCambios: true }); return }
     await guardaPlan(plan)
   }
-  // V9.1067: con velas semanales, guardar sin pasar al paso 2 (que aún no las admite): se sigue en «Señales en el gráfico».
-  const guardaSinPaso2 = async () => {
-    if (hayErrores || guardando) return
-    setMsg(null)
-    if (plan.metodo === 'ninguno') return
-    await guardaPlan(plan, { quedarse: true })
-  }
-  // «Guardar estos valores en la estrategia» (V9.1054): las casillas de prueba pasan a la estrategia con la regla de versiones de
-  // siempre (si está en una prueba, «· versión 2») y se sigue en «Señales en el gráfico» con la estrategia guardada.
+  // «Guardar en la estrategia» (V9.1054; V9.1073: en la barra de arriba): las tarjetas con las casillas de prueba pasan a la
+  // estrategia con la regla de versiones de siempre (si está en una prueba, «· versión 2») y se sigue en la misma pestaña, con la
+  // estrategia guardada.
   const guardaValores = async () => {
     if (guardando) return
     setMsgValores(null)
-    const est2 = { ...est, ...aplicaPrueba({ def: est.def, valores: est.valores }, cambiosPrueba, opcionesCasillas(est.def, valoresEf, sueltos)) }   // V9.1067: con los enlazados
+    const est2 = conPrueba   // V9.1067: con los enlazados
     let errs = []; try { errs = validaDefinicion(est2.def, est2.valores) } catch (e) { errs = [e.message] }
     if (errs.length || errNombre) { setMsgValores(`No se puede guardar: ${errNombre || errs[0]}`); return }
     const cambia2 = jsonCanonico(paraHuella(est2.def, est2.valores)) !== jsonCanonico(paraHuella(orig.current.def, orig.current.valores))
     const plan2 = planGuardado({ fila, est: est2, orig: orig.current, enPrueba, estrategias, cambiaRegla: cambia2 })
-    if (plan2.metodo === 'ninguno') { setCambiosPrueba({}); return }
-    await guardaPlan(plan2, { quedarse: true }, setMsgValores)
+    if (plan2.metodo === 'ninguno') { volverGuardados(); return }
+    await guardaPlan(plan2, { quedarse: true, pestana }, setMsgValores)
+  }
+  // «Volver a los guardados» (V9.1073): la estrategia exactamente como está guardada: sin los cambios de las tarjetas ni las casillas.
+  const volverGuardados = () => {
+    setEst(estadoDe(fila)); setCambiosPrueba({}); setSueltos(new Set()); setMsgValores(null); setMsg(null)
+    setModoCompraUI(leeCompra(orig.current.def).modo || 'todas'); setModoVentaUI(leeVenta(orig.current.def).modo || 'alguna')
   }
   const abreClasico = () => onEditorClasico?.({ id: fila?.id ?? null, name: est.nombre, description: est.descripcion, definition: def, params: { ...valores } })
 
@@ -415,11 +424,22 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
 
   return (
     <div style={S.pagina}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+      {/* V9.1073: la fila del título, fija arriba al desplazarse (con la barra de los cambios). */}
+      <div data-fila-titulo style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 20, background: B.fondo, padding: '6px 0' }}>
         <button style={{ ...S.enlace, color: B.secundario }} onClick={() => onVolver?.()}>← Builder · Mi trabajo</button>
         <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Paso 1 · Crear la estrategia</span>
         <span data-cabecera-nombre style={{ color: B.secundario }}>{est.nombre.trim() || 'Sin nombre'} · velas {intervalo === 'semanal' ? 'semanales' : 'diarias'}</span>
-        <span style={{ marginLeft: 'auto' }}><button style={S.boton} onClick={() => setGuia(true)}>Guía: cómo se prueba una estrategia</button></span>
+        <span data-barra-cambios={cambiado ? 'cambios' : nueva ? 'nueva' : 'sin-cambios'} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <span data-estado-barra title={cambiosBarra.join(' · ') || undefined} style={{ fontSize: 13, maxWidth: 560, color: cambiado || nueva ? AMARILLO : '#7ee2a0' }}>
+            {cambiado ? <>● Probando cambios sin guardar: {resumenCambios(cambiosBarra)}</> : nueva ? '● Estrategia nueva: todavía sin guardar' : '✓ Sin cambios: ves la estrategia guardada'}
+          </span>
+          {msgValores && <span data-error-barra style={{ color: ROJO, fontSize: 13 }}>{msgValores}</span>}
+          <button data-boton="volver" style={cambiado && !guardando ? S.boton : S.botonDesactivado} disabled={!cambiado || guardando} onClick={volverGuardados}
+            title="Deshace los cambios de las tarjetas y de las casillas de prueba: la estrategia queda como está guardada">Volver a los guardados</button>
+          <button data-boton="guardar-valores" style={puedeGuardarBarra ? S.botonVerde : S.botonDesactivado} disabled={!puedeGuardarBarra} onClick={guardaValores}
+            title={hayErrores || errConPrueba.length ? 'La regla tiene errores: corrígelos para guardar' : planBarra?.version ? avisoVersion(planBarra.version) : 'Guarda las tarjetas y las casillas de prueba en la estrategia; sigues en esta pestaña'}>{guardando ? 'Guardando…' : 'Guardar en la estrategia'}</button>
+          <button style={S.boton} onClick={() => setGuia(true)}>Guía: cómo se prueba una estrategia</button>
+        </span>
       </div>
       {/* V9.1054: tres pestañas. «Tarjetas» es el editor; las otras dos dibujan la regla de la pantalla (con sus cambios sin guardar) y,
           si tiene errores, lo dicen y no dibujan. */}
@@ -430,7 +450,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
         ))}
       </div>
       {pestana === 'senales' && <ProteccionPanel nombre="Señales en el gráfico"><BuilderSenales entrada={entradaBuilder} sueltos={sueltos} def={def} valores={valoresEf} guardado={orig.current} intervalo={intervalo} error={hayErrores ? 'La regla tiene errores: corrígelos en «Tarjetas» (lo que está en rojo) para ver las señales y las cifras.' : null}
-        cambios={cambiosPrueba} onCambios={setCambiosPrueba} onGuardarValores={guardaValores} guardando={guardando} msgGuardar={msgValores} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} {...(senalesInicial || {})}/></ProteccionPanel>}
+        cambios={cambiosPrueba} onCambios={setCambiosPrueba} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} {...(senalesInicial || {})}/></ProteccionPanel>}
       {pestana === 'dibujo' && <ProteccionPanel nombre="Dibujo de la regla"><div data-pestana-dibujo style={{ ...S.tarjeta }}><div style={S.cuerpo}>
         <BuilderDibujo def={def} valores={valoresEf} error={hayErrores ? 'La regla tiene errores: corrígelos en «Tarjetas» (lo que está en rojo) para ver el dibujo.' : null} {...(dibujoInicial || {})}/>
       </div></div></ProteccionPanel>}
@@ -712,7 +732,6 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
           {plan.version && <div data-aviso="version" style={{ background: '#3a3220', border: `1px solid ${AMARILLO}`, borderRadius: B.radioBoton, padding: 12, marginBottom: 12, color: B.texto }}>{avisoVersion(plan.version)}</div>}
           {intervalo === 'semanal' ? <div data-semanal-paso2 style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <button style={S.botonDesactivado} disabled title={AVISO_SEMANAL_PASO2}>Guardar y pasar al paso 2</button>
-            <button style={hayErrores || guardando ? S.botonDesactivado : S.botonVerde} disabled={hayErrores || guardando} onClick={guardaSinPaso2}>{guardando ? 'Guardando…' : 'Guardar'}</button>
             <span data-aviso="semanal" style={{ color: AMARILLO, fontSize: 13 }}>{AVISO_SEMANAL_PASO2}</span>
           </div>
           : <button style={hayErrores || guardando ? S.botonDesactivado : S.botonVerde} disabled={hayErrores || guardando} onClick={guarda}>{guardando ? 'Guardando…' : 'Guardar y pasar al paso 2'}</button>}

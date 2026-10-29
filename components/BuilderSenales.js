@@ -1,14 +1,14 @@
 // components/BuilderSenales.js — la pestaña «Señales en el gráfico» del paso 1 (V9.1050; V9.1054: docs/builder.md, §20).
 // Arriba, en una fila: el valor (cualquiera con precios guardados), las fechas («Ensayo · 2010–2015» por defecto, u «Otras fechas»),
 // las velas de la estrategia (solo se muestran) y una casilla por cada número de la regla, SOLO PARA PROBAR: no tocan la estrategia
-// (la casilla cambiada dice «(guardado: X)»; «Volver a los guardados» y «Guardar estos valores en la estrategia» solo salen si algo
-// es distinto de lo guardado). Debajo, el gráfico de precio (lightweight-charts) con las medias y los canales de la regla, la zona
+// (la casilla cambiada dice «(guardado: X)»; V9.1073: «Volver a los guardados» y «Guardar en la estrategia» van en la barra de
+// arriba del paso 1, components/BuilderEditor.js, y cuentan también los cambios de las tarjetas). Debajo, el gráfico de precio (lightweight-charts) con las medias y los canales de la regla, la zona
 // gris donde el filtro no deja comprar, las flechas de compra y venta y, DENTRO DEL MISMO GRÁFICO (la misma escala de tiempo), una
 // franja por condición del filtro y de la compra; un panel por oscilador. A la derecha, las cifras de la regla frente a comprar y
 // mantener: LAS DE «BACKTEST DE UN VALOR» (lib/builder/ensayo.js cifrasRegla: el mismo núcleo y la misma calcMetrics). Nada se
 // guarda. Se recalcula solo, 250 ms después del último cambio.
 //   def, valores: la estrategia en pantalla (con los cambios de «Tarjetas»); guardado: { def, valores } la guardada. cambios /
-//   onCambios: las casillas de prueba ({ clave: valor }), que viven en el editor mientras está abierto. onGuardarValores(): guarda.
+//   onCambios: las casillas de prueba ({ clave: valor }), que viven en el editor mientras está abierto.
 //   cargaSimbolos() → [símbolos] o [{ simbolo, nombre }] (V9.1058: el selector busca por ticker y por nombre); cargaVelas(simbolo) →
 //   velas diarias (V9.1071: o { velas, semanaAbierta }, lo que da pages/api/velas.js); comisiones: las de «Backtest de un valor».
 //   Para las pruebas de montaje: velasIniciales ({ simbolo: velas }), simbolosIniciales, simboloInicial, fechasInicial
@@ -31,8 +31,9 @@ import { lunesDeSemana } from '../lib/velasSemanales'
 import { NOTA_LINEA_SWING } from '../lib/builder/fichas'
 import { tramosLinea, lineaOperacion, COLOR_GANA, COLOR_PIERDE } from '../lib/graficoPaneles'
 import { colocaMarcas } from '../lib/builder/marcas'
+import { colorSigno, colorWinRate, colorFactor, COLOR_SUBE, COLOR_BAJA, COLOR_DRAWDOWN, COLOR_OPERACIONES, COLOR_TIEMPO, AYUDA_MAX_DD } from '../lib/coloresCifras'
 
-const VERDE = '#3fb950', NARANJA = '#f0883e', MORADO = '#a371f7', AZUL = '#58a6ff', AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE_CIFRA = '#7ee2a0', GRIS_BH = '#8b98a8'
+const VERDE = '#3fb950', NARANJA = '#f0883e', MORADO = '#a371f7', AZUL = '#58a6ff', AMARILLO = '#f2cc60', ROJO = '#ff8b8b', GRIS_BH = '#8b98a8'
 const fechaCorta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 const ESPERA_MS = 250
 // V9.1064: el «?» del SuperTrend de la leyenda.
@@ -45,9 +46,11 @@ const AYUDA_STOP_ST = 'La línea roja es el stop activo del motor, solo mientras
 const AYUDA_SWINGS = `${NOTA_LINEA_SWING} El stop activo (rojo) solo se dibuja mientras hay una operación abierta; donde coincide con el mínimo de swing en vigor, se ve solo el rojo.`
 const AYUDA = 'Las flechas son las compras (▲ verde, en la vela en que se compra) y las ventas (▼ naranja) que hace el motor con esta regla en este valor y estas fechas: las mismas de «Backtest de un valor» y de la prueba del paso 2. Las franjas de debajo de las velas dicen, vela a vela, si se cumple cada condición y cada pieza (la ruptura, tocar el stop, tener una operación abierta; pintado = sí) y van en la misma escala de tiempo: cada marca queda justo debajo de su vela, también al hacer zoom. La zona gris es donde el filtro no deja comprar.'
 const AYUDA_ENSAYO = 'El ensayo son los años 2010–2015, ANTES de los que usa el paso 2 (2016–2025). Ajustar la regla mirando 2016–2025 y luego probarla en esos mismos años sería hacer trampa sin querer: la regla saldría bien porque se ha hecho a la medida de esos años. Ejemplo: si aquí cambias el máximo de 20 a 25 velas porque en 2010–2015 compra mejor, el paso 2 dirá después si eso funciona en años que no has mirado.'
-const AYUDA_CASILLAS = 'Cada casilla es un número de la regla. Cambiarla es solo para probar: el gráfico y las cifras se recalculan al momento, pero la estrategia no cambia. Ejemplo: con «Compro: máximo de 20 velas», escribe 25 y verás las compras con 25; la estrategia sigue con 20 hasta que pulses «Guardar estos valores en la estrategia». Al salir del paso 1 y volver a entrar, salen siempre los valores guardados.'
-const AYUDA_CIFRAS = 'Las mismas cifras que «Backtest de un valor» con este valor y estas fechas, con el 100 % del capital y su comisión (los filtros de su panel no cuentan: no son de la estrategia). Compuesto: cada operación usa todo el dinero acumulado. CAGR: lo que crece el dinero cada año, de media. Max Drawdown (vela a vela): la mayor caída desde un máximo, con la operación abierta valorada al cierre de cada vela (no solo al vender). Win Rate: el % de operaciones que ganan. Factor de beneficio: lo ganado entre lo perdido (2 = se gana el doble de lo que se pierde). Tiempo invertido: el % del tiempo con la acción comprada. Ejemplo: CAGR 12 % con Tiempo invertido 40 % es crecer un 12 % al año estando dentro menos de la mitad del tiempo.'
+const AYUDA_CASILLAS = 'Cada casilla es un número de la regla. Cambiarla es solo para probar: el gráfico y las cifras se recalculan al momento, pero la estrategia no cambia. Ejemplo: con «Compro: máximo de 20 velas», escribe 25 y verás las compras con 25; la estrategia sigue con 20 hasta que pulses «Guardar en la estrategia» (arriba). Al salir del paso 1 y volver a entrar, salen siempre los valores guardados.'
+const AYUDA_CIFRAS = 'Las mismas cifras que «Backtest de un valor» con este valor y estas fechas, con el 100 % del capital y su comisión (los filtros de su panel no cuentan: no son de la estrategia). Compuesto: cada operación usa todo el dinero acumulado. CAGR: lo que crece el dinero cada año, de media. Max Drawdown: la mayor caída desde un máximo, con la operación abierta valorada al cierre de cada vela (no solo al vender). Win Rate: el % de operaciones que ganan. Factor de beneficio: lo ganado entre lo perdido (2 = se gana el doble de lo que se pierde). Tiempo invertido: el % del tiempo con la acción comprada. Ejemplo: CAGR 12 % con Tiempo invertido 40 % es crecer un 12 % al año estando dentro menos de la mitad del tiempo.'
 export const LINEA_CIFRAS = (sym) => `Compuesto: cada operación usa todo el dinero acumulado. Referencia: comprar y mantener ${sym} en las mismas fechas. Comisión: la de «Backtest de un valor».`
+// V9.1073: esa línea ya no va encima de la tabla: es el «?» de su título, con un ejemplo y lo que dice cada fila.
+export const AYUDA_TITULO_CIFRAS = (sym) => `${LINEA_CIFRAS(sym)} Ejemplo de compuesto: con 10.000 €, si la primera operación gana un 10 % (11.000 €) y la segunda pierde un 5 %, la segunda usa los 11.000 € y acaba en 10.450 €. ${AYUDA_CIFRAS}`
 const signo = (v, d = 2) => v == null || !Number.isFinite(v) ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${fmt(Math.abs(v), d)} %`
 
 // ── El gráfico de precio con las franjas dentro, y los osciladores (solo en el navegador) ──
@@ -278,13 +281,13 @@ export function TablaCifras({ c, simbolo }) {
   const cr = crecimiento(c), aniosTxt = cr.anios != null ? ` (${fmt(cr.anios, 2)}a)` : ''
   const nombreCrec = cr.corto ? <>Rentabilidad del periodo{aniosTxt}<Ayuda texto={AYUDA_PERIODO} etiqueta="Rentabilidad del periodo"/><div data-nota-periodo style={{ fontSize: 11, color: B.apagado }}>periodo de menos de un año: no se anualiza</div></> : `CAGR${aniosTxt}`
   const filas = [
-    [nombreCrec, <span style={{ color: col || (cr.regla >= 0 ? VERDE_CIFRA : ROJO), fontWeight: 700 }}>{signo(cr.regla)}</span>, signo(cr.bh), cr.corto ? 'Rentabilidad del periodo' : 'CAGR'],
-    ['Max Drawdown (vela a vela)', <span style={{ color: col || ROJO, fontWeight: 700 }}>{signo(c.regla.maxDD == null ? null : -c.regla.maxDD)}</span>, signo(c.bh.maxDD == null ? null : -c.bh.maxDD), 'Max Drawdown'],
-    ['Win Rate', <strong style={{ color: col || B.titulo }}>{c.regla.winRate == null ? '—' : `${fmt(c.regla.winRate, 1)} %`}</strong>, '—'],
-    ['Factor de beneficio', <strong style={{ color: col || B.titulo }}>{c.regla.factor == null ? '—' : fmt(c.regla.factor, 2)}</strong>, '—'],
-    ['Operaciones', <strong style={{ color: col || B.titulo }}>{c.regla.operaciones}</strong>, '1'],
-    ['Ganancia / pérdida media', <span style={{ color: col || B.texto }}><span style={{ color: col || VERDE_CIFRA }}>{c.regla.gananciaMedia == null ? '—' : `+${fmt(c.regla.gananciaMedia, 2)}`}</span> / <span style={{ color: col || ROJO }}>{c.regla.perdidaMedia == null ? '—' : `−${fmt(c.regla.perdidaMedia, 2)} %`}</span></span>, '—'],
-    ['Tiempo invertido', <span style={{ color: col || B.texto }}>{fmt(c.regla.tiempoInvertido, 0)} %</span>, '100 %'],
+    [nombreCrec, <span style={{ color: col || colorSigno(cr.regla), fontWeight: 700 }}>{signo(cr.regla)}</span>, signo(cr.bh), cr.corto ? 'Rentabilidad del periodo' : 'CAGR', cr.bh == null ? null : colorSigno(cr.bh)],
+    [<>Max Drawdown<Ayuda texto={AYUDA_MAX_DD} etiqueta="Max Drawdown"/></>, <span style={{ color: col || COLOR_DRAWDOWN, fontWeight: 700 }}>{signo(c.regla.maxDD == null ? null : -c.regla.maxDD)}</span>, signo(c.bh.maxDD == null ? null : -c.bh.maxDD), 'Max Drawdown', COLOR_DRAWDOWN],
+    ['Win Rate', <strong style={{ color: col || (c.regla.winRate == null ? B.titulo : colorWinRate(c.regla.winRate)) }}>{c.regla.winRate == null ? '—' : `${fmt(c.regla.winRate, 1)} %`}</strong>, '—'],
+    ['Factor de beneficio', <strong style={{ color: col || (c.regla.factor == null ? B.titulo : colorFactor(c.regla.factor)) }}>{c.regla.factor == null ? '—' : fmt(c.regla.factor, 2)}</strong>, '—'],
+    ['Operaciones', <strong style={{ color: col || COLOR_OPERACIONES }}>{c.regla.operaciones}</strong>, '1', null, COLOR_OPERACIONES],
+    ['Ganancia / pérdida media', <span style={{ color: col || B.texto }}><span style={{ color: col || COLOR_SUBE }}>{c.regla.gananciaMedia == null ? '—' : `+${fmt(c.regla.gananciaMedia, 2)}`}</span> / <span style={{ color: col || COLOR_BAJA }}>{c.regla.perdidaMedia == null ? '—' : `−${fmt(c.regla.perdidaMedia, 2)} %`}</span></span>, '—'],
+    ['Tiempo invertido', <span style={{ color: col || COLOR_TIEMPO }}>{fmt(c.regla.tiempoInvertido, 0)} %</span>, '100 %', null, COLOR_TIEMPO],
   ]
   const celda = { padding: '7px 6px', borderBottom: `1px solid ${B.borde}`, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
   const com = c.comisiones
@@ -295,7 +298,7 @@ export function TablaCifras({ c, simbolo }) {
         <th scope="col" style={{ ...celda, fontSize: 12, color: poca ? B.apagado : B.secundario }}>Tu regla</th>
         <th scope="col" style={{ ...celda, fontSize: 12, color: B.secundario }}>Comprar y mantener {simbolo}</th>
       </tr></thead>
-      <tbody>{filas.map(([n, a, b, clave]) => <tr key={clave || n} data-fila-cifra={clave || n}><td style={{ ...celda, textAlign: 'left', color: B.secundario }}>{n}</td><td style={celda}>{a}</td><td style={{ ...celda, color: b === '—' ? B.apagado : B.texto }}>{b}</td></tr>)}
+      <tbody>{filas.map(([n, a, b, clave, colorB]) => <tr key={clave || n} data-fila-cifra={clave || n}><td style={{ ...celda, textAlign: 'left', color: B.secundario }}>{n}</td><td style={celda}>{a}</td><td style={{ ...celda, color: b === '—' ? B.apagado : colorB || B.texto }}>{b}</td></tr>)}
         {com && <tr data-fila-cifra="Comisiones pagadas"><td style={{ ...celda, textAlign: 'left', color: B.secundario }}>Comisiones pagadas</td><td colSpan={2} style={{ ...celda, color: B.texto }}>{textoComisiones(com)}</td></tr>}</tbody>
     </table>
   )
@@ -326,7 +329,7 @@ function Casilla({ valor, guardado, etiqueta, onCambia }) {
   </>)
 }
 
-export default function BuilderSenales({ def, valores, guardado = null, intervalo: intervaloGuardado = 'diario', sueltos = null, error = null, cambios = {}, onCambios = () => {}, onGuardarValores = null, guardando = false, msgGuardar = null,
+export default function BuilderSenales({ def, valores, guardado = null, intervalo: intervaloGuardado = 'diario', sueltos = null, error = null, cambios = {}, onCambios = () => {},
   cargaSimbolos = null, cargaVelas = null, comisiones = null, velasIniciales = null, simbolosIniciales = null, simboloInicial = 'AAPL', fechasInicial = null, cifrasIniciales = null, verZonaInicial = true, verOpsInicial = true, ocultosIniciales = [], entrada = 0 }) {
   const [simbolos, setSimbolos] = useState(simbolosIniciales || [simboloInicial])
   const valoresLista = useMemo(() => simbolos.map(s => typeof s === 'string' ? { simbolo: s, nombre: '' } : s), [simbolos])
@@ -412,8 +415,6 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   const casillas = filasCampos.flatMap(x => x.partes.filter(y => typeof y === 'object'))
   const distintos = casillas.filter(y => { const g = enGuardado(y.campo), v = valorCampo(prueba.def, prueba.valores, y.campo); return g != null && v !== g })
   const velasCambiadas = intervalo !== intervaloGuardado
-  // Volver a los guardados: sin ningún cambio de prueba (los números, «Cómo compro» y las velas).
-  const volver = () => onCambios({})
 
   if (error) return <div data-senales="error" style={{ color: ROJO, padding: '12px 4px' }}>{error}</div>
   const seg = (activo) => ({ fontFamily: B.letra, fontSize: 13, minHeight: 34, padding: '0 12px', cursor: 'pointer', border: `1px solid ${activo ? AZUL : B.borde}`, background: activo ? '#1f3350' : B.fondo, color: activo ? B.titulo : B.secundario, fontWeight: activo ? 600 : 400 })
@@ -451,16 +452,11 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
           </span>
         ))}
         {filasCampos.length > 0 && <Ayuda texto={AYUDA_CASILLAS} etiqueta="Casillas de prueba"/>}
-        {(distintos.length > 0 || velasCambiadas) && <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
-          <button data-boton="volver" style={S.boton} onClick={volver}>Volver a los guardados</button>
-          {onGuardarValores && <button data-boton="guardar-valores" style={guardando || errPrueba.length ? S.botonDesactivado : S.botonVerde} disabled={guardando || !!errPrueba.length} onClick={onGuardarValores}>{guardando ? 'Guardando…' : 'Guardar estos valores en la estrategia'}</button>}
-        </span>}
       </div>
-      <div style={{ ...S.apagado, marginTop: 6 }}>Las casillas son para probar: no cambian la estrategia hasta que pulses «Guardar estos valores en la estrategia». Al salir del paso 1 y volver a entrar, salen siempre los valores guardados.</div>
+      <div style={{ ...S.apagado, marginTop: 6 }}>Las casillas son para probar: no cambian la estrategia hasta que pulses «Guardar en la estrategia», arriba. Al salir del paso 1 y volver a entrar, salen siempre los valores guardados.</div>
       {ensayo.aviso && !otras && <div data-aviso-ensayo style={{ color: AMARILLO, fontSize: 13, marginTop: 4 }}>{ensayo.aviso}</div>}
       {avisoFin && <div data-aviso-fecha-final={avisoFin.tipo} style={{ color: AMARILLO, fontSize: 13, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>{avisoFin.texto}<Ayuda texto={avisoFin.ayuda} etiqueta={avisoFin.tipo === 'fechas' ? 'Fecha final elegida' : 'Faltan velas'}/></div>}
       {tocaPaso2(desde, hasta) && <div data-nota-paso2 style={{ color: AMARILLO, fontSize: 13, marginTop: 4 }}>{NOTA_PASO2}</div>}
-      {msgGuardar && <div style={{ color: ROJO, marginTop: 4 }}>{msgGuardar}</div>}
       {errPrueba.length > 0 && <div data-error-prueba style={{ color: ROJO, marginTop: 6 }}>{errPrueba.map((e, k) => <div key={k}>{e}</div>)}</div>}
       {cargando && <div style={{ ...S.apagado, marginTop: 8 }}>Leyendo los precios guardados…</div>}
       {fallo && <div style={{ color: ROJO, marginTop: 8 }}>{fallo}</div>}
@@ -495,7 +491,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
       </div>
       {conVelas && !errPrueba.length && <aside data-columna-cifras style={{ flex: '1 1 320px', maxWidth: 400, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ ...S.tarjeta, padding: 12 }}>
-            <div data-linea-cifras style={{ fontSize: 12, color: B.secundario, lineHeight: 1.5, marginBottom: 6 }}>{LINEA_CIFRAS(simbolo)} <Ayuda texto={AYUDA_CIFRAS} etiqueta="Las cifras"/></div>
+            <div data-titulo-cifras style={{ fontSize: 13, color: B.secundario, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>Las cifras de la regla en {simbolo}<Ayuda texto={AYUDA_TITULO_CIFRAS(simbolo)} etiqueta="Las cifras"/></div>
             {cifras ? <>
               <TablaCifras c={cifras} simbolo={simbolo}/>
               {cifras.regla.operaciones < MIN_OPERACIONES && <div data-pocas style={{ fontSize: 12, color: B.apagado, marginTop: 6 }}>Solo {cifras.regla.operaciones} {cifras.regla.operaciones === 1 ? 'operación' : 'operaciones'}: puede ser suerte.</div>}

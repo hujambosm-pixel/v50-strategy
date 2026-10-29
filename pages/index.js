@@ -35,7 +35,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1072'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1073'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -43,6 +43,7 @@ const LaboratorioPanelMemo = memo(LaboratorioPanel)
 const CarteraPanelMemo = memo(CarteraPanel)
 import { payloadPrueba } from '../lib/optimizacion'
 import { curvasVelaAVela, caidaMaxima } from '../lib/ddVelaAVela'
+import { colorSigno, colorWinRate, colorFactor, COLOR_DRAWDOWN, COLOR_OPERACIONES, COLOR_TIEMPO, AYUDA_MAX_DD } from '../lib/coloresCifras'
 import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart, AssetSignalChart } from '../components/BacktestCharts'
 import dynamic from 'next/dynamic'
 const McMonthlyGainsChart = dynamic(() => import('../components/McMonthlyGainsChart'), { ssr: false })
@@ -5940,16 +5941,17 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   const buildUnifiedRows=(m, maxDDBH)=>{
     if(!m) return []
     const v=(val,color)=>({val,color})
-    const wr=m.winRate>=50?'#00e5a0':'#ff4d6d'
-    const fb=m.factorBen>=1?'#00e5a0':'#ff4d6d'
+    // V9.1073: las reglas de color, en lib/coloresCifras.js (las mismas en las cifras del paso 1 del Builder).
+    const wr=colorWinRate(m.winRate)
+    const fb=colorFactor(m.factorBen)
     // Strategy-specific gains
-    const cS=m.ganSimple>=0?'#00e5a0':'#ff4d6d', cC=m.ganComp>=0?'#00e5a0':'#ff4d6d', cBH=m.ganBH>=0?'#00e5a0':'#ff4d6d'
+    const cS=colorSigno(m.ganSimple), cC=colorSigno(m.ganComp), cBH=colorSigno(m.ganBH)
     // B&H = buy & hold, no individual trades → trade-specific stats = null (—)
     return [
-      {label:'Total Operaciones',     compound:v(m.n,'#ffd166'),            bh:null,                   simple:v(m.n,'#ffd166')},
+      {label:'Total Operaciones',     compound:v(m.n,COLOR_OPERACIONES),            bh:null,                   simple:v(m.n,COLOR_OPERACIONES)},
       {label:'Total Días Invertido',  compound:v(m.totalDias,'#00d4ff'),    bh:null,                   simple:v(m.totalDias,'#00d4ff')},
       {label:'Días Promedio',         compound:v(fmt(m.diasProm,1,' días'),'#00d4ff'), bh:null,        simple:v(fmt(m.diasProm,1,' días'),'#00d4ff')},
-      {label:`Tiempo Invertido (${fmt(m.aniosInv,2)}a)`, compound:v(fmt(m.tiempoInvPct,0,'%'),'#ffd166'), bh:null, simple:v(fmt(m.tiempoInvPct,0,'%'),'#ffd166')},
+      {label:`Tiempo Invertido (${fmt(m.aniosInv,2)}a)`, compound:v(fmt(m.tiempoInvPct,0,'%'),COLOR_TIEMPO), bh:null, simple:v(fmt(m.tiempoInvPct,0,'%'),COLOR_TIEMPO)},
       {label:'Capital inv. medio',    compound:v(fmt(m.tiempoInvPct,1,'%'),'#9b72ff'), bh:null,       simple:v(fmt(m.tiempoInvPct,1,'%'),'#9b72ff')},
       {label:'Ganadoras',             compound:v(m.wins,'#00e5a0'),         bh:null,                   simple:v(m.wins,'#00e5a0')},
       {label:'Perdedoras',            compound:v(m.losses,'#ff4d6d'),       bh:null,                   simple:v(m.losses,'#ff4d6d')},
@@ -5959,8 +5961,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
       {label:'Pérdida Media (%)',     compound:v(fmt(m.avgLoss,2,'%'),'#ff4d6d'), bh:null,            simple:v(fmt(m.avgLoss,2,'%'),'#ff4d6d')},
       {label:'Ganancia (€)',          compound:v(fmt(m.ganComp,2,'€'),cC),  bh:v(fmt(m.ganBH,2,'€'),cBH), simple:v(fmt(m.ganSimple,2,'€'),cS)},
       {label:'Ganancia (%)',          compound:v(fmt(m.ganComp/Number(capitalIni)*100,2,'%'),cC), bh:v(fmt(m.ganBH/Number(capitalIni)*100,2,'%'),cBH), simple:v(fmt(m.ganTotalPct,2,'%'),cS)},
-      {label:`CAGR (${fmt(m.anios,2)}a)`, compound:v(fmt(m.cagrC,2,'%'),m.cagrC>=0?'#00e5a0':'#ff4d6d'), bh:v(fmt(m.cagrBH,2,'%'),m.cagrBH>=0?'#00e5a0':'#ff4d6d'), simple:v(fmt(m.cagrS,2,'%'),m.cagrS>=0?'#00e5a0':'#ff4d6d')},
-      {label:'Max Drawdown (vela a vela)', compound:v(fmt(ddVelaAVela.compound,2,'%'),'#ff4d6d'), bh:v(fmt(maxDDBH,2,'%'),'#ff4d6d'), simple:v(fmt(ddVelaAVela.simple,2,'%'),'#ff4d6d')},
+      {label:`CAGR (${fmt(m.anios,2)}a)`, compound:v(fmt(m.cagrC,2,'%'),colorSigno(m.cagrC)), bh:v(fmt(m.cagrBH,2,'%'),colorSigno(m.cagrBH)), simple:v(fmt(m.cagrS,2,'%'),colorSigno(m.cagrS))},
+      {label:'Max Drawdown', ayuda:AYUDA_MAX_DD, compound:v(fmt(ddVelaAVela.compound,2,'%'),COLOR_DRAWDOWN), bh:v(fmt(maxDDBH,2,'%'),COLOR_DRAWDOWN), simple:v(fmt(ddVelaAVela.simple,2,'%'),COLOR_DRAWDOWN)},
     ]
   }
 
@@ -6003,7 +6005,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
         <tbody>
           {rows.map((row,ri)=>(
             <tr key={row.label} style={{borderBottom:'1px solid rgba(20,40,65,0.9)',background:ri%2===0?'transparent':'rgba(255,255,255,0.012)'}}>
-              <td style={{padding:'5px 10px',color:'#9ac8e2',fontSize:11,whiteSpace:'nowrap'}}>{row.label}</td>
+              <td style={{padding:'5px 10px',color:'#9ac8e2',fontSize:11,whiteSpace:'nowrap'}}>{row.label}{row.ayuda&&<Ayuda texto={row.ayuda} etiqueta={row.label}/>}</td>
               {activeCols.map((s,si)=>{
                 const cell=row[s]
                 return(
@@ -6036,7 +6038,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   if(!cell) return null
                   return(
                     <tr key={row.label} style={{borderBottom:'1px solid rgba(20,40,65,0.9)',background:ri%2===0?'transparent':'rgba(255,255,255,0.012)'}}>
-                      <td style={{padding:'5px 12px',color:'#9ac8e2',fontSize:11,whiteSpace:'nowrap'}}>{row.label}</td>
+                      <td style={{padding:'5px 12px',color:'#9ac8e2',fontSize:11,whiteSpace:'nowrap'}}>{row.label}{row.ayuda&&<Ayuda texto={row.ayuda} etiqueta={row.label}/>}</td>
                       <td style={{padding:'5px 12px',textAlign:'right',fontWeight:600,color:cell.color,fontSize:12}}>{cell.val}</td>
                     </tr>
                   )
@@ -6307,7 +6309,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1072</title>
+        <title>Trading Simulator V9.1073</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6396,7 +6398,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1072
+            <span className="dot"/>Trading Simulator V9.1073
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
