@@ -1491,3 +1491,13 @@ venta, su `capitalTras`). Una operación de 100 → 120 → 90 → vende a 110 d
   2024–07/2025 (5 operaciones, la última abierta: «+56,1 % (abierta)», «Stop 154,64» = stop de la última vela; el stop coincide con
   la línea en 146 velas y se dibuja en todas) y AAPL 2010–2015 (24 operaciones); cada % comprobado a mano; la casilla oculta las
   etiquetas. Comprobaciones comunes.
+
+**Parte C · la caída máxima en «Cómo habría crecido 100» (V9.1075)**
+- La curva de equity de «Backtest de un valor» ya marca la caída máxima (EquityChart.js addDD: una línea del máximo previo al
+  mínimo con su etiqueta), así que se usa ese dibujo: en la curva de «Tu regla» (solo esa), una línea roja del máximo previo al
+  mínimo y, en el punto más bajo, la etiqueta roja con la cifra («−21,45 %»). La cifra es EXACTAMENTE el Max Drawdown de la tabla
+  (cifras.regla.maxDD); tramoCaida (components/BuilderSenales.js) solo busca dónde dibujarla, con la misma regla que caidaMaxima (el
+  máximo empieza en 100). Ningún cálculo cambia.
+- Comprobado: a mano (100 → 120 → 90 → 110: del 120 al 90; 98 → 80: desde la base 100); con cifrasRegla, SuperTrend 10/3 en AAPL
+  2010–2015 (−21,45 %, mínimo el 29/09/2015) y NVDA 2024–07/2025 (−35,60 %, el 21/04/2025): el mínimo marcado es el de caidaMaxima,
+  la caída dibujada es la de la tabla y la etiqueta de la curva dice lo mismo que la tabla. Comprobaciones comunes.

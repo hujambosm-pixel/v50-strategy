@@ -40,9 +40,9 @@ const ESPERA_MS = 250
 const AYUDA_SUPERTREND = 'La línea del SuperTrend: verde y por debajo del precio mientras la tendencia es alcista (es la banda inferior, que solo sube); roja y por encima mientras es bajista (la banda superior, que solo baja). Se corta en cada cambio de tendencia: cambia a alcista cuando una vela CIERRA por encima de la roja y a bajista cuando cierra por debajo de la verde. Ejemplo: con SuperTrend (10, 3), si la línea roja está en 105 € y una vela cierra a 106 €, desde esa vela la línea es verde, por debajo del precio. Todo con la vela cerrada.'
 // V9.1067: el «?» de los puntos de la señal.
 const AYUDA_PUNTO_SENAL = 'La señal se conoce al CIERRE de una vela: en esa vela va el punto, por encima de su máximo (verde para la compra, naranja para la venta). La flecha va en la vela en que se compra o se vende de verdad. Con «apertura de la vela siguiente», la compra es en la vela de después del punto; con una orden en un nivel (el máximo, la ruptura, el swing o la línea del SuperTrend), el punto va en la vela en que se puso la orden o en que el precio la tocó. Una venta por un stop o un objetivo es dentro de la vela: el punto y la flecha, en la misma.'
-// V9.1066 / V9.1073: el «?» del stop activo (ya no se oculta donde coincide con la línea del SuperTrend).
+// V9.1066 / V9.1074: el «?» del stop activo (ya no se oculta donde coincide con la línea del SuperTrend).
 const AYUDA_STOP = 'La línea roja punteada es el stop activo del motor, vela a vela, solo mientras hay una operación abierta. Va siempre encima de las demás líneas, también de la del SuperTrend. Con el stop en la línea del SuperTrend, el stop de cada vela es la línea del SuperTrend de la vela ANTERIOR (sube con ella y nunca baja): por eso el rojo va casi pegado a la línea verde y una vela por detrás. Ejemplo: si la línea verde está en 140,52 € el martes y sube a 142,27 € el miércoles, el stop del miércoles es 140,52 € y el del jueves, 142,27 €. Si al final del periodo sigue la operación abierta, su stop sale en el eje de precios en rojo («Stop 142,27»).'
-// V9.1073: el «?» de las etiquetas de cada operación.
+// V9.1074: el «?» de las etiquetas de cada operación.
 const AYUDA_ETIQUETAS = 'Cada operación lleva arriba su resultado: (precio de venta / precio de compra − 1) × 100, la misma cuenta que las etiquetas de «Backtest de un valor». Verde si gana, rojo si pierde. La que sigue abierta al final, con el cierre de la última vela y «(abierta)». Ejemplo: compras a 100 € y vendes a 98,40 € → «−1,6 %».'
 // V9.1062: el «?» de los swings de la leyenda: los dos tramos y el stop rojo.
 const AYUDA_SWINGS = `${NOTA_LINEA_SWING} El stop activo (rojo) solo se dibuja mientras hay una operación abierta; donde coincide con el mínimo de swing en vigor, se ve solo el rojo.`
@@ -91,7 +91,7 @@ function Interruptor({ clave, ocultos, onCambia, que, datos = {}, children }) {
   )
 }
 export const claveCanal = (c) => `canal:${c.tipo === 'bollinger' ? c.nombre.replace(/ · (superior|inferior)$/, '') : c.tipo === 'supertrend' ? c.nombre.replace(/ (alcista|bajista)$/, '') : c.nombre}`
-// V9.1073: la etiqueta de cada operación («+0,8 %», «−1,6 % (abierta)»): el % es (salida / entrada − 1) × 100, como las de
+// V9.1074: la etiqueta de cada operación («+0,8 %», «−1,6 % (abierta)»): el % es (salida / entrada − 1) × 100, como las de
 // «Backtest de un valor» (components/CandleChart.js), y el mismo dibujo: un recuadro verde o rojo en una franja de arriba (3 filas,
 // una operación en cada una, por turno), unido con una línea punteada a la mitad de la operación. La franja queda libre: la escala
 // de precios deja ese hueco arriba (scaleMargins), así que las velas, los puntos y las flechas van siempre debajo.
@@ -128,7 +128,7 @@ function Graficos({ r, ocultos = new Set(), llaveZoom = '' }) {
   const zoom = useRef({ llave: null, rango: null }), llaveR = useRef(llaveZoom)
   llaveR.current = llaveZoom
   const caja = useRef(null), precio = useRef(null), osc = useRef([]), series = useRef(new Map()), ocultosR = useRef(ocultos), flechas = useRef(null)
-  const etiquetas = useRef(null), redibuja = useRef(null), precioStop = useRef(null)   // V9.1073: el SVG de las etiquetas de las operaciones, cómo redibujarlas y la etiqueta del stop en el eje
+  const etiquetas = useRef(null), redibuja = useRef(null), precioStop = useRef(null)   // V9.1074: el SVG de las etiquetas de las operaciones, cómo redibujarlas y la etiqueta del stop en el eje
   const franjas = r.franjas
   const [altoPrecio, setAltoPrecio] = useState(ALTO_PRECIO)
   const H = altoGrafico(franjas.length, altoPrecio)
@@ -160,7 +160,7 @@ function Graficos({ r, ocultos = new Set(), llaveZoom = '' }) {
       const altoDibujo = ch.paneSize?.().height
       if (altoDibujo > 0 && altoDibujo !== H) ch.resize(precio.current.clientWidth, H + EJE_TIEMPO + H - altoDibujo)
       const abajo = franjas.length ? (H - altoPrecio + 6) / H : 0.05
-      // V9.1073: con etiquetas de operaciones, la escala deja libre la franja de arriba (las velas, los puntos y las flechas, debajo).
+      // V9.1074: con etiquetas de operaciones, la escala deja libre la franja de arriba (las velas, los puntos y las flechas, debajo).
       const ops = r.operaciones || [], arriba = () => ops.length && !ocultosR.current.has('etiquetas') ? (ETQ_BANDA + 6) / H : 0.05
       // V9.1065: cada serie, apuntada con la clave de su casilla y creada visible u oculta según la casilla.
       series.current = new Map()
@@ -226,9 +226,9 @@ function Graficos({ r, ocultos = new Set(), llaveZoom = '' }) {
         if (!sitio[tipo].length) continue
         apunta(clave, ch.addLineSeries({ color, lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: radio, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: visto(clave) })).setData(sitio[tipo])
       }
-      // V9.1073: el stop de la operación abierta al final, en rojo en el eje de precios («Stop 0,79»), como «Backtest de un valor».
+      // V9.1074: el stop de la operación abierta al final, en rojo en el eje de precios («Stop 0,79»), como «Backtest de un valor».
       precioStop.current = r.stopFinal != null && Number.isFinite(r.stopFinal) ? velas.createPriceLine({ price: r.stopFinal, color: '#ff4d6d', lineVisible: false, axisLabelVisible: visto('canal:stop activo'), axisLabelColor: '#ff4d6d', axisLabelTextColor: '#ffffff', title: visto('canal:stop activo') ? textoStop(r.stopFinal) : '' }) : null
-      // V9.1073: las etiquetas de las operaciones, redibujadas al mover el gráfico, al cambiar su tamaño y al enseñarlas u ocultarlas.
+      // V9.1074: las etiquetas de las operaciones, redibujadas al mover el gráfico, al cambiar su tamaño y al enseñarlas u ocultarlas.
       redibuja.current = () => {
         if (!vivo) return
         const quita = ocultosR.current.has('etiquetas')
@@ -285,12 +285,28 @@ function Graficos({ r, ocultos = new Set(), llaveZoom = '' }) {
 }
 
 // ── Las cifras de la derecha ──
-function Curva100({ curvas }) {
+// V9.1075: dónde está la caída máxima de una curva [{ value }] que empieza en «base»: el índice del mínimo (la caída más grande
+// desde el máximo anterior, como lib/ddVelaAVela.js caidaMaxima) y el del máximo previo (-1 si es el punto de partida, la base).
+// Solo para dibujarla: la cifra es la de la tabla.
+export function tramoCaida(curva, base = 100) {
+  let pico = base, iPico = -1, max = 0, out = null
+  curva.forEach((p, i) => {
+    if (p.value > pico) { pico = p.value; iPico = i }
+    const dd = pico > 0 ? (pico - p.value) / pico * 100 : 0
+    if (dd > max) { max = dd; out = { pico: iPico, valle: i, valorPico: pico } }
+  })
+  return out
+}
+export function Curva100({ curvas, maxDD = null }) {
   const a = curvas.regla, b = curvas.bh, W = 340, H = 130
   if (a.length < 2) return null
   const vals = [...a, ...b].map(p => p.value).filter(Number.isFinite), lo = Math.min(100, ...vals), hi = Math.max(100, ...vals)
   const x = (i, n) => (i / (n - 1)) * W, y = (v) => 6 + (1 - (v - lo) / ((hi - lo) || 1)) * (H - 12)
   const ruta = (cs) => cs.map((p, i) => `${x(i, cs.length).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ')
+  // V9.1075: la caída máxima de «Tu regla»: la línea roja del máximo previo al mínimo y, en el punto más bajo, la etiqueta roja con
+  // el Max Drawdown de la tabla (la misma cifra). El dibujo, como el de la curva de equity de «Backtest de un valor».
+  const caida = maxDD > 0 ? tramoCaida(a) : null
+  const pc = caida && { x1: caida.pico < 0 ? 0 : x(caida.pico, a.length), y1: y(caida.valorPico), x2: x(caida.valle, a.length), y2: y(a[caida.valle].value) }
   return (
     <div data-curva100>
       <div style={{ position: 'relative' }}>
@@ -298,8 +314,10 @@ function Curva100({ curvas }) {
           <line x1="0" x2={W} y1={y(100)} y2={y(100)} stroke={B.borde} strokeDasharray="3 3" vectorEffect="non-scaling-stroke"/>
           {b.length > 1 && <polyline points={ruta(b)} fill="none" stroke={GRIS_BH} strokeWidth="1.5" vectorEffect="non-scaling-stroke"/>}
           <polyline data-linea="regla" points={ruta(a)} fill="none" stroke={AZUL} strokeWidth="2.2" vectorEffect="non-scaling-stroke"/>
+          {pc && <line data-caida-maxima x1={pc.x1} y1={pc.y1} x2={pc.x2} y2={pc.y2} stroke={COLOR_DRAWDOWN} strokeWidth="2" vectorEffect="non-scaling-stroke"/>}
         </svg>
         <span style={{ position: 'absolute', left: 2, top: y(100) - 16, fontSize: 11, color: B.apagado }}>100</span>
+        {pc && <span data-etiqueta-caida style={{ position: 'absolute', left: `${pc.x2 / W * 100}%`, top: Math.min(H - 16, pc.y2 + 3), transform: `translateX(${pc.x2 / W > 0.8 ? '-100%' : pc.x2 / W < 0.2 ? '0' : '-50%'})`, fontSize: 11, fontWeight: 700, color: '#fff', background: COLOR_DRAWDOWN, borderRadius: 3, padding: '0 4px', whiteSpace: 'nowrap', pointerEvents: 'none' }}>{signo(-maxDD)}</span>}
       </div>
       <div style={{ display: 'flex', gap: 14, fontSize: 12, color: B.secundario, marginTop: 6, flexWrap: 'wrap' }}>
         <span><span style={{ display: 'inline-block', width: 14, height: 3, background: AZUL, verticalAlign: 'middle' }}/> Tu regla: {fmt(a[a.length - 1].value, 0)}</span>
@@ -551,7 +569,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
           </div>
           {cifras && <div style={{ ...S.tarjeta, padding: 12 }}>
             <div style={{ fontSize: 13, color: B.secundario, marginBottom: 6 }}>Cómo habría crecido 100 (en %, sin euros)</div>
-            <Curva100 curvas={cifras.curvas}/>
+            <Curva100 curvas={cifras.curvas} maxDD={cifras.regla.maxDD}/>
           </div>}
           <div style={{ fontSize: 12, color: B.apagado, lineHeight: 1.5 }}>Solo para orientarte: no se guarda nada.</div>
       </aside>}
