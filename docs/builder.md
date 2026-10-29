@@ -1501,3 +1501,69 @@ venta, su `capitalTras`). Una operación de 100 → 120 → 90 → vende a 110 d
 - Comprobado: a mano (100 → 120 → 90 → 110: del 120 al 90; 98 → 80: desde la base 100); con cifrasRegla, SuperTrend 10/3 en AAPL
   2010–2015 (−21,45 %, mínimo el 29/09/2015) y NVDA 2024–07/2025 (−35,60 %, el 21/04/2025): el mínimo marcado es el de caidaMaxima,
   la caída dibujada es la de la tabla y la etiqueta de la curva dice lo mismo que la tabla. Comprobaciones comunes.
+
+## 40. Línea de tendencia bajista y stop en el mínimo de la vela que cierra bajo la EMA (V9.1076)
+
+**Auditoría (solo lectura, antes de tocar nada)**
+- Los swings de V9.1059 (lib/condiciones/indicadores.js swings: L / R, estrictamente mayor, confirmado al cierre de v + R) sirven tal
+  cual para los máximos de la línea; la «orden en el último máximo de swing» (ordenSwing y su rama del intérprete) es el modelo de la
+  orden en la línea. «Cómo compro» (leeOrden / ponModoOrden) admite un modo más sin tocar los demás.
+- «Stop inicial en el mínimo de la vela de señal»: ya existía (`nivel` con `de: [{ campo: 'low' }]`, «Mínimo de la vela de la señal»).
+- «Stop en el mínimo de la vela que cierra bajo la EMA N»: el `trailing` de siempre lo hace con «en su orden», pero **con «manda el
+  más alto» el motor no lo mueve** (en esa rama solo suben minimoMovil, swingMinimo y supertrend): el trailing se queda vacío toda la
+  operación. Arreglarlo cambiaría una pieza existente (y las cifras de cualquier estrategia guardada con trailing + «manda el más
+  alto»), así que NO se toca: hay un stop nuevo, `emaMinimo`, que entra por el mismo camino que los stops que suben y funciona en los
+  dos modos.
+
+**La regla de la línea (lib/condiciones/indicadores.js lineaBajista; para la vela k, con lo conocido al cierre de k)**
+- P = el último máximo de swing confirmado dentro de las N últimas velas (v ≥ k − N + 1). Q (el ancla) = el máximo de swing anterior
+  a P más reciente con máximo > el de P tal que ninguna mecha de las velas entre Q y P quede por encima de la recta Q–P (si alguna
+  queda, el siguiente más alto hacia atrás); Q también dentro de las N velas. Sin Q, no hay línea. El ancla de cada P no depende de
+  k: se calcula una vez por P.
+- «Si el último máximo sube»: «unir con el anterior más alto» (por defecto: lo de arriba) o «invalidar la línea» (si el máximo de P ≥
+  el del máximo de swing anterior, no hay línea).
+- Valor en la vela k: la recta Q–P. Señal (la condición «Rompe la línea de tendencia bajista», `rompeLineaBajista`, grupo «Swings»):
+  el primer CIERRE por encima de la línea vigente; cada línea (el par Q–P) da una sola señal, con operación abierta o sin ella (solo
+  depende del precio). Sin línea, false; antes de L + R velas, null.
+- «Cómo compro»: «apertura de la vela siguiente» (lo de siempre) u «Orden en la línea de tendencia bajista» (orden `lineaBajista`,
+  { nivel: { izquierda, derecha, velas, siSube } }): en la vela i, la línea vigente al cierre de i − 1 proyectada a i; compra si el
+  máximo la SUPERA (a ese nivel, o a la apertura si abre por encima). Cada línea se usa una vez: la primera vela cuyo máximo la supera
+  la gasta, con compra o sin ella. Las filas de «Compro cuando…» pasan a ser opcionales. Con la fila «Rompe la línea…» y la orden con
+  los mismos números, aviso «casi nunca compra» (el cierre que la rompe ya la ha superado con su máximo).
+- Al elegir la orden en la línea (o con su «+» del catálogo), toma los números de la fila «Rompe la línea…» si la hay; los dos usos van
+  enlazados (familia «Línea bajista»: L, R y N).
+
+**El stop `emaMinimo` (lib/editor/interprete.js; lib/condiciones/indicadores.js minimoBajoMedia)**
+- { periodo } (10 por defecto): con la operación abierta (velas desde la de la compra), cada vela que CIERRA bajo su EMA de N propone su
+  mínimo; desde la vela siguiente el stop es el mayor entre el actual y ese mínimo: nunca baja. Empieza vacío. Salta dentro de la vela
+  a su precio, o a la apertura si abre por debajo. Vale con «en su orden» y con «manda el más alto». La EMA es la del motor (calcEMA:
+  arranca con la SMA de los N primeros cierres).
+- En las tarjetas: «En el mínimo de la vela que cierra bajo la EMA (solo sube)», con su casilla del periodo, su «?» y su pieza en el
+  catálogo (enlazada con las filas de la EMA del mismo periodo). Motivo de salida: trailing_exit, como el de la 1 V50.
+
+**Lo demás**
+- Formato (lib/editor/definicion.js): TIPOS_ORDEN + 'lineaBajista', TIPOS_STOP + 'emaMinimo', con su validación y sus frases.
+  Calentamiento: N para la condición y la orden; el periodo de la EMA para el stop (historia.js, laboratorio.js). El exportador a
+  code_js no las copia y dice por qué. Funciona igual en diario y en semanal (son velas).
+- Solo detrás de una condición, una orden y un stop nuevos: lo de antes no cambia (la opción con nombre de los desplegables de las
+  filas —«unir con el anterior más alto»— es nueva; las opciones de antes no tienen nombre y se ven igual).
+- Comprobado (pruebas sintéticas de Sergi, L/R 2/2, N = 120, «unir», a la apertura):
+  - E1: máximos 3 (90) y 9 (80, conocido en la 11); línea 3–9; señal en la 16 (72 > 68,33); compra en la 17 a 72,5. ✓
+  - E2: máximos 3, 8 y 14 (conocido en la 16); 3–8 hasta la 15 y 8–14 desde la 16; señal en la 18 (65 > 63,67); compra en la 19 a 65,5. ✓
+  - E3: máximos 3, 9 y 13 (conocido en la 15); 3–9 hasta la 14 y 9–13 desde la 15; sin señal en la 17 (69 < 72); señal en la 18
+    (73 > 71); compra en la 19 a 73,5. ✓
+  - E4: máximos 3 (90), 8 (82) y 12 (84, conocido en la 14); 3–8 hasta la 13; con «unir», 3–12 desde la 14, señal en la 18 (82 > 80),
+    compra en la 19 a 82,5; con «invalidar», sin línea desde la 14 y sin compra. ✓
+  - E5: compra a la apertura de la 5 (66,5) con stop inicial 62 (mínimo de la 4). Con la EMA10 del motor (SMA de los 10 primeros
+    cierres = 68,4 en la vela 9), la 12 cierra a 71,5 con la EMA en 71,114: NO cierra bajo ella (con la EMA iniciada en el primer
+    cierre valdría 72,243 y sí). La primera vela por debajo es la 17 (75 < 75,118) → stop 74 desde la 18; la 18 abre a 75 y baja a
+    71 → sale en la 18 a 74. Igual que lo esperado (sale en la 18 a 74); solo cambia que el stop pasa de 62 a 74 sin el paso por 70.
+    Igual con «manda el más alto» y con «en su orden».
+  - Extra: un cierre bajo la EMA con un mínimo más bajo que el stop vigente no lo baja (con la operación abierta solo puede pasar en la
+    vela de la compra sin vigilar: stop 92, la vela de la compra baja a 90 y cierra bajo su EMA → sigue en 92 y sale después a 92).
+    Y uno que sube: 100 → 100,5 → 100,6.
+  - Sin mirar el futuro: señal, línea y orden en todos los cortes de E1–E4 (unir e invalidar) y en ~60 cortes de AAPL en diario y en
+    semanal; en E1 el máximo de la 9 no forma línea en la 10 (sin confirmar) y, cortado en la 10, no hay ninguna línea.
+  - La orden en la línea en E1: compra en la 16 a 68,33 (la línea; abre a 67). Tarjetas: «+» de la orden y del stop, leeOrden, aviso
+    «casi nunca». Montaje SWC con estado (las tres pestañas, con la compra a la apertura y con la orden en la línea). Comprobaciones
+    comunes.
