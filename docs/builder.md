@@ -1640,3 +1640,66 @@ venta, su `capitalTras`). Una operación de 100 → 120 → 90 → vende a 110 d
   Drawdown y el mismo comprar y mantener. Montaje SWC con estado (por defecto el ensayo; con N = 5 en AAPL: del 29/10/2021, 45
   operaciones y «Faltan velas…», porque los precios guardados de las pruebas llegan al 07/10/2026; con N = 0, el aviso de la casilla y
   sin cálculo; «Otras fechas» igual que antes). Comprobaciones comunes.
+
+## 42. Paso 2 · azar con stops: diagnóstico (parte 1, sin cambiar la app)
+
+**Auditoría.** Ninguna de las copias al azar que hay hoy re-simula las reglas de salida: todas reutilizan las DURACIONES de las
+operaciones reales.
+- `lib/azar.js` (la de «Probarla contra el azar» de hoy, y `lib/azarCartera.js`): por activo, las mismas k operaciones con sus
+  duraciones en velas, en orden barajado y en huecos al azar sin solaparse (`colocaAlAzar`, «barras y estrellas»); cada una compra a
+  la apertura de su vela y vende a la apertura de la vela entrada + duración (`pctAlAzar`). Ejemplo: 1.260 velas y tres operaciones
+  de 3, 40 y 12 velas → quedan 1.205 velas libres repartidas al azar en 4 huecos; una copia puede ser «compra en la vela 210, vende
+  en la 250; compra en la 600, vende en la 612; compra en la 1.001, vende en la 1.004». CAGR simple de la suma y percentil del real.
+- LOTE_2 (`lib/laboratorioSalidas.js`): el «re-simulado» (`sorteaSecuencial`) usa las mismas señales y una duración sacada de las
+  reales en cada una que se abre; la permutación y el «hueco», también duraciones. LOTE_3 y el laboratorio del editor
+  (`preparaAzarEstrategia`): mismas duraciones en fechas al azar, con la calibración en paseos aleatorios (criterio 8, ≤ 10 %).
+- Los stops del motor de tarjetas (`lib/editor/interprete.js`) encajan con lo descrito: `atrCompra` (precio de compra − k × ATR de
+  la vela anterior, fijo), `trailing` con `nivel.atr` (cierre − k × ATR de cada vela cerrada; empieza en la vela de entrada con la
+  anterior), `minimoMovil` (mínimo de las n velas anteriores), `stopsModo: 'masAlto'` y `supertrend` (línea al cierre de la vela
+  anterior). Ninguno baja nunca. Se vende dentro de la vela al nivel del stop, o a la apertura si abre por debajo.
+
+**Experimento** (`scripts/comprobaciones/azar-stops.js`, no está en comunes.sh; unos 3 minutos). 200 mercados ficticios por manera
+con los días de QQQ (2005–2026) barajados: (a) día a día, (b) por bloques de 20 días. Cada día se guarda como cocientes (salto de la
+apertura sobre el cierre anterior, máximo, mínimo y cierre sobre la apertura) y se encadena desde 100: el OHLC es el de un día real,
+coherente por construcción (0 incoherentes). 60 velas de calentamiento + 1.260 medidas. «Estrategia» sin ventaja: señal al azar
+(1/20 por vela), compra a la apertura siguiente, una operación a la vez, con el INTÉRPRETE de la app tal cual (la señal entra como
+«volumen alto» sobre un volumen inventado). Medida: CAGR compuesto, sin comisiones. 1.000 copias por mercado. Aprobado falso: gana
+al ≥ 95 % de las copias. Copias:
+- *resim*: entradas al azar (1/20) y la MISMA salida aplicada desde cada entrada. La salida desde cada vela de entrada posible sale
+  del intérprete (varias pasadas) y se comprueba que rehace la estrategia exactamente (2.400 de 2.400 casos).
+- *resimP*: igual, con la tasa de entradas medida en la estrategia: operaciones / velas sin posición.
+- *durac*: `lib/azar.js` (`colocaAlAzar` + `pctAlAzar`), la de hoy.
+- *lote2*: el re-simulado de LOTE_2 en velas (mismas señales, duraciones sacadas de las reales).
+
+| Mercados | Salida | resim | resimP | durac (hoy) | lote2 |
+|---|---|---|---|---|---|
+| día a día | S1 stop fijo ATR(14)×2 | 4,0 % [2,0–7,7] | 3,0 % [1,4–6,4] | 1,0 % [0,3–3,6] | 7,0 % [4,2–11,4] |
+| día a día | S2 trailing ATR(14)×3 | 2,5 % [1,1–5,7] | 3,0 % [1,4–6,4] | 1,5 % [0,5–4,3] | 5,5 % [3,1–9,6] |
+| día a día | S3 mínimo de 10 velas | 4,0 % [2,0–7,7] | 4,5 % [2,4–8,3] | 3,0 % [1,4–6,4] | 4,5 % [2,4–8,3] |
+| día a día | S4 manda el más alto S1/S3 | 4,0 % [2,0–7,7] | 3,5 % [1,7–7,0] | 2,5 % [1,1–5,7] | 4,5 % [2,4–8,3] |
+| día a día | S5 SuperTrend 10/3 | 2,5 % [1,1–5,7] | 3,0 % [1,4–6,4] | 1,0 % [0,3–3,6] | 4,5 % [2,4–8,3] |
+| día a día | S6 control: 20 velas | 6,0 % [3,5–10,2] | 7,0 % [4,2–11,4] | 6,5 % [3,8–10,8] | 0,0 % [0,0–1,9] |
+| bloques 20 | S1 | 7,5 % [4,6–12,0] | 6,0 % [3,5–10,2] | 3,0 % [1,4–6,4] | **10,5 % [7,0–15,5]** |
+| bloques 20 | S2 | 4,0 % [2,0–7,7] | 5,5 % [3,1–9,6] | 1,5 % [0,5–4,3] | 4,5 % [2,4–8,3] |
+| bloques 20 | S3 | 6,5 % [3,8–10,8] | 6,0 % [3,5–10,2] | 0,5 % [0,1–2,8] | 1,0 % [0,3–3,6] |
+| bloques 20 | S4 | 4,5 % [2,4–8,3] | 5,0 % [2,7–9,0] | 0,0 % [0,0–1,9] | 0,5 % [0,1–2,8] |
+| bloques 20 | S5 | 3,0 % [1,4–6,4] | 3,0 % [1,4–6,4] | 1,0 % [0,3–3,6] | 3,5 % [1,7–7,0] |
+| bloques 20 | S6 | 4,0 % [2,0–7,7] | 3,0 % [1,4–6,4] | 3,0 % [1,4–6,4] | 0,0 % [0,0–1,9] |
+
+Percentil medio (lo neutral es 50): resim y resimP 46–53 en todo; durac 40–48 con stops (39–40 en S3/S4 por bloques) y 49–50 en S6.
+
+**Causa.** Una duración con stop no es neutral: la decide el camino del precio (corta = cayó hasta el stop; larga = subió y el stop
+lo fue siguiendo). Copiar las duraciones a fechas al azar las separa del camino que las produjo, y además cambia el precio de salida
+(el stop vende dentro de la vela a su nivel o en un hueco a la baja; la copia, a una apertura) y dónde se está fuera (con rachas de
+volatilidad, los stops salen en los tramos agitados; las copias, en cualquier sitio). El sesgo que queda depende del mercado y de la
+medida: en LOTE_2 (media por operación, paseos aleatorios) daba aprobados falsos (stops 12–26 %); aquí (CAGR, QQQ barajado) hace la
+prueba demasiado DURA con stops y deja pasar de más con la de LOTE_2 (S1 por bloques, 10,5 %). Ejemplo: S3 por bloques, CAGR medio de
+la estrategia 3,9 %; las copias re-simuladas, mediana 3,5 %; las de duraciones, 5,4 %, con los mismos días invertidos: el listón
+está 1,5 puntos al año más alto de lo que corresponde a una estrategia sin ventaja, y casi nunca se aprueba (0,5 %), aunque la
+estrategia tuviera algo. Re-simular la regla de salida desde entradas al azar no tiene ese problema: si la estrategia no tiene
+ventaja, ella misma es una copia más, y sale en el 5 % con cualquier salida y cualquier manera de crear los mercados.
+
+**Para la parte 2** (sin implementar): copia re-simulada con la tasa de entradas de la estrategia (resimP). Una función en lib que dé
+la operación que abre cada vela de entrada con el propio intérprete (mejor con una opción de `interpreta` para forzar las señales
+que con el volumen inventado del script) y otra que haga las copias (entradas al azar con la tasa operaciones / velas sin posición,
+salida de la tabla, CAGR); la comprobación en mercados ficticios se mantiene antes de dar el veredicto.
