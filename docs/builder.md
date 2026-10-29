@@ -1588,3 +1588,21 @@ venta, su `capitalTras`). Una operación de 100 → 120 → 90 → vende a 110 d
   E5 (stop EMA 74 en la 18; activo 62 de la 5 a la 17 y 74 en la 18); orden en la línea en E1 (franja y recuadro en la 16); AAPL
   2010–2015 en diario (60 compras, 69 amarillas, 51 grises, 68 roturas) y semanal (9 compras); montaje SWC con velas y con las casillas
   ocultas; las pruebas de la parte A siguen igual. Comprobaciones comunes.
+
+**Parte C · la estrategia «Línea bajista + EMA10» (V9.1078)**
+- Creada en la app (v50-strategy.vercel.app, V9.1077, con la sesión de Sergi) desde el Builder: «Empezar en blanco», nombre, «Rompe la
+  línea de tendencia bajista» del catálogo en «Compro cuando…» (2/2, 120, unir con el anterior más alto), «Cómo compro» a la apertura de
+  la vela siguiente, stops «Mínimo de la vela de la señal» y «En el mínimo de la vela que cierra bajo la EMA (solo sube)» (10), «Con
+  varios stops: manda el más alto», y «Guardar y pasar al paso 2» (POST /api/strategies). Nada más escrito en Supabase (sin pruebas).
+  id 3d3eb031-c3f0-40cf-8669-05feb89db500; params {"intervalo":"diario"}.
+- Ida y vuelta: leída de Supabase (solo lectura), valida, abrirla (estadoDe) da la definición byte a byte y guardarla sin tocar no
+  escribe nada (planGuardado → ninguno); sus params son los que pone el servidor (preparaGuardado).
+- Cifras del ensayo 2010–2015, diario, sin comisión (cifrasRegla del paso 1; AAPL y NVDA de los precios guardados de las
+  comprobaciones, GC=F de Yahoo), solo informativas:
+  - AAPL: 60 operaciones · CAGR 7,21 % · Max Drawdown 19,11 % · Win Rate 31,67 % · Factor de beneficio 1,76 · Tiempo invertido
+    28,72 % (comprar y mantener: CAGR 22,93 %, Max DD 43,03 %).
+  - NVDA: 59 operaciones · CAGR −1,68 % · Max Drawdown 37,76 % · Win Rate 23,73 % · Factor 1,04 · Tiempo invertido 19,80 % (comprar y
+    mantener: CAGR 10,14 %, Max DD 54,42 %).
+  - GC=F: 65 operaciones · CAGR 3,56 % · Max Drawdown 10,80 % · Win Rate 35,38 % · Factor 1,56 · Tiempo invertido 29,86 % (comprar y
+    mantener: CAGR −0,88 %, Max DD 43,40 %).
+- Comprobaciones comunes.
