@@ -1475,3 +1475,19 @@ venta, su `capitalTras`). Una operación de 100 → 120 → 90 → vende a 110 d
 - Comprobado: montaje SWC (barra sin cambios en las tres pestañas; con una casilla cambiada; con tarjetas y casilla; semanales sin
   «Guardar»; estrategia nueva); «Volver» deja la definición y los valores byte a byte como los guardados; los colores comunes dan lo
   mismo que las fórmulas de antes para negativos, cero, umbrales, NaN y null. Comprobaciones comunes.
+
+**Parte B · «Señales en el gráfico»: el stop y las etiquetas (V9.1074)**
+- **El stop activo, siempre** (lib/builder/senales.js): mientras hay operación abierta, rojo punteado, vela a vela, también donde
+  coincide con la línea del SuperTrend (va encima: se crea después). Se revierte el ocultado de V9.1066; la leyenda dice «stop
+  activo» y su «?» (AYUDA_STOP) explica que va una vela por detrás de la línea. senales.js devuelve `stopFinal`: el stop de la
+  operación que sigue abierta en la última vela; el gráfico lo pone como etiqueta roja en el eje de precios («Stop 154,64», una
+  createPriceLine sin línea) y se oculta con la casilla del stop.
+- **Una etiqueta por operación** (components/BuilderSenales.js, dibujaEtiquetas): «+0,8 %», «−1,6 %», la abierta con «(abierta)» y el
+  cierre de la última vela; % = (salida / entrada − 1) × 100, como CandleChart.js, con su dibujo (recuadro verde o rojo arriba,
+  línea punteada a la mitad de la operación) y sin número de operación. Van en una franja de 3 filas que la escala de precios deja
+  libre (scaleMargins), así que no tapan las velas, los puntos ni las flechas. Casilla «% por operación» en la leyenda.
+- Ningún cálculo cambia: solo el dibujo.
+- Comprobado: montaje SWC con los precios guardados (SuperTrend 10/3 con compra «cambia a alcista» y stop en la línea): NVDA
+  2024–07/2025 (5 operaciones, la última abierta: «+56,1 % (abierta)», «Stop 154,64» = stop de la última vela; el stop coincide con
+  la línea en 146 velas y se dibuja en todas) y AAPL 2010–2015 (24 operaciones); cada % comprobado a mano; la casilla oculta las
+  etiquetas. Comprobaciones comunes.
