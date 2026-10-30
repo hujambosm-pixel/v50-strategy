@@ -1753,3 +1753,56 @@ con la vela anterior a la compra). Sustituye al volumen inventado de `azar-stops
   aleatorio inventado, con la huella de todo el resultado (`3ee29dbc`). Con `--mercados 200 --copias 1000`, la de verdad y sus tiempos.
 
 **Pendiente** (partes siguientes): la pantalla del paso 2 y de dónde salen las velas, las operaciones reales y los periodos.
+
+## 44. Paso 2 · registro congelado y la función que ejecuta la prueba (sin pantalla)
+
+**Tablas** (`sql/pruebas_azar.sql`, creadas el 30/10/2026 con la Management API en una transacción). Las dos, como `editor_lotes`:
+`user_id = auth.uid()`, RLS «dueño», **solo SELECT e INSERT** (sin políticas ni permisos de UPDATE ni DELETE: una prueba no se cambia ni
+se borra; `anon`, nada).
+- `pruebas_azar`: id, user_id, creada_en, estrategia_id (uuid, sin clave ajena: borrar una estrategia no toca sus pruebas),
+  estrategia_nombre, estrategia_foto (el JSON exacto al confirmar: `{ id, name, definition, params }`, params como objeto),
+  estrategia_huella (sha256 del JSON canónico de la foto, `lib/lotesLab.js huella`), valor, velas (`'diarias' | 'semanales'`),
+  periodos (`[[desde, hasta], …]`), regla (copia de `REGLA_AZAR_REGLAS`), semilla (entero de 0 a 2³² − 1, nuevo al confirmar),
+  version_app.
+- `pruebas_azar_resultados`: id, prueba_id (clave ajena, **única**: como mucho un resultado por prueba), user_id, creado_en, resultado,
+  version_app. Solo se puede insertar en una prueba propia (la política de INSERT lo comprueba).
+
+**`lib/pruebaAzar.js`**
+- `ejecutarPrueba(prueba, precios, alProgresar)`: usa solo lo guardado (la foto, la semilla, el valor, las velas, los periodos y la
+  regla), nunca la estrategia de ahora; si la regla guardada no es la de esta versión, no calcula. `precios`: `{ símbolo: diarias }`
+  (el valor y los índices del filtro de mercado, `tickersDe`). Cada periodo, como el paso 1 con «Otras fechas»: las semanales se hacen
+  con las diarias cerradas; el calentamiento que pide la regla antes de la primera vela y nada después de la última
+  (`preparaPeriodo`). Etapas: `'fiabilidad'` (200 mercados por periodo, de uno en uno con `fiabilidad(…, { mercados: 1, primero: m })`
+  y cediendo el control entre ellos), `'comparar'` (`copiasReSimuladas`, 1.000 copias) y `'veredicto'` (`veredicto` con la fiabilidad
+  de cada periodo: manda la peor). Semillas: `pruebaAzar|<semilla>|<desde>|fiabilidad` y `…|copias`.
+- **resultado** (formato 1): por periodo, fechas y velas, calentamiento, CAGR y caída máxima de la estrategia (todo el capital, sin
+  comisiones, como sus copias), operaciones, tasa de entradas, percentil y si gana, mediana de las copias, la «copia típica» (la del
+  medio por CAGR: su CAGR, caída y operaciones), aviso de pocas operaciones, aprobados falsos y su fiabilidad (aprobados, sin
+  operaciones, intervalo de Wilson) y los 1.000 CAGR de las copias (para el histograma); además el veredicto, su texto, el aviso, la
+  huella de la estrategia, la semilla y la de los precios usados (las velas OHLC de la primera de calentamiento a la última del
+  segundo periodo). Unos 39 KB.
+- `comprobarPrecios(foto, precios, valor, velas)`: si los precios del valor (y de los índices del filtro) cubren los dos periodos con
+  su calentamiento (y si no, qué tramo falta) y cuántas operaciones haría en cada periodo con el motor del paso 1, sin azar.
+- `nuevaPrueba`, `confirmarPrueba` (inserta en `pruebas_azar` y devuelve la fila), `guardarResultado` (inserta con `on_conflict=prueba_id`
+  y «ignore-duplicates»: si ya había uno, no hace nada y devuelve el que había), `listarPruebas(estrategia_id)` (con el veredicto de
+  cada una o `resultado: null` si está sin terminar), `leerResultado`, `fotoDe`, `huellaEstrategia` y `textoParaClaude`.
+- `lib/azarReglas.js`: solo una opción nueva en `fiabilidad`, `primero` (el índice del primer mercado; por defecto 0, así que todo lo de
+  antes da lo mismo: la huella `3ee29dbc` de `azar-reglas.js` no cambia). La lógica no cambia.
+
+**Tiempo.** Con «Prueba editor EMA20» en AAPL, velas diarias (foto de precios de las comprobaciones), una prueba entera tarda **unos
+7 s** en Node (5,8 s con semanales): casi todo es la fiabilidad (los 400 mercados); las 2 × 1.000 copias, décimas. Resultado de
+ejemplo (semilla 12345): 2016–2020, 57 operaciones, CAGR 32,9 % contra una mediana de 17,8 %, gana al 98,7 %, aprobados falsos 5,5 %;
+2021–2025, 66 operaciones, CAGR 6,9 % contra 13,8 %, gana al 10,7 %, 7,5 % → «No pasa». Las operaciones de `comprobarPrecios` (57 y 66;
+semanales 12 y 18) son las de `calculaSenales` del paso 1.
+
+**Pruebas** (`scripts/comprobaciones/prueba-azar.js`, en comunes.sh; unos 40 s; no escribe en la base).
+- A mano: 300 velas planas y dos tramos iguales de 9 velas (una cada 30 días), «cierre por encima del máximo de las 2 anteriores» con
+  stop fijo del 8 %: 2 operaciones, tasa 2/7, CAGR (0,92 × 96,5 / 94)^(365,25/240) − 1 = −8,33 % y caída 1 − 0,92 / (103/102) = 8,89 %
+  en los dos tramos, con 250 velas de calentamiento y el aviso de pocas operaciones.
+- `fiabilidad` mercado a mercado suma lo mismo que de una vez. «Sin veredicto» con aprobados falsos ≥ 9 % en un periodo aunque el
+  percentil sea 99 (y «Pasa» con 8,5 %).
+- Determinismo: la misma foto y la misma semilla, dos veces, dan un resultado idéntico byte a byte (diarias y semanales, en un paseo
+  aleatorio inventado de 2014 a 2026); con otra semilla, otro. Huella de los resultados: `03313d2c`.
+- Acceso con un fetch simulado (lo que se inserta; «si ya existe, no hace nada»; solo GET y POST). Las políticas, leídas de la base en
+  solo lectura: RLS activa, solo SELECT e INSERT del dueño, permisos de `authenticated` solo INSERT y SELECT, `anon` nada.
+
