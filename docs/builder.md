@@ -1872,3 +1872,19 @@ el resultado guardado ya trae, por periodo, los 1.000 CAGR de las copias (`cagrC
   Histograma a mano con 10 copias (1 … 10): con 3 barras, 3 / 3 / 4; con 30, suman 10; mediana 5,5; listón = 10 (la 10.ª, borde
   derecho); estrategia 12 → pegada a la derecha; 5,5 → en medio; con 20 copias, listón 19 en 18/19 y estrategia 0 → a la izquierda; con
   1.000, justo por encima del listón gana al ≥ 95 % y justo por debajo no. Los 4 textos del veredicto, exactos. Comprobaciones comunes.
+
+
+## 47. Paso 3 · parte 3a: la estrategia de tarjetas como pieza de un plan (sin pantalla) y los histogramas del paso 2
+
+**Parte 1 · GLD en la caché y los histogramas de «Resultado de la prueba».**
+- **GLD** en la caché de precios con el mecanismo de siempre (`node scripts/llenaCachePrecios.js --simbolo GLD --anios 25`: velas
+  diarias de Yahoo, `guardar_velas`, sin SQL nuevo): 5.521 velas del 18/11/2004 al 29/10/2026. Sirve de dinero ocioso de un plan.
+- **Histogramas** (`Histograma` de `components/BuilderAzarResultado.js`): antes el SVG tenía `viewBox` y `width: 100%`, así que los
+  textos escalaban con el ancho y salían enormes. Ahora va SIN `viewBox`, con alto fijo (`ALTO_HISTOGRAMA` = 172 px): las x en % del
+  ancho (barras, líneas y textos; la flecha de «fuera del rango», en un `<svg>` anidado en la x de la línea) y las y en píxeles. Textos
+  de tamaño fijo: 12 px (eje, «% al año», «Listón del 95 %») y 13 px («Tu estrategia …»). **«Listón del 95 %» va al LADO de su línea**
+  (`ladoListon`: en el lado contrario a la línea de tu estrategia si hay sitio, ≥ 32 % del ancho; si no, en el otro), una fila por
+  debajo de «Tu estrategia», así que no se pisan. Ningún cálculo cambia (`lib/resultadoAzar.js` no se toca).
+- Comprobado: montaje SWC (renderToString) con casos «pasa» y «no pasa» (sin `viewBox`, `font-size` 12 y 13, alto 172) y en el
+  navegador a 508, 386 y 306 px de ancho: textos de 12 px, la etiqueta del listón nunca encima de su línea, nunca encima de «Tu
+  estrategia» ni cruzando su línea, y nada fuera del SVG. Comprobaciones comunes.

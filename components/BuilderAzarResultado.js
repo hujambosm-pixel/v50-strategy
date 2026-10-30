@@ -18,34 +18,43 @@ const celda = { padding: '8px 10px', borderBottom: `1px solid ${B.borde}`, textA
 const CAJA = { pasa: [CHIPS.supera[0], B.pasoBorde, CHIPS.supera[1]], noPasa: [CHIPS.noSupera[0], '#8b3a42', CHIPS.noSupera[1]], sinVeredicto: [CHIPS.neutro[0], '#4b5868', CHIPS.neutro[1]] }
 const TITULO = { pasa: 'Pasa', noPasa: 'No pasa', sinVeredicto: 'Sin veredicto' }
 
-// El histograma de los CAGR de las copias de un periodo, en SVG.
+// El histograma de los CAGR de las copias de un periodo, en SVG. V9.1086: SIN viewBox, para que los textos no escalen con el ancho:
+// las x van en % del ancho y las y en píxeles (alto fijo ALTO_HISTOGRAMA); los textos, 12–13 px como el resto de la pantalla. La
+// etiqueta del listón va al lado de su línea (no encima), en el lado contrario a la línea de tu estrategia si cabe.
+export const ALTO_HISTOGRAMA = 172
+export function ladoListon(posListon, posEstrategia, hueco = 0.32) {
+  const izq = posListon >= hueco, der = 1 - posListon >= hueco
+  if (posEstrategia != null && posEstrategia > posListon && izq) return 'izquierda'
+  if ((posEstrategia == null || posEstrategia <= posListon) && der) return 'derecha'
+  return der ? 'derecha' : 'izquierda'
+}
 export function Histograma({ periodo }) {
   const h = histogramaCopias(periodo.cagrCopias, periodo.cagr)
   if (!h) return null
-  const W = 320, x0 = 12, x1 = W - 12, yTop = 34, yBase = 118, x = (f) => x0 + f * (x1 - x0), anchoB = (x1 - x0) / h.barras.length
+  const yTop = 44, yBase = 132, x = (f) => `${(3 + f * 94).toFixed(3)}%`, anchoB = 94 / h.barras.length
   const gana = periodo.percentil != null && periodo.percentil >= R.gana, color = gana ? B.verde : NARANJA
   const xE = h.posEstrategia == null ? null : x(h.posEstrategia), xL = x(h.posListon)
   const ancla = (f) => f > 0.62 ? 'end' : f < 0.38 ? 'start' : 'middle'
+  const lado = ladoListon(h.posListon, h.posEstrategia)
   const resumen = `Histograma de los ${miles(h.copias)} CAGR de las copias en ${periodo.nombre}: de ${numero(h.minimo)} % a ${numero(h.maximo)} % al año, mediana ${numero(h.mediana)} %. `
     + `Listón del ${R.gana} %: ${numero(h.liston)} %. Tu estrategia: ${numero(periodo.cagr, 2)} % al año${h.fuera ? `, fuera del rango por la ${h.fuera}` : ''}, gana al ${pctTexto(periodo.percentil)} % de las copias.`
   return (
-    <svg data-histograma={periodo.nombre} role="img" aria-label={resumen} viewBox={`0 0 ${W} 156`} style={{ width: '100%', height: 'auto', display: 'block' }}>
-      {h.barras.map((b, i) => b.n ? <rect key={i} data-barra={b.n} x={x0 + i * anchoB + 0.5} width={Math.max(0.5, anchoB - 1)} y={yBase - (yBase - yTop) * b.n / h.maxN} height={(yBase - yTop) * b.n / h.maxN} fill={GRIS_BARRA}/> : null)}
-      <line x1={x0} x2={x1} y1={yBase} y2={yBase} stroke={B.borde}/>
+    <svg data-histograma={periodo.nombre} role="img" aria-label={resumen} width="100%" height={ALTO_HISTOGRAMA} style={{ width: '100%', height: ALTO_HISTOGRAMA, display: 'block', overflow: 'visible' }}>
+      {h.barras.map((b, i) => b.n ? <rect key={i} data-barra={b.n} x={`${(3 + (i + 0.08) * anchoB).toFixed(3)}%`} width={`${(anchoB * 0.84).toFixed(3)}%`} y={yBase - (yBase - yTop) * b.n / h.maxN} height={(yBase - yTop) * b.n / h.maxN} fill={GRIS_BARRA}/> : null)}
+      <line x1="3%" x2="97%" y1={yBase} y2={yBase} stroke={B.borde}/>
       {[['minimo', h.posMinimo, h.minimo], ['mediana', h.posMediana, h.mediana], ['maximo', h.posMaximo, h.maximo]].map(([k, f, v]) => (
         <g key={k} data-marca={k}><line x1={x(f)} x2={x(f)} y1={yBase} y2={yBase + 4} stroke={B.apagado}/>
-          <text x={x(f)} y={yBase + 15} fontSize="10" fill={B.apagado} textAnchor={k === 'minimo' ? 'start' : k === 'maximo' ? 'end' : 'middle'}>{numero(v)}</text></g>
+          <text x={x(f)} y={yBase + 17} fontSize="12" fill={B.apagado} textAnchor={k === 'minimo' ? 'start' : k === 'maximo' ? 'end' : 'middle'}>{numero(v)}</text></g>
       ))}
-      <text x={W / 2} y={152} fontSize="10" fill={B.apagado} textAnchor="middle">% al año</text>
-      <g data-liston={numero(h.liston, 4)} data-pos={h.posListon.toFixed(4)}>
-        <line x1={xL} x2={xL} y1={24} y2={yBase} stroke={B.secundario} strokeWidth="1.5" strokeDasharray="4 3"/>
-        <text x={xL} y={30} fontSize="10" fill={B.secundario} textAnchor={ancla(h.posListon)}>Listón del {R.gana} %</text>
+      <text x="50%" y={ALTO_HISTOGRAMA - 4} fontSize="12" fill={B.apagado} textAnchor="middle">% al año</text>
+      <g data-liston={numero(h.liston, 4)} data-pos={h.posListon.toFixed(4)} data-lado={lado}>
+        <line x1={xL} x2={xL} y1={22} y2={yBase} stroke={B.secundario} strokeWidth="1.5" strokeDasharray="4 3"/>
+        <text x={xL} dx={lado === 'derecha' ? 6 : -6} y={36} fontSize="12" fill={B.secundario} textAnchor={lado === 'derecha' ? 'start' : 'end'}>Listón del {R.gana} %</text>
       </g>
       {xE != null && <g data-estrategia={numero(periodo.cagr, 2)} data-pos={h.posEstrategia.toFixed(4)} data-fuera={h.fuera || ''}>
-        <line x1={xE} x2={xE} y1={8} y2={yBase} stroke={color} strokeWidth="3.5"/>
-        {h.fuera === 'derecha' && <path d={`M ${xE + 1} 60 l 8 5 l -8 5 z`} fill={color}/>}
-        {h.fuera === 'izquierda' && <path d={`M ${xE - 1} 60 l -8 5 l 8 5 z`} fill={color}/>}
-        <text x={xE + (h.posEstrategia > 0.62 ? -5 : h.posEstrategia < 0.38 ? 5 : 0)} y={14} fontSize="11" fontWeight="700" fill={color} textAnchor={ancla(h.posEstrategia)}>Tu estrategia {numero(periodo.cagr, 2)} %</text>
+        <line x1={xE} x2={xE} y1={4} y2={yBase} stroke={color} strokeWidth="3.5"/>
+        {h.fuera && <svg x={xE} y={0} overflow="visible">{h.fuera === 'derecha' ? <path d="M 1 74 l 8 5 l -8 5 z" fill={color}/> : <path d="M -1 74 l -8 5 l 8 5 z" fill={color}/>}</svg>}
+        <text x={xE} dx={h.posEstrategia > 0.62 ? -6 : h.posEstrategia < 0.38 ? 6 : 0} y={15} fontSize="13" fontWeight="700" fill={color} textAnchor={ancla(h.posEstrategia)}>Tu estrategia {numero(periodo.cagr, 2)} %</text>
       </g>}
     </svg>
   )
