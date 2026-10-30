@@ -1888,3 +1888,16 @@ el resultado guardado ya trae, por periodo, los 1.000 CAGR de las copias (`cagrC
 - Comprobado: montaje SWC (renderToString) con casos «pasa» y «no pasa» (sin `viewBox`, `font-size` 12 y 13, alto 172) y en el
   navegador a 508, 386 y 306 px de ancho: textos de 12 px, la etiqueta del listón nunca encima de su línea, nunca encima de «Tu
   estrategia» ni cruzando su línea, y nada fuera del SVG. Comprobaciones comunes.
+
+**Parte 2 · la pieza «estrategia» en `lib/planes` (V9.1087; docs/planes-inversion.md §10).** Una estrategia de tarjetas sobre una
+acción como pieza de un plan, sin pantalla. Archivos: `lib/planes/estrategia.js` (las operaciones, que son las del paso 1 y el
+paso 2, los precios y el sintético ×2 / ×3), `lib/planes/descorrelacion.js` (las 5 peores caídas de la estrategia sola frente al
+ocioso), `lib/planes/plan.js` (el motor: un tipo de pieza más y los símbolos nuevos al final de la lista de la persona, de modo que
+un plan sin la pieza suma en el mismo orden que antes), `lib/planes/evalua.js` (dos referencias más y la descorrelación) y
+`lib/planes/datosServidor.js` (carga las velas que hagan falta). Prueba nueva en las comprobaciones comunes:
+`scripts/comprobaciones/planes-estrategia.js` (a mano, planes de siempre idénticos a la versión anterior y coherencia con el paso 1).
+- Ejecución real de ejemplo (precios de la caché): EMA20 en AAPL, 2016–2025, 10.000 € + 300 €/mes, ocioso GLD, sin apalancar,
+  España (base del ahorro), 0,1 % de comisión: aportado 45.700 €, final neto 114.340,91 €, TWR 15,84 % (neto 15,74 %), TIR
+  14,50 %, peor caída −34,02 %, impuestos 17.128,13 €, comisiones 28.990,63 € (623 órdenes: cada entrada y salida mueve todo el
+  dinero de la pieza dos veces). Con el ocioso en liquidez: 91.548,97 €, TWR 13,04 %; comprar y mantener AAPL: 201.921,87 €,
+  TWR 26,63 %.

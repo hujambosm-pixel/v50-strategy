@@ -276,3 +276,38 @@ variantes: [{ id, nombre, plan }] }`; todas las variantes con el mismo dinero, p
 `{ formato, tipo, comun, [id y huella de cada plan] }`. Criterio (versión 1, la propuesta de §5): una variante MEJORA si su
 TWR neto supera al de la referencia (por defecto la mezcla 50/50 sin reglas) en el periodo y, con inicios rodantes, en más
 de la mitad de ellos. Cada ejecución, en `lab_pruebas` (`prueba: 'planLote'`), exploratoria. Sin azar todavía.
+
+---
+
+## 10. P8 · la pieza «estrategia», versión «una acción» (V9.1087; docs/builder.md §47)
+
+Versión reducida de P8: UNA estrategia de TARJETAS sobre UNA acción, con velas diarias. Sin listas y sin el multibacktest (eso
+vendrá con el «Modo de asignación» de `lib/mcAsignacion.js`). Se amplía el motor de siempre (`lib/planes/plan.js`); no hay otro.
+- **Formato**: `{ id, tipo: 'estrategia', estrategia: { id, name, definition, params } (la foto de la estrategia, como la que
+  congela el paso 2), activo: 'AAPL', peso, ocioso: 'LIQUIDEZ' | 'QQQ' | 'GLD' | <cualquier símbolo de la caché>,
+  aportacionDentro?: 'espera' (por defecto) | 'compra', apalancamiento?: 1 | 2 | 3, velas?: 'diarias' }`. Como mucho una por
+  plan. La foto va dentro del plan, así que la huella del plan cubre la estrategia y el motor sigue siendo puro.
+- **Operaciones** (`lib/planes/estrategia.js`): EXACTAMENTE las del paso 1 y el paso 2: `preparaPeriodo` de `lib/pruebaAzar.js`
+  (velas diarias cerradas, el calentamiento que pide la regla, el intérprete del editor con las referencias del filtro de
+  mercado), las que entran en el periodo, y el precio ajustado a su vela como en «Backtest de un valor» (`ajustaPreciosAVela`).
+  Precios de la acción sin dividendos, como el paso 1.
+- **Dinero**: con una operación abierta, el de la pieza está en el valor; fuera, en el ocioso. Al entrar se vende el ocioso a la
+  apertura y se compra el valor al precio de la entrada; al salir se vende al precio de la salida y se compra el ocioso a la
+  apertura si la salida fue a la apertura o al cierre si fue dentro de la vela (un stop). Todo con costes, lotes FIFO de la
+  persona, regla de los dos meses e impuesto de julio, en los dos sentidos. Las aportaciones con una operación abierta: con
+  `espera`, al ocioso (entran con la siguiente compra); con `compra`, más valor a la apertura de ese día. El dinero que llega el
+  mismo día de una entrada entra con ella.
+- **Apalancamiento 2 o 3**: un sintético diario sobre el valor (`construyeSintetico`, con la comisión y el ajuste de los de QQQ)
+  durante las operaciones; un precio p dentro de la vela t equivale a cierre del sintético en t − 1 × (1 + k × (p / cierre del
+  valor en t − 1 − 1)). El ocioso, nunca apalancado.
+- **Lo que devuelve**: en `ejecucion.estrategias[id]`, sus operaciones, la franja diaria `dentro` (1 dentro, 0 en el ocioso, al
+  cierre) y, con detalle, la curva de la estrategia sola y los cierres del ocioso. **Referencias** nuevas (solo si hay pieza
+  estrategia): `OCIOSO_LIQUIDEZ` (el mismo plan con el ocioso en liquidez) y `ACTIVO` (comprar y mantener el valor). Y
+  `descorrelacion[id]` (`lib/planes/descorrelacion.js`): las 5 peores caídas de la estrategia sola, de pico a valle, con lo que
+  hizo el ocioso en esa misma ventana.
+- **Datos** (`lib/planes/datosServidor.js`): las velas del valor, del ocioso y de los índices de la regla, desde 6 años antes.
+- **Un plan sin esta pieza**: resultado, referencias, inicios rodantes y huella idénticos byte a byte (comprobado con tres planes
+  de piezas de cartera, de activo, costes, impuestos, aportaciones y rebalanceos).
+- **Comprobado**: casos a mano (una operación; con comisiones; con una venta con ganancia y el impuesto en julio; con una
+  aportación a mitad de operación en los dos modos); «Prueba editor EMA20» en AAPL 2016–2025 sin costes ni impuestos: las mismas
+  123 operaciones que el paso 1 y TWR del plan = CAGR del paso 1 (18,757714592386 % en los dos, diferencia 0).

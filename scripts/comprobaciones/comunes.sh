@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/comprobaciones/comunes.sh — las comprobaciones comunes de cada commit (docs/builder.md, §22): guardián, build, batería
 # V9.949 (52 + 44) byte a byte, CARTERA_1–3 y exploraciones idénticas, huellas de LOTE_1–3 / CARTERA_1–3 y de las pruebas del
-# editor; las pruebas sintéticas del motor (sinteticas.js, V9.1079); la huella del azar re-simulado (azar-reglas.js, §43); y la prueba contra el azar del paso 2 (prueba-azar.js, §44). Compara el árbol de trabajo con una copia de la versión anterior (por defecto HEAD) hecha con git archive.
+# editor; las pruebas sintéticas del motor (sinteticas.js, V9.1079); la huella del azar re-simulado (azar-reglas.js, §43); la prueba contra el azar del paso 2 (prueba-azar.js, §44); y la pieza «estrategia» de los planes (planes-estrategia.js, §47). Compara el árbol de trabajo con una copia de la versión anterior (por defecto HEAD) hecha con git archive.
 # Uso, desde cualquier sitio:   bash scripts/comprobaciones/comunes.sh [referencia de git]      (unos 15 minutos)
 # Necesita: npm install; una copia en backups/ (npm run backup); las fotos de precios en scripts/comprobaciones/datos/ (o en la
 # carpeta de COMPROBACIONES_DATOS); y, para las huellas del editor, «supabase login» (solo lectura). Termina en 0 si todo va bien.
@@ -34,5 +34,7 @@ paso azar-reglas node "$DIR/azar-reglas.js" < /dev/null
 tail -1 "$SAL/azar-reglas.txt"
 paso prueba-azar node "$DIR/prueba-azar.js" < /dev/null
 tail -1 "$SAL/prueba-azar.txt"
+paso planes-estrategia node "$DIR/planes-estrategia.js" < /dev/null
+tail -1 "$SAL/planes-estrategia.txt"
 echo "comparado con $REF · salidas en scripts/comprobaciones/salida/ · fallos: $fallos"
 exit $([ $fallos -eq 0 ] && echo 0 || echo 1)

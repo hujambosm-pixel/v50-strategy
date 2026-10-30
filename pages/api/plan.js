@@ -2,10 +2,11 @@
 // definitiva irá en el futuro «Builder» guiado (decisión 9). Sirve para probarlo desde la app o con «Copiar para Claude».
 //
 //   POST { plan, rodantes?: { duracion?: 10, hastaElFinal?: false, desde?, hasta? } }
-//   → { evaluacion: { plan: { medidas, ejecucion }, referencias: [...], comparaciones: [...] }, rodantes?, huella, tiempos }
+//   → { evaluacion: { plan: { medidas, ejecucion }, referencias: [...], comparaciones: [...], descorrelacion? }, rodantes?, huella, tiempos }
 //
 // Datos: lib/planes/datosServidor.js (QQQ, SPY y el ETF del plan, con dividendos, desde 3 años antes del periodo; las velas de
-// la referencia de cada pieza de cartera que la tenga).
+// la referencia de cada pieza de cartera que la tenga; con una pieza «estrategia», las del valor, del ocioso y de los índices de
+// su regla: docs/builder.md §47).
 import { exigeAuth } from '../../lib/verificaJwt'
 import { validaPlan, huellaPlan, usaEtf } from '../../lib/planes/plan'
 import { evaluaPlan, iniciosRodantes } from '../../lib/planes/evalua'
