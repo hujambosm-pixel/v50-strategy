@@ -5,7 +5,8 @@
 // resultado se ve en su propia pantalla (components/BuilderAzarResultado.js, §46): al terminar y con «Ver». Las pruebas anteriores de la estrategia, debajo; una
 // sin terminar se termina con su semilla guardada y da el mismo resultado. components/BuilderPrueba.js (el paso 2 de los lotes) no cambia.
 //   estrategias: las filas de `strategies`; estrategiaId: la abierta. cargaSimbolos y cargaVelas: los del paso 1 (BuilderPanel).
-//   onVolver: a «Mi trabajo»; onPaso1(fila): abre la estrategia en el paso 1.
+//   onVolver: a «Mi trabajo»; onPaso1(fila): abre la estrategia en el paso 1; onPaso3(id): el paso 3 con ella (§48: desde la barra y
+//   desde «Paso 3 · Convertirla en plan» del resultado, siempre activo).
 //   deps (opcional, para las pruebas): { ctx } en lugar de la sesión de Supabase. inicial (opcional, para las pruebas de montaje):
 //   { simbolos, precios, pruebas, huella, curso, valor, velas, viendo } ya leídos o en curso (viendo: { fila, resultado }, la pantalla
 //   del resultado abierta).
@@ -44,7 +45,7 @@ export function progresoDe(curso) {
 }
 const velasDeRespuesta = (v) => Array.isArray(v) ? v : v?.velas || []
 
-export default function BuilderAzar({ estrategias = [], estrategiaId = null, apiFetch, version = null, cargaSimbolos = null, cargaVelas = null, onVolver, onPaso1, deps = null, inicial = null }) {
+export default function BuilderAzar({ estrategias = [], estrategiaId = null, apiFetch, version = null, cargaSimbolos = null, cargaVelas = null, onVolver, onPaso1, onPaso3 = null, deps = null, inicial = null }) {
   const tarjetas = useMemo(() => estrategias.filter(esDeTarjetas).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
   const [estId, setEstId] = useState(() => String((tarjetas.find(s => String(s.id) === String(estrategiaId)) || tarjetas[0])?.id ?? ''))
   const estrategia = tarjetas.find(s => String(s.id) === estId) || null
@@ -248,8 +249,8 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
           <button data-boton="volver" style={{ ...S.enlace, color: B.secundario }} onClick={() => setViendo(null)}>← Volver</button>
           <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Builder</span>
         </div>
-        <BarraPasos actual={2} onPaso={(n) => { if (n === 1) aPaso1() }}/>
-        <BuilderAzarResultado prueba={viendo.fila} resultado={viendo.resultado} onPaso1={aPaso1}/>
+        <BarraPasos actual={2} onPaso={(n) => { if (n === 1) aPaso1(); else if (n === 3) onPaso3?.(viendo.fila.estrategia_id) }}/>
+        <BuilderAzarResultado prueba={viendo.fila} resultado={viendo.resultado} onPaso1={aPaso1} onPaso3={() => onPaso3?.(viendo.fila.estrategia_id)}/>
       </div>
     )
   }
@@ -259,7 +260,7 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
         <button style={{ ...S.enlace, color: B.secundario }} disabled={enMarcha} onClick={() => onVolver?.()}>← Builder · Mi trabajo</button>
         <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Builder</span>
       </div>
-      <BarraPasos actual={2} onPaso={enMarcha ? null : (n) => { if (n === 1) onPaso1?.(estrategia) }}/>
+      <BarraPasos actual={2} onPaso={enMarcha ? null : (n) => { if (n === 1) onPaso1?.(estrategia); else if (n === 3) onPaso3?.(estrategia?.id ?? null) }}/>
       <div style={{ fontSize: 20, fontWeight: 700, color: B.titulo, marginTop: 8 }}>¿Gana «{nombre}» por algo más que suerte?</div>
       <div style={{ ...S.secundario, marginTop: 4, marginBottom: 16 }}>Tú eliges dónde probarla y confirmas. Lo demás lo hace la app sola, en orden.</div>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>

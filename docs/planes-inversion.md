@@ -311,3 +311,6 @@ vendrá con el «Modo de asignación» de `lib/mcAsignacion.js`). Se amplía el 
 - **Comprobado**: casos a mano (una operación; con comisiones; con una venta con ganancia y el impuesto en julio; con una
   aportación a mitad de operación en los dos modos); «Prueba editor EMA20» en AAPL 2016–2025 sin costes ni impuestos: las mismas
   123 operaciones que el paso 1 y TWR del plan = CAGR del paso 1 (18,757714592386 % en los dos, diferencia 0).
+- **Pantalla** (docs/builder.md §48): el paso 3 del Builder, `components/BuilderPlan.js`, construye el plan de
+  esta pieza con los ajustes de la persona y lo ejecuta por `/api/plan` con `curvas: true` (solo añade las series diarias de las
+  referencias `OCIOSO_LIQUIDEZ` y `ACTIVO`; el motor no cambia).

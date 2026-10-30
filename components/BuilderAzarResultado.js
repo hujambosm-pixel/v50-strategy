@@ -2,7 +2,8 @@
 // al terminar una prueba y con «Ver» en «Pruebas anteriores» (components/BuilderAzar.js). Se dibuja SOLO con lo guardado: la fila de
 // pruebas_azar (`prueba`) y su resultado (`resultado`, lib/pruebaAzar.js formato 1); nunca recalcula. Las cifras y los textos, en
 // lib/resultadoAzar.js.
-//   onVolver: a la pantalla de confirmación; onPaso1: abre la estrategia en el paso 1.
+//   onVolver: a la pantalla de confirmación; onPaso1: abre la estrategia en el paso 1; onPaso3: el paso 3 (§48: el botón «Paso 3 ·
+//   Convertirla en plan» está siempre activo, también si la prueba no pasa; el plan lo avisa en rojo).
 import { B, S, CHIPS } from '../lib/builder/estilo'
 import BotonCopiar from './BotonCopiar'
 import { REGLA_AZAR_REGLAS } from '../lib/azarReglas'
@@ -86,7 +87,7 @@ function TarjetaPeriodo({ periodo: p, informativo }) {
   )
 }
 
-export default function BuilderAzarResultado({ prueba, resultado, onPaso1 }) {
+export default function BuilderAzarResultado({ prueba, resultado, onPaso1, onPaso3 = null }) {
   const t = textosResultado(resultado), [fondo, borde, colorTitulo] = CAJA[resultado.veredicto] || CAJA.sinVeredicto
   const nombre = prueba.estrategia_nombre, velas = prueba.velas || resultado.velas
   const sinVer = resultado.veredicto === 'sinVeredicto'
@@ -118,12 +119,12 @@ export default function BuilderAzarResultado({ prueba, resultado, onPaso1 }) {
         <div style={S.cabeceraTarjeta}>¿Y ahora?</div>
         <div style={{ ...S.cuerpo, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div data-texto-y-ahora>{resultado.veredicto === 'pasa'
-            ? 'Ha pasado. El paso 3 (convertirla en plan) todavía no está construido; cuando lo esté, se abrirá desde aquí.'
-            : `Esta prueba queda guardada tal cual. Puedes volver al paso 1, crear «${nombre} · versión 2» y probarla aparte. El paso 3 solo se abre con una prueba que pase.`}</div>
+            ? 'Ha pasado. Ahora puedes convertirla en un plan (paso 3): con tu dinero, aportaciones, comisiones e impuestos.'
+            : `Esta prueba queda guardada tal cual. Puedes volver al paso 1, crear «${nombre} · versión 2» y probarla aparte. También puedes ver cómo sería un plan con ella (paso 3), que avisará de que no ha superado al azar.`}</div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <button data-boton="paso1" style={S.boton} onClick={() => onPaso1?.()}>Volver al paso 1</button>
             <BotonCopiar obtenerTexto={() => textoParaClaude(prueba, resultado)} titulo="Copia en texto plano la configuración, la huella y las cifras del resultado"/>
-            <button data-boton="paso3" style={S.botonDesactivado} disabled title="El paso 3 todavía no está construido">Paso 3 · Convertirla en plan</button>
+            <button data-boton="paso3" style={resultado.veredicto === 'pasa' ? S.botonVerde : S.boton} onClick={() => onPaso3?.()}>Paso 3 · Convertirla en plan</button>
           </div>
         </div>
       </div>

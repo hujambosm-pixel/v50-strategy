@@ -1901,3 +1901,52 @@ un plan sin la pieza suma en el mismo orden que antes), `lib/planes/evalua.js` (
   14,50 %, peor caída −34,02 %, impuestos 17.128,13 €, comisiones 28.990,63 € (623 órdenes: cada entrada y salida mueve todo el
   dinero de la pieza dos veces). Con el ocioso en liquidez: 91.548,97 €, TWR 13,04 %; comprar y mantener AAPL: 201.921,87 €,
   TWR 26,63 %.
+
+
+## 48. Paso 3 · parte 3b: la pantalla «Convertirla en plan» (opción A del boceto, versión 2) y guardar planes
+
+**Parte 1 · la pantalla (sin guardar todavía).** `components/BuilderPlan.js` (la pantalla) y `lib/builder/planPantalla.js` (los
+ajustes, el plan que sale de ellos, las cifras leídas de la respuesta, los tramos, los textos de los «?», «Copiar para Claude» y el
+temporizador). El motor (`lib/planes/`) no cambia: todas las cifras son las suyas.
+- **Se entra** desde el paso 3 de la barra de pasos (`BarraPasos`: ahora se pulsa cualquier paso que no sea el actual) en «Mi
+  trabajo», en el editor (guardada y de velas diarias; nueva: «Guárdala primero») y en las dos pantallas del paso 2; y desde «Paso 3 ·
+  Convertirla en plan» del resultado del paso 2, **siempre activo** (verde si pasa, gris si no; el texto de «¿Y ahora?» ya no dice que
+  el paso 3 solo se abre con una prueba que pase). `BuilderPanel`: `vistaInicial: { plan: { estrategiaId } }`.
+- **Norma de esta pantalla**: las explicaciones no ocupan sitio fijo. Cada término lleva su «?» (`BuilderAyuda`, 26 en la pantalla
+  con resultado) con un ejemplo con números (`AYUDA_PLAN`); a la vista, títulos, cifras y avisos de una línea.
+- **Avisos**: rojo si la estrategia no tiene una prueba del paso 2 que pase **con su huella de ahora** («…NO ha superado al azar…» si
+  las hay y no pasan, «…no tiene prueba contra el azar…» si no hay ninguna con esa huella; una que pasa con otra huella no cuenta);
+  su «?», con las cifras de la prueba (`leerResultado`: gana al X % en 2016–2020 y al Y % en 2021–2025). Con una que pasa, una línea
+  verde. Amarillo siempre: «Acción elegida a mano, sabiendo cómo le fue».
+- **Izquierda · Bloques**: un bloque con Estrategia (las de tarjetas; las semanales, desactivadas en la lista), «Dónde se aplica»
+  (Una acción + el buscador de valor; Una lista, desactivada), «Parte de tu dinero» 100 % fija y «Modo de asignación» desactivado;
+  «+ Añadir bloque» desactivado. **Tu dinero**: periodo (2016–2025, solo 2016–2020, solo 2021–2025, otras fechas), dinero inicial
+  10.000 €, aportación mensual 300 € fija o «Sube cada año» (3 % al elegirla), dinero ocioso (liquidez, QQQ, GLD u otro símbolo de la
+  caché: el buscador solo enseña los de la caché, porque `/api/plan` solo lee la caché), aportación con la operación abierta
+  (`espera` por defecto / `compra`), apalancamiento (no, ×2, ×3), impuestos (España · base del ahorro / sin impuestos) y comisión por
+  operación (0,1 %, sin mínimo ni horquilla).
+- **El plan** (`planDe`): una pieza `estrategia` con la foto de la estrategia (`fotoDe`), peso 1, aportaciones mensuales
+  (`crecimientoAnual` 0 si son fijas), reparto con los pesos y sin rebalanceo. Se valida con `validaPlan` antes de pedirlo (los
+  errores, en rojo). **Recalcula solo** (`creaCalculador`): 600 ms después del último cambio; si hay un cálculo en marcha, manda el
+  último (la respuesta de uno anterior se descarta); mientras, «Calculando…» sin borrar el resultado anterior.
+- **`/api/plan` con `curvas: true`** (solo añade, no cambia nada de lo que ya devolvía): con una pieza estrategia, el patrimonio y el
+  VL diarios de las referencias `OCIOSO_LIQUIDEZ` y `ACTIVO` (las medidas de `evaluaPlan` no traen las series), ejecutadas con el
+  mismo motor y los mismos datos. Sin `curvas`, la respuesta es la de antes (comprobado byte a byte).
+- **Derecha · resultado**: 6 cifras (Has aportado · Tienes al final con la ganancia neta · Peor caída en % sobre el VL y en € sobre el
+  patrimonio, con la fecha del valle · «CAGR de la estrategia» = TWR · «Rentabilidad de tu dinero (TIR)» · impuestos y comisiones);
+  «Cómo crece tu dinero» (escala logarítmica; tu plan continua, con el ocioso en liquidez a puntos, comprar y mantener la acción a
+  rayas, lo aportado escalonado a raya y punto; debajo, la franja dentro de la acción / en el ocioso, de `estrategias.e.dentro`);
+  «Tu plan frente a las alternativas» (tu plan, ocioso en liquidez, la acción, QQQ, SPY y liquidez: final, CAGR de la estrategia, TIR,
+  peor caída, impuestos y comisiones); «¿Es estable? Por tramos» (`cagrTramo`: el TWR del VL del mismo cálculo en 2016–2020 —desde el
+  VL 1 de la primera apertura— y en 2021–2025 —desde el último cierre de 2020—; «—» si el periodo no cubre el tramo; «el ocioso
+  añadió» = el del plan − el del plan con el ocioso en liquidez, en puntos); «Cuando tu estrategia cae, ¿qué hace el ocioso?» (las 5
+  peores caídas de `descorrelacion` y «En N de las 5 peores caídas, el ocioso subió»); «Copiar para Claude» (ajustes, prueba, huella,
+  las cifras, las tablas y el plan en JSON) y «Volver al paso 2».
+- Comprobado (montaje SWC con renderToString y la ruta de verdad, sin el JWT, con los precios de la caché leídos en solo lectura): sin
+  datos; con un resultado (ajustes por defecto y ocioso GLD: aportado 45.700,00 €, final 114.340,91 €, ganancia neta 68.640,91 €,
+  peor caída −34,02 %, CAGR de la estrategia 15,84 %, TIR 14,50 %, impuestos 17.128,13 € y comisiones 28.990,63 €, las de la ejecución
+  de ejemplo de §47; ocioso en liquidez 91.549 €, AAPL 201.922 €; tramos 27,05 % / 5,63 % con −0,08 y +5,10 puntos del ocioso, y los
+  dos tramos juntos dan el VL final; 4 de las 5 peores caídas con el oro subiendo); con un error (con y sin resultado anterior); los
+  avisos sin prueba, no pasa (99,2 % y 11,3 % en su «?») y pasa; una prueba que pasa con otra huella no cuenta; la semanal desactivada;
+  el temporizador (tres cambios en 400 ms → un solo cálculo, con el último, a los 600 ms del último; con uno en marcha, manda el
+  último); la barra de pasos y el botón del resultado que no pasa, activo. Comprobaciones comunes.

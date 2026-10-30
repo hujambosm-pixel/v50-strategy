@@ -16,6 +16,7 @@ import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 import { B, S } from '../lib/builder/estilo'
 import BuilderPrueba from './BuilderPrueba'
 import BuilderAzar from './BuilderAzar'
+import BuilderPlan from './BuilderPlan'
 import BuilderEditor, { ReglaPorBloques } from './BuilderEditor'
 import BuilderCodigo from './BuilderCodigo'
 import { esDeCodigo, filaCopiaCodigo } from '../lib/builder/codigo'
@@ -43,13 +44,13 @@ function Frase({ texto }) {
 }
 const Chip = ({ clave }) => { const [tipo, txt] = CHIP[clave] || CHIP.sinVeredicto; return <span style={S.chip(tipo)}>{txt}</span> }
 
-// La barra de los tres pasos; `actual` resaltado. §45: con onPaso(n), los pasos 1 y 2 que no son el actual se pulsan (el 3, todavía
-// no); desactivados (string: el motivo, en el título) no se pulsan.
+// La barra de los tres pasos; `actual` resaltado. §45: con onPaso(n), los pasos que no son el actual se pulsan (§48: también el 3);
+// desactivados (string: el motivo, en el título) no se pulsan.
 export function BarraPasos({ actual = 1, onPaso = null, desactivados = {} }) {
   return (
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }} aria-label="Pasos del Builder">
       {PASOS.map((p, k) => {
-        const n = k + 1, on = n === actual, pulsable = !!onPaso && !on && n <= 2 && !desactivados[n], Caja = pulsable ? 'button' : 'div'
+        const n = k + 1, on = n === actual, pulsable = !!onPaso && !on && !desactivados[n], Caja = pulsable ? 'button' : 'div'
         return (
           <Caja key={p} data-paso={n} aria-current={on ? 'step' : undefined} onClick={pulsable ? () => onPaso(n) : undefined} title={pulsable ? `Ir al paso ${n}` : desactivados[n] || undefined}
             style={{ flex: '1 1 200px', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: B.radioTarjeta, fontFamily: B.letra, fontSize: B.base, textAlign: 'left', cursor: pulsable ? 'pointer' : 'default',
@@ -77,7 +78,8 @@ export const filaCopia = (s) => esDeCodigo(s) ? filaCopiaCodigo(s) : ({ id: null
 // enseñar «Cargando» y sin recalcular si no ha cambiado nada (firmaDatos). Las estrategias llegan de la página.
 // apiFetch y version: para el paso 1 (guardar) y el paso 2. onGuardada: la página recarga sus estrategias. vistaInicial (opcional,
 // para las pruebas): la de BuilderPrueba ({ estrategiaId } | { loteId }), la guía ({ guia: true }), el editor ({ editor: fila }) o la
-// prueba contra el azar de §45 ({ azar: { estrategiaId } }, components/BuilderAzar.js: se abre desde la barra de pasos).
+// prueba contra el azar de §45 ({ azar: { estrategiaId } }, components/BuilderAzar.js: se abre desde la barra de pasos) o el paso 3
+// de §48 ({ plan: { estrategiaId } }, components/BuilderPlan.js: desde la barra de pasos y desde el resultado del paso 2).
 // Las estrategias se abren aquí, en el paso 1: las de tarjetas en el editor por tarjetas y las de código (V9.1048) en el apartado
 // «Código de la estrategia». onAbrirEstrategia(s, 'editor') las abre en el Editor clásico (la pestaña «Editor»). onBacktestValor:
 // el enlace «Backtest de un valor» (la pestaña donde se ejecutan y se ven en el gráfico). abrir ({ fila, n }): la página pide
@@ -94,8 +96,9 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   const [buscar, setBuscar] = useState(buscarInicial)   // V9.1058: el buscador de «Mi trabajo» (por nombre y por la frase de la regla; V9.1063: resaltado)
   const [buscarCopia, setBuscarCopia] = useState(buscarCopiaInicial)   // y el de «Desde una de mis estrategias» (por nombre)
   const [plantillaId, setPlantillaId] = useState(null)
-  const [prueba, setPrueba] = useState(vistaInicial && !vistaInicial.guia && !vistaInicial.editor && !vistaInicial.azar ? { ...vistaInicial, n: 0 } : null)   // la pantalla del paso 2, si está abierta
+  const [prueba, setPrueba] = useState(vistaInicial && !vistaInicial.guia && !vistaInicial.editor && !vistaInicial.azar && !vistaInicial.plan ? { ...vistaInicial, n: 0 } : null)   // la pantalla del paso 2, si está abierta
   const [azar, setAzar] = useState(vistaInicial?.azar ? { ...vistaInicial.azar, n: 0 } : null)   // §45: «Probarla contra el azar» (azar re-simulado), si está abierta
+  const [plan, setPlan] = useState(vistaInicial?.plan ? { ...vistaInicial.plan, n: 0 } : null)   // §48: «Convertirla en plan» (paso 3), si está abierta
   const [editor, setEditor] = useState(vistaInicial?.editor ? { fila: vistaInicial.editor, n: 0 } : null)   // el paso 1 (editor por tarjetas), si está abierto
   const [guardadas, setGuardadas] = useState([])   // lo recién guardado, hasta que la página recargue sus estrategias
   const [guia, setGuia] = useState(!!vistaInicial?.guia)   // la «Guía de las pruebas» (vistaInicial { guia: true }, para las pruebas)
@@ -157,17 +160,21 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   const abreEditor = (fila) => setEditor({ fila, n: Date.now() })
   // «Señales en el gráfico» (V9.1050): los valores con precios guardados y sus velas diarias (la caché de la app, solo lectura).
   // V9.1058: con su nombre (de la lista de seguimiento o del universo), para buscarlos también por nombre; sin nombres, solo el ticker.
-  const cargaSimbolos = useCallback(async () => {
+  const leeSimbolos = useCallback(async (soloCache) => {
     const lee = async (q) => { try { const r = await fetch(`${getSupaUrl()}/rest/v1/${q}`, { headers: getSupaH() }); return r.ok ? await r.json() : [] } catch (_) { return [] } }
     const [ss, wl, un] = await Promise.all([lee('precios_simbolos?select=simbolo&order=simbolo.asc'), lee('watchlist?select=symbol,name'), lee('universo_miembros?select=simbolo_yahoo,nombre')])
-    // V9.1071: también los de la lista de seguimiento y del universo aunque no estén en la caché: /api/velas los descarga.
-    return conNombres([...new Set([...ss.map(x => x.simbolo), ...wl.map(w => w?.symbol), ...un.map(u => u?.simbolo_yahoo)].filter(Boolean))].sort(), wl, un)
+    // V9.1071: también los de la lista de seguimiento y del universo aunque no estén en la caché: /api/velas los descarga. §48: el
+    // paso 3 (/api/plan) lee solo la caché, así que allí solo salen los de la caché (con su nombre, si lo hay).
+    return conNombres([...new Set([...ss.map(x => x.simbolo), ...(soloCache ? [] : [...wl.map(w => w?.symbol), ...un.map(u => u?.simbolo_yahoo)])].filter(Boolean))].sort(), wl, un)
   }, [])
+  const cargaSimbolos = useCallback(() => leeSimbolos(false), [leeSimbolos])
+  const cargaSimbolosCache = useCallback(() => leeSimbolos(true), [leeSimbolos])
   // V9.1071: las velas, por el mismo camino que «Backtest de un valor» (pages/api/velas.js: la caché más lo último de Yahoo).
   // Devuelve { velas, semanaAbierta, origen }.
   const cargaVelas = useCallback(async (sym) => { const r = await apiFetch(`/api/velas?simbolo=${encodeURIComponent(sym)}`); if (!r.ok) throw new Error(`HTTP ${r.status}`); return await r.json() }, [apiFetch])
-  useEffect(() => { if (abrir?.fila) { setPrueba(null); setAzar(null); setGuia(false); setEditor({ fila: abrir.fila, n: abrir.n }) } }, [abrir?.n])
+  useEffect(() => { if (abrir?.fila) { setPrueba(null); setAzar(null); setPlan(null); setGuia(false); setEditor({ fila: abrir.fila, n: abrir.n }) } }, [abrir?.n])
   const abreAzar = (estrategiaId) => setAzar({ estrategiaId, n: Date.now() })
+  const abrePlan = (estrategiaId) => setPlan({ estrategiaId, n: Date.now() })
   // Guardada en el paso 1: la página recarga sus estrategias y se pasa al paso 2 con ella (la versión nueva, si se creó). §46: a la
   // pantalla nueva del paso 2 (BuilderAzar), no a la de los lotes.
   // V9.1054: «Guardar estos valores en la estrategia» (info.quedarse) sigue en el paso 1 con la estrategia guardada (la versión nueva,
@@ -189,9 +196,11 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   if (editor && esDeCodigo(editor.fila)) return <ProteccionPanel nombre="Estrategia de código"><BuilderCodigo key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
     onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardarCodigo}/></ProteccionPanel>
   if (editor) return <ProteccionPanel nombre="Editor por tarjetas"><BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} lotes={datos.lotes} apiFetch={apiFetch}
-    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} onPaso2={f => { setEditor(null); abreAzar(f.id) }} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'} entradaBuilder={entrada}/></ProteccionPanel>
+    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} onPaso2={f => { setEditor(null); abreAzar(f.id) }} onPaso3={f => { setEditor(null); abrePlan(f.id) }} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'} entradaBuilder={entrada}/></ProteccionPanel>
   if (azar) return <ProteccionPanel nombre="Probarla contra el azar"><BuilderAzar key={azar.n} estrategias={estrategiasEf} estrategiaId={azar.estrategiaId} version={version}
-    cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} onVolver={() => { setAzar(null); recarga() }} onPaso1={f => { setAzar(null); if (f) abreEditor(f); else recarga() }}/></ProteccionPanel>
+    cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} onVolver={() => { setAzar(null); recarga() }} onPaso1={f => { setAzar(null); if (f) abreEditor(f); else recarga() }} onPaso3={id => { setAzar(null); abrePlan(id) }}/></ProteccionPanel>
+  if (plan) return <ProteccionPanel nombre="Convertirla en plan"><BuilderPlan key={plan.n} estrategias={estrategiasEf} estrategiaId={plan.estrategiaId} apiFetch={apiFetch} version={version}
+    cargaSimbolos={cargaSimbolosCache} onVolver={() => { setPlan(null); recarga() }} onPaso1={f => { setPlan(null); if (f) abreEditor(f); else recarga() }} onPaso2={id => { setPlan(null); abreAzar(id) }}/></ProteccionPanel>
   if (prueba) return <ProteccionPanel nombre="Probarla contra el azar"><BuilderPrueba key={prueba.n} estrategias={estrategiasEf} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
     onVolver={() => { setPrueba(null); recarga() }} onNuevaPrueba={() => setPrueba({ n: Date.now() })} onCambio={recarga}/></ProteccionPanel>
   const pestanaBtn = (k, t, n) => (
@@ -218,7 +227,7 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
           <button style={{ ...S.enlace, color: B.apagado, fontSize: 13 }} onClick={() => onBacktestValor?.()} title="Donde las estrategias se ejecutan sobre un valor y se ven en el gráfico">Backtest de un valor</button>
         </span>
       </div>
-      <BarraPasos actual={1} onPaso={n => n === 2 && abreAzar(null)}/>
+      <BarraPasos actual={1} onPaso={n => n === 2 ? abreAzar(null) : n === 3 && abrePlan(null)}/>
 
       <div style={{ ...S.tituloSeccion, marginTop: 8 }}>¿Desde dónde empiezas?</div>
       <div style={S.subtituloSeccion}>Las tres opciones abren el paso 1 con una estrategia nueva. Se guarda al pulsar «Guardar y pasar al paso 2».</div>

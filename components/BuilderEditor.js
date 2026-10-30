@@ -36,6 +36,7 @@ import ConLimpiar from './LimpiarBusqueda'
 import ProteccionPanel from './ProteccionPanel'
 import { propagaEnlaces, estadoEnlaces, enlazaUso, AYUDA_ENLACE, opcionesCasillas } from '../lib/builder/enlaces'
 import { conCasillas, hayCambios, listaCambios, resumenCambios } from '../lib/builder/barraCambios'
+import { esSemanal } from '../lib/builder/planPantalla'
 
 const AZUL = '#58a6ff', NARANJA = '#f0883e', MORADO = '#a371f7', ROJO = '#ff8b8b', AMARILLO = '#f2cc60'
 // V9.1049: Protección con su color, un verde azulado (ni el rojo de los errores ni el amarillo de los avisos; contraste alto sobre el
@@ -198,7 +199,7 @@ function Tarjeta({ titulo, color, derecha, children, datos, soltar = null }) {
   )
 }
 
-export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, onVolver, onGuardada, onEditorClasico, onPaso2 = null, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null, abiertosInicial = null, ayudaInicial = null, anadiendoInicial = null, arrastreInicial = null, cargaSimbolos = null, cargaVelas = null, comisiones = null, pestanaInicial = 'tarjetas', panelInicial = null, senalesInicial = null, dibujoInicial = null, cambiosInicial = null, entradaBuilder = 0, sueltosInicial = null }) {
+export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, onVolver, onGuardada, onEditorClasico, onPaso2 = null, onPaso3 = null, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null, abiertosInicial = null, ayudaInicial = null, anadiendoInicial = null, arrastreInicial = null, cargaSimbolos = null, cargaVelas = null, comisiones = null, pestanaInicial = 'tarjetas', panelInicial = null, senalesInicial = null, dibujoInicial = null, cambiosInicial = null, entradaBuilder = 0, sueltosInicial = null }) {
   const [est, setEst] = useState(() => estadoInicial || estadoDe(fila))
   const orig = useRef(null); if (!orig.current) orig.current = estadoDe(fila)
   const { def, valores } = est
@@ -429,7 +430,8 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   return (
     <div style={S.pagina}>
       {/* §45: la barra de los pasos; el paso 2 («Probarla contra el azar») abre la estrategia GUARDADA (una nueva, al guardarla). */}
-      <BarraPasos actual={1} onPaso={onPaso2 ? (n) => { if (n === 2 && fila?.id) onPaso2(fila) } : null} desactivados={nueva ? { 2: 'Guárdala primero: el paso 2 prueba la estrategia tal como está guardada' } : {}}/>
+      <BarraPasos actual={1} onPaso={onPaso2 ? (n) => { if (n === 2 && fila?.id) onPaso2(fila); else if (n === 3 && fila?.id) onPaso3?.(fila) } : null}
+        desactivados={nueva ? { 2: 'Guárdala primero: el paso 2 prueba la estrategia tal como está guardada', 3: 'Guárdala primero: el plan usa la estrategia tal como está guardada' } : esSemanal(fila) ? { 3: 'El paso 3, por ahora, solo con estrategias de velas diarias' } : {}}/>
       {/* V9.1073: la fila del título, fija arriba al desplazarse (con la barra de los cambios). */}
       <div data-fila-titulo style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 20, background: B.fondo, padding: '6px 0' }}>
         <button style={{ ...S.enlace, color: B.secundario }} onClick={() => onVolver?.()}>← Builder · Mi trabajo</button>
