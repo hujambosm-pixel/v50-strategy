@@ -1839,3 +1839,36 @@ pasar al paso 2» y `components/BuilderPrueba.js` (el paso 2 de los lotes) no ca
   curso (fiabilidad, 120 de 400 → 30 %), terminada (No pasa: 98,7 % y 10,7 %; 11 y 15 aprobados falsos), error a medias; la barra
   de pasos en «Mi trabajo», en el editor (guardada y nueva) y `vistaInicial: { azar }`. Comprobaciones comunes.
 
+
+## 46. Paso 2 · pantalla «Resultado de la prueba» (V9.1085, opción A del boceto)
+
+`components/BuilderAzarResultado.js` (la pantalla) y `lib/resultadoAzar.js` (las cifras y los textos). **Se dibuja solo con lo
+guardado** (la fila de `pruebas_azar` y su resultado de `pruebas_azar_resultados`, formato 1, §44): nunca recalcula. Auditoría previa:
+el resultado guardado ya trae, por periodo, los 1.000 CAGR de las copias (`cagrCopias`) y la copia típica (CAGR, caída y operaciones).
+- **Se abre** al terminar una prueba (sustituye al bloque provisional de §45, que se quita) y con «Ver» en «Pruebas anteriores»;
+  `BuilderAzar` guarda `viendo = { fila, resultado }` y, mientras está, pinta esta pantalla en lugar de la de confirmación. «← Volver»
+  vuelve a la de confirmación. «Volver al paso 1» abre en el editor la estrategia de la prueba (por su id; si ya no está, la elegida).
+- **«Guardar y pasar al paso 2»** (`BuilderPanel` `alGuardar`) lleva ahora a la pantalla nueva del paso 2 (`BuilderAzar`) con esa
+  estrategia. La pantalla vieja de los lotes (`components/BuilderPrueba.js`) no se borra: se sigue abriendo desde «Mi trabajo» (los
+  nombres de las pruebas en «Mis pruebas», «Última prueba» en «Mis estrategias» y la acción «prueba» de las filas). Con una estrategia
+  semanal ese botón sigue desactivado como antes (`AVISO_SEMANAL_PASO2`), aunque la barra de pasos sí lleva al paso 2.
+- **Contenido**: línea superior «[nombre] · Prueba confirmada el [fecha] · [valor] · velas [..] · congelada», título y subtítulo; la caja
+  del veredicto (verde / roja / gris) con el texto automático de `textosResultado` (casos `pasa`, `unoPasa`, `ningunoPasa`,
+  `sinVeredicto`: en este, el periodo con más aprobados falsos de los que llegan al límite) y un aviso por periodo con < 30
+  operaciones; una tarjeta por periodo (dos columnas, una en móvil) con «Pasa / No pasa este periodo», «Gana a [P] % de las copias», el
+  histograma y la tabla «Tu estrategia / Copia típica» (CAGR, caída máxima, operaciones); con «Sin veredicto», «Solo informativo: la
+  prueba no es fiable» en cada tarjeta; «¿La prueba era fiable?» (Sí si todos los periodos quedan por debajo de 9 %) con una línea por
+  periodo; «¿Y ahora?» con «Volver al paso 1», «Copiar para Claude» (`textoParaClaude`, como en §45) y «Paso 3 · Convertirla en plan»
+  siempre desactivado.
+- **Histograma** (`histogramaCopias`, SVG con `role="img"` y un `aria-label` que lo resume): 30 barras iguales de anchas de la mínima a
+  la máxima (la última incluye la máxima), marcas en mínimo, mediana y máximo, «% al año». **Listón del 95 %** = la copia número
+  ⌈0,95 · n⌉ de menor a mayor (con 1.000, la 950.ª): con `percentilDe` (empates, la mitad), una estrategia por encima de esa cifra gana a
+  ≥ 95 % y una por debajo, no, así que «a la derecha del listón» es pasar. La línea de la estrategia, verde si P ≥ 95 y naranja si no;
+  fuera del rango, pegada al borde con una flecha.
+- Comprobado (montaje SWC con renderToString): pasa; no pasa con un periodo bueno; con ninguno; sin veredicto; pocas operaciones (12 y
+  29); la prueba real «Prueba editor EMA20 · AAPL · diarias · semilla 867154936» leída de la base en solo lectura (99,2 % y 11,3 %;
+  CAGR 32,89 % / 18,02 % y 6,87 % / 13,92 %; operaciones 57 / 47 y 66 / 54; 9 y 14 de 200; fiable Sí; caso `unoPasa`; las barras suman
+  1.000); `BuilderAzar` con `inicial.viendo` (la pantalla con «← Volver») y sin él (la de confirmación, ya sin bloque provisional).
+  Histograma a mano con 10 copias (1 … 10): con 3 barras, 3 / 3 / 4; con 30, suman 10; mediana 5,5; listón = 10 (la 10.ª, borde
+  derecho); estrategia 12 → pegada a la derecha; 5,5 → en medio; con 20 copias, listón 19 en 18/19 y estrategia 0 → a la izquierda; con
+  1.000, justo por encima del listón gana al ≥ 95 % y justo por debajo no. Los 4 textos del veredicto, exactos. Comprobaciones comunes.

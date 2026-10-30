@@ -2,20 +2,21 @@
 // §45). Se entra desde la barra de pasos (paso 2) con la estrategia que esté abierta. El usuario elige qué prueba (tarjeta A), la app
 // comprueba antes de empezar (tarjeta B: precios y operaciones) y, al confirmar, va sola y en orden: congelar (lib/pruebaAzar.js
 // confirmarPrueba), comprobar que la prueba es fiable y comparar con el azar (ejecutarPrueba) y el veredicto (guardarResultado). El
-// resultado de aquí es PROVISIONAL (la pantalla completa es la siguiente tanda). Las pruebas anteriores de la estrategia, debajo; una
+// resultado se ve en su propia pantalla (components/BuilderAzarResultado.js, §46): al terminar y con «Ver». Las pruebas anteriores de la estrategia, debajo; una
 // sin terminar se termina con su semilla guardada y da el mismo resultado. components/BuilderPrueba.js (el paso 2 de los lotes) no cambia.
 //   estrategias: las filas de `strategies`; estrategiaId: la abierta. cargaSimbolos y cargaVelas: los del paso 1 (BuilderPanel).
 //   onVolver: a «Mi trabajo»; onPaso1(fila): abre la estrategia en el paso 1.
 //   deps (opcional, para las pruebas): { ctx } en lugar de la sesión de Supabase. inicial (opcional, para las pruebas de montaje):
-//   { simbolos, precios, pruebas, huella, curso, valor, velas } ya leídos o en curso.
+//   { simbolos, precios, pruebas, huella, curso, valor, velas, viendo } ya leídos o en curso (viendo: { fila, resultado }, la pantalla
+//   del resultado abierta).
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import { BarraPasos } from './BuilderPanel'
 import Ayuda from './BuilderAyuda'
-import BotonCopiar from './BotonCopiar'
+import BuilderAzarResultado from './BuilderAzarResultado'
 import BuscadorValor from './BuscadorValor'
 import { REGLA_AZAR_REGLAS } from '../lib/azarReglas'
-import { PERIODOS_AZAR, comprobarPrecios, confirmarPrueba, ejecutarPrueba, esDeTarjetas, fotoDe, guardarResultado, huellaEstrategia, leerResultado, listarPruebas, textoParaClaude, tickersDe } from '../lib/pruebaAzar'
+import { PERIODOS_AZAR, comprobarPrecios, confirmarPrueba, ejecutarPrueba, esDeTarjetas, fotoDe, guardarResultado, huellaEstrategia, leerResultado, listarPruebas, tickersDe } from '../lib/pruebaAzar'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0'
@@ -28,7 +29,6 @@ const seg = (on, desactivado) => ({ fontFamily: B.letra, fontSize: 14, padding: 
   background: on ? B.siguienteFondo : 'transparent', color: desactivado ? B.apagado : on ? B.titulo : B.secundario, fontWeight: on ? 700 : 400 })
 const fecha = (d) => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '—'
 const fechaHora = (d) => { if (!d) return '—'; const x = new Date(d); return `${fecha(x.toISOString())} ${String(x.getHours()).padStart(2, '0')}:${String(x.getMinutes()).padStart(2, '0')}` }
-const pct = (x, d = 1) => x == null || !Number.isFinite(x) ? '—' : `${x.toFixed(d).replace('.', ',')} %`
 const CHIP_VEREDICTO = { pasa: 'supera', noPasa: 'noSupera', sinVeredicto: 'neutro' }
 export const ETAPAS_PANTALLA = [
   { id: 'congelar', titulo: 'Congelar', texto: 'Guarda lo que confirmaste para que no se pueda cambiar.' },
@@ -44,34 +44,6 @@ export function progresoDe(curso) {
 }
 const velasDeRespuesta = (v) => Array.isArray(v) ? v : v?.velas || []
 
-// El bloque PROVISIONAL del resultado (la pantalla completa es la tanda 3b).
-export function ResultadoProvisional({ prueba, resultado }) {
-  return (
-    <div data-resultado={resultado.veredicto} style={{ ...S.tarjeta, marginTop: 16 }}>
-      <div style={S.cabeceraTarjeta}>Resultado <span style={{ ...S.apagado, fontWeight: 400, marginLeft: 6 }}>provisional: la pantalla completa del resultado llegará en la próxima tanda</span></div>
-      <div style={S.cuerpo}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 12 }}>
-          <span data-veredicto-grande style={{ ...S.chip(CHIP_VEREDICTO[resultado.veredicto]), fontSize: 22, padding: '6px 20px' }}>{resultado.texto}</span>
-          <span style={S.secundario}>{prueba.estrategia_nombre} · {prueba.valor} · velas {prueba.velas}</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-          {resultado.periodos.map(p => (
-            <div key={p.nombre} data-periodo-resultado={p.nombre} style={{ border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: 12 }}>
-              <div style={{ fontWeight: 700, color: B.titulo }}>{p.nombre} <span style={S.chip(p.gana ? 'supera' : 'noSupera')}>{p.gana ? 'pasa' : 'no pasa'}</span></div>
-              <div style={{ marginTop: 6 }}>Gana al <strong style={{ color: B.titulo }}>{pct(p.percentil)}</strong> de las copias</div>
-              <div style={S.secundario}>CAGR de la estrategia {pct(p.cagr, 2)} / mediana de las copias {pct(p.mediana, 2)}</div>
-              <div style={S.secundario}>{p.operaciones} operaciones</div>
-              {p.pocasOperaciones && <div style={{ color: AMARILLO, fontSize: 13 }}>Pocas operaciones: con menos de {R.pocasOperaciones}, el resultado puede ser casualidad.</div>}
-              <div data-fiable style={{ ...S.secundario, marginTop: 6, fontSize: 13 }}>¿La prueba era fiable? En {p.fiabilidad.mercados} mercados ficticios aprobó por error {p.fiabilidad.aprobados} veces ({pct(p.aprobadosFalsos)}).</div>
-            </div>
-          ))}
-        </div>
-        <div style={{ marginTop: 12 }}><BotonCopiar obtenerTexto={() => textoParaClaude(prueba, resultado)} titulo="Copia en texto plano la configuración, la huella y las cifras del resultado"/></div>
-      </div>
-    </div>
-  )
-}
-
 export default function BuilderAzar({ estrategias = [], estrategiaId = null, apiFetch, version = null, cargaSimbolos = null, cargaVelas = null, onVolver, onPaso1, deps = null, inicial = null }) {
   const tarjetas = useMemo(() => estrategias.filter(esDeTarjetas).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
   const [estId, setEstId] = useState(() => String((tarjetas.find(s => String(s.id) === String(estrategiaId)) || tarjetas[0])?.id ?? ''))
@@ -84,6 +56,7 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
   const [pruebas, setPruebas] = useState(inicial?.pruebas || null)
   const [huella, setHuella] = useState(inicial?.huella || null)
   const [curso, setCurso] = useState(inicial?.curso || null)   // { fila, etapa, hecho, total, resultado?, error? }
+  const [viendo, setViendo] = useState(inicial?.viendo || null)   // §46: { fila, resultado }, la pantalla «Resultado de la prueba» abierta
   const vivo = useRef(true)
   useEffect(() => () => { vivo.current = false }, [])
   const ctx = useMemo(() => deps?.ctx || (hayConfigSupabase() ? { url: getSupaUrl(), headers: getSupaH() } : null), [deps])
@@ -127,7 +100,7 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
       const ps = await leePrecios([fila.valor, ...tickersDe(fila.estrategia_foto.definition)])
       const resultado = await ejecutarPrueba(fila, ps, (p) => { if (vivo.current) setCurso(c => ({ ...c, etapa: p.etapa, hecho: p.hecho, total: p.total })) })
       const g = await guardarResultado(ctx, fila.id, resultado, version)
-      if (vivo.current) setCurso({ fila, etapa: 'hecho', hecho: 1, total: 1, resultado: g.resultado || resultado })
+      if (vivo.current) { setCurso({ fila, etapa: 'hecho', hecho: 1, total: 1, resultado: g.resultado || resultado }); setViendo({ fila, resultado: g.resultado || resultado }) }
     } catch (e) { if (vivo.current) setCurso(c => ({ ...c, etapa: 'error', error: e.message })) }
     recargaPruebas()
   }
@@ -140,7 +113,7 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
     await ejecuta(fila)
   }
   const verResultado = async (fila) => {
-    try { const r = await leerResultado(ctx, fila.id); if (r && vivo.current) setCurso({ fila, etapa: 'hecho', hecho: 1, total: 1, resultado: r.resultado }) } catch (e) { setFallo(e.message) }
+    try { const r = await leerResultado(ctx, fila.id); if (r && vivo.current) setViendo({ fila, resultado: r.resultado }) } catch (e) { setFallo(e.message) }
   }
 
   const prog = progresoDe(curso)
@@ -266,6 +239,20 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
     </div>
   )
 
+  // §46: la pantalla «Resultado de la prueba» (con lo guardado); «← Volver», a la de confirmación.
+  if (viendo) {
+    const aPaso1 = () => onPaso1?.(tarjetas.find(s => String(s.id) === String(viendo.fila.estrategia_id)) || estrategia)
+    return (
+      <div style={S.pagina}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+          <button data-boton="volver" style={{ ...S.enlace, color: B.secundario }} onClick={() => setViendo(null)}>← Volver</button>
+          <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Builder</span>
+        </div>
+        <BarraPasos actual={2} onPaso={(n) => { if (n === 1) aPaso1() }}/>
+        <BuilderAzarResultado prueba={viendo.fila} resultado={viendo.resultado} onPaso1={aPaso1}/>
+      </div>
+    )
+  }
   return (
     <div style={S.pagina}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -279,7 +266,6 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
         <div data-columna="izquierda" style={{ flex: '1 1 380px', minWidth: 0 }}>{tarjetaA}{tarjetaB}</div>
         <div data-columna="derecha" style={{ flex: '1 1 380px', minWidth: 0 }}>{queSePrueba}{etapas}{anteriores}</div>
       </div>
-      {curso?.etapa === 'hecho' && curso.resultado && curso.fila && <ResultadoProvisional prueba={curso.fila} resultado={curso.resultado}/>}
     </div>
   )
 }
