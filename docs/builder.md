@@ -1806,3 +1806,36 @@ semanales 12 y 18) son las de `calculaSenales` del paso 1.
 - Acceso con un fetch simulado (lo que se inserta; «si ya existe, no hace nada»; solo GET y POST). Las políticas, leídas de la base en
   solo lectura: RLS activa, solo SELECT e INSERT del dueño, permisos de `authenticated` solo INSERT y SELECT, `anon` nada.
 
+## 45. Paso 2 · pantalla «Probarla contra el azar» (opción A del boceto)
+
+`components/BuilderAzar.js`, con el estilo del paso 1 (`lib/builder/estilo.js`). **Se entra desde la barra de pasos**: `BarraPasos`
+admite `onPaso(n)` y `desactivados`; los pasos 1 y 2 que no son el actual son botones (el 3, todavía no). En «Mi trabajo», el paso 2
+abre la pantalla con la primera estrategia de tarjetas; en el editor por tarjetas (paso 1, la barra va ahora encima del título), con
+la estrategia abierta **tal como está guardada** (una nueva, sin guardar: el paso 2 no se pulsa, «Guárdala primero»). «Guardar y
+pasar al paso 2» y `components/BuilderPrueba.js` (el paso 2 de los lotes) no cambian.
+
+- **Cabecera**: «¿Gana «[nombre]» por algo más que suerte?» y «Tú eliges dónde probarla y confirmas. Lo demás lo hace la app sola, en orden.»
+- **Tarjeta A «Elige qué vas a probar»**: estrategia (solo las de tarjetas, por nombre) con «Se prueba tal como está guardada…»; ¿Dónde?:
+  «Un valor» (activo) y «Una lista de valores» (desactivado, «Llegará más adelante»), el buscador de valor del paso 1 (`BuscadorValor`,
+  la misma lista: caché de precios, lista de seguimiento y universo; §37) y su «?»; velas Diarias / Semanales (por defecto, las de la
+  estrategia); periodos fijos 2016–2020 y 2021–2025 con su «?»; «Para pasar», fijo.
+- **Tarjeta B «Antes de empezar, la app comprueba»** (`comprobarPrecios`, se recalcula al cambiar el valor o las velas; las velas, por
+  `/api/velas` como el paso 1): precios en verde con sus fechas, o en rojo cada tramo que falta (el calentamiento antes del 01/01/2016
+  o el final hasta el 31/12/2025, también de los índices del filtro); operaciones por periodo con el motor del paso 1; amarillo si
+  alguna es < 30; rojo si alguna es 0. Con rojo, «Confirmar y probar» desactivado. El aviso de que la prueba se congela; «Volver al
+  paso 1» abre la estrategia en el editor.
+- **Columna derecha**: «¿Qué se prueba?» con el ejemplo; «La app lo hace sola», las 4 etapas que se iluminan (hecha ✓, la de ahora
+  resaltada, con «N de 400 mercados») y la barra de progreso (congelar 1 %, fiabilidad hasta el 95 %, comparar hasta el 99 %, veredicto
+  100 %); «Pruebas anteriores de esta estrategia» (`listarPruebas`): fecha y hora, valor, velas y veredicto con «Ver», o «Sin terminar»
+  con «Terminar el cálculo» (`ejecutarPrueba` con lo guardado: el mismo resultado) y «La estrategia ha cambiado desde esta prueba.» si
+  la huella de la estrategia de ahora no es la de la prueba.
+- **Al confirmar**: `confirmarPrueba` → `ejecutarPrueba` (cediendo el control entre mercados) → `guardarResultado` → el bloque
+  **provisional** del resultado (la pantalla completa es la tanda 3b): veredicto en grande; por periodo «Gana al P % de las copias»,
+  CAGR de la estrategia / mediana de las copias, operaciones y el aviso si < 30, y «¿La prueba era fiable? En 200 mercados ficticios
+  aprobó por error X veces (X/2 %).»; «Copiar para Claude» (`textoParaClaude`: configuración, foto, huellas, semilla y cifras). Si
+  algo falla a medias, la prueba ya está congelada: se termina desde la lista. Mientras corre, no se puede cambiar nada.
+- Comprobado: montaje SWC (renderToString con estado, con «Prueba editor EMA20» y los precios de AAPL de la foto) vacía, con pruebas
+  (una sin terminar y una con otra huella), sin precios, pocas operaciones (semanales: 12 y 18), ninguna operación (un valor plano), en
+  curso (fiabilidad, 120 de 400 → 30 %), terminada (No pasa: 98,7 % y 10,7 %; 11 y 15 aprobados falsos), error a medias; la barra
+  de pasos en «Mi trabajo», en el editor (guardada y nueva) y `vistaInicial: { azar }`. Comprobaciones comunes.
+

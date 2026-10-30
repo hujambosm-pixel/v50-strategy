@@ -14,6 +14,7 @@ import { listarPruebas } from '../lib/registroLab'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 import { B, S } from '../lib/builder/estilo'
 import BuilderPrueba from './BuilderPrueba'
+import BuilderAzar from './BuilderAzar'
 import BuilderEditor, { ReglaPorBloques } from './BuilderEditor'
 import BuilderCodigo from './BuilderCodigo'
 import { esDeCodigo, filaCopiaCodigo } from '../lib/builder/codigo'
@@ -41,22 +42,24 @@ function Frase({ texto }) {
 }
 const Chip = ({ clave }) => { const [tipo, txt] = CHIP[clave] || CHIP.sinVeredicto; return <span style={S.chip(tipo)}>{txt}</span> }
 
-// La barra de los tres pasos; `actual` resaltado (en la tanda 1, solo indica).
-export function BarraPasos({ actual = 1 }) {
+// La barra de los tres pasos; `actual` resaltado. §45: con onPaso(n), los pasos 1 y 2 que no son el actual se pulsan (el 3, todavía
+// no); desactivados (string: el motivo, en el título) no se pulsan.
+export function BarraPasos({ actual = 1, onPaso = null, desactivados = {} }) {
   return (
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }} aria-label="Pasos del Builder">
       {PASOS.map((p, k) => {
-        const n = k + 1, on = n === actual
+        const n = k + 1, on = n === actual, pulsable = !!onPaso && !on && n <= 2 && !desactivados[n], Caja = pulsable ? 'button' : 'div'
         return (
-          <div key={p} aria-current={on ? 'step' : undefined} style={{ flex: '1 1 200px', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: B.radioTarjeta,
-            border: `1px solid ${on ? B.pasoBorde : B.borde}`, background: on ? B.pasoFondo : B.tarjeta }}>
+          <Caja key={p} data-paso={n} aria-current={on ? 'step' : undefined} onClick={pulsable ? () => onPaso(n) : undefined} title={pulsable ? `Ir al paso ${n}` : desactivados[n] || undefined}
+            style={{ flex: '1 1 200px', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: B.radioTarjeta, fontFamily: B.letra, fontSize: B.base, textAlign: 'left', cursor: pulsable ? 'pointer' : 'default',
+            border: `1px solid ${on ? B.pasoBorde : pulsable ? B.siguienteBorde : B.borde}`, background: on ? B.pasoFondo : B.tarjeta }}>
             <span style={{ width: 28, height: 28, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 700,
               background: on ? B.verde : 'transparent', color: on ? B.sobreVerde : B.secundario, border: on ? 'none' : `1px solid ${B.borde}` }}>{n}</span>
             <span style={{ display: 'flex', flexDirection: 'column' }}>
               <span style={{ fontWeight: 700, color: on ? B.titulo : B.secundario }}>{p}</span>
               <span style={{ fontSize: 12, color: on ? B.secundario : B.apagado }}>{SUBTITULOS_PASOS[k]}</span>
             </span>
-          </div>
+          </Caja>
         )
       })}
     </div>
@@ -72,7 +75,8 @@ export const filaCopia = (s) => esDeCodigo(s) ? filaCopiaCodigo(s) : ({ id: null
 // visible: si la pestaña se ve. Cada vez que pasa a verse (al entrar o al volver del editor) se vuelve a leer la base, sin
 // enseñar «Cargando» y sin recalcular si no ha cambiado nada (firmaDatos). Las estrategias llegan de la página.
 // apiFetch y version: para el paso 1 (guardar) y el paso 2. onGuardada: la página recarga sus estrategias. vistaInicial (opcional,
-// para las pruebas): la de BuilderPrueba ({ estrategiaId } | { loteId }), la guía ({ guia: true }) o el editor ({ editor: fila }).
+// para las pruebas): la de BuilderPrueba ({ estrategiaId } | { loteId }), la guía ({ guia: true }), el editor ({ editor: fila }) o la
+// prueba contra el azar de §45 ({ azar: { estrategiaId } }, components/BuilderAzar.js: se abre desde la barra de pasos).
 // Las estrategias se abren aquí, en el paso 1: las de tarjetas en el editor por tarjetas y las de código (V9.1048) en el apartado
 // «Código de la estrategia». onAbrirEstrategia(s, 'editor') las abre en el Editor clásico (la pestaña «Editor»). onBacktestValor:
 // el enlace «Backtest de un valor» (la pestaña donde se ejecutan y se ven en el gráfico). abrir ({ fila, n }): la página pide
@@ -89,7 +93,8 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   const [buscar, setBuscar] = useState(buscarInicial)   // V9.1058: el buscador de «Mi trabajo» (por nombre y por la frase de la regla; V9.1063: resaltado)
   const [buscarCopia, setBuscarCopia] = useState(buscarCopiaInicial)   // y el de «Desde una de mis estrategias» (por nombre)
   const [plantillaId, setPlantillaId] = useState(null)
-  const [prueba, setPrueba] = useState(vistaInicial && !vistaInicial.guia && !vistaInicial.editor ? { ...vistaInicial, n: 0 } : null)   // la pantalla del paso 2, si está abierta
+  const [prueba, setPrueba] = useState(vistaInicial && !vistaInicial.guia && !vistaInicial.editor && !vistaInicial.azar ? { ...vistaInicial, n: 0 } : null)   // la pantalla del paso 2, si está abierta
+  const [azar, setAzar] = useState(vistaInicial?.azar ? { ...vistaInicial.azar, n: 0 } : null)   // §45: «Probarla contra el azar» (azar re-simulado), si está abierta
   const [editor, setEditor] = useState(vistaInicial?.editor ? { fila: vistaInicial.editor, n: 0 } : null)   // el paso 1 (editor por tarjetas), si está abierto
   const [guardadas, setGuardadas] = useState([])   // lo recién guardado, hasta que la página recargue sus estrategias
   const [guia, setGuia] = useState(!!vistaInicial?.guia)   // la «Guía de las pruebas» (vistaInicial { guia: true }, para las pruebas)
@@ -160,7 +165,8 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   // V9.1071: las velas, por el mismo camino que «Backtest de un valor» (pages/api/velas.js: la caché más lo último de Yahoo).
   // Devuelve { velas, semanaAbierta, origen }.
   const cargaVelas = useCallback(async (sym) => { const r = await apiFetch(`/api/velas?simbolo=${encodeURIComponent(sym)}`); if (!r.ok) throw new Error(`HTTP ${r.status}`); return await r.json() }, [apiFetch])
-  useEffect(() => { if (abrir?.fila) { setPrueba(null); setGuia(false); setEditor({ fila: abrir.fila, n: abrir.n }) } }, [abrir?.n])
+  useEffect(() => { if (abrir?.fila) { setPrueba(null); setAzar(null); setGuia(false); setEditor({ fila: abrir.fila, n: abrir.n }) } }, [abrir?.n])
+  const abreAzar = (estrategiaId) => setAzar({ estrategiaId, n: Date.now() })
   // Guardada en el paso 1: la página recarga sus estrategias y se pasa al paso 2 con ella (la versión nueva, si se creó).
   // V9.1054: «Guardar estos valores en la estrategia» (info.quedarse) sigue en el paso 1 con la estrategia guardada (la versión nueva,
   // si se creó); así las casillas vuelven a enseñar los valores guardados. V9.1073: «Guardar en la estrategia», en la barra de arriba,
@@ -181,7 +187,9 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   if (editor && esDeCodigo(editor.fila)) return <ProteccionPanel nombre="Estrategia de código"><BuilderCodigo key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
     onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardarCodigo}/></ProteccionPanel>
   if (editor) return <ProteccionPanel nombre="Editor por tarjetas"><BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} lotes={datos.lotes} apiFetch={apiFetch}
-    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'} entradaBuilder={entrada}/></ProteccionPanel>
+    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} onPaso2={f => { setEditor(null); abreAzar(f.id) }} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'} entradaBuilder={entrada}/></ProteccionPanel>
+  if (azar) return <ProteccionPanel nombre="Probarla contra el azar"><BuilderAzar key={azar.n} estrategias={estrategiasEf} estrategiaId={azar.estrategiaId} version={version}
+    cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} onVolver={() => { setAzar(null); recarga() }} onPaso1={f => { setAzar(null); if (f) abreEditor(f); else recarga() }}/></ProteccionPanel>
   if (prueba) return <ProteccionPanel nombre="Probarla contra el azar"><BuilderPrueba key={prueba.n} estrategias={estrategiasEf} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
     onVolver={() => { setPrueba(null); recarga() }} onNuevaPrueba={() => setPrueba({ n: Date.now() })} onCambio={recarga}/></ProteccionPanel>
   const pestanaBtn = (k, t, n) => (
@@ -208,7 +216,7 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
           <button style={{ ...S.enlace, color: B.apagado, fontSize: 13 }} onClick={() => onBacktestValor?.()} title="Donde las estrategias se ejecutan sobre un valor y se ven en el gráfico">Backtest de un valor</button>
         </span>
       </div>
-      <BarraPasos actual={1}/>
+      <BarraPasos actual={1} onPaso={n => n === 2 && abreAzar(null)}/>
 
       <div style={{ ...S.tituloSeccion, marginTop: 8 }}>¿Desde dónde empiezas?</div>
       <div style={S.subtituloSeccion}>Las tres opciones abren el paso 1 con una estrategia nueva. Se guarda al pulsar «Guardar y pasar al paso 2».</div>
