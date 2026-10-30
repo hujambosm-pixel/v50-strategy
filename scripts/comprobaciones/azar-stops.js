@@ -24,6 +24,8 @@
 //   resimP  igual, con la tasa de entradas de la estrategia: operaciones / velas sin posición (lo que se puede medir en una real).
 //   durac   la de lib/azar.js (paso 2 de hoy): las mismas k duraciones, en fechas al azar sin solaparse (colocaAlAzar, pctAlAzar).
 //   lote2   el re-simulado de LOTE_2 (sorteaSecuencial, en velas): las mismas señales y duraciones sacadas de las reales.
+//   lib     (§43) resimP hecho con lib/azarReglas.js (tablaSalidas con entradas forzadas + copiasReSimuladas), con la misma semilla
+//           que resimP: se comprueba que su tabla y su percentil son los mismos.
 const path = require('path')
 const C0 = require('./cargador')
 
@@ -36,6 +38,7 @@ const CAL = 60, N = 1260, P = 1 / 20, BLOQUE = 20, ANIOS = N / 252
   const { interpreta } = require(path.join(C0.RAIZ, 'lib/editor/interprete.js'))
   const { validaDefinicion } = require(path.join(C0.RAIZ, 'lib/editor/definicion.js'))
   const { generador, semillaDe, percentilDe, colocaAlAzar, pctAlAzar } = require(path.join(C0.RAIZ, 'lib/azar.js'))
+  const AR = require(path.join(C0.RAIZ, 'lib/azarReglas.js'))
 
   // ── Los días de QQQ como cocientes ──
   const q = require('./datos/foto_mom.json').QQQ.quote
@@ -122,10 +125,10 @@ const CAL = 60, N = 1260, P = 1 / 20, BLOQUE = 20, ANIOS = N / 252
   }
   const abre = (velas) => velas.slice(CAL).map(b => b.open), cierra = (velas) => velas.slice(CAL).map(b => b.close)
 
-  const TIPOS = ['resim', 'resimP', 'durac', 'lote2']
+  const TIPOS = ['resim', 'resimP', 'durac', 'lote2', 'lib']
   const res = {}   // res[modo][salida] = { aprob: {tipo: n}, ...}
   const t0 = Date.now()
-  let comprobadas = 0, pasadasTot = 0
+  let comprobadas = 0, pasadasTot = 0, libIgual = 0, libCasos = 0
   for (const modo of ['dia', 'bloques']) {
     res[modo] = {}
     for (const [id] of SALIDAS) res[modo][id] = { aprob: Object.fromEntries(TIPOS.map(k => [k, 0])), pctMedio: Object.fromEntries(TIPOS.map(k => [k, 0])), cagrReal: 0, cagrCopia: Object.fromEntries(TIPOS.map(k => [k, 0])), ops: 0, dias: 0, sinOps: 0 }
@@ -154,6 +157,14 @@ const CAL = 60, N = 1260, P = 1 / 20, BLOQUE = 20, ANIOS = N / 252
         const sims = Object.fromEntries(TIPOS.map(tp => [tp, new Float64Array(COPIAS)]))
         const rnd = (tp) => generador(semillaDe(`azarStops|copias|${tp}|${modo}|${m}|${id}`))
         const r1 = rnd('resim'), r2 = rnd('resimP'), r3 = rnd('durac'), r4 = rnd('lote2'), pHat = k / libres
+        // lib: la tabla con entradas forzadas (tiene que ser la del volumen inventado) y las copias de lib/azarReglas.js.
+        const tl = AR.tablaSalidas(velas, d, { desde: fechas[CAL] })
+        let tablaIgual = tl.desde === CAL && tl.hasta === n - 1
+        for (let e = CAL; e < n; e++) if (tl.salida[e] !== tab.x[e] || tl.precio[e] !== tab.px[e]) tablaIgual = false
+        const realesLib = r.openPosition ? [...r.trades, r.openPosition] : r.trades
+        const cl = AR.copiasReSimuladas(velas, d, realesLib, { n: COPIAS, semilla: `azarStops|copias|resimP|${modo}|${m}|${id}`, tabla: tl })
+        if (Math.abs(cl.tasa - pHat) > 1e-12) tablaIgual = false
+        cl.copias.forEach((c, s) => { sims.lib[s] = c.cagr })
         for (let s = 0; s < COPIAS; s++) {
           sims.resim[s] = resim(tab, velas, P, r1)
           sims.resimP[s] = resim(tab, velas, pHat, r2)
@@ -170,8 +181,10 @@ const CAL = 60, N = 1260, P = 1 / 20, BLOQUE = 20, ANIOS = N / 252
           }
           sims.lote2[s] = (Math.pow(f, 1 / ANIOS) - 1) * 100
         }
+        libCasos++
+        if (tablaIgual && cl.percentil === percentilDe(sims.resimP, real)) libIgual++
         for (const tp of TIPOS) {
-          const p = percentilDe(sims[tp], real)
+          const p = tp === 'lib' ? cl.percentil : percentilDe(sims[tp], real)
           if (p >= 95) R.aprob[tp]++
           R.pctMedio[tp] += p / MERCADOS
           const v = Array.from(sims[tp]).sort((a, b) => a - b); R.cagrCopia[tp] += v[v.length >> 1] / MERCADOS
@@ -187,6 +200,7 @@ const CAL = 60, N = 1260, P = 1 / 20, BLOQUE = 20, ANIOS = N / 252
   console.log(`azar-stops · ${MERCADOS} mercados por manera × ${COPIAS} copias · ${dias.length} días de QQQ · OHLC incoherentes: ${incoherentes}`)
   console.log(`tabla del intérprete comprobada en ${comprobadas} casos (${(pasadasTot / comprobadas).toFixed(1)} pasadas de media) · ${((Date.now() - t0) / 1000).toFixed(0)} s`)
   console.log('\n% de mercados con aprobado falso (gana al ≥ 95 % de las copias), [intervalo del 95 %]')
+  console.log(`lib/azarReglas.js: misma tabla, misma tasa y mismo percentil que resimP en ${libIgual} de ${libCasos} casos`)
   console.log(['mercados', 'salida', ...TIPOS.map(t => t.padEnd(22))].join(' | '))
   for (const modo of Object.keys(res)) for (const [id, nombre] of SALIDAS) {
     const R = res[modo][id]

@@ -72,6 +72,49 @@ const velas = (xs) => xs.map(([open, high, low, close], i) => ({ date: new Date(
     ok(m.n > 0 && p1.regla.operaciones === m.n && p1.regla.cagr === m.cagrC && p1.regla.maxDD === ddBV, `mismas operaciones (${m.n}), mismo CAGR y mismo Max Drawdown`)
     ok(p1.bh.cagr === m.cagrBH, 'comprar y mantener el mismo valor: el mismo CAGR')
   }
+  // 3 · Paso 2 · azar re-simulado (lib/azarReglas.js, §43): la operación que abre una entrada forzada, calculada a mano. 15 velas;
+  //     compra a la apertura de la vela 2 (101) y de la 9 (99). ATR(1) = el rango verdadero de la vela: vela 1 = 102 − 99 = 3; vela 8 =
+  //     97,5 − 97 = 0,5. Mínimo de 3 velas: el menor mínimo de las 3 anteriores (en la 2 aún no hay 3: sin stop).
+  //     S1 stop fijo ATR(1) × 2. Entrada 2: 101 − 6 = 95; ningún mínimo lo toca hasta la vela 14, que abre a 94 → vende a 94 (12 velas).
+  //        Entrada 9: 99 − 1 = 98; la vela 11 baja a 97,8 → vende a 98 (2 velas).
+  //     S3 mínimo de 3 velas. Entrada 2: velas 3–6 → 99, 99, 100, 101; la 6 abre a 102 y baja a 99,5 → vende a 101 (4 velas).
+  //        Entrada 9: velas 9–12 → 96,5, 96,5, 97, 97,8; la 12 abre a 98,4 y baja a 97,6 → vende a 97,8 (3 velas).
+  //     S4 manda el más alto de S1 y S3. Entrada 2: 95, 99, 99, 100, 101 → vende a 101 en la 6 (manda S3). Entrada 9: 98 (S1 > 96,5,
+  //        96,5, 97) → vende a 98 en la 11 (manda S1).
+  //     Y la tasa de entradas: 4 operaciones con 80 velas sin posición → 0,05.
+  {
+    const AR = require(path.join(C0.RAIZ, 'lib/azarReglas.js'))
+    const v = velas([[100, 101, 99, 100], [100, 102, 99, 101], [101, 104, 100, 103], [103, 105, 101, 104], [104, 106, 102, 105], [105, 106, 101, 102],
+      [102, 103, 99.5, 100], [100, 100.5, 96.5, 97], [97, 97.5, 97, 97.2], [99, 100, 98.5, 99.8], [99.8, 101, 99, 100.5], [100.5, 101, 97.8, 98.4],
+      [98.4, 99, 97.6, 98.9], [98.9, 99.5, 98, 98.2], [94, 95, 93, 94.5]])
+    const base = (nombre, stops, extra = {}) => ({ tipo: 'editor', formato: 1, motor: 1, nombre, parametros: { version: 1, lista: [] },
+      entrada: { senal: { c: 'nuevoMaximo', p: { n: 2 } }, orden: { tipo: 'apertura' } }, stops, salidas: [], ...extra })
+    const s1 = { id: 'atrCompra1', tipo: 'atrCompra', motivo: 'stop', k: 2, periodo: 1, historialAlEntrar: true }
+    const s3 = { id: 'minimoMovil1', tipo: 'minimoMovil', motivo: 'stop_minimo', n: 3, historialAlEntrar: true }
+    const casos = [['S1 stop fijo ATR × 2', base('S1', [s1]), [[2, 14, 94], [9, 11, 98]]], ['S3 mínimo de 3 velas', base('S3', [s3]), [[2, 6, 101], [9, 12, 97.8]]],
+      ['S4 manda el más alto', base('S4', [s1, s3], { stopsModo: 'masAlto' }), [[2, 6, 101], [9, 11, 98]]]]
+    for (const [nombre, d, esperado] of casos) {
+      ok(validaDefinicion(d).length === 0, `${nombre}: la definición es válida ${validaDefinicion(d).join(' ')}`)
+      const tab = AR.tablaSalidas(v, d), obt = esperado.map(([e]) => [e, tab.salida[e], tab.precio[e]])
+      ok(JSON.stringify(obt) === JSON.stringify(esperado) && esperado.every(([e, x]) => tab.velasDe(e) === x - e),
+        `${nombre}: tablaSalidas de las entradas 2 y 9 = ${esperado.map(([e, x, p]) => `vela ${x} a ${p}`).join(', ')} (obtenido: ${obt.map(([, x, p]) => `vela ${x} a ${p}`).join(', ')})`)
+      // Las mismas operaciones con interpreta y las entradas forzadas en 2 y 9 (S1 sigue dentro en la 9: una sola).
+      const r = interpreta(d, v, {}, { entradasForzadas: new Set([2, 9]) }), k = (f) => v.findIndex(b => b.date === f)
+      const dir = r.trades.map(t => [k(t.entryDate), k(t.exitDate), t.exitPrice]), quiere = d.nombre === 'S1' ? [esperado[0]] : esperado
+      ok(JSON.stringify(dir) === JSON.stringify(quiere), `${nombre}: interpreta con entradas forzadas en 2 y 9 da ${JSON.stringify(dir)}`)
+    }
+    // Sin la opción, el intérprete no cambia: con la señal de siempre (nuevo máximo de 2 velas) no hay ninguna entrada forzada.
+    ok(JSON.stringify(interpreta(casos[1][1], v)) === JSON.stringify(interpreta(casos[1][1], v, {}, {})), 'sin entradasForzadas, el mismo resultado')
+    const fechas = Array.from({ length: 101 }, (_, i) => new Date(Date.UTC(2020, 0, 1) + i * 864e5).toISOString().slice(0, 10))
+    const plana = fechas.map(date => ({ date, open: 100, high: 101, low: 99, close: 100, volume: 1000 }))
+    const ops = [[1, 6], [20, 25], [40, 45], [60, 65]].map(([e, x]) => ({ entryDate: fechas[e], exitDate: fechas[x], entryPrice: 100, exitPrice: 100 }))
+    const ta = AR.tasaDeEntradas(plana, ops)
+    ok(ta.operaciones === 4 && ta.libres === 80 && ta.tasa === 0.05, `tasa de entradas: 4 operaciones / 80 velas sin posición = 0,05 (obtenido: ${ta.operaciones} / ${ta.libres} = ${ta.tasa})`)
+    // Semanales: la misma tabla con las fechas de una vela por semana (solo cambian las fechas).
+    const sem = v.map((b, i) => ({ ...b, date: new Date(Date.UTC(2020, 0, 6) + i * 7 * 864e5).toISOString().slice(0, 10) }))
+    const t1 = AR.tablaSalidas(v, casos[2][1]), t2 = AR.tablaSalidas(sem, casos[2][1])
+    ok(JSON.stringify([...t1.salida, ...t1.precio]) === JSON.stringify([...t2.salida, ...t2.precio]), 'semanales: la misma tabla')
+  }
   console.log(fallos ? `sintéticas: ${fallos} fallos` : 'sintéticas: todas bien')
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(2) })

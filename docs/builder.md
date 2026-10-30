@@ -1703,3 +1703,53 @@ ventaja, ella misma es una copia más, y sale en el 5 % con cualquier salida y c
 la operación que abre cada vela de entrada con el propio intérprete (mejor con una opción de `interpreta` para forzar las señales
 que con el volumen inventado del script) y otra que haga las copias (entradas al azar con la tasa operaciones / velas sin posición,
 salida de la tabla, CAGR); la comprobación en mercados ficticios se mantiene antes de dar el veredicto.
+
+## 43. Paso 2 · azar re-simulado en lib
+
+La parte 2 de §42, en `lib/azarReglas.js`, **sin pantalla todavía**. `lib/azar.js` y todas las pantallas siguen igual.
+
+**Intérprete.** `interpreta(def, velas, params, ctx)` admite `ctx.entradasForzadas` (algo con `.has(i)`, p. ej. un `Set` de índices de
+vela): sin posición, compra a la apertura de cada vela del conjunto sin mirar la señal, la orden, la cancelación ni el filtro de
+mercado; los stops y las salidas son los de la definición (los que se fijan con la vela de señal, como el mínimo de la vela de señal,
+con la vela anterior a la compra). Sustituye al volumen inventado de `azar-stops.js`. Sin la opción, el resultado es el de siempre
+(batería, lotes, huellas y sintéticas iguales).
+
+**`lib/azarReglas.js`**
+- `tablaSalidas(velas, estrategia, { desde, hasta })`: para cada vela de entrada posible del periodo, la operación que abriría
+  comprando a su apertura (vela de salida, precio de venta, motivo; `velasDe(e)`), con el intérprete y entradas forzadas, por
+  pasadas (en cada una se fuerzan todas las velas que faltan). Una operación que sigue abierta al final se valora al cierre de la
+  última vela del periodo. No mira velas más allá de `hasta`.
+- `tasaDeEntradas(velas, operaciones, { desde, hasta })`: operaciones que entran en el periodo ÷ velas sin posición (la vela de una
+  entrada cuenta como libre; las velas siguientes hasta la de la venta, no).
+- `copiasReSimuladas(velas, estrategia, operacionesReales, { n: 1000, semilla })`: cada copia entra al azar con esa tasa en las velas
+  sin posición (saltos geométricos, lo mismo que sortear vela a vela), una operación a la vez, compra SIEMPRE a la apertura de la vela
+  (decisión 1), sin el filtro de mercado (decisión 2) y sale como dice la tabla. Por copia: CAGR compuesto (años de las fechas: vale
+  igual con velas semanales), caída máxima vela a vela (la abierta marcada al cierre de cada vela, la venta a su precio; todo el
+  capital, sin comisiones) y operaciones. Resumen: percentil de la estrategia (`percentilDe`: copias con CAGR menor, empates la
+  mitad) y mediana de las copias. La estrategia se mide igual, con sus operaciones reales (su precio de compra, sea cual sea la orden).
+- `fiabilidad(velas, estrategia, { mercados: 200, bloque: 20, semilla })`: 200 mercados ficticios con los días del propio activo
+  (cocientes, como en §42) barajados por bloques de 20 y encadenados desde la primera vela real, con las mismas fechas. En cada uno,
+  una «estrategia» sin ventaja (entradas al azar a la tasa de la real) contra 1.000 copias re-simuladas con la tasa medida en ella. %
+  de aprobados falsos (gana al ≥ 95 %) e intervalo de Wilson del 95 %.
+- `REGLA_AZAR_REGLAS` (la regla, una sola vez) y `veredicto({ aprobadosFalsos, periodos })`: «Sin veredicto» si los aprobados falsos
+  son ≥ 9 %; si no, «Pasa» si gana al ≥ 95 % de las copias en 2016–2020 y en 2021–2025, y si no «No pasa». Aviso «pocas operaciones»
+  si un periodo tiene < 30. Con varias fiabilidades (una por periodo), manda la peor. Nota: con 200 mercados, el intervalo de Wilson
+  queda entero por encima del 5 % ya con 17 (8,5 %: 5,4–13,2); con 16 (8 %) toca el 5 % (5,0–12,6). El umbral es el 9 % decidido.
+- Semilla fija (texto o número): el mismo resultado cada vez con los mismos datos.
+
+**Pruebas** (solo velas inventadas o mercados ficticios).
+- `sinteticas.js` §3, a mano con 15 velas y entradas en las velas 2 y 9 (ATR de 1 vela, mínimo de 3 velas): S1 stop fijo ATR × 2 →
+  vela 14 a 94 (abre por debajo del 95) y vela 11 a 98; S3 → vela 6 a 101 y vela 12 a 97,8; S4 manda el más alto → vela 6 a 101 (manda
+  S3) y vela 11 a 98 (manda S1). La tabla y `interpreta` con las entradas forzadas dan esas cifras exactas; con fechas semanales, la
+  misma tabla. Tasa: 4 operaciones con 80 velas sin posición → 0,05.
+- El experimento de §42 con una columna más, *lib* (`azar-stops.js`): la tabla de `tablaSalidas` es la del volumen inventado, la tasa
+  es la misma y el percentil de `copiasReSimuladas` (con la semilla de resimP) es idéntico en **2.400 de 2.400** casos, así que los
+  aprobados falsos son exactamente los de la columna resimP de §42 (de 3,0 a 7,0 % día a día y de 3,0 a 6,0 % por bloques). Solo
+  cambia la mediana de las copias, unas décimas más alta: el script cuenta 5 años fijos y la librería los años de las fechas (los 1.260
+  días laborables inventados son 4,8 años); el orden, y por tanto el percentil, no cambia.
+- Tiempo de `fiabilidad()` con 200 mercados × 1.000 copias en 1.260 velas diarias inventadas: 2–3 s con S4, 9–10 s con SuperTrend, 11–13 s
+  con S1 (operaciones largas: más pasadas para la tabla). Por debajo de los 20 s; no hace falta recortar.
+- `azar-reglas.js` (en comunes.sh): la versión corta (8 mercados, 200 copias, semilla fija) de S1, S4, S5 y S4 semanal sobre un paseo
+  aleatorio inventado, con la huella de todo el resultado (`3ee29dbc`). Con `--mercados 200 --copias 1000`, la de verdad y sus tiempos.
+
+**Pendiente** (partes siguientes): la pantalla del paso 2 y de dónde salen las velas, las operaciones reales y los periodos.
