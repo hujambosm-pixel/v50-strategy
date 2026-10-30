@@ -1978,3 +1978,47 @@ estrategia).
   `ajustesDe(planDe(x)) = x`. Montaje SWC (renderToString): sin guardados, pidiendo el nombre, dos guardados con sus ajustes, sin
   cambios, confirmación de borrar, estrategia cambiada (con la guardada elegida) y borrada, sin conexión. Las pruebas de la parte 1
   siguen igual. Comprobaciones comunes.
+
+
+## 49. Paso 3 · arreglos de la pantalla del plan
+
+`components/BuilderPlan.js`, `lib/builder/planPantalla.js`, `lib/builder/planesGuardados.js` (una lectura más) y, en «Mi trabajo»,
+`lib/builder/misListas.js`, `lib/builder/miTrabajo.js` y `components/BuilderPanel.js`. El motor de planes no cambia.
+- **Auditoría.** La lista de estrategias del paso 3 es la misma que la del paso 2 desde todos los sitios que lo abren (barra de pasos,
+  «Mi trabajo», editor, resultado del paso 2): la de la página (`strategies?active=eq.true`) más las recién guardadas
+  (`estrategiasEf` de `BuilderPanel`). En la base hay 8 de tarjetas, todas diarias y activas (Copia editor 23, Línea bajista + EMA10,
+  Prueba editor EMA20, PRUEBA_BUILDER_1, Retroceso líderes RSI2, SuperTrend 10/3, Swings 2/2, Tortugas 20/10), y la pantalla montada con
+  esas filas enseña las 8 en los dos pasos: la falta de «Prueba editor EMA20» no se reproduce con el código. La pestaña «Plan nuevo 2»
+  solo la creaba «+ Añadir plan» (el número seguía al del primero, aunque ya no estuviera). El motor ya acepta la comisión fija
+  (`comisionPct` 0 con `comisionMinEur`) y el % con mínimo: cada orden paga max(% × importe, mínimo).
+- **Desplegable «Estrategia»**: todas las de tarjetas (las semanales, desactivadas) y, entre paréntesis, «pasa el azar», «no pasa» o
+  «sin prueba» (`estadosPrueba`: la huella de ahora de cada una frente a las pruebas del paso 2 de TODAS, leídas una vez con
+  `listarPruebasUsuario`; una prueba con otra huella no cuenta). El aviso de la estrategia abierta sale de esa misma lectura.
+- **Pestañas**: al entrar se abre el plan guardado más reciente de la estrategia con la que se entra (sin estrategia, el más reciente
+  de todos); sin ninguno, UN plan nuevo con ella (hace falta uno para trabajar; lo mismo al borrar el último). Otro plan nuevo, solo con
+  «+ Añadir plan» («Plan nuevo», «Plan nuevo 2»…: el primer nombre libre, `nombreNueva`). Los nuevos llevan una × (no la última
+  pestaña): sin cambios desde que se crearon se cierran; con cambios, «¿Cerrar «…» sin guardar? Se pierden sus cambios.»
+  (`conCambios`, `trasCerrar`).
+- **Espacio**: una fila arriba con las pestañas, «+ Añadir plan», los botones de guardar (y sus diálogos en la misma fila) y «Comparar
+  planes»; la fecha de guardado va en el título de «Guardar cambios». Los dos avisos en una línea, uno al lado del otro (en el móvil, por
+  debajo de 700 px, uno debajo del otro), con «Calculando…» a la derecha; los errores, debajo. Las dos columnas empiezan a la misma
+  altura: a la derecha, directamente las 6 cifras (de 150 px de ancho mínimo) y el gráfico (250 px de alto en lugar de 280). En
+  escritorio (≥ 1000 px), la columna de ajustes es `sticky` con su propia barra (alto máximo, el de la página que se desplaza); en el
+  móvil, nada fijo.
+- **Comisión por operación**: «%» (0,1 % por defecto), «€ fijos por operación» (2 € de partida) y «% con mínimo» (0,1 % con mínimo de
+  1 €), cada una con su «?» y un ejemplo con números (`costesDe`: `comisionPct` y `comisionMinEur`, sin horquilla; `ajustesDe` lo
+  deshace). Con «%» el plan es el mismo de antes (la misma huella).
+- **Cifras**: euros grandes sin céntimos (114.341 €); «Peor caída» con el % grande y debajo «fecha del valle · caída en €» (las fechas
+  de las dos caídas, en su «?»); «Impuestos y comisiones» en dos líneas, «Impuestos 17.128 €» y «Comisiones 28.991 € (623 órdenes)».
+- **Ocioso en liquidez**: sin la fila «El mismo plan con el dinero ocioso en liquidez» (es el mismo plan) ni su línea en el gráfico,
+  sin la columna «El ocioso añadió» y, en lugar de la tabla de caídas, «Con el dinero ocioso en liquidez no hay nada que comparar:
+  elige QQQ, oro u otro símbolo para ver si te protege en las caídas».
+- **Mi trabajo**: «Convertirla en plan (paso 3)» ya no dice «próximamente» y abre el paso 3 con esa estrategia (acción `plan`).
+- Comprobado (montaje SWC con renderToString): el desplegable con una que pasa, una que no, una sin prueba (y una con otra huella), una
+  semanal y una de código (fuera); al entrar sin planes, con planes de la estrategia (el más reciente), sin estrategia y con una sin
+  planes; las × (la última no), cerrar la abierta o otra, y la confirmación con cambios; la fila de arriba; ocioso en liquidez y en GLD;
+  las tres comisiones en pantalla y en el plan; por defecto con GLD, 114.341 € en pantalla (114.340,91 € del motor), 15,84 % y 14,50 %,
+  con la misma huella que en V9.1088. A mano, en el caso inventado de `planes-estrategia.js` (compra a 105, vende a 114, ocioso plano a
+  50): con 2 € fijos, (10.000 − 6) / 105 × 114 − 6 = 10.844,628571 € y 12 € de comisiones; con 0,1 % y mínimo de 1 €, 536,60 € con 500 €
+  (6 × 1 €) y 10.792,162640 € con 10.000 € (62,411359 €), iguales que el motor. Las pruebas de §48 siguen bien. Comprobaciones comunes.
+  No comprobado en el navegador: el gráfico entero sin bajar a 1920 × 1080 y la columna fija.

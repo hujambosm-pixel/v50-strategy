@@ -9,11 +9,17 @@
 // con «+ Añadir plan» (copia los ajustes de ahora) y «Comparar planes» (desactivado). «Guardar este plan» pide el nombre; uno guardado,
 // «Guardar cambios», «Guardar como plan nuevo» y «Borrar» (con confirmación). Un plan guardado lleva la foto de su estrategia: si la
 // estrategia ha cambiado desde entonces, una línea lo avisa y deja usar la versión guardada (por defecto) o la de ahora.
+// §49: el desplegable con todas las estrategias de tarjetas y su prueba («pasa el azar / no pasa / sin prueba»); al entrar se abre el
+// plan guardado más reciente de la estrategia (o, sin ninguno, un plan nuevo): otro plan nuevo solo con «+ Añadir plan», y los nuevos
+// se cierran con su ×; una fila arriba (pestañas, guardar, comparar) y los avisos en otra; la columna de ajustes, fija al bajar en
+// escritorio; la comisión en %, en € fijos o en % con mínimo; con el ocioso en liquidez no se compara el ocioso.
 //   estrategias: las filas de `strategies`; estrategiaId: la abierta. cargaSimbolos: los símbolos de la caché de precios (BuilderPanel).
 //   onVolver: a «Mi trabajo»; onPaso1(fila): la estrategia en el paso 1; onPaso2(id): el paso 2 con ella.
 //   deps (opcional, para las pruebas): { ctx, calcula(plan) } en lugar de la sesión y de /api/plan. inicial (opcional, para las pruebas
 //   de montaje): { ajustes, resultado ({ respuesta, plan }), error, calculando, pruebas, huella, resultadoPrueba, simbolos, planes
-//   (las filas guardadas), pestana (la abierta: «g<id>» o «n1»), cambio ({ cambiada, borrada }), pideNombre, borrando }.
+//   (las filas guardadas), pestana (la abierta: «g<id>» o «n1»), cambio ({ cambiada, borrada }), pideNombre, borrando, huellas ({ id: huella }
+//   de cada estrategia, para su etiqueta), nuevas ([{ clave, nombre, base }]), cerrando (la clave de la pestaña que pide confirmación) }.
+//   pruebas: las de todas las estrategias (con estrategia_id).
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import { BarraPasos } from './BuilderPanel'
@@ -21,13 +27,13 @@ import Ayuda from './BuilderAyuda'
 import BuscadorValor from './BuscadorValor'
 import BotonCopiar from './BotonCopiar'
 import { marcasLog, separaEtiquetas } from './BuilderCurvas'
-import { esDeTarjetas, huellaEstrategia, listarPruebas, leerResultado } from '../lib/pruebaAzar'
+import { esDeTarjetas, huellaEstrategia, leerResultado } from '../lib/pruebaAzar'
 import { validaPlan, paraHuellaPlan } from '../lib/planes/plan'
 import { jsonCanonico } from '../lib/lotesLab'
-import { AVISO_BORRADA, AVISO_CAMBIADA, AYUDA_CAMBIADA, AYUDA_COMPARAR, borrarPlan, cambiarPlan, comparaEstrategia, crearPlan, fotoDelPlan, listarPlanes, nombreLimpio } from '../lib/builder/planesGuardados'
+import { AVISO_BORRADA, AVISO_CAMBIADA, AYUDA_CAMBIADA, AYUDA_COMPARAR, borrarPlan, cambiarPlan, comparaEstrategia, crearPlan, fotoDelPlan, listarPlanes, listarPruebasUsuario, nombreLimpio } from '../lib/builder/planesGuardados'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
-import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_PRUEBA, AYUDA_PLAN, OCIOSOS_FIJOS, PERIODOS_PLAN, SUBIDA_DEFECTO, ajustesDe, ayudaPrueba, cifrasPlan, creaCalculador, estadoPrueba,
-  esSemanal, euros, fechaCorta, fechasDe, fraseCaidas, pct, planDe, puntos, textoParaClaudePlan } from '../lib/builder/planPantalla'
+import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_PRUEBA, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
+  ayudaCaida, ayudaPrueba, baseNueva, cifrasPlan, conCambios, nombreNueva, trasCerrar, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, fraseCaidas, pct, planDe, puntos, textoParaClaudePlan } from '../lib/builder/planPantalla'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0', AZUL = '#58a6ff', CLARO = '#c9d4df', GRIS = '#8b9bad', GRIS_FRANJA = '#3a4656'
 const campo = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px' }
@@ -73,7 +79,7 @@ export const LINEAS_PLAN = [
 ]
 function GraficoPlan({ curva, activo }) {
   const [ref, W] = useAncho()
-  const IZQ = 76, DER = 150, H1 = 280, ARR = 22, FR = 14, n = curva.fechas.length
+  const IZQ = 76, DER = 150, H1 = 250, ARR = 22, FR = 14, n = curva.fechas.length
   const lineas = LINEAS_PLAN.filter(l => curva[l.k]?.length).map(l => ({ ...l, t: l.k === 'activo' ? `Comprar y mantener ${activo}` : l.t, v: curva[l.k] }))
   const vals = lineas.flatMap(l => l.v).filter(v => Number.isFinite(v) && v > 0)
   if (!vals.length || n < 2) return null
@@ -106,11 +112,11 @@ function GraficoPlan({ curva, activo }) {
     </div>
   )
 }
-function Leyenda() {
+function Leyenda({ sinOcioso = false }) {
   const muestra = (l) => <svg width="30" height="10" aria-hidden="true"><line x1="1" x2="29" y1="5" y2="5" stroke={l.color} strokeWidth={l.ancho} strokeDasharray={l.rayas || undefined} strokeLinecap={l.redondo ? 'round' : 'butt'}/></svg>
   return (
     <div data-leyenda style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: B.secundario, marginTop: 6, alignItems: 'center' }}>
-      {LINEAS_PLAN.map(l => <span key={l.k} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{muestra(l)}{l.t}</span>)}
+      {LINEAS_PLAN.filter(l => !(sinOcioso && l.k === 'ociosoLiquidez')).map(l => <span key={l.k} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{muestra(l)}{l.t}</span>)}
       <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><span style={{ width: 14, height: 10, background: AZUL, display: 'inline-block' }}/>dentro de la acción</span>
       <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><span style={{ width: 14, height: 10, background: GRIS_FRANJA, display: 'inline-block' }}/>en el ocioso</span>
     </div>
@@ -140,19 +146,32 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
   // las demás espera en `edic` (si una guardada no tiene nada ahí, se abre como se guardó).
   const [planes, setPlanes] = useState(inicial?.planes || null)
   const [falloPlanes, setFalloPlanes] = useState(null)
-  const [nuevas, setNuevas] = useState(() => [{ clave: 'n1', nombre: 'Plan nuevo' }])
   const deFila = (r) => ({ a: ajustesDe(r.plan), estId: String(fotoDelPlan(r.plan)?.id ?? ''), version: 'guardada' })
+  const borrador = () => ({ a: { ...AJUSTES_PLAN, ...(inicial?.ajustes || {}) }, estId: String((diarias.find(s => String(s.id) === String(estrategiaId)) || diarias[0])?.id ?? ''), version: 'actual' })
+  const base = baseNueva   // lo que tenía un plan nuevo al crearlo (para saber si tiene cambios al cerrarlo)
+  // §49: al entrar, el plan guardado más reciente de la estrategia con la que se entra (sin estrategia, el más reciente de todos); si no
+  // hay ninguno, UN plan nuevo con ella. null: todavía no se sabe (se están leyendo los planes).
+  const eligeInicio = (ps) => {
+    const deEsta = ps.filter(p => estrategiaId == null || String(fotoDelPlan(p.plan)?.id) === String(estrategiaId))
+    const r = [...deEsta].sort((x, y) => String(y.updated_at).localeCompare(String(x.updated_at)))[0]
+    if (r) return { clave: `g${r.id}`, ...deFila(r) }
+    return { clave: 'n1', ...borrador() }
+  }
   const inicio = useMemo(() => {
     const r = inicial?.pestana && (inicial.planes || []).find(p => `g${p.id}` === inicial.pestana)
     if (r) return { clave: inicial.pestana, ...deFila(r) }
-    return { clave: 'n1', a: { ...AJUSTES_PLAN, ...(inicial?.ajustes || {}) }, estId: String((diarias.find(s => String(s.id) === String(estrategiaId)) || diarias[0])?.id ?? ''), version: 'actual' }
+    if (inicial?.pestana?.startsWith('n')) return { clave: inicial.pestana, ...borrador() }
+    if (inicial?.planes) return eligeInicio(inicial.planes)
+    return { clave: null, ...borrador() }
   }, [])
+  const [nuevas, setNuevas] = useState(() => inicial?.nuevas || (inicio.clave?.startsWith('n') ? [{ clave: inicio.clave, nombre: 'Plan nuevo', base: base(inicio) }] : []))
+  const [cerrando, setCerrando] = useState(inicial?.cerrando || null)   // la pestaña nueva que pide «¿cerrar sin guardar?»
   const [actual, setActual] = useState(inicio.clave)
   const [estId, setEstId] = useState(inicio.estId)
   const [a, setA] = useState(inicio.a)
   const [cualVersion, setCualVersion] = useState(inicio.version)   // en un plan guardado: 'guardada' (la foto del plan) o 'actual' (la estrategia de ahora)
   const edic = useRef({}), cuentaNuevas = useRef(1)
-  const fila = actual.startsWith('g') ? (planes || []).find(p => `g${p.id}` === actual) || null : null
+  const fila = actual?.startsWith('g') ? (planes || []).find(p => `g${p.id}` === actual) || null : null
   const fotoG = fila ? fotoDelPlan(fila.plan) : null
   const estrategiaActual = diarias.find(s => String(s.id) === estId) || null
   const usaGuardada = !!fotoG && String(fotoG.id) === estId && (cualVersion === 'guardada' || !estrategiaActual)
@@ -169,18 +188,29 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
   const [falloGuardar, setFalloGuardar] = useState(null)
   const [simbolos, setSimbolos] = useState(inicial?.simbolos || ['AAPL', 'GLD', 'QQQ'])
   const [calc, setCalc] = useState({ calculando: !!inicial?.calculando, resultado: inicial?.resultado || null, error: inicial?.error || null })
-  const [pruebas, setPruebas] = useState(inicial?.pruebas || null)
+  const [todasPruebas, setTodasPruebas] = useState(inicial?.pruebas || null)
   const [huella, setHuella] = useState(inicial?.huella || null)
   const [resPrueba, setResPrueba] = useState(inicial?.resultadoPrueba || null)
   const vivo = useRef(true)
   useEffect(() => { vivo.current = true; return () => { vivo.current = false } }, [])
+  // El alto de la página (el contenedor que se desplaza): la columna fija de ajustes no pasa de ahí.
+  const pagina = useRef(null)
+  const [altoPagina, setAltoPagina] = useState(null)
+  useEffect(() => {
+    const el = pagina.current; if (!el) return
+    const mide = () => { if (el.clientHeight > 0) setAltoPagina(el.clientHeight) }
+    mide()
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(mide) : null
+    ro?.observe(el)
+    return () => ro?.disconnect()
+  }, [])
   const ctx = useMemo(() => deps?.ctx || (hayConfigSupabase() ? { url: getSupaUrl(), headers: getSupaH() } : null), [deps])
   const nombre = estrategia?.name || 'tu estrategia'
 
   // El plan de los ajustes de ahora; sus errores (los del motor) y, sin errores, la clave que dispara el cálculo.
   const plan = useMemo(() => estrategia ? planDe(a, estrategia) : null, [a, estrategia])
   const errores = useMemo(() => plan ? validaPlan(plan) : [], [plan])
-  const clave = plan && !errores.length ? JSON.stringify(plan) : null
+  const clave = actual && plan && !errores.length ? JSON.stringify(plan) : null
   const api = useRef(apiFetch); api.current = apiFetch
   // Un plan ya calculado (p. ej., al volver a una pestaña) se enseña sin repetir el cálculo.
   const hechos = useRef(new Map())
@@ -207,13 +237,21 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
 
   // Los símbolos de la caché (para la acción y el ocioso) y la prueba del paso 2 de la estrategia (con su huella de ahora).
   useEffect(() => { if (!inicial?.simbolos && cargaSimbolos) cargaSimbolos().then(xs => { if (vivo.current && xs?.length) setSimbolos(xs) }).catch(() => {}) }, [])
+  // §49: las pruebas de TODAS las estrategias (una lectura) y la huella de ahora de cada una: la etiqueta del desplegable y el aviso.
   useEffect(() => {
-    if (inicial?.pruebas || !ctx || !estId) return
+    if (inicial?.pruebas || !ctx) return
+    listarPruebasUsuario(ctx).then(xs => { if (vivo.current) setTodasPruebas(xs) }).catch(() => { if (vivo.current) setTodasPruebas([]) })
+  }, [ctx])
+  const [huellas, setHuellas] = useState(inicial?.huellas || null)
+  useEffect(() => {
+    if (inicial?.huellas) return
     let v = true
-    setPruebas(null); setResPrueba(null)
-    listarPruebas(ctx, estId).then(xs => { if (v) setPruebas(xs) }).catch(() => { if (v) setPruebas([]) })
+    Promise.all(tarjetas.map(t => huellaEstrategia(t).then(h => [t.id, h]))).then(xs => { if (v) setHuellas(Object.fromEntries(xs)) }).catch(() => {})
     return () => { v = false }
-  }, [estId, ctx])
+  }, [tarjetas])
+  const estadosLista = useMemo(() => estadosPrueba(tarjetas, todasPruebas, huellas), [tarjetas, todasPruebas, huellas])
+  const pruebas = useMemo(() => todasPruebas && todasPruebas.filter(p => String(p.estrategia_id) === String(estrategia?.id ?? estId)), [todasPruebas, estrategia, estId])
+  useEffect(() => { setResPrueba(inicial?.resultadoPrueba || null) }, [estId])
   useEffect(() => { if (!estrategia || inicial?.huella) return; let v = true; setHuella(null); huellaEstrategia(estrategia).then(h => { if (v) setHuella(h) }); return () => { v = false } }, [estrategia])
   const estado = useMemo(() => estadoPrueba(pruebas, huella), [pruebas, huella])
   useEffect(() => {
@@ -228,6 +266,13 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
     if (inicial?.planes || !ctx) return
     listarPlanes(ctx).then(xs => { if (vivo.current) setPlanes(xs) }).catch(e => { if (vivo.current) { setPlanes([]); setFalloPlanes(e.message) } })
   }, [ctx])
+  // Leídos los planes (o sin base de datos), qué pestaña se abre al entrar (eligeInicio).
+  useEffect(() => {
+    if (actual || (planes == null && ctx)) return
+    const e = eligeInicio(planes || [])
+    if (e.clave.startsWith('n')) setNuevas([{ clave: e.clave, nombre: 'Plan nuevo', base: base(e) }])
+    setA(e.a); setEstId(e.estId); setCualVersion(e.version); setActual(e.clave)
+  }, [planes, ctx])
   // ¿Ha cambiado la estrategia del plan guardado abierto desde que se guardó?
   useEffect(() => {
     if (inicial?.cambio) return
@@ -238,21 +283,31 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
     return () => { v = false }
   }, [fila?.id, fila?.updated_at, estrategias])
   const pestanas = [...(planes || []).map(r => ({ clave: `g${r.id}`, id: r.id, nombre: r.nombre })), ...nuevas]
-  const limpiaDialogos = () => { setPideNombre(null); setBorrando(false); setFalloGuardar(null); setNombreNuevo('') }
+  const limpiaDialogos = () => { setPideNombre(null); setBorrando(false); setFalloGuardar(null); setNombreNuevo(''); setCerrando(null) }
   // Abre otra pestaña: lo de la de ahora espera en edic; la otra, con lo suyo (o como se guardó).
   const abre = (clave, guardaAhora = true) => {
-    if (guardaAhora) edic.current[actual] = { a, estId, version: cualVersion }
+    if (guardaAhora && actual) edic.current[actual] = { a, estId, version: cualVersion }
     const r = (planes || []).find(p => `g${p.id}` === clave)
     const e = edic.current[clave] || (r ? deFila(r) : clave.startsWith('n') ? { a: { ...AJUSTES_PLAN }, estId: String(diarias[0]?.id ?? ''), version: 'actual' } : null)
     if (!e) return
     setA(e.a); setEstId(e.estId); setCualVersion(e.version); setOtroForzado(false); setActual(clave); limpiaDialogos()
   }
+  // Un plan nuevo SOLO con «+ Añadir plan» (§49): copia los ajustes de ahora; se llama «Plan nuevo», «Plan nuevo 2»… (el primer número libre).
   const anadePlan = () => {
     const k = ++cuentaNuevas.current, clave = `n${k}`
-    edic.current[actual] = { a, estId, version: cualVersion }
-    edic.current[clave] = { a: { ...a }, estId: String(estrategiaActual?.id ?? estId), version: 'actual' }
-    setNuevas(xs => [...xs, { clave, nombre: `Plan nuevo ${k}` }])
+    const e = { a: { ...a }, estId: String(estrategiaActual?.id ?? estId), version: 'actual' }
+    if (actual) edic.current[actual] = { a, estId, version: cualVersion }
+    edic.current[clave] = e
+    setNuevas(xs => [...xs, { clave, nombre: nombreNueva(xs), base: base(e) }])
     abre(clave, false)
+  }
+  // La × de un plan nuevo: sin cambios desde que se creó, se cierra; con cambios, pide confirmación (cerrando). La última pestaña no se cierra.
+  const cierraNueva = (clave, confirmado = false) => {
+    const t = trasCerrar({ planes: planes || [], nuevas, actual }, clave)
+    if (!t) return
+    if (!confirmado && conCambios(nuevas.find(x => x.clave === clave), clave === actual ? { a, estId } : edic.current[clave])) { limpiaDialogos(); setCerrando(clave); return }
+    delete edic.current[clave]; setNuevas(t.nuevas); setCerrando(null)
+    if (t.abrir) abre(t.abrir, false)
   }
   const hayCambios = !!fila && !!plan && jsonCanonico(paraHuellaPlan(plan)) !== jsonCanonico(paraHuellaPlan(fila.plan))
   const puedeGuardar = !!ctx && !!plan && !errores.length && !guardando
@@ -287,7 +342,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
       setPlanes(quedan); limpiaDialogos()
       const otra = quedan[0] ? `g${quedan[0].id}` : nuevas[0]?.clave
       if (otra) abre(otra, false)
-      else { edic.current.n1 = { a, estId: String(estrategiaActual?.id ?? estId), version: 'actual' }; setNuevas([{ clave: 'n1', nombre: 'Plan nuevo' }]); abre('n1', false) }
+      // Sin ningún plan, hace falta uno para trabajar: uno nuevo con los ajustes del borrado.
+      else { const k = `n${++cuentaNuevas.current}`, e = { a, estId: String(estrategiaActual?.id ?? estId), version: 'actual' }; edic.current[k] = e; setNuevas([{ clave: k, nombre: 'Plan nuevo', base: base(e) }]); abre(k, false) }
     } catch (e) { setFalloGuardar(e.message) }
     setGuardando(false)
   }
@@ -303,47 +359,65 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
       {estado.clave === 'pasa' ? '✓ ' : '✕ '}{AVISO_PRUEBA[estado.clave]}<Ayuda texto={ayudaPrueba(estado, resPrueba)} etiqueta="La prueba contra el azar"/>
     </div>
   )
+  // §49: los dos avisos en UNA línea, uno al lado del otro (en el móvil, uno debajo del otro: .bp-avisos), con «Calculando…» a la derecha.
   const avisos = (
-    <div data-avisos style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 }}>
+    <div data-avisos className="bp-avisos" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 24px', alignItems: 'center', marginBottom: 12 }}>
       {estrategia && (avisoPrueba || <div data-aviso="prueba" data-estado="leyendo" style={S.secundario}>Leyendo las pruebas contra el azar de esta estrategia…</div>)}
       <div data-aviso="a-mano" style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>⚠ {AVISO_A_MANO}<Ayuda texto={AYUDA_PLAN.aMano} etiqueta={AVISO_A_MANO}/></div>
+      {calc.calculando && <div data-calculando style={{ color: AMARILLO, marginLeft: 'auto' }}>Calculando…</div>}
+    </div>
+  )
+  const errorCalculo = (!!errores.length || calc.error) && (
+    <div data-estado-calculo style={{ marginBottom: 10 }}>
+      {!!errores.length && <div data-errores-plan style={{ color: ROJO }}>✕ {errores.join(' ')}</div>}
+      {calc.error && !errores.length && <div data-error-plan style={{ color: ROJO }}>✕ No se pudo calcular: {calc.error}</div>}
     </div>
   )
 
-  // ── Pestañas de los planes y guardar ──
+  // ── Una fila arriba: pestañas de planes, «+ Añadir plan», guardar y «Comparar planes» ──
   const campoNombre = pideNombre && (
     <span data-pide-nombre={pideNombre} style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      <input type="text" aria-label="Nombre del plan" placeholder="Nombre del plan" maxLength={200} value={nombreNuevo} autoFocus onChange={e => setNombreNuevo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') guarda('nuevo'); if (e.key === 'Escape') limpiaDialogos() }} style={{ ...campo, width: 240 }}/>
-      <button data-boton="confirmar-nombre" style={puedeGuardar && nombreLimpio(nombreNuevo) ? S.botonVerde : S.botonDesactivado} disabled={!puedeGuardar || !nombreLimpio(nombreNuevo)} onClick={() => guarda('nuevo')}>{guardando ? 'Guardando…' : 'Guardar'}</button>
-      <button style={S.boton} onClick={limpiaDialogos}>Cancelar</button>
+      <input type="text" aria-label="Nombre del plan" placeholder="Nombre del plan" maxLength={200} value={nombreNuevo} autoFocus onChange={e => setNombreNuevo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') guarda('nuevo'); if (e.key === 'Escape') limpiaDialogos() }} style={{ ...campo, width: 220, padding: '5px 8px' }}/>
+      <button data-boton="confirmar-nombre" style={{ ...(puedeGuardar && nombreLimpio(nombreNuevo) ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar || !nombreLimpio(nombreNuevo)} onClick={() => guarda('nuevo')}>{guardando ? 'Guardando…' : 'Guardar'}</button>
+      <button style={{ ...S.boton, padding: '6px 12px' }} onClick={limpiaDialogos}>Cancelar</button>
     </span>
   )
-  const barraGuardar = borrando && fila ? (
+  const nombreCerrando = nuevas.find(x => x.clave === cerrando)?.nombre
+  const barraGuardar = cerrando && nombreCerrando ? (
+    <span data-confirma-cerrar style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ color: AMARILLO }}>{`¿Cerrar «${nombreCerrando}» sin guardar? Se pierden sus cambios.`}</span>
+      <button data-boton="si-cerrar" style={{ ...S.boton, padding: '6px 12px' }} onClick={() => cierraNueva(cerrando, true)}>Sí, cerrar</button>
+      <button style={{ ...S.boton, padding: '6px 12px' }} onClick={limpiaDialogos}>Cancelar</button>
+    </span>
+  ) : borrando && fila ? (
     <span data-confirma-borrar style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
       <span style={{ color: ROJO }}>{`¿Borrar «${fila.nombre}»? No se puede deshacer.`}</span>
-      <button data-boton="si-borrar" style={{ ...S.boton, borderColor: '#8b3a42', background: '#3b1d22', color: ROJO }} disabled={guardando} onClick={borra}>{guardando ? 'Borrando…' : 'Sí, borrar'}</button>
-      <button style={S.boton} onClick={limpiaDialogos}>Cancelar</button>
+      <button data-boton="si-borrar" style={{ ...S.boton, padding: '6px 12px', borderColor: '#8b3a42', background: '#3b1d22', color: ROJO }} disabled={guardando} onClick={borra}>{guardando ? 'Borrando…' : 'Sí, borrar'}</button>
+      <button style={{ ...S.boton, padding: '6px 12px' }} onClick={limpiaDialogos}>Cancelar</button>
     </span>
   ) : campoNombre || (fila ? (
     <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      <button data-boton="guardar-cambios" style={puedeGuardar && hayCambios ? S.botonVerde : S.botonDesactivado} disabled={!puedeGuardar || !hayCambios} title={hayCambios ? undefined : 'No hay cambios desde que lo guardaste'} onClick={() => guarda('cambios')}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>
-      <button data-boton="guardar-como" style={S.boton} disabled={!puedeGuardar} onClick={() => { limpiaDialogos(); setNombreNuevo(`${fila.nombre} (copia)`); setPideNombre('comoNuevo') }}>Guardar como plan nuevo</button>
-      <button data-boton="borrar" style={{ ...S.boton, color: ROJO }} disabled={!ctx || guardando} onClick={() => { limpiaDialogos(); setBorrando(true) }}>Borrar</button>
-      {!hayCambios && <span data-sin-cambios style={S.apagado}>Guardado el {fechaCorta(fila.updated_at)}</span>}
+      <button data-boton="guardar-cambios" style={{ ...(puedeGuardar && hayCambios ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar || !hayCambios} title={hayCambios ? undefined : `Sin cambios: guardado el ${fechaCorta(fila.updated_at)}`} onClick={() => guarda('cambios')}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>
+      <button data-boton="guardar-como" style={{ ...S.boton, padding: '6px 12px' }} disabled={!puedeGuardar} onClick={() => { limpiaDialogos(); setNombreNuevo(`${fila.nombre} (copia)`); setPideNombre('comoNuevo') }}>Guardar como plan nuevo</button>
+      <button data-boton="borrar" style={{ ...S.boton, padding: '6px 12px', color: ROJO }} disabled={!ctx || guardando} onClick={() => { limpiaDialogos(); setBorrando(true) }}>Borrar</button>
     </span>
-  ) : <button data-boton="guardar" style={puedeGuardar ? S.botonVerde : S.botonDesactivado} disabled={!puedeGuardar} onClick={() => { limpiaDialogos(); setPideNombre('nuevo') }}>Guardar este plan</button>)
+  ) : actual ? <button data-boton="guardar" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={!ctx ? 'Sin conexión con la base de datos: no se pueden guardar planes' : undefined} onClick={() => { limpiaDialogos(); setPideNombre('nuevo') }}>Guardar este plan</button> : null)
+  const pestanaEstilo = (on) => ({ ...S.boton, padding: '6px 12px', fontSize: 13, ...(on ? { background: B.cabecera, borderColor: B.siguienteBorde, color: B.titulo, fontWeight: 700 } : { background: 'transparent', color: B.secundario }) })
   const pestanasPlanes = (
-    <div data-planes style={{ marginBottom: 12 }}>
-      <div role="tablist" aria-label="Tus planes" style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-        {pestanas.map(p => <button key={p.clave} role="tab" data-pestana={p.clave} aria-selected={p.clave === actual} onClick={() => p.clave !== actual && abre(p.clave)}
-          style={{ ...S.boton, padding: '6px 12px', fontSize: 13, ...(p.clave === actual ? { background: B.cabecera, borderColor: B.siguienteBorde, color: B.titulo, fontWeight: 700 } : { background: 'transparent', color: B.secundario }) }}>{p.id == null ? `${p.nombre} · sin guardar` : p.nombre}</button>)}
-        <button data-boton="anadir-plan" style={{ ...S.enlace, fontSize: 13, marginLeft: 6 }} onClick={anadePlan} title="Un plan nuevo, sin guardar, con los ajustes de ahora">+ Añadir plan</button>
-        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2 }}><button data-boton="comparar" disabled style={{ ...S.boton, padding: '6px 12px', fontSize: 13, color: B.apagado, cursor: 'not-allowed' }}>Comparar planes</button><Ayuda texto={AYUDA_COMPARAR} etiqueta="Comparar planes"/></span>
-      </div>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+    <div data-planes style={{ marginBottom: 10 }}>
+      <div role="tablist" aria-label="Tus planes" data-fila-planes style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        {pestanas.map(p => (
+          <span key={p.clave} style={{ display: 'inline-flex', alignItems: 'stretch' }}>
+            <button role="tab" data-pestana={p.clave} aria-selected={p.clave === actual} onClick={() => p.clave !== actual && abre(p.clave)}
+              style={{ ...pestanaEstilo(p.clave === actual), ...(p.id == null && pestanas.length > 1 ? { borderTopRightRadius: 0, borderBottomRightRadius: 0 } : {}) }}>{p.id == null ? `${p.nombre} · sin guardar` : p.nombre}</button>
+            {p.id == null && pestanas.length > 1 && <button data-cerrar={p.clave} aria-label={`Cerrar ${p.nombre}`} title="Cerrar este plan sin guardar" onClick={() => cierraNueva(p.clave)}
+              style={{ ...pestanaEstilo(p.clave === actual), padding: '6px 8px', borderLeft: 'none', borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}>×</button>}
+          </span>
+        ))}
+        {!actual && <span style={S.apagado}>Leyendo tus planes…</span>}
+        <button data-boton="anadir-plan" style={{ ...S.enlace, fontSize: 13, margin: '0 6px' }} onClick={anadePlan} disabled={!actual} title="Un plan nuevo, sin guardar, con los ajustes de ahora">+ Añadir plan</button>
         {barraGuardar}
-        {!ctx && <span style={{ color: AMARILLO }}>Sin conexión con la base de datos: no se pueden guardar planes.</span>}
-        {planes == null && ctx && <span style={S.apagado}>Leyendo tus planes…</span>}
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2 }}><button data-boton="comparar" disabled style={{ ...S.boton, padding: '6px 12px', fontSize: 13, color: B.apagado, cursor: 'not-allowed' }}>Comparar planes</button><Ayuda texto={AYUDA_COMPARAR} etiqueta="Comparar planes"/></span>
       </div>
       {falloPlanes && <div data-fallo-planes style={{ color: ROJO, marginTop: 6 }}>✕ {falloPlanes}</div>}
       {falloGuardar && <div data-fallo-guardar style={{ color: ROJO, marginTop: 6 }}>✕ {falloGuardar}</div>}
@@ -368,7 +442,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
             <Etiqueta texto="Estrategia" ayuda={AYUDA_PLAN.estrategia}/>
             {tarjetas.length ? <select aria-label="Estrategia" value={estId} onChange={e => { setEstId(e.target.value); setCualVersion('actual') }} style={{ ...campo, maxWidth: '100%' }}>
               {fotoG && String(fotoG.id) === estId && !tarjetas.some(s => String(s.id) === estId) && <option value={estId}>{`${fotoG.name} (versión guardada)`}</option>}
-              {tarjetas.map(s => { const sem = esSemanal(s); return <option key={s.id} value={String(s.id)} disabled={sem}>{`${s.name}${sem ? ' (semanal: llegará más adelante)' : ''}`}</option> })}
+              {tarjetas.map(s => { const sem = esSemanal(s), ps = [ETIQUETA_PRUEBA[estadosLista[s.id]], sem ? 'semanal: llegará más adelante' : null].filter(Boolean)
+                return <option key={s.id} value={String(s.id)} disabled={sem}>{`${s.name}${ps.length ? ` (${ps.join(' · ')})` : ''}`}</option> })}
             </select> : <div style={S.secundario}>No tienes estrategias de tarjetas. Crea una en el paso 1.</div>}
             {tarjetas.length > 0 && !diarias.length && <div style={{ color: AMARILLO, marginTop: 6 }}>Todas tus estrategias de tarjetas son semanales: el paso 3, por ahora, solo con velas diarias.</div>}
           </div>
@@ -420,52 +495,58 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
           <div><Etiqueta texto="Apalancamiento" ayuda={AYUDA_PLAN.apalancamiento}/><Segmentos etiquetaGrupo="Apalancamiento" valor={a.apalancamiento} onCambia={v => cambia('apalancamiento', v)} opciones={[[1, 'No'], [2, '×2'], [3, '×3']]}/></div>
           <div><Etiqueta texto="Impuestos" ayuda={AYUDA_PLAN.impuestos}/><Segmentos etiquetaGrupo="Impuestos" valor={a.impuestos} onCambia={v => cambia('impuestos', v)} opciones={[['ES-ahorro', 'España · base del ahorro'], ['ninguno', 'Sin impuestos']]}/></div>
         </div>
-        <div><Etiqueta texto="Comisión por operación" ayuda={AYUDA_PLAN.comision}/><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><input type="number" min="0" step="0.01" aria-label="Comisión por operación" value={a.comision} onChange={e => cambia('comision', e.target.value === '' ? '' : Number(e.target.value))} style={{ ...campo, width: 80 }}/> %</span></div>
+        <div>
+          <Etiqueta texto="Comisión por operación" ayuda={AYUDA_PLAN.comision}/>
+          <div role="group" aria-label="Cómo es la comisión" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 10px', alignItems: 'center' }}>
+            {TIPOS_COMISION.map(([k, t]) => <span key={k} style={{ display: 'inline-flex', alignItems: 'center' }}><button type="button" data-comision={k} aria-pressed={(a.comisionTipo || 'pct') === k} onClick={() => cambia('comisionTipo', k)} style={{ ...seg((a.comisionTipo || 'pct') === k), borderRadius: 6 }}>{t}</button><Ayuda texto={AYUDA_COMISION[k]} etiqueta={`Comisión: ${t}`}/></span>)}
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
+            {(a.comisionTipo || 'pct') !== 'fija' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><input type="number" min="0" step="0.01" aria-label="Comisión en %" value={a.comision} onChange={e => cambia('comision', e.target.value === '' ? '' : Number(e.target.value))} style={{ ...campo, width: 80 }}/> %</span>}
+            {a.comisionTipo === 'pctMin' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>con mínimo de <input type="number" min="0" step="0.5" aria-label="Mínimo en euros" value={a.comisionMin} onChange={e => cambia('comisionMin', e.target.value === '' ? '' : Number(e.target.value))} style={{ ...campo, width: 70 }}/> €</span>}
+            {a.comisionTipo === 'fija' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><input type="number" min="0" step="0.5" aria-label="Euros por operación" value={a.comisionFija} onChange={e => cambia('comisionFija', e.target.value === '' ? '' : Number(e.target.value))} style={{ ...campo, width: 70 }}/> € por operación</span>}
+          </div>
+        </div>
       </div>
     </div>
   )
 
   // ── Columna derecha ──
   const s = cifras?.seis, activoRes = ajustesDelResultado?.activo || a.activo, ociosoRes = ajustesDelResultado?.ocioso || a.ocioso
-  const estadoCalculo = (
-    <div data-estado-calculo style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 20 }}>
-      {calc.calculando && <div data-calculando style={{ color: AMARILLO }}>Calculando…</div>}
-      {!!errores.length && <div data-errores-plan style={{ color: ROJO }}>✕ {errores.join(' ')}</div>}
-      {calc.error && !errores.length && <div data-error-plan style={{ color: ROJO }}>✕ No se pudo calcular: {calc.error}</div>}
-    </div>
-  )
+  // §49: con el ocioso en liquidez, el plan con el ocioso en liquidez es el mismo plan: ni su fila, ni su línea, ni «El ocioso añadió», ni caídas.
+  const sinOcioso = ociosoRes === 'LIQUIDEZ'
   const resultado = !cifras ? (
     <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{!estrategia ? 'Elige una estrategia de tarjetas de velas diarias.' : calc.calculando || clave ? 'Calculando tu plan…' : 'Sin resultado todavía.'}</div>
   ) : (<>
-    <div data-cifras style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 10 }}>
-      <Cifra id="aportado" titulo="Has aportado" ayuda={AYUDA_PLAN.aportado} valor={euros(s.aportado)}/>
-      <Cifra id="final" titulo="Tienes al final" ayuda={AYUDA_PLAN.final} valor={euros(s.final)} sub={`ganancia neta ${euros(s.ganancia)}`}/>
-      <Cifra id="caida" titulo="Peor caída" ayuda={AYUDA_PLAN.caida} valor={pct(s.caidaPct)} sub={`valle el ${fechaCorta(s.caidaPctValle)} · en €: ${euros(s.caidaEuros)} (valle el ${fechaCorta(s.caidaEurosValle)})`}/>
+    <div data-cifras style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 10 }}>
+      <Cifra id="aportado" titulo="Has aportado" ayuda={AYUDA_PLAN.aportado} valor={euros(s.aportado, 0)}/>
+      <Cifra id="final" titulo="Tienes al final" ayuda={AYUDA_PLAN.final} valor={euros(s.final, 0)} sub={`ganancia neta ${euros(s.ganancia, 0)}`}/>
+      <Cifra id="caida" titulo="Peor caída" ayuda={ayudaCaida(s)} valor={pct(s.caidaPct)} sub={`${fechaCorta(s.caidaPctValle)} · ${euros(s.caidaEuros, 0)}`}/>
       <Cifra id="twr" titulo="CAGR de la estrategia" ayuda={AYUDA_PLAN.twr} valor={pct(s.twr)}/>
       <Cifra id="tir" titulo="Rentabilidad de tu dinero (TIR)" ayuda={AYUDA_PLAN.tir} valor={pct(s.tir)}/>
-      <Cifra id="costes" titulo="Impuestos y comisiones" ayuda={AYUDA_PLAN.costes} valor={`${euros(s.impuestos)} · ${euros(s.costes)}`} sub={`impuestos · comisiones (${cifras.ordenes ?? '—'} órdenes)`}/>
+      <Cifra id="costes" titulo="Impuestos y comisiones" ayuda={AYUDA_PLAN.costes} valor={<span style={{ display: 'flex', flexDirection: 'column', fontSize: 15, lineHeight: 1.35 }}>
+        <span data-impuestos>{`Impuestos ${euros(s.impuestos, 0)}`}</span><span data-comisiones>{`Comisiones ${euros(s.costes, 0)} (${cifras.ordenes ?? '—'} órdenes)`}</span></span>}/>
     </div>
     <Tarjeta id="grafico" titulo="Cómo crece tu dinero" ayuda={`${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franja}`}>
-      <GraficoPlan curva={cifras.curva} activo={activoRes}/>
-      <Leyenda/>
+      <GraficoPlan curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes}/>
+      <Leyenda sinOcioso={sinOcioso}/>
     </Tarjeta>
     <Tarjeta id="alternativas" titulo="Tu plan frente a las alternativas" ayuda={AYUDA_PLAN.alternativas}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="alternativas" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr>{['', 'Final', 'CAGR de la estrategia', 'TIR', 'Peor caída', 'Impuestos y comisiones'].map(h => <th key={h} style={cab}>{h}</th>)}</tr></thead>
-        <tbody>{cifras.alternativas.map(x => <tr key={x.id} data-fila={x.id} style={x.id === 'PLAN' ? { fontWeight: 700, color: B.titulo } : undefined}>
+        <tbody>{cifras.alternativas.filter(x => !(sinOcioso && x.id === 'OCIOSO_LIQUIDEZ')).map(x => <tr key={x.id} data-fila={x.id} style={x.id === 'PLAN' ? { fontWeight: 700, color: B.titulo } : undefined}>
           <td style={celda}>{x.nombre}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.final, 0)}</td><td style={celda}>{pct(x.twr)}</td><td style={celda}>{pct(x.tir)}</td><td style={celda}>{pct(x.caida)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.impuestos, 0)} · {euros(x.costes, 0)}</td>
         </tr>)}</tbody>
       </table></div>
     </Tarjeta>
     <Tarjeta id="tramos" titulo="¿Es estable? Por tramos" ayuda={AYUDA_PLAN.tramos}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="tramos" style={{ borderCollapse: 'collapse', width: '100%' }}>
-        <thead><tr>{['Tramo', 'CAGR de tu plan', 'El ocioso añadió'].map(h => <th key={h} style={cab}>{h}</th>)}</tr></thead>
-        <tbody>{cifras.tramos.map(t => <tr key={t.nombre} data-tramo={t.nombre}><td style={celda}>{t.nombre}</td><td style={celda}>{pct(t.cagr)}</td><td style={celda}>{t.ocioso == null ? '—' : puntos(t.ocioso)}</td></tr>)}</tbody>
+        <thead><tr>{['Tramo', 'CAGR de tu plan', ...(sinOcioso ? [] : ['El ocioso añadió'])].map(h => <th key={h} style={cab}>{h}</th>)}</tr></thead>
+        <tbody>{cifras.tramos.map(t => <tr key={t.nombre} data-tramo={t.nombre}><td style={celda}>{t.nombre}</td><td style={celda}>{pct(t.cagr)}</td>{!sinOcioso && <td style={celda}>{t.ocioso == null ? '—' : puntos(t.ocioso)}</td>}</tr>)}</tbody>
       </table></div>
     </Tarjeta>
     <Tarjeta id="caidas" titulo="Cuando tu estrategia cae, ¿qué hace el ocioso?" ayuda={AYUDA_PLAN.caidas}>
-      <div data-frase-caidas style={{ marginBottom: 8, color: B.texto }}>{fraseCaidas(cifras, ociosoRes)}</div>
-      {cifras.caidas.length > 0 && <div style={{ overflowX: 'auto' }}><table data-tabla="caidas" style={{ borderCollapse: 'collapse', width: '100%' }}>
+      {sinOcioso ? <div data-sin-ocioso style={{ color: B.texto }}>{SIN_OCIOSO}</div> : <div data-frase-caidas style={{ marginBottom: 8, color: B.texto }}>{fraseCaidas(cifras, ociosoRes)}</div>}
+      {!sinOcioso && cifras.caidas.length > 0 && <div style={{ overflowX: 'auto' }}><table data-tabla="caidas" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr>{['Desde (pico)', 'Hasta (valle)', 'Tu estrategia', `El ocioso (${ociosoRes === 'LIQUIDEZ' ? 'liquidez' : ociosoRes})`, 'Recupera el pico'].map(h => <th key={h} style={cab}>{h}</th>)}</tr></thead>
         <tbody>{cifras.caidas.map(c => <tr key={c.pico} data-caida={c.pico}><td style={celda}>{fechaCorta(c.pico)}</td><td style={celda}>{fechaCorta(c.valle)}</td><td style={{ ...celda, color: ROJO }}>{pct(c.caida)}</td>
           <td style={{ ...celda, color: c.ocioso > 0 ? VERDE : c.ocioso < 0 ? ROJO : B.texto }}>{c.ocioso > 0 ? '+' : ''}{pct(c.ocioso)}</td><td style={celda}>{c.recuperacion ? fechaCorta(c.recuperacion) : 'todavía no'}</td></tr>)}</tbody>
@@ -474,7 +555,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
   </>)
 
   return (
-    <div style={S.pagina} data-pantalla="plan">
+    <div ref={pagina} style={S.pagina} data-pantalla="plan">
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
         <button style={{ ...S.enlace, color: B.secundario }} onClick={() => onVolver?.()}>← Builder · Mi trabajo</button>
         <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Builder</span>
@@ -484,10 +565,13 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
       <div style={{ ...S.secundario, marginTop: 4, marginBottom: 10 }}>Tu estrategia con tu dinero: aportaciones, dinero ocioso, comisiones e impuestos.</div>
       {pestanasPlanes}
       {avisos}
+      {errorCalculo}
+      {/* §49: en escritorio (≥ 1000 px), la columna de ajustes queda fija al bajar, con su propia barra si no cabe; en el móvil, nada fijo. */}
+      <style>{`.bp-avisos { flex-direction: row } @media (max-width: 700px) { .bp-avisos { flex-direction: column; align-items: flex-start !important } }
+@media (min-width: 1000px) { .bp-izq { position: sticky; top: 0; max-height: var(--bp-alto, calc(100vh - 24px)); overflow-y: auto; padding-right: 4px } }`}</style>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        <div data-columna="izquierda" style={{ flex: '1 1 340px', minWidth: 0 }}>{bloques}{dinero}</div>
+        <div data-columna="izquierda" className="bp-izq" style={{ flex: '1 1 340px', maxWidth: 520, minWidth: 0, '--bp-alto': altoPagina ? `${altoPagina - 8}px` : undefined }}>{bloques}{dinero}</div>
         <div data-columna="derecha" style={{ flex: '2 1 480px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {estadoCalculo}
           {resultado}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
             <BotonCopiar obtenerTexto={texto} titulo="Copia en texto plano todos los ajustes, el plan y sus cifras"/>

@@ -154,6 +154,7 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
     const a = f.toca?.accion
     if (!a) return
     if (a.tipo === 'editor') abreEditor(f.estrategia)
+    else if (a.tipo === 'plan') abrePlan(a.estrategiaId)
     else if (a.tipo === 'prueba') setPrueba({ ...(a.loteId != null ? { loteId: a.loteId } : { estrategiaId: a.estrategiaId }), n: Date.now() })
   }
   const abrePrueba = (id) => setPrueba({ loteId: id, n: Date.now() })
