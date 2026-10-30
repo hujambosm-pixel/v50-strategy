@@ -1950,3 +1950,31 @@ temporizador). El motor (`lib/planes/`) no cambia: todas las cifras son las suya
   avisos sin prueba, no pasa (99,2 % y 11,3 % en su «?») y pasa; una prueba que pasa con otra huella no cuenta; la semanal desactivada;
   el temporizador (tres cambios en 400 ms → un solo cálculo, con el último, a los 600 ms del último; con uno en marcha, manda el
   último); la barra de pasos y el botón del resultado que no pasa, activo. Comprobaciones comunes.
+
+**Parte 2 · guardar planes.** Tabla nueva `planes_inversion` (`sql/planes_inversion.sql`, creada el 30/10/2026 con la Management API
+en una transacción) y `lib/builder/planesGuardados.js` (leer, crear, cambiar y borrar por PostgREST, y la comparación de la
+estrategia).
+- **Tabla**: id, user_id (`auth.uid()`), nombre (1–200), plan (jsonb, el formato 1 con la foto de la estrategia en su pieza; `tipo`
+  = 'plan', ≤ 200 KB), huella (`huellaPlan`: sin contar el nombre), created_at, updated_at (lo pone un disparador al cambiar). RLS
+  «dueño» con las cuatro políticas: cada usuario lee, crea, cambia y borra SOLO lo suyo. Los planes **no se congelan**. Permisos por
+  columnas: al crear y al cambiar, solo nombre, plan y huella (ni el dueño ni las fechas); `anon`, nada.
+- **Pestañas arriba**: una por plan guardado (por orden de creación) y los nuevos sin guardar («Plan nuevo · sin guardar»); «+ Añadir
+  plan» copia los ajustes de ahora en uno nuevo sin guardar (con la estrategia de ahora); «Comparar planes», visible y desactivado con
+  su «?» (parte 3c). Al cambiar de pestaña, lo que se estaba tocando se queda en esa pestaña; un plan ya calculado se enseña sin
+  repetir el cálculo.
+- **Guardar**: «Guardar este plan» pide el nombre la primera vez (campo en la misma línea, Intro para guardar, Escape para cancelar);
+  uno guardado tiene «Guardar cambios» (solo con cambios: el plan sin el nombre, en JSON canónico, distinto del guardado),
+  «Guardar como plan nuevo» (pide el nombre, «… (copia)» de partida) y «Borrar» con confirmación («¿Borrar «…»? No se puede
+  deshacer.»).
+- **La estrategia ha cambiado**: si la huella de la foto guardada no es la de la estrategia de ahora (`comparaEstrategia`), una línea
+  amarilla «La estrategia ha cambiado desde que guardaste este plan» con su «?» y «Usar la versión guardada» (por defecto: el plan se
+  calcula con la foto) / «Usar la versión actual» (con la de ahora; al guardar los cambios, la foto se actualiza). Si la estrategia ya
+  no está, se usa la guardada y lo dice.
+- Comprobado: **RLS** con dos usuarios de prueba creados en `auth.users` dentro de UNA transacción de la Management API que se deshace
+  entera al final (la excepción final da el resultado): A crea, ve, cambia y borra lo suyo y no puede cambiar el dueño ni created_at;
+  B no ve, no cambia y no borra el plan de A, ni crea uno a nombre de A, y solo ve el suyo; los CHECK rechazan un plan que no es de
+  tipo plan; `anon` no puede leer; después, 0 usuarios de prueba y 0 planes. `planesGuardados` con un fetch falso (nombre limpio, huella
+  sin el nombre, sin user_id, PATCH y DELETE de esa fila, error si no existe; la comparación: igual, con otra EMA y sin la estrategia).
+  `ajustesDe(planDe(x)) = x`. Montaje SWC (renderToString): sin guardados, pidiendo el nombre, dos guardados con sus ajustes, sin
+  cambios, confirmación de borrar, estrategia cambiada (con la guardada elegida) y borrada, sin conexión. Las pruebas de la parte 1
+  siguen igual. Comprobaciones comunes.

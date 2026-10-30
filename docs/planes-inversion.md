@@ -314,3 +314,5 @@ vendrá con el «Modo de asignación» de `lib/mcAsignacion.js`). Se amplía el 
 - **Pantalla** (docs/builder.md §48): el paso 3 del Builder, `components/BuilderPlan.js`, construye el plan de
   esta pieza con los ajustes de la persona y lo ejecuta por `/api/plan` con `curvas: true` (solo añade las series diarias de las
   referencias `OCIOSO_LIQUIDEZ` y `ACTIVO`; el motor no cambia).
+- **Planes guardados** (docs/builder.md §48, parte 2): tabla `planes_inversion` (`sql/planes_inversion.sql`) con el plan entero
+  (formato 1, con la foto de la estrategia) y su huella `huellaPlan`; RLS «dueño», se cambian y se borran (no se congelan).

@@ -5,10 +5,15 @@
 // hay un cálculo en marcha, manda el último). Los números y los textos, en lib/builder/planPantalla.js. NORMA de esta pantalla: las
 // explicaciones no ocupan sitio fijo; cada término lleva su «?» (components/BuilderAyuda.js) con un ejemplo con números, y los avisos
 // van en una línea.
+// Parte 2 (§48): arriba, una pestaña por plan guardado (planes_inversion, lib/builder/planesGuardados.js) y los nuevos sin guardar,
+// con «+ Añadir plan» (copia los ajustes de ahora) y «Comparar planes» (desactivado). «Guardar este plan» pide el nombre; uno guardado,
+// «Guardar cambios», «Guardar como plan nuevo» y «Borrar» (con confirmación). Un plan guardado lleva la foto de su estrategia: si la
+// estrategia ha cambiado desde entonces, una línea lo avisa y deja usar la versión guardada (por defecto) o la de ahora.
 //   estrategias: las filas de `strategies`; estrategiaId: la abierta. cargaSimbolos: los símbolos de la caché de precios (BuilderPanel).
 //   onVolver: a «Mi trabajo»; onPaso1(fila): la estrategia en el paso 1; onPaso2(id): el paso 2 con ella.
 //   deps (opcional, para las pruebas): { ctx, calcula(plan) } en lugar de la sesión y de /api/plan. inicial (opcional, para las pruebas
-//   de montaje): { ajustes, resultado ({ respuesta, plan }), error, calculando, pruebas, huella, resultadoPrueba, simbolos }.
+//   de montaje): { ajustes, resultado ({ respuesta, plan }), error, calculando, pruebas, huella, resultadoPrueba, simbolos, planes
+//   (las filas guardadas), pestana (la abierta: «g<id>» o «n1»), cambio ({ cambiada, borrada }), pideNombre, borrando }.
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import { BarraPasos } from './BuilderPanel'
@@ -17,9 +22,11 @@ import BuscadorValor from './BuscadorValor'
 import BotonCopiar from './BotonCopiar'
 import { marcasLog, separaEtiquetas } from './BuilderCurvas'
 import { esDeTarjetas, huellaEstrategia, listarPruebas, leerResultado } from '../lib/pruebaAzar'
-import { validaPlan } from '../lib/planes/plan'
+import { validaPlan, paraHuellaPlan } from '../lib/planes/plan'
+import { jsonCanonico } from '../lib/lotesLab'
+import { AVISO_BORRADA, AVISO_CAMBIADA, AYUDA_CAMBIADA, AYUDA_COMPARAR, borrarPlan, cambiarPlan, comparaEstrategia, crearPlan, fotoDelPlan, listarPlanes, nombreLimpio } from '../lib/builder/planesGuardados'
 import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
-import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_PRUEBA, AYUDA_PLAN, OCIOSOS_FIJOS, PERIODOS_PLAN, SUBIDA_DEFECTO, ayudaPrueba, cifrasPlan, creaCalculador, estadoPrueba,
+import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_PRUEBA, AYUDA_PLAN, OCIOSOS_FIJOS, PERIODOS_PLAN, SUBIDA_DEFECTO, ajustesDe, ayudaPrueba, cifrasPlan, creaCalculador, estadoPrueba,
   esSemanal, euros, fechaCorta, fechasDe, fraseCaidas, pct, planDe, puntos, textoParaClaudePlan } from '../lib/builder/planPantalla'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0', AZUL = '#58a6ff', CLARO = '#c9d4df', GRIS = '#8b9bad', GRIS_FRANJA = '#3a4656'
@@ -129,11 +136,37 @@ const Tarjeta = ({ id, titulo, ayuda, children }) => (
 export default function BuilderPlan({ estrategias = [], estrategiaId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, deps = null, inicial = null }) {
   const tarjetas = useMemo(() => estrategias.filter(esDeTarjetas).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
   const diarias = useMemo(() => tarjetas.filter(s => !esSemanal(s)), [tarjetas])
-  const [estId, setEstId] = useState(() => String((diarias.find(s => String(s.id) === String(estrategiaId)) || diarias[0])?.id ?? ''))
-  const estrategia = diarias.find(s => String(s.id) === estId) || null
-  const [a, setA] = useState(() => ({ ...AJUSTES_PLAN, ...(inicial?.ajustes || {}) }))
+  // Las pestañas: los planes guardados («g<id>») y los nuevos sin guardar («n<k>»). La abierta se edita en a / estId / version; lo de
+  // las demás espera en `edic` (si una guardada no tiene nada ahí, se abre como se guardó).
+  const [planes, setPlanes] = useState(inicial?.planes || null)
+  const [falloPlanes, setFalloPlanes] = useState(null)
+  const [nuevas, setNuevas] = useState(() => [{ clave: 'n1', nombre: 'Plan nuevo' }])
+  const deFila = (r) => ({ a: ajustesDe(r.plan), estId: String(fotoDelPlan(r.plan)?.id ?? ''), version: 'guardada' })
+  const inicio = useMemo(() => {
+    const r = inicial?.pestana && (inicial.planes || []).find(p => `g${p.id}` === inicial.pestana)
+    if (r) return { clave: inicial.pestana, ...deFila(r) }
+    return { clave: 'n1', a: { ...AJUSTES_PLAN, ...(inicial?.ajustes || {}) }, estId: String((diarias.find(s => String(s.id) === String(estrategiaId)) || diarias[0])?.id ?? ''), version: 'actual' }
+  }, [])
+  const [actual, setActual] = useState(inicio.clave)
+  const [estId, setEstId] = useState(inicio.estId)
+  const [a, setA] = useState(inicio.a)
+  const [cualVersion, setCualVersion] = useState(inicio.version)   // en un plan guardado: 'guardada' (la foto del plan) o 'actual' (la estrategia de ahora)
+  const edic = useRef({}), cuentaNuevas = useRef(1)
+  const fila = actual.startsWith('g') ? (planes || []).find(p => `g${p.id}` === actual) || null : null
+  const fotoG = fila ? fotoDelPlan(fila.plan) : null
+  const estrategiaActual = diarias.find(s => String(s.id) === estId) || null
+  const usaGuardada = !!fotoG && String(fotoG.id) === estId && (cualVersion === 'guardada' || !estrategiaActual)
+  const estrategia = usaGuardada ? fotoG : estrategiaActual
   const cambia = (k, v) => setA(x => ({ ...x, [k]: v }))
-  const [otroOcioso, setOtroOcioso] = useState(() => !OCIOSOS_FIJOS.some(([k]) => k === (inicial?.ajustes?.ocioso ?? AJUSTES_PLAN.ocioso)))
+  const [otroForzado, setOtroForzado] = useState(false)
+  const otroOcioso = otroForzado || !OCIOSOS_FIJOS.some(([k]) => k === a.ocioso)
+  const setOtroOcioso = setOtroForzado
+  const [cambio, setCambio] = useState(inicial?.cambio || null)   // { cambiada, borrada } del plan guardado abierto
+  const [pideNombre, setPideNombre] = useState(inicial?.pideNombre || null)   // null | 'nuevo' | 'comoNuevo'
+  const [nombreNuevo, setNombreNuevo] = useState('')
+  const [borrando, setBorrando] = useState(!!inicial?.borrando)
+  const [guardando, setGuardando] = useState(false)
+  const [falloGuardar, setFalloGuardar] = useState(null)
   const [simbolos, setSimbolos] = useState(inicial?.simbolos || ['AAPL', 'GLD', 'QQQ'])
   const [calc, setCalc] = useState({ calculando: !!inicial?.calculando, resultado: inicial?.resultado || null, error: inicial?.error || null })
   const [pruebas, setPruebas] = useState(inicial?.pruebas || null)
@@ -149,6 +182,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
   const errores = useMemo(() => plan ? validaPlan(plan) : [], [plan])
   const clave = plan && !errores.length ? JSON.stringify(plan) : null
   const api = useRef(apiFetch); api.current = apiFetch
+  // Un plan ya calculado (p. ej., al volver a una pestaña) se enseña sin repetir el cálculo.
+  const hechos = useRef(new Map())
   const calculador = useRef(null)
   if (!calculador.current) {
     const pide = deps?.calcula || (async (p) => {
@@ -158,9 +193,16 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
       return j
     })
     calculador.current = creaCalculador({ calcula: async (p) => ({ respuesta: await pide(p), plan: p }),
-      alEstado: (e) => { if (vivo.current) setCalc(c => ({ calculando: e.calculando, resultado: e.resultado || c.resultado, error: e.resultado ? null : e.error ?? c.error })) } })
+      alEstado: (e) => {
+        if (e.resultado) { hechos.current.set(JSON.stringify(e.resultado.plan), e.resultado); if (hechos.current.size > 20) hechos.current.delete(hechos.current.keys().next().value) }
+        if (vivo.current) setCalc(c => ({ calculando: e.calculando, resultado: e.resultado || c.resultado, error: e.resultado ? null : e.error ?? c.error }))
+      } })
   }
-  useEffect(() => { if (clave) calculador.current.pide(JSON.parse(clave)); else calculador.current.cancela() }, [clave])
+  useEffect(() => {
+    if (!clave) { calculador.current.cancela(); return }
+    const ya = hechos.current.get(clave)
+    if (ya) { calculador.current.cancela(); setCalc({ calculando: false, resultado: ya, error: null }) } else calculador.current.pide(JSON.parse(clave))
+  }, [clave])
   useEffect(() => () => calculador.current?.cancela(), [])
 
   // Los símbolos de la caché (para la acción y el ocioso) y la prueba del paso 2 de la estrategia (con su huella de ahora).
@@ -181,10 +223,79 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
     return () => { v = false }
   }, [estado?.fila?.id])
 
+  // ── Los planes guardados ──
+  useEffect(() => {
+    if (inicial?.planes || !ctx) return
+    listarPlanes(ctx).then(xs => { if (vivo.current) setPlanes(xs) }).catch(e => { if (vivo.current) { setPlanes([]); setFalloPlanes(e.message) } })
+  }, [ctx])
+  // ¿Ha cambiado la estrategia del plan guardado abierto desde que se guardó?
+  useEffect(() => {
+    if (inicial?.cambio) return
+    setCambio(null)
+    if (!fila) return
+    let v = true
+    comparaEstrategia(fila.plan, estrategias).then(c => { if (v) setCambio(c) }).catch(() => {})
+    return () => { v = false }
+  }, [fila?.id, fila?.updated_at, estrategias])
+  const pestanas = [...(planes || []).map(r => ({ clave: `g${r.id}`, id: r.id, nombre: r.nombre })), ...nuevas]
+  const limpiaDialogos = () => { setPideNombre(null); setBorrando(false); setFalloGuardar(null); setNombreNuevo('') }
+  // Abre otra pestaña: lo de la de ahora espera en edic; la otra, con lo suyo (o como se guardó).
+  const abre = (clave, guardaAhora = true) => {
+    if (guardaAhora) edic.current[actual] = { a, estId, version: cualVersion }
+    const r = (planes || []).find(p => `g${p.id}` === clave)
+    const e = edic.current[clave] || (r ? deFila(r) : clave.startsWith('n') ? { a: { ...AJUSTES_PLAN }, estId: String(diarias[0]?.id ?? ''), version: 'actual' } : null)
+    if (!e) return
+    setA(e.a); setEstId(e.estId); setCualVersion(e.version); setOtroForzado(false); setActual(clave); limpiaDialogos()
+  }
+  const anadePlan = () => {
+    const k = ++cuentaNuevas.current, clave = `n${k}`
+    edic.current[actual] = { a, estId, version: cualVersion }
+    edic.current[clave] = { a: { ...a }, estId: String(estrategiaActual?.id ?? estId), version: 'actual' }
+    setNuevas(xs => [...xs, { clave, nombre: `Plan nuevo ${k}` }])
+    abre(clave, false)
+  }
+  const hayCambios = !!fila && !!plan && jsonCanonico(paraHuellaPlan(plan)) !== jsonCanonico(paraHuellaPlan(fila.plan))
+  const puedeGuardar = !!ctx && !!plan && !errores.length && !guardando
+  const guarda = async (como) => {
+    if (!puedeGuardar) return
+    setGuardando(true); setFalloGuardar(null)
+    try {
+      if (como === 'cambios') {
+        const r = await cambiarPlan(ctx, fila.id, { nombre: fila.nombre, plan })
+        setPlanes(xs => xs.map(x => x.id === r.id ? r : x)); setCualVersion('guardada')
+        edic.current[`g${r.id}`] = { a, estId, version: 'guardada' }
+      } else {
+        const n = nombreLimpio(nombreNuevo)
+        if (!n) { setFalloGuardar('Escribe un nombre para el plan.'); setGuardando(false); return }
+        const r = await crearPlan(ctx, { nombre: n, plan }), g = `g${r.id}`
+        edic.current[g] = { a, estId, version: 'guardada' }
+        delete edic.current[actual]
+        if (!fila) setNuevas(xs => { const ys = xs.filter(x => x.clave !== actual); return ys })
+        setPlanes(xs => [...(xs || []), r]); setActual(g); setCualVersion('guardada')
+      }
+      limpiaDialogos()
+    } catch (e) { setFalloGuardar(e.message) }
+    setGuardando(false)
+  }
+  const borra = async () => {
+    if (!fila || !ctx || guardando) return
+    setGuardando(true); setFalloGuardar(null)
+    try {
+      await borrarPlan(ctx, fila.id)
+      delete edic.current[actual]
+      const quedan = (planes || []).filter(x => x.id !== fila.id)
+      setPlanes(quedan); limpiaDialogos()
+      const otra = quedan[0] ? `g${quedan[0].id}` : nuevas[0]?.clave
+      if (otra) abre(otra, false)
+      else { edic.current.n1 = { a, estId: String(estrategiaActual?.id ?? estId), version: 'actual' }; setNuevas([{ clave: 'n1', nombre: 'Plan nuevo' }]); abre('n1', false) }
+    } catch (e) { setFalloGuardar(e.message) }
+    setGuardando(false)
+  }
+
   const valoresLista = useMemo(() => simbolos.map(s => typeof s === 'string' ? { simbolo: s, nombre: '' } : s), [simbolos])
   const cifras = useMemo(() => { try { return calc.resultado ? cifrasPlan(calc.resultado.respuesta, calc.resultado.plan) : null } catch (_) { return null } }, [calc.resultado])
   const ajustesDelResultado = calc.resultado?.plan?.piezas?.[0] || null
-  const texto = () => textoParaClaudePlan({ ajustes: a, estrategia, plan, cifras, estado, resultadoPrueba: resPrueba, version })
+  const texto = () => textoParaClaudePlan({ ajustes: a, estrategia, plan, cifras, estado, resultadoPrueba: resPrueba, version, nombre: fila?.nombre || null })
 
   // ── Avisos (una línea; el detalle, tras «?») ──
   const avisoPrueba = estado && (
@@ -199,6 +310,53 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
     </div>
   )
 
+  // ── Pestañas de los planes y guardar ──
+  const campoNombre = pideNombre && (
+    <span data-pide-nombre={pideNombre} style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <input type="text" aria-label="Nombre del plan" placeholder="Nombre del plan" maxLength={200} value={nombreNuevo} autoFocus onChange={e => setNombreNuevo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') guarda('nuevo'); if (e.key === 'Escape') limpiaDialogos() }} style={{ ...campo, width: 240 }}/>
+      <button data-boton="confirmar-nombre" style={puedeGuardar && nombreLimpio(nombreNuevo) ? S.botonVerde : S.botonDesactivado} disabled={!puedeGuardar || !nombreLimpio(nombreNuevo)} onClick={() => guarda('nuevo')}>{guardando ? 'Guardando…' : 'Guardar'}</button>
+      <button style={S.boton} onClick={limpiaDialogos}>Cancelar</button>
+    </span>
+  )
+  const barraGuardar = borrando && fila ? (
+    <span data-confirma-borrar style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ color: ROJO }}>{`¿Borrar «${fila.nombre}»? No se puede deshacer.`}</span>
+      <button data-boton="si-borrar" style={{ ...S.boton, borderColor: '#8b3a42', background: '#3b1d22', color: ROJO }} disabled={guardando} onClick={borra}>{guardando ? 'Borrando…' : 'Sí, borrar'}</button>
+      <button style={S.boton} onClick={limpiaDialogos}>Cancelar</button>
+    </span>
+  ) : campoNombre || (fila ? (
+    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <button data-boton="guardar-cambios" style={puedeGuardar && hayCambios ? S.botonVerde : S.botonDesactivado} disabled={!puedeGuardar || !hayCambios} title={hayCambios ? undefined : 'No hay cambios desde que lo guardaste'} onClick={() => guarda('cambios')}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>
+      <button data-boton="guardar-como" style={S.boton} disabled={!puedeGuardar} onClick={() => { limpiaDialogos(); setNombreNuevo(`${fila.nombre} (copia)`); setPideNombre('comoNuevo') }}>Guardar como plan nuevo</button>
+      <button data-boton="borrar" style={{ ...S.boton, color: ROJO }} disabled={!ctx || guardando} onClick={() => { limpiaDialogos(); setBorrando(true) }}>Borrar</button>
+      {!hayCambios && <span data-sin-cambios style={S.apagado}>Guardado el {fechaCorta(fila.updated_at)}</span>}
+    </span>
+  ) : <button data-boton="guardar" style={puedeGuardar ? S.botonVerde : S.botonDesactivado} disabled={!puedeGuardar} onClick={() => { limpiaDialogos(); setPideNombre('nuevo') }}>Guardar este plan</button>)
+  const pestanasPlanes = (
+    <div data-planes style={{ marginBottom: 12 }}>
+      <div role="tablist" aria-label="Tus planes" style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+        {pestanas.map(p => <button key={p.clave} role="tab" data-pestana={p.clave} aria-selected={p.clave === actual} onClick={() => p.clave !== actual && abre(p.clave)}
+          style={{ ...S.boton, padding: '6px 12px', fontSize: 13, ...(p.clave === actual ? { background: B.cabecera, borderColor: B.siguienteBorde, color: B.titulo, fontWeight: 700 } : { background: 'transparent', color: B.secundario }) }}>{p.id == null ? `${p.nombre} · sin guardar` : p.nombre}</button>)}
+        <button data-boton="anadir-plan" style={{ ...S.enlace, fontSize: 13, marginLeft: 6 }} onClick={anadePlan} title="Un plan nuevo, sin guardar, con los ajustes de ahora">+ Añadir plan</button>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2 }}><button data-boton="comparar" disabled style={{ ...S.boton, padding: '6px 12px', fontSize: 13, color: B.apagado, cursor: 'not-allowed' }}>Comparar planes</button><Ayuda texto={AYUDA_COMPARAR} etiqueta="Comparar planes"/></span>
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+        {barraGuardar}
+        {!ctx && <span style={{ color: AMARILLO }}>Sin conexión con la base de datos: no se pueden guardar planes.</span>}
+        {planes == null && ctx && <span style={S.apagado}>Leyendo tus planes…</span>}
+      </div>
+      {falloPlanes && <div data-fallo-planes style={{ color: ROJO, marginTop: 6 }}>✕ {falloPlanes}</div>}
+      {falloGuardar && <div data-fallo-guardar style={{ color: ROJO, marginTop: 6 }}>✕ {falloGuardar}</div>}
+      {fila && cambio?.cambiada && fotoG && String(fotoG.id) === estId && (
+        <div data-aviso="cambiada" style={{ color: AMARILLO, marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>⚠ {AVISO_CAMBIADA}<Ayuda texto={AYUDA_CAMBIADA} etiqueta={AVISO_CAMBIADA}/></span>
+          <Segmentos etiquetaGrupo="Qué versión de la estrategia" valor={cualVersion} onCambia={setCualVersion} opciones={[['guardada', 'Usar la versión guardada'], ['actual', 'Usar la versión actual']]}/>
+        </div>
+      )}
+      {fila && cambio?.borrada && <div data-aviso="borrada" style={{ color: AMARILLO, marginTop: 8 }}>⚠ {AVISO_BORRADA}</div>}
+    </div>
+  )
+
   // ── Columna izquierda ──
   const bloques = (
     <div data-tarjeta="bloques" style={{ ...S.tarjeta, overflow: 'visible' }}>
@@ -208,7 +366,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
           <div style={{ fontWeight: 700, color: B.titulo }}>Bloque 1</div>
           <div>
             <Etiqueta texto="Estrategia" ayuda={AYUDA_PLAN.estrategia}/>
-            {tarjetas.length ? <select aria-label="Estrategia" value={estId} onChange={e => setEstId(e.target.value)} style={{ ...campo, maxWidth: '100%' }}>
+            {tarjetas.length ? <select aria-label="Estrategia" value={estId} onChange={e => { setEstId(e.target.value); setCualVersion('actual') }} style={{ ...campo, maxWidth: '100%' }}>
+              {fotoG && String(fotoG.id) === estId && !tarjetas.some(s => String(s.id) === estId) && <option value={estId}>{`${fotoG.name} (versión guardada)`}</option>}
               {tarjetas.map(s => { const sem = esSemanal(s); return <option key={s.id} value={String(s.id)} disabled={sem}>{`${s.name}${sem ? ' (semanal: llegará más adelante)' : ''}`}</option> })}
             </select> : <div style={S.secundario}>No tienes estrategias de tarjetas. Crea una en el paso 1.</div>}
             {tarjetas.length > 0 && !diarias.length && <div style={{ color: AMARILLO, marginTop: 6 }}>Todas tus estrategias de tarjetas son semanales: el paso 3, por ahora, solo con velas diarias.</div>}
@@ -320,9 +479,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
         <button style={{ ...S.enlace, color: B.secundario }} onClick={() => onVolver?.()}>← Builder · Mi trabajo</button>
         <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Builder</span>
       </div>
-      <BarraPasos actual={3} onPaso={(n) => { if (n === 1) onPaso1?.(estrategia); else if (n === 2) onPaso2?.(estrategia?.id ?? null) }}/>
+      <BarraPasos actual={3} onPaso={(n) => { if (n === 1) onPaso1?.(estrategiaActual); else if (n === 2) onPaso2?.(estrategia?.id ?? null) }}/>
       <div style={{ fontSize: 20, fontWeight: 700, color: B.titulo, marginTop: 8 }}>Convierte «{nombre}» en un plan</div>
       <div style={{ ...S.secundario, marginTop: 4, marginBottom: 10 }}>Tu estrategia con tu dinero: aportaciones, dinero ocioso, comisiones e impuestos.</div>
+      {pestanasPlanes}
       {avisos}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div data-columna="izquierda" style={{ flex: '1 1 340px', minWidth: 0 }}>{bloques}{dinero}</div>
