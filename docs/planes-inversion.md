@@ -316,3 +316,6 @@ vendrá con el «Modo de asignación» de `lib/mcAsignacion.js`). Se amplía el 
   referencias `OCIOSO_LIQUIDEZ` y `ACTIVO`; el motor no cambia).
 - **Planes guardados** (docs/builder.md §48, parte 2): tabla `planes_inversion` (`sql/planes_inversion.sql`) con el plan entero
   (formato 1, con la foto de la estrategia) y su huella `huellaPlan`; RLS «dueño», se cambian y se borran (no se congelan).
+- **Arreglos de la pantalla** (docs/builder.md §50): la base con el token vigente y renovado ante 401/403 (`ctxConSesion`), números con
+  coma, la columna de ajustes fija de verdad, «Guardar cambios» solo con cambios y «Duplicar», y el gráfico y la tabla con «Buy&Hold» y
+  el importe final de cada línea. Solo pantalla: el motor, los planes guardados y sus huellas no cambian (comprobado byte a byte).

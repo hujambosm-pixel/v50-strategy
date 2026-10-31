@@ -7,12 +7,15 @@
 // van en una línea.
 // Parte 2 (§48): arriba, una pestaña por plan guardado (planes_inversion, lib/builder/planesGuardados.js) y los nuevos sin guardar,
 // con «+ Añadir plan» (copia los ajustes de ahora) y «Comparar planes» (desactivado). «Guardar este plan» pide el nombre; uno guardado,
-// «Guardar cambios», «Guardar como plan nuevo» y «Borrar» (con confirmación). Un plan guardado lleva la foto de su estrategia: si la
+// «Guardar cambios» (§50: solo si hay cambios), «Duplicar» y «Borrar» (con confirmación). Un plan guardado lleva la foto de su estrategia: si la
 // estrategia ha cambiado desde entonces, una línea lo avisa y deja usar la versión guardada (por defecto) o la de ahora.
 // §49: el desplegable con todas las estrategias de tarjetas y su prueba («pasa el azar / no pasa / sin prueba»); al entrar se abre el
 // plan guardado más reciente de la estrategia (o, sin ninguno, un plan nuevo): otro plan nuevo solo con «+ Añadir plan», y los nuevos
 // se cierran con su ×; una fila arriba (pestañas, guardar, comparar) y los avisos en otra; la columna de ajustes, fija al bajar en
 // escritorio; la comisión en %, en € fijos o en % con mínimo; con el ocioso en liquidez no se compara el ocioso.
+// §50: la base de datos con el token vigente (y renovado ante 401/403); los números con coma o punto; la columna de ajustes, fija de
+// verdad (esta página es la que se desplaza en escritorio); «Guardar cambios» solo con cambios y «Duplicar»; el gráfico con líneas
+// continuas y finas y el importe final de cada una; «Buy&Hold X»; la línea gris de las estrategias de código en el desplegable.
 //   estrategias: las filas de `strategies`; estrategiaId: la abierta. cargaSimbolos: los símbolos de la caché de precios (BuilderPanel).
 //   onVolver: a «Mi trabajo»; onPaso1(fila): la estrategia en el paso 1; onPaso2(id): el paso 2 con ella.
 //   deps (opcional, para las pruebas): { ctx, calcula(plan) } en lugar de la sesión y de /api/plan. inicial (opcional, para las pruebas
@@ -31,11 +34,14 @@ import { esDeTarjetas, huellaEstrategia, leerResultado } from '../lib/pruebaAzar
 import { validaPlan, paraHuellaPlan } from '../lib/planes/plan'
 import { jsonCanonico } from '../lib/lotesLab'
 import { AVISO_BORRADA, AVISO_CAMBIADA, AYUDA_CAMBIADA, AYUDA_COMPARAR, borrarPlan, cambiarPlan, comparaEstrategia, crearPlan, fotoDelPlan, listarPlanes, listarPruebasUsuario, nombreLimpio } from '../lib/builder/planesGuardados'
-import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
+import { esDeCodigo } from '../lib/builder/codigo'
+import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
+import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_PRUEBA, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
-  ayudaCaida, ayudaPrueba, baseNueva, cifrasPlan, conCambios, nombreNueva, trasCerrar, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, fraseCaidas, pct, planDe, puntos, textoParaClaudePlan } from '../lib/builder/planPantalla'
+  ayudaCaida, ayudaPrueba, baseNueva, cifrasPlan, conCambios, nombreNueva, trasCerrar, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo,
+  textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS } from '../lib/builder/planPantalla'
 
-const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0', AZUL = '#58a6ff', CLARO = '#c9d4df', GRIS = '#8b9bad', GRIS_FRANJA = '#3a4656'
+const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0', AZUL = '#58a6ff', GRIS_FRANJA = '#3a4656'
 const campo = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px' }
 const etiqueta = { fontWeight: 600, color: B.titulo, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 2 }
 const celda = { padding: '8px 10px', borderBottom: `1px solid ${B.borde}`, textAlign: 'left', verticalAlign: 'top' }
@@ -53,6 +59,16 @@ function Segmentos({ opciones, valor, onCambia, etiquetaGrupo }) {
   )
 }
 const Etiqueta = ({ texto, ayuda }) => <div style={etiqueta}>{texto}{ayuda && <Ayuda texto={ayuda} etiqueta={texto}/>}</div>
+// §50: un campo de número que acepta coma y punto («0,1» y «0.1»), como components/CondicionesSimulacion.js: un campo de texto con
+// inputMode="decimal" y el texto que se escribe como estado suyo («0,» todavía no es un número y no se borra). Cada texto que ya es un
+// número se pasa al momento (a los ajustes va siempre un número; vacío, ''); al salir del campo se reescribe con coma (textoCampo).
+// minimo: el menor que se admite (por defecto 0); lo demás no se pasa y, al salir, vuelve el valor de antes.
+function CampoNumero({ valor, onCambia, etiqueta: nombre, ancho, minimo = 0 }) {
+  const [txt, setTxt] = useState(() => textoCampo(valor))
+  useEffect(() => { setTxt(t => numeroEs(t) === (valor === '' ? null : Number(valor)) ? t : textoCampo(valor)) }, [valor])
+  return <input type="text" inputMode="decimal" aria-label={nombre} value={txt} style={{ ...campo, width: ancho }} onBlur={() => setTxt(textoCampo(valor))}
+    onChange={e => { const t = e.target.value, n = numeroEs(t); setTxt(t); if (!t.trim()) onCambia(''); else if (n != null && n >= minimo) onCambia(n) }}/>
+}
 
 // El ancho real del gráfico (como components/BuilderCurvas.js): 1 unidad = 1 píxel, las letras miden siempre 12 px. Sin navegador, 760.
 function useAncho(defecto = 760) {
@@ -69,18 +85,21 @@ function useAncho(defecto = 760) {
   return [ref, w]
 }
 
-// «Cómo crece tu dinero»: tu plan (continua), el mismo plan con el ocioso en liquidez (puntos), comprar y mantener la acción (rayas) y
-// lo aportado (escalonado, raya y punto), en escala logarítmica; debajo, la franja dentro de la acción / en el ocioso.
+// «Cómo crece tu dinero»: tu plan, comprar y mantener la acción (Buy&Hold), el mismo plan con el ocioso en liquidez y lo aportado
+// (escalonado), en escala logarítmica; debajo, la franja dentro de la acción / en el ocioso. §50: todas continuas y finas, de colores
+// bien distintos, y al final de cada una su nombre y su importe final (el de la tabla: tras vender todo y pagar impuestos y comisiones).
 export const LINEAS_PLAN = [
-  { k: 'plan', t: 'Tu plan', color: AZUL, ancho: 2.6, rayas: null },
-  { k: 'ociosoLiquidez', t: 'Con el ocioso en liquidez', color: AMARILLO, ancho: 2.2, rayas: '0.5 4.5', redondo: true },
-  { k: 'activo', t: 'Comprar y mantener', color: CLARO, ancho: 1.6, rayas: '7 5' },
-  { k: 'aportado', t: 'Lo aportado', color: GRIS, ancho: 1.4, rayas: '9 3 2 3', escalon: true },
+  { k: 'plan', t: 'Tu plan', color: AZUL, ancho: 2 },
+  { k: 'activo', t: 'Buy&Hold', color: '#d0d7de', ancho: 1.5 },
+  { k: 'ociosoLiquidez', t: 'Ocioso en liquidez', color: '#f0883e', ancho: 1.5 },
+  { k: 'aportado', t: 'Lo aportado', color: '#6e7681', ancho: 1, escalon: true },
 ]
-function GraficoPlan({ curva, activo }) {
+const nombreLinea = (l, activo) => l.k === 'activo' && activo ? `${l.t} ${activo}` : l.t
+// finales: { plan, activo, ociosoLiquidez, aportado } en euros (el texto al final de cada línea; sin él, solo el nombre).
+function GraficoPlan({ curva, activo, finales = {} }) {
   const [ref, W] = useAncho()
-  const IZQ = 76, DER = 150, H1 = 250, ARR = 22, FR = 14, n = curva.fechas.length
-  const lineas = LINEAS_PLAN.filter(l => curva[l.k]?.length).map(l => ({ ...l, t: l.k === 'activo' ? `Comprar y mantener ${activo}` : l.t, v: curva[l.k] }))
+  const IZQ = 76, DER = 200, H1 = 250, ARR = 22, FR = 14, n = curva.fechas.length
+  const lineas = LINEAS_PLAN.filter(l => curva[l.k]?.length).map(l => ({ ...l, t: `${nombreLinea(l, activo)}${Number.isFinite(finales[l.k]) ? ` ${euros(finales[l.k], 0)}` : ''}`, v: curva[l.k] }))
   const vals = lineas.flatMap(l => l.v).filter(v => Number.isFinite(v) && v > 0)
   if (!vals.length || n < 2) return null
   const lo = Math.min(...vals), hi = Math.max(...vals), L = Math.log
@@ -98,25 +117,25 @@ function GraficoPlan({ curva, activo }) {
   const tramos = []
   curva.dentro.forEach((d, i) => { const u = tramos[tramos.length - 1]; if (u && u.d === d) u.h = i; else tramos.push({ d, i, h: i }) })
   const yF = H1 + 8, ancho1 = n > 1 ? (W - IZQ - DER) / (n - 1) : 0
-  const resumen = `Cómo crece tu dinero, en escala logarítmica, del ${fechaCorta(curva.fechas[0])} al ${fechaCorta(curva.fechas[n - 1])}: ` + lineas.map(l => `${l.t} termina en ${euros(l.v[l.v.length - 1], 0)}`).join('; ') + '.'
+  const resumen = `Cómo crece tu dinero, en escala logarítmica, del ${fechaCorta(curva.fechas[0])} al ${fechaCorta(curva.fechas[n - 1])}: ` + lineas.map(l => `${nombreLinea(l, activo)} termina en ${euros(Number.isFinite(finales[l.k]) ? finales[l.k] : l.v[l.v.length - 1], 0)}`).join('; ') + '.'
   return (
     <div ref={ref} style={{ width: '100%', marginTop: 6 }}>
       <svg data-grafico="plan" width={W} height={yF + FR + 4} role="img" aria-label={resumen} style={{ display: 'block', fontFamily: B.letra }}>
         <text data-escala="log" x={4} y={12} fontSize={12} fill={B.apagado}>escala logarítmica</text>
         {marcasLog(lo, hi).map((t, k) => <g key={k}><line x1={IZQ} x2={W - DER} y1={y(t)} y2={y(t)} stroke="#1b2430"/><text x={IZQ - 6} y={y(t) + 4} textAnchor="end" fontSize={12} fill={B.apagado}>{euros(t, 0)}</text></g>)}
         {anios.filter((_, k) => k % paso === 0).map(([i, a]) => <text key={a} x={x(i)} y={H1 - 6} fontSize={12} fill={B.apagado}>{a}</text>)}
-        {[...lineas].reverse().map(l => <polyline key={l.k} data-linea={l.k} points={ruta(l.v, l.escalon)} fill="none" stroke={l.color} strokeWidth={l.ancho} strokeDasharray={l.rayas || undefined} strokeLinecap={l.redondo ? 'round' : 'butt'}/>)}
+        {[...lineas].reverse().map(l => <polyline key={l.k} data-linea={l.k} points={ruta(l.v, l.escalon)} fill="none" stroke={l.color} strokeWidth={l.ancho} strokeLinejoin="round"/>)}
         {etq.map(e => <text key={e.t} data-etiqueta={e.t} x={W - DER + 8} y={e.y + 4} fontSize={12} fill={e.color} fontWeight={e.color === AZUL ? 700 : 400}>{e.t}</text>)}
         <g data-franja={tramos.length}>{tramos.map((t, k) => <rect key={k} data-dentro={t.d} x={x(t.i) - (t.i ? ancho1 / 2 : 0)} width={Math.max(0.5, (t.h - t.i) * ancho1 + (t.i ? ancho1 / 2 : 0) + (t.h < n - 1 ? ancho1 / 2 : 0))} y={yF} height={FR} fill={t.d ? AZUL : GRIS_FRANJA}/>)}</g>
       </svg>
     </div>
   )
 }
-function Leyenda({ sinOcioso = false }) {
-  const muestra = (l) => <svg width="30" height="10" aria-hidden="true"><line x1="1" x2="29" y1="5" y2="5" stroke={l.color} strokeWidth={l.ancho} strokeDasharray={l.rayas || undefined} strokeLinecap={l.redondo ? 'round' : 'butt'}/></svg>
+function Leyenda({ sinOcioso = false, activo = null }) {
+  const muestra = (l) => <svg width="30" height="10" aria-hidden="true"><line x1="1" x2="29" y1="5" y2="5" stroke={l.color} strokeWidth={l.ancho}/></svg>
   return (
     <div data-leyenda style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: B.secundario, marginTop: 6, alignItems: 'center' }}>
-      {LINEAS_PLAN.filter(l => !(sinOcioso && l.k === 'ociosoLiquidez')).map(l => <span key={l.k} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{muestra(l)}{l.t}</span>)}
+      {LINEAS_PLAN.filter(l => !(sinOcioso && l.k === 'ociosoLiquidez')).map(l => <span key={l.k} data-muestra={l.k} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{muestra(l)}{nombreLinea(l, activo)}</span>)}
       <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><span style={{ width: 14, height: 10, background: AZUL, display: 'inline-block' }}/>dentro de la acción</span>
       <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><span style={{ width: 14, height: 10, background: GRIS_FRANJA, display: 'inline-block' }}/>en el ocioso</span>
     </div>
@@ -142,6 +161,7 @@ const Tarjeta = ({ id, titulo, ayuda, children }) => (
 export default function BuilderPlan({ estrategias = [], estrategiaId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, deps = null, inicial = null }) {
   const tarjetas = useMemo(() => estrategias.filter(esDeTarjetas).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
   const diarias = useMemo(() => tarjetas.filter(s => !esSemanal(s)), [tarjetas])
+  const deCodigo = useMemo(() => estrategias.filter(esDeCodigo).length, [estrategias])
   // Las pestañas: los planes guardados («g<id>») y los nuevos sin guardar («n<k>»). La abierta se edita en a / estId / version; lo de
   // las demás espera en `edic` (si una guardada no tiene nada ahí, se abre como se guardó).
   const [planes, setPlanes] = useState(inicial?.planes || null)
@@ -193,18 +213,21 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
   const [resPrueba, setResPrueba] = useState(inicial?.resultadoPrueba || null)
   const vivo = useRef(true)
   useEffect(() => { vivo.current = true; return () => { vivo.current = false } }, [])
-  // El alto de la página (el contenedor que se desplaza): la columna fija de ajustes no pasa de ahí.
+  // §50: la columna de ajustes fija al bajar. En la app se desplaza la VENTANA, pero entre la columna y la ventana hay contenedores con
+  // overflow que no se desplazan nunca (esta página, .content y .main de pages/index.js), y un sticky se pega al más cercano: no se movía
+  // nada. Así que en escritorio (≥ 1000 px) esta página es la que se desplaza, con el alto de la ventana menos lo que tiene encima (la
+  // cabecera de la app y, si sale, el aviso de configuración: se mide aquí, `arriba`), y la columna se pega a ella. Sin tocar index.js.
   const pagina = useRef(null)
-  const [altoPagina, setAltoPagina] = useState(null)
+  const [arriba, setArriba] = useState(null)
   useEffect(() => {
-    const el = pagina.current; if (!el) return
-    const mide = () => { if (el.clientHeight > 0) setAltoPagina(el.clientHeight) }
+    const el = pagina.current; if (!el || typeof window === 'undefined') return
+    const mide = () => { const t = Math.round(el.getBoundingClientRect().top + window.scrollY); if (t >= 0) setArriba(t) }
     mide()
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(mide) : null
-    ro?.observe(el)
-    return () => ro?.disconnect()
+    window.addEventListener('resize', mide)
+    return () => window.removeEventListener('resize', mide)
   }, [])
-  const ctx = useMemo(() => deps?.ctx || (hayConfigSupabase() ? { url: getSupaUrl(), headers: getSupaH() } : null), [deps])
+  // §50: el token, el vigente en cada llamada (y renovado ante 401/403), no el del momento de montar: ctxConSesion (lib/supabase.js).
+  const ctx = useMemo(() => deps?.ctx || (hayConfigSupabase() ? ctxConSesion() : null), [deps])
   const nombre = estrategia?.name || 'tu estrategia'
 
   // El plan de los ajustes de ahora; sus errores (los del motor) y, sin errores, la clave que dispara el cálculo.
@@ -397,8 +420,9 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
     </span>
   ) : campoNombre || (fila ? (
     <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      <button data-boton="guardar-cambios" style={{ ...(puedeGuardar && hayCambios ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar || !hayCambios} title={hayCambios ? undefined : `Sin cambios: guardado el ${fechaCorta(fila.updated_at)}`} onClick={() => guarda('cambios')}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>
-      <button data-boton="guardar-como" style={{ ...S.boton, padding: '6px 12px' }} disabled={!puedeGuardar} onClick={() => { limpiaDialogos(); setNombreNuevo(`${fila.nombre} (copia)`); setPideNombre('comoNuevo') }}>Guardar como plan nuevo</button>
+      {/* §50: «Guardar cambios» solo con cambios (en verde); sin ellos no sale. «Duplicar»: el plan de ahora, con sus cambios, como plan nuevo. */}
+      {hayCambios && <button data-boton="guardar-cambios" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={`Guardado por última vez el ${fechaCorta(fila.updated_at)}`} onClick={() => guarda('cambios')}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>}
+      <button data-boton="guardar-como" style={{ ...S.boton, padding: '6px 12px' }} disabled={!puedeGuardar} title="Una copia de este plan, con sus cambios, como plan nuevo" onClick={() => { limpiaDialogos(); setNombreNuevo(`${fila.nombre} (copia)`); setPideNombre('comoNuevo') }}>Duplicar</button>
       <button data-boton="borrar" style={{ ...S.boton, padding: '6px 12px', color: ROJO }} disabled={!ctx || guardando} onClick={() => { limpiaDialogos(); setBorrando(true) }}>Borrar</button>
     </span>
   ) : actual ? <button data-boton="guardar" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={!ctx ? 'Sin conexión con la base de datos: no se pueden guardar planes' : undefined} onClick={() => { limpiaDialogos(); setPideNombre('nuevo') }}>Guardar este plan</button> : null)
@@ -444,6 +468,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
               {fotoG && String(fotoG.id) === estId && !tarjetas.some(s => String(s.id) === estId) && <option value={estId}>{`${fotoG.name} (versión guardada)`}</option>}
               {tarjetas.map(s => { const sem = esSemanal(s), ps = [ETIQUETA_PRUEBA[estadosLista[s.id]], sem ? 'semanal: llegará más adelante' : null].filter(Boolean)
                 return <option key={s.id} value={String(s.id)} disabled={sem}>{`${s.name}${ps.length ? ` (${ps.join(' · ')})` : ''}`}</option> })}
+              {/* §50: al final, en gris y sin poder elegirse, cuántas de código hay (no sirven aquí). */}
+              {deCodigo > 0 && <option data-codigo={deCodigo} value="" disabled style={{ color: B.apagado }}>{textoCodigo(deCodigo)}</option>}
             </select> : <div style={S.secundario}>No tienes estrategias de tarjetas. Crea una en el paso 1.</div>}
             {tarjetas.length > 0 && !diarias.length && <div style={{ color: AMARILLO, marginTop: 6 }}>Todas tus estrategias de tarjetas son semanales: el paso 3, por ahora, solo con velas diarias.</div>}
           </div>
@@ -475,12 +501,12 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
           </div>}
         </div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <div><Etiqueta texto="Dinero inicial" ayuda={AYUDA_PLAN.capital}/><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><input type="number" min="0" step="100" aria-label="Dinero inicial" value={a.capital} onChange={e => cambia('capital', e.target.value === '' ? '' : Number(e.target.value))} style={{ ...campo, width: 120 }}/> €</span></div>
-          <div><Etiqueta texto="Aportación mensual" ayuda={AYUDA_PLAN.aportacion}/><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><input type="number" min="0" step="10" aria-label="Aportación mensual" value={a.aportacion} onChange={e => cambia('aportacion', e.target.value === '' ? '' : Number(e.target.value))} style={{ ...campo, width: 100 }}/> €</span></div>
+          <div><Etiqueta texto="Dinero inicial" ayuda={AYUDA_PLAN.capital}/><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero etiqueta="Dinero inicial" valor={a.capital} onCambia={v => cambia('capital', v)} ancho={120}/> €</span></div>
+          <div><Etiqueta texto="Aportación mensual" ayuda={AYUDA_PLAN.aportacion}/><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero etiqueta="Aportación mensual" valor={a.aportacion} onCambia={v => cambia('aportacion', v)} ancho={100}/> €</span></div>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <Segmentos etiquetaGrupo="Cómo es la aportación" valor={a.sube ? 'sube' : 'fija'} onCambia={v => setA(x => ({ ...x, sube: v === 'sube', subePct: v === 'sube' && !(Number(x.subePct) > 0) ? SUBIDA_DEFECTO : x.subePct }))} opciones={[['fija', 'Fija'], ['sube', 'Sube cada año']]}/>
-          {a.sube && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><input type="number" step="0.5" aria-label="Cuánto sube cada año" value={a.subePct} onChange={e => cambia('subePct', e.target.value === '' ? '' : Number(e.target.value))} style={{ ...campo, width: 70 }}/> % al año</span>}
+          {a.sube && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero etiqueta="Cuánto sube cada año" valor={a.subePct} onCambia={v => cambia('subePct', v)} ancho={70} minimo={-Infinity}/> % al año</span>}
         </div>
         <div>
           <Etiqueta texto="Dinero ocioso" ayuda={AYUDA_PLAN.ocioso}/>
@@ -501,9 +527,9 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
             {TIPOS_COMISION.map(([k, t]) => <span key={k} style={{ display: 'inline-flex', alignItems: 'center' }}><button type="button" data-comision={k} aria-pressed={(a.comisionTipo || 'pct') === k} onClick={() => cambia('comisionTipo', k)} style={{ ...seg((a.comisionTipo || 'pct') === k), borderRadius: 6 }}>{t}</button><Ayuda texto={AYUDA_COMISION[k]} etiqueta={`Comisión: ${t}`}/></span>)}
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
-            {(a.comisionTipo || 'pct') !== 'fija' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><input type="number" min="0" step="0.01" aria-label="Comisión en %" value={a.comision} onChange={e => cambia('comision', e.target.value === '' ? '' : Number(e.target.value))} style={{ ...campo, width: 80 }}/> %</span>}
-            {a.comisionTipo === 'pctMin' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>con mínimo de <input type="number" min="0" step="0.5" aria-label="Mínimo en euros" value={a.comisionMin} onChange={e => cambia('comisionMin', e.target.value === '' ? '' : Number(e.target.value))} style={{ ...campo, width: 70 }}/> €</span>}
-            {a.comisionTipo === 'fija' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><input type="number" min="0" step="0.5" aria-label="Euros por operación" value={a.comisionFija} onChange={e => cambia('comisionFija', e.target.value === '' ? '' : Number(e.target.value))} style={{ ...campo, width: 70 }}/> € por operación</span>}
+            {(a.comisionTipo || 'pct') !== 'fija' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero etiqueta="Comisión en %" valor={a.comision} onCambia={v => cambia('comision', v)} ancho={80}/> %</span>}
+            {a.comisionTipo === 'pctMin' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>con mínimo de <CampoNumero etiqueta="Mínimo en euros" valor={a.comisionMin} onCambia={v => cambia('comisionMin', v)} ancho={70}/> €</span>}
+            {a.comisionTipo === 'fija' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero etiqueta="Euros por operación" valor={a.comisionFija} onCambia={v => cambia('comisionFija', v)} ancho={70}/> € por operación</span>}
           </div>
         </div>
       </div>
@@ -527,10 +553,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
         <span data-impuestos>{`Impuestos ${euros(s.impuestos, 0)}`}</span><span data-comisiones>{`Comisiones ${euros(s.costes, 0)} (${cifras.ordenes ?? '—'} órdenes)`}</span></span>}/>
     </div>
     <Tarjeta id="grafico" titulo="Cómo crece tu dinero" ayuda={`${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franja}`}>
-      <GraficoPlan curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes}/>
-      <Leyenda sinOcioso={sinOcioso}/>
+      <GraficoPlan curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes} finales={finalesDe(cifras)}/>
+      <Leyenda sinOcioso={sinOcioso} activo={activoRes}/>
     </Tarjeta>
-    <Tarjeta id="alternativas" titulo="Tu plan frente a las alternativas" ayuda={AYUDA_PLAN.alternativas}>
+    <Tarjeta id="alternativas" titulo={TITULO_ALTERNATIVAS} ayuda={AYUDA_PLAN.alternativas}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="alternativas" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr>{['', 'Final', 'CAGR de la estrategia', 'TIR', 'Peor caída', 'Impuestos y comisiones'].map(h => <th key={h} style={cab}>{h}</th>)}</tr></thead>
         <tbody>{cifras.alternativas.filter(x => !(sinOcioso && x.id === 'OCIOSO_LIQUIDEZ')).map(x => <tr key={x.id} data-fila={x.id} style={x.id === 'PLAN' ? { fontWeight: 700, color: B.titulo } : undefined}>
@@ -555,7 +581,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
   </>)
 
   return (
-    <div ref={pagina} style={S.pagina} data-pantalla="plan">
+    <div ref={pagina} className="bp-pagina" style={{ ...S.pagina, '--bp-arriba': arriba != null ? `${arriba}px` : undefined }} data-pantalla="plan">
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
         <button style={{ ...S.enlace, color: B.secundario }} onClick={() => onVolver?.()}>← Builder · Mi trabajo</button>
         <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Builder</span>
@@ -566,11 +592,14 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
       {pestanasPlanes}
       {avisos}
       {errorCalculo}
-      {/* §49: en escritorio (≥ 1000 px), la columna de ajustes queda fija al bajar, con su propia barra si no cabe; en el móvil, nada fijo. */}
+      {/* §49 y §50: en escritorio (≥ 1000 px), esta página es la que se desplaza (el alto de la ventana menos lo de encima) y la columna
+          de ajustes queda fija al bajar, con su propia barra si no cabe (como mucho, el alto visible de la página menos su relleno); en el
+          móvil, nada fijo y se desplaza la ventana, como antes. */}
       <style>{`.bp-avisos { flex-direction: row } @media (max-width: 700px) { .bp-avisos { flex-direction: column; align-items: flex-start !important } }
-@media (min-width: 1000px) { .bp-izq { position: sticky; top: 0; max-height: var(--bp-alto, calc(100vh - 24px)); overflow-y: auto; padding-right: 4px } }`}</style>
+@media (min-width: 1000px) { .bp-pagina { box-sizing: border-box; height: calc(100vh - var(--bp-arriba, 56px)); flex: none !important }
+  .bp-izq { position: sticky; top: 0; max-height: calc(100vh - var(--bp-arriba, 56px) - 40px); overflow-y: auto; padding-right: 4px } }`}</style>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        <div data-columna="izquierda" className="bp-izq" style={{ flex: '1 1 340px', maxWidth: 520, minWidth: 0, '--bp-alto': altoPagina ? `${altoPagina - 8}px` : undefined }}>{bloques}{dinero}</div>
+        <div data-columna="izquierda" className="bp-izq" style={{ flex: '1 1 340px', maxWidth: 520, minWidth: 0 }}>{bloques}{dinero}</div>
         <div data-columna="derecha" style={{ flex: '2 1 480px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {resultado}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>

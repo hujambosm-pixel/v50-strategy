@@ -18,7 +18,7 @@ import BuilderAzarResultado from './BuilderAzarResultado'
 import BuscadorValor from './BuscadorValor'
 import { REGLA_AZAR_REGLAS } from '../lib/azarReglas'
 import { PERIODOS_AZAR, comprobarPrecios, confirmarPrueba, ejecutarPrueba, esDeTarjetas, fotoDe, guardarResultado, huellaEstrategia, leerResultado, listarPruebas, tickersDe } from '../lib/pruebaAzar'
-import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
+import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0'
 const R = REGLA_AZAR_REGLAS
@@ -60,7 +60,8 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
   const [viendo, setViendo] = useState(inicial?.viendo || null)   // §46: { fila, resultado }, la pantalla «Resultado de la prueba» abierta
   const vivo = useRef(true)
   useEffect(() => () => { vivo.current = false }, [])
-  const ctx = useMemo(() => deps?.ctx || (hayConfigSupabase() ? { url: getSupaUrl(), headers: getSupaH() } : null), [deps])
+  // §50: el token, el vigente en cada llamada (y renovado ante 401/403), no el del momento de montar: ctxConSesion.
+  const ctx = useMemo(() => deps?.ctx || (hayConfigSupabase() ? ctxConSesion() : null), [deps])
   const enMarcha = !!curso && !['hecho', 'error'].includes(curso.etapa)
   const nombre = estrategia?.name || 'tu estrategia'
   const tickers = useMemo(() => estrategia ? tickersDe(estrategia.definition) : [], [estrategia])

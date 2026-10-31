@@ -2022,3 +2022,50 @@ estrategia).
   50): con 2 € fijos, (10.000 − 6) / 105 × 114 − 6 = 10.844,628571 € y 12 € de comisiones; con 0,1 % y mínimo de 1 €, 536,60 € con 500 €
   (6 × 1 €) y 10.792,162640 € con 10.000 € (62,411359 €), iguales que el motor. Las pruebas de §48 siguen bien. Comprobaciones comunes.
   No comprobado en el navegador: el gráfico entero sin bajar a 1920 × 1080 y la columna fija.
+
+## 50. Paso 3 · arreglos rápidos (sesión caducada, comas, columna fija, botones, gráfico)
+
+`components/BuilderPlan.js`, `lib/builder/planPantalla.js`, `lib/supabase.js` y, para la sesión, `components/BuilderAzar.js`. El motor de
+planes no cambia: ninguna cifra se mueve (comprobado con el motor antes y después, abajo).
+- **Sesión caducada al guardar («HTTP 401: JWT expired»).** Causa: BuilderPlan y BuilderAzar memorizaban al montar
+  `ctx = { url, headers: getSupaH() }`, así que el token quedaba congelado y caducaba con la pestaña abierta unas horas. Ahora
+  `ctxConSesion()` (lib/supabase.js) da un `ctx` cuyo `fetch` pone en cada llamada el token VIGENTE y, ante 401/403, renueva la sesión y
+  reintenta una vez: `fetchConSesion`, el mismo de `apiFetch` (sin otro mecanismo). Lo usan todas las llamadas a la base de las dos
+  pantallas (listar, crear, cambiar y borrar planes; listar pruebas; leer resultados; confirmar y guardar pruebas del azar). `deps.ctx`
+  sigue para las pruebas. **Con el mismo patrón y sin tocar**: `components/BuilderPrueba.js` (línea ~69, `useMemo` con
+  `headers: getSupaH()` dentro de `deps`, que solo se rehace si cambian `depsPrueba`, `apiFetch` o `version`). Las demás que usan
+  `getSupaH()` lo llaman en cada petición (token vigente, pero sin reintento ante 401).
+- **Comas**: dinero inicial, aportación mensual, subida anual, comisión %, mínimo € y € fijos son campos de texto con
+  `inputMode="decimal"` (`CampoNumero`, el patrón de `components/CondicionesSimulacion.js`): aceptan «0,1» y «0.1» (`numeroEs` de
+  lib/utils.js), el texto que se escribe es estado del campo y lo que va a los ajustes es siempre un número; se enseñan con coma y sin
+  punto de miles (`textoCampo`: 10000, 0,1, 0,36). La misma huella con «0,1» que con 0.1.
+- **Columna de ajustes fija al bajar.** Por qué no iba el `sticky`: en la app se desplaza la ventana, pero entre la columna y la
+  ventana hay tres contenedores con `overflow` que nunca se desplazan (la propia página, `S.pagina` con `overflowY: auto`; `.content`
+  con `overflow-y: auto` y `.main` con `overflow: hidden`, en pages/index.js y styles/globals.css), y un sticky se pega al más cercano.
+  Arreglo, solo en esta pantalla (sin tocar index.js ni el CSS global, así que no cambia ninguna otra pestaña): en escritorio
+  (≥ 1000 px) la página del plan tiene el alto de la ventana menos lo que tiene encima (`--bp-arriba`, medido: la cabecera y, si sale,
+  el aviso de configuración) y es ella la que se desplaza; la columna izquierda queda pegada arriba, con su propia barra si es más alta
+  que la ventana. En el móvil, una columna y la ventana como antes.
+- **Botones**: «Guardar cambios» no sale sin cambios; con un cambio, sale en verde. «Guardar como plan nuevo» se llama «Duplicar» (lo
+  mismo: el plan de ahora con sus cambios, con el nombre «… (copia)»).
+- **Gráfico «Cómo crece tu dinero»**: todas las líneas continuas y finas: Tu plan #58a6ff (2), Buy&Hold #d0d7de (1,5), ocioso en
+  liquidez #f0883e (1,5), lo aportado #6e7681 (1, en escalones); la leyenda, con las mismas muestras. Al final de cada línea, su nombre
+  y su importe final, el de la tabla (`finalesDe`: tras venderlo todo y pagar comisiones e impuestos; por eso Buy&Hold acaba en
+  201.922 € aunque su línea llegue a 247.457 € antes de la venta final): «Tu plan 114.341 €», «Buy&Hold AAPL 201.922 €», «Ocioso en
+  liquidez 91.549 €», «Lo aportado 45.700 €», separadas con `separaEtiquetas` (16 px) y con 200 px de margen a la derecha. «Comprar y
+  mantener X» pasa a «Buy&Hold X».
+- **Tabla**: título «Sin estrategia: el mismo dinero en…»; filas «Buy&Hold AAPL», «Buy&Hold QQQ», «Buy&Hold S&P 500 (SPY)», «En liquidez
+  (0 %)» (`nombreAlternativa`: el motor guarda sus nombres de siempre); «El mismo plan con el dinero ocioso en liquidez», igual. Su «?»:
+  «Responde a: ¿mi estrategia aporta algo frente a no hacer nada?…» con el ejemplo 114.341 € frente a 201.922 €.
+- **Desplegable «Estrategia»**: al final, gris y sin poder elegirse, «Las estrategias de código (N) no se pueden usar aquí: rehazlas en
+  tarjetas.» (N: las de código entre las estrategias de la página, `esDeCodigo`; hoy 76 activas). Sin ninguna, no sale.
+- Comprobado: con el motor, antes y después, idénticos: «Prueba editor EMA20» · AAPL · 2016–2025 · 10.000 € + 300 €/mes · GLD ·
+  espera · sin apalancamiento · España · 0,1 % → 114.341 € (114.340,91), TWR 15,84 %, TIR 14,50 %, peor caída −34,02 %, 623 órdenes;
+  con liquidez, 91.549 €; Buy&Hold AAPL, 201.922 €; «Copia editor 23» · 10.000 € sin aportación · GLD · 0,36 € fijos → 88.075 €,
+  24,33 %. Sesión caducada simulada (401 «JWT expired» con el token viejo, 200 tras renovar): el plan se guarda sin error, un solo
+  reintento con el mismo cuerpo y las mismas cabeceras; sin sesión que renovar, una llamada y el error de siempre. Comas: «0,1» y 0.1,
+  la misma huella (la del motor); ida y vuelta plan → ajustes → plan en las tres comisiones y con subida anual, byte a byte e igual que
+  la versión anterior; los 2 planes guardados y las 8 estrategias de tarjetas de la base, iguales byte a byte con las dos versiones.
+  Montaje SWC con renderToString y con estado: las etiquetas e importes del gráfico sin solaparse, las cuatro líneas sin rayas con sus
+  colores y grosores, la leyenda, la tabla, los botones con y sin cambios, la línea gris del desplegable, los campos con coma y las 6
+  cifras y la tabla iguales que antes. Comprobaciones comunes. No comprobado en el navegador: la columna fija a 1920 × 1080.
