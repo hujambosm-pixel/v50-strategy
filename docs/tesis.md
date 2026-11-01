@@ -100,7 +100,41 @@ editor tipo Word. Es una pantalla **aislada**: no toca el motor, el Builder ni n
 - **Teclear**: el atajo de `pages/index.js` que abre el buscador de símbolos con cualquier letra no salta dentro del editor (`isContentEditable`).
 - Al abrir otra tesis, el editor se monta de nuevo (`hoja`, su `key`): «deshacer» no trae el texto de la anterior.
 
+## Imágenes y adjuntos
+
+Imágenes dentro del texto y archivos adjuntos con visor. Boceto aprobado por Sergi: «Tesis · imágenes y adjuntos», A + B (adjuntos debajo del
+texto con visor a pantalla completa, más un botón para leerlos al lado del texto).
+
+- **Tabla** `public.tesis_adjuntos` (`sql/tesis_adjuntos.sql`, con QUÉ, QUIÉN y REVERSIÓN; creada el 02/11/2026 con la Management API en una
+  transacción): una fila por archivo, con la clase (`imagen`: dentro del texto; `adjunto`: en la zona Adjuntos), la ruta, el nombre ORIGINAL
+  (con tildes, hasta 200), el tipo y los bytes (hasta 50 MB). RLS «dueño»: leer, crear y borrar solo lo suyo, sin UPDATE. Al crear, la tesis tiene
+  que ser suya y la ruta, de su carpeta y de esa tesis y clase (esto último, además de lo pedido: así nadie aparta una ruta ajena). `anon`, nada.
+- **Bucket PRIVADO** `tesis-archivos`: 50 MB por archivo; png, jpeg, gif, webp, pdf, doc, docx, xls, xlsx, ppt, pptx, csv y txt. Nada de svg ni html
+  (podrían ejecutar código). Rutas: `<user_id>/<tesis_id>/<clase>/<uuid>.<extensión>`. Políticas para `authenticated`: SELECT, INSERT y DELETE solo si el
+  primer trozo de la ruta es su `auth.uid()`. Sin UPDATE: un archivo cambiado es un archivo nuevo. El bucket no tiene carpeta pública: todo se lee con URL firmadas.
+- **`lib/tesisArchivos.js`**: `subir` (si la fila falla, borra lo subido; con `alProgreso`, por XMLHttpRequest, porque fetch no da el progreso), `listar`,
+  `espacioUsado`, `urlFirmada` y `urlsFirmadas` (en lote), `descargar` (con el nombre original: el «download» de la URL firmada), `borrar` (primero el
+  archivo, luego la fila) y `borrarTodoDeTesis`. Puras: `tamanoLegible`, `visorDe`, `tipoDe`, `cabe`, `avisoDe`.
+- **El tipo sale de la extensión**, no de lo que diga el navegador (en Windows, un csv puede llegar como Excel y un docx, vacío).
+- **El límite de 1 GB lo cuenta la pantalla** (`espacioUsado` + `cabe`), no la base: protege de llenar el espacio sin querer, no de alguien que
+  use la API a mano con su propia cuenta. El de 50 MB sí lo imponen el bucket y la tabla.
+- **Copias**: `npm run backup` copia la tabla (descubre todas las de `public`), pero NO los archivos del bucket.
+
+### La prueba de seguridad
+
+`scripts/comprobaciones/tesisSeguridad.js` habla con la base de VERDAD (no va en `comunes.sh`). Tres modos:
+
+- **`sql`**: las políticas, con dos usuarios y anon, en una transacción que termina en un error a propósito: se deshace SIEMPRE y ningún usuario
+  llega a existir (la técnica de la tabla `tesis_inversion`). 32 comprobaciones.
+- **`anon`**: por HTTP, sin cuentas: el bucket de verdad (rechaza svg, html, sobrescribir y más de 50 MB; es privado; la descarga lleva el nombre original) y anon no puede nada. El
+  archivo de la prueba lo sube la clave de servicio a `_humo/` y lo borra.
+- **`usuarios`**: por HTTP y con `lib/tesisArchivos.js`: crea dos usuarios temporales con la API de administración y comprueba que B no ve, descarga, lista, firma, borra ni
+  sube nada de A; borra usuarios, tesis y archivos al terminar, salga bien o mal. **Lo lanza Sergi a mano**: Claude no crea cuentas en la base de producción.
+
 ## Comprobaciones
+
+`scripts/comprobaciones/tesisArchivos.js` (en `comunes.sh`): `lib/tesisArchivos.js` con un fetch falso, sus piezas puras y el SQL guardado.
+`scripts/comprobaciones/tesisHuella.js`: la huella de `tesis_inversion`, `planes_inversion` y `strategies`, para comparar antes y después.
 
 `scripts/comprobaciones/tesis.js` (en `comunes.sh`): la capa de la base con un fetch falso (crear, cambiar, marcar revisada, borrar,
 errores, 401 → renueva y reintenta), las piezas puras y el montaje con `renderToString` y estado (lista vacía, tres tesis, filtros,

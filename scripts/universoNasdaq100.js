@@ -296,7 +296,7 @@ function compruebaTramos(entidades, cortes, { min = 95, max = 105 } = {}) {
   }
   return errores
 }
-module.exports = { leeCambios, leeComponentes, reconstruye, miembrosEn, compruebaTramos, motivoSalida, textoPlano, enlace, aplicaCorrecciones, normaliza, CORRECCIONES, ALIAS, consulta }
+module.exports = { leeCambios, leeComponentes, reconstruye, miembrosEn, compruebaTramos, motivoSalida, textoPlano, enlace, aplicaCorrecciones, normaliza, CORRECCIONES, ALIAS, consulta, leeToken }
 
 // ── Programa ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 if (require.main === module) (async () => {
