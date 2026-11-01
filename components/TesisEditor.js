@@ -1,18 +1,23 @@
 // components/TesisEditor.js — el editor de texto tipo Word de la pestaña «Tesis» (V9.1093, docs/tesis.md), con TipTap. Lo carga
 // TesisPanel con next/dynamic (ssr: false), así que TipTap va en su propio trozo y el resto de la app no pesa más ni lo ve en el servidor.
-// Guarda HTML (lo que da editor.getHTML()); solo se muestra lo que admiten estas extensiones: nada del contenido se ejecuta y las imágenes
-// no existen (ni nodo ni botón). Las piezas puras (texto plano ↔ HTML, pegado, colores), en lib/tesis.js.
-// Props: valor (lo guardado o lo que se está escribiendo), onCambio (el nuevo valor). La pantalla le pone una key nueva al abrir otra tesis.
+// Guarda HTML (lo que da editor.getHTML()); solo se muestra lo que admiten estas extensiones: nada del contenido se ejecuta. Las imágenes
+// (docs/tesis.md, «Imágenes y adjuntos») se guardan como referencia, <img data-archivo data-tamano>, sin URL: la URL firmada solo la lleva la pantalla, en la vista
+// del nodo (vistaImagen), y por eso nunca llega a getHTML(). Las piezas puras (texto plano ↔ HTML, pegado, colores), en lib/tesis.js; los archivos, en lib/tesisArchivos.js.
+// Props: valor (lo guardado o lo que se está escribiendo), onCambio (el nuevo valor), tesisId (null en una nueva sin guardar), ctx (función que da el ctx de cada llamada),
+// onSubiendo (±1 por cada imagen que empieza o acaba de subir), onAbrirImagen (la ruta, al pulsar dos veces). La pantalla le pone una key nueva al abrir otra tesis.
 import { useEffect, useRef, useState } from 'react'
 import { EditorContent, Node as NodoTiptap, mergeAttributes, useEditor } from '@tiptap/react'
+import { NodeSelection, Plugin, PluginKey } from '@tiptap/pm/state'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import { Color, TextStyle } from '@tiptap/extension-text-style'
 import Highlight from '@tiptap/extension-highlight'
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table'
 import Placeholder from '@tiptap/extension-placeholder'
-import { Baseline, Bold, Columns3, Eraser, Highlighter, IndentDecrease, IndentIncrease, Italic, Link2, List, ListOrdered, Minus, Redo2, Rows3, Strikethrough, Table as IconoTabla, Trash2, TriangleAlert, Underline, Undo2 } from 'lucide-react'
+import { Baseline, Bold, Columns3, Eraser, Highlighter, ImagePlus, IndentDecrease, IndentIncrease, Italic, Link2, List, ListOrdered, Minus, Redo2, Rows3, Strikethrough, Table as IconoTabla, Trash2, TriangleAlert, Underline, Undo2 } from 'lucide-react'
 import { B } from '../lib/builder/estilo'
-import { AVISO_IMAGEN, COLORES_LETRA, COLORES_RESALTE, HOJA, direccionEnlace, imagenEnPegado, limpiarPegado, textoAHtml, valorDelEditor } from '../lib/tesis'
+import { COLORES_LETRA, COLORES_RESALTE, HOJA, TAMANOS_IMAGEN, direccionEnlace, imagenEnPegado, limpiarPegado, quitarImagenesAjenas, rutaImagenValida, tamanoImagen, textoAHtml, valorDelEditor } from '../lib/tesis'
+import { ACEPTA_IMAGENES, AVISO_SIN_GUARDAR, AVISO_TIPO, avisoDe, borrar, carpetaDe, descargar, esImagenAdmitida, espacioUsado, listar, subir, tiendaUrls, urlFirmada, urlsFirmadas, usuarioDe } from '../lib/tesisArchivos'
 
 const PISTA = 'Qué crees que va a pasar, qué tendría que ocurrir para entrar y qué te haría descartarla…'
 
@@ -33,8 +38,88 @@ const Recuadro = NodoTiptap.create({
   },
 })
 
-// Todo lo que admite el editor. Lo que no esté aquí (imágenes, código, fuentes, tamaños…) se descarta al abrir y al pegar.
-export const extensionesTesis = () => [
+// La imagen en pantalla: su URL firmada (solo aquí), el aviso si no se puede ver y, con ella elegida, la barrita. No es React: es la vista de un nodo de
+// ProseMirror, y la barrita va dentro para que se mueva con el texto. La marca de elegida (ProseMirror-selectednode) la pone ProseMirror y la pinta CSS.
+const ICONO_PAPELERA = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f85149" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>'
+function vistaImagen({ node, getPos, editor }, { tienda, acciones }) {
+  let actual = node
+  const dom = document.createElement('div'); dom.className = 'ts-img'; dom.setAttribute('data-imagen', '')
+  const img = document.createElement('img'); img.alt = ''; img.draggable = false
+  const nota = document.createElement('div'); nota.className = 'ts-img-nota'
+  const barra = document.createElement('div'); barra.className = 'ts-img-barra'; barra.setAttribute('data-barra-imagen', '')
+  const botonDe = (texto, pista, accion, html) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'ts-img-boton'; b.title = pista; b.setAttribute('aria-label', pista)
+    if (html) b.innerHTML = html; else b.textContent = texto
+    b.addEventListener('mousedown', e => e.preventDefault())
+    b.addEventListener('click', e => { e.preventDefault(); accion() })
+    barra.appendChild(b)
+    return b
+  }
+  const ponTamano = (tamano) => {
+    const pos = getPos()
+    const tr = editor.state.tr.setNodeMarkup(pos, undefined, { ...actual.attrs, tamano })
+    editor.view.dispatch(tr.setSelection(NodeSelection.create(tr.doc, pos)))
+  }
+  const tamanos = TAMANOS_IMAGEN.map(t => [t.id, botonDe(t.nombre, `Tamaño: ${t.nombre}`, () => ponTamano(t.id))])
+  botonDe('Descargar', 'Descargar la imagen', () => acciones.descargar(actual.attrs.archivo))
+  botonDe('', 'Quitar la imagen del texto', () => { const pos = getPos(); editor.view.dispatch(editor.state.tr.delete(pos, pos + actual.nodeSize)); editor.commands.focus() }, ICONO_PAPELERA)
+  const pinta = () => {
+    const ruta = actual.attrs.archivo, url = tienda.url(ruta)
+    dom.setAttribute('data-tamano', tamanoImagen(actual.attrs.tamano))
+    for (const [id, b] of tamanos) b.setAttribute('aria-pressed', String(id === tamanoImagen(actual.attrs.tamano)))
+    if (url && img.getAttribute('src') !== url) img.setAttribute('src', url)
+    img.style.display = url ? 'block' : 'none'
+    nota.style.display = url ? 'none' : 'block'
+    nota.textContent = tienda.rota(ruta) ? 'Imagen no disponible' : 'Cargando imagen…'
+  }
+  img.addEventListener('error', () => { img.removeAttribute('src'); tienda.fallo(actual.attrs.archivo); pinta() })
+  dom.addEventListener('dblclick', () => acciones.abrir?.(actual.attrs.archivo))
+  dom.append(img, nota, barra)
+  const deja = tienda.oye(pinta)
+  tienda.pide(actual.attrs.archivo)
+  pinta()
+  return {
+    dom,
+    update: (n) => { if (n.type !== actual.type) return false; actual = n; tienda.pide(n.attrs.archivo); pinta(); return true },
+    stopEvent: (e) => !!e.target.closest?.('.ts-img-barra'),
+    ignoreMutation: () => true,
+    destroy: deja,
+  }
+}
+// El hueco «Subiendo imagen…»: una decoración, no un nodo, así que nunca llega al texto guardado. Se mueve con lo que se escriba mientras sube.
+const claveHuecos = new PluginKey('huecosImagen')
+const pluginHuecos = () => new Plugin({
+  key: claveHuecos,
+  state: {
+    init: () => DecorationSet.empty,
+    apply(tr, set) {
+      let s = set.map(tr.mapping, tr.doc)
+      const m = tr.getMeta(claveHuecos)
+      if (m?.pon) { const w = document.createElement('div'); w.className = 'ts-hueco'; w.textContent = 'Subiendo imagen…'; s = s.add(tr.doc, [Decoration.widget(m.pon.pos, w, { id: m.pon.id })]) }
+      if (m?.quita) s = s.remove(s.find(null, null, x => x.id === m.quita))
+      return s
+    },
+  },
+  props: { decorations(st) { return claveHuecos.getState(st) } },
+})
+const ImagenTesis = NodoTiptap.create({
+  name: 'imagenTesis', group: 'block', atom: true, selectable: true, draggable: true,
+  addOptions() { return { tienda: null, acciones: {} } },
+  addAttributes() {
+    return {
+      archivo: { default: null, parseHTML: e => e.getAttribute('data-archivo'), renderHTML: a => ({ 'data-archivo': a.archivo }) },
+      tamano: { default: 'mediana', parseHTML: e => tamanoImagen(e.getAttribute('data-tamano')), renderHTML: a => ({ 'data-tamano': a.tamano }) },
+    }
+  },
+  // Solo una referencia con forma de ruta de imagen; cualquier otro <img> no existe para el editor. El src, si lo trae, no se lee nunca.
+  parseHTML() { return [{ tag: 'img[data-archivo]', getAttrs: e => (rutaImagenValida(e.getAttribute('data-archivo')) ? null : false) }] },
+  renderHTML({ HTMLAttributes }) { return ['img', HTMLAttributes] },
+  addNodeView() { return (props) => vistaImagen(props, this.options) },
+  addProseMirrorPlugins() { return [pluginHuecos()] },
+})
+
+// Todo lo que admite el editor. Lo que no esté aquí (otras imágenes, código, fuentes, tamaños…) se descarta al abrir y al pegar.
+export const extensionesTesis = (imagen = {}) => [
   StarterKit.configure({
     heading: { levels: [1, 2, 3] }, blockquote: false, code: false, codeBlock: false,
     link: { openOnClick: true, autolink: true, defaultProtocol: 'https', HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer nofollow' } },
@@ -42,6 +127,7 @@ export const extensionesTesis = () => [
   TextStyle, Color, Highlight.configure({ multicolor: true }),
   Table.configure({ resizable: false }), TableRow, TableHeader, TableCell,
   Recuadro,
+  ImagenTesis.configure(imagen),
   Placeholder.configure({ placeholder: PISTA }),
 ]
 
@@ -81,7 +167,18 @@ const CSS = `.ts-editor { display: flex; flex-direction: column; width: 100%; bo
 .ts-muestra:hover, .ts-quita:hover { outline: 2px solid ${B.enlace} }
 .ts-quita { width: 100%; padding: 5px 8px; border: 1px solid ${B.borde}; border-radius: 6px; background: transparent; color: ${B.texto}; font-family: ${B.letra}; font-size: 13px; cursor: pointer }
 .ts-campo { width: 260px; box-sizing: border-box; padding: 6px 8px; border: 1px solid ${B.borde}; border-radius: 6px; background: ${B.fondo}; color: ${B.texto}; font-family: ${B.letra}; font-size: 13px }
-.ts-aviso { flex: none; padding: 5px 12px; background: ${HOJA.recuadroFondo}; color: #f2d675; font-size: 13px; border-bottom: 1px solid ${B.borde} }`
+.ts-aviso { flex: none; padding: 5px 12px; background: ${HOJA.recuadroFondo}; color: #f2d675; font-size: 13px; border-bottom: 1px solid ${B.borde} }
+${TAMANOS_IMAGEN.map(t => `.ts-img[data-tamano="${t.id}"] { width: ${t.ancho}% }`).join(' ')}
+.ts-img { position: relative; margin: 0 0 0.9em; max-width: 100%; cursor: pointer; line-height: 0; border-radius: 4px; outline: 2px solid transparent; outline-offset: 2px }
+.ts-img img { width: 100%; height: auto; border-radius: 4px }
+.ts-img.ProseMirror-selectednode { outline-color: #79c0ff }
+.ts-img-nota, .ts-hueco { padding: 18px 14px; border: 1px dashed ${HOJA.borde}; border-radius: 4px; color: ${HOJA.apagado}; font-size: 13px; line-height: 1.4 }
+.ts-hueco { margin: 0 0 0.9em; max-width: 60% }
+.ts-img-barra { display: none; position: absolute; top: 6px; left: 6px; z-index: 5; gap: 2px; padding: 3px; align-items: center; white-space: nowrap; line-height: 1.4; background: ${B.tarjeta}; border: 1px solid ${B.borde}; border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); cursor: default }
+.ts-img.ProseMirror-selectednode .ts-img-barra { display: inline-flex }
+.ts-img-boton { display: inline-flex; align-items: center; height: 26px; padding: 0 8px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: ${B.texto}; font-family: ${B.letra}; font-size: 12px; cursor: pointer }
+.ts-img-boton:hover { background: ${B.borde} }
+.ts-img-boton[aria-pressed="true"] { background: ${B.siguienteFondo}; border-color: ${B.siguienteBorde} }`
 
 const Sep = () => <span className="ts-sep" aria-hidden="true"/>
 const Boton = ({ id, pista, on, activo = true, accion, children, referencia }) => (
@@ -89,33 +186,77 @@ const Boton = ({ id, pista, on, activo = true, accion, children, referencia }) =
     onMouseDown={e => e.preventDefault()} onClick={accion}>{children}</button>)
 const I = { size: 16, strokeWidth: 2, 'aria-hidden': true }
 
-export default function TesisEditor({ valor, onCambio }) {
+export default function TesisEditor({ valor, onCambio, tesisId = null, ctx = null, onSubiendo = null, onAbrirImagen = null }) {
   const base = useRef(null)      // { html, valor }: el contenido al abrir
   const ultimo = useRef(valor)   // lo último que se le ha pasado a la pantalla
-  const [aviso, setAviso] = useState(false)
+  const [aviso, setAviso] = useState(null)
   const [menu, setMenu] = useState(null)   // { que: 'color' | 'resalte' | 'enlace', x, y }
   const [direccion, setDireccion] = useState('')
   const [malEnlace, setMalEnlace] = useState(false)
   const reloj = useRef(null)
-  const avisa = () => { setAviso(true); clearTimeout(reloj.current); reloj.current = setTimeout(() => setAviso(false), 6000) }
-  // Una imagen pegada o arrastrada no entra: sale el aviso. Si viene con texto (Word), el texto sí se pega.
-  const imagen = (dt) => {
+  const elegir = useRef(null)
+  const props = useRef(null)     // las props de ahora: una tesis nueva recibe su tesisId al guardarla, sin montar el editor otra vez
+  props.current = { tesisId, ctx, onSubiendo, onAbrirImagen }
+  const avisa = (texto) => { setAviso(texto); clearTimeout(reloj.current); reloj.current = setTimeout(() => setAviso(null), 6000) }
+  const tienda = useRef(null)
+  if (!tienda.current) tienda.current = tiendaUrls((rutas) => urlsFirmadas(props.current.ctx(), rutas))
+  const carpeta = () => { const { tesisId: id, ctx: c } = props.current, u = id != null && c ? usuarioDe(c() || {}) : null; return u ? carpetaDe(u, id, 'imagen') : null }
+  const acciones = useRef({
+    abrir: (ruta) => props.current.onAbrirImagen?.(ruta),
+    descargar: async (ruta) => {
+      try {
+        const c = props.current.ctx(), fila = (await listar(c, props.current.tesisId)).find(f => f.ruta === ruta)
+        await descargar(c, fila || { ruta, nombre: ruta.split('/').pop() })
+      } catch (e) { avisa(e.message) }
+    },
+  })
+  // Sube las imágenes una a una y pone cada una donde estaba el cursor. Si mientras sube se cierra el editor (otra tesis, «Salir sin guardar»), no se queda huérfana: se borra.
+  const subeImagenes = async (vista, archivos, pos) => {
+    const { tesisId: id, ctx: dame } = props.current
+    if (id == null || !dame) { avisa(AVISO_SIN_GUARDAR); return }
+    let usados = 0
+    try { usados = await espacioUsado(dame()) } catch (e) { avisa(e.message); return }
+    for (const archivo of archivos) {
+      const no = avisoDe(archivo, usados)
+      if (no) { avisa(no); continue }
+      usados += archivo.size
+      const hueco = {}
+      if (vista.isDestroyed) return
+      vista.dispatch(vista.state.tr.setMeta(claveHuecos, { pon: { id: hueco, pos: Math.min(pos, vista.state.doc.content.size) } }))
+      props.current.onSubiendo?.(1)
+      try {
+        const c = dame(), fila = await subir(c, { tesisId: id, clase: 'imagen', archivo })
+        if (vista.isDestroyed) { await borrar(dame(), [fila]); continue }
+        tienda.current.pon(fila.ruta, await urlFirmada(c, fila.ruta))
+        if (vista.isDestroyed) { await borrar(dame(), [fila]); continue }
+        const donde = claveHuecos.getState(vista.state).find(null, null, x => x.id === hueco)[0]?.from ?? vista.state.selection.from
+        const nodo = vista.state.schema.nodes.imagenTesis.create({ archivo: fila.ruta, tamano: 'mediana' })
+        vista.dispatch(vista.state.tr.setMeta(claveHuecos, { quita: hueco }).replaceRangeWith(donde, donde, nodo))
+      } catch (e) {
+        if (!vista.isDestroyed) { vista.dispatch(vista.state.tr.setMeta(claveHuecos, { quita: hueco })); avisa(e.message) }
+      } finally { props.current.onSubiendo?.(-1) }
+    }
+  }
+  // Una imagen sola, pegada o arrastrada, se sube; con texto (Word) se pega el texto. Lo demás, sin los <img> ajenos, y con su aviso.
+  const alPegar = (vista, dt, pos) => {
     if (!dt) return false
-    const r = imagenEnPegado({ html: dt.getData('text/html'), texto: dt.getData('text/plain'), archivos: [...dt.files].map(f => f.type) })
-    if (r.aviso) avisa()
+    const archivos = [...dt.files]
+    const r = imagenEnPegado({ html: dt.getData('text/html'), texto: dt.getData('text/plain'), archivos, carpeta: carpeta(), esImagen: f => esImagenAdmitida(f.name, f.type), avisoTipo: AVISO_TIPO })
+    if (r.aviso) avisa(r.aviso)
+    if (r.subir) subeImagenes(vista, archivos.filter(f => esImagenAdmitida(f.name, f.type)), pos())
     return r.bloquea
   }
 
   const editor = useEditor({
-    extensions: extensionesTesis(),
+    extensions: extensionesTesis({ tienda: tienda.current, acciones: acciones.current }),
     content: textoAHtml(valor),
     immediatelyRender: false,
     shouldRerenderOnTransaction: true,   // la barra refleja dónde está el cursor
     editorProps: {
       attributes: { 'aria-label': 'Texto de la tesis', 'data-texto-editor': '', spellcheck: 'true' },
-      transformPastedHTML: limpiarPegado,
-      handlePaste: (_vista, e) => imagen(e.clipboardData),
-      handleDrop: (_vista, e, _trozo, movido) => (movido ? false : imagen(e.dataTransfer)),
+      transformPastedHTML: (html) => quitarImagenesAjenas(limpiarPegado(html), carpeta()).html,
+      handlePaste: (vista, e) => alPegar(vista, e.clipboardData, () => vista.state.selection.from),
+      handleDrop: (vista, e, _trozo, movido) => (movido ? false : alPegar(vista, e.dataTransfer, () => vista.posAtCoords({ left: e.clientX, top: e.clientY })?.pos ?? vista.state.selection.from)),
     },
     onUpdate: ({ editor: ed }) => {
       const v = valorDelEditor(ed.getHTML(), ed.isEmpty, base.current)
@@ -201,12 +342,14 @@ export default function TesisEditor({ valor, onCambio }) {
         <Sep/>
         <Boton id="recuadro" pista="Recuadro de aviso, para destacar una conclusión" on={editor.isActive('recuadro')} accion={() => c().alternaRecuadro().run()}><TriangleAlert {...I}/></Boton>
         <Boton id="linea" pista="Línea separadora" accion={() => c().setHorizontalRule().run()}><Minus {...I}/></Boton>
+        <Boton id="imagen" pista="Imagen: elegirla desde el PC (también se puede pegar o arrastrar)" accion={() => { if (props.current.tesisId == null) avisa(AVISO_SIN_GUARDAR); else elegir.current?.click() }}><ImagePlus {...I}/> Imagen</Boton>
+        <input ref={elegir} type="file" hidden multiple accept={ACEPTA_IMAGENES} data-elegir-imagen onChange={e => { const xs = [...e.target.files]; e.target.value = ''; subeImagenes(editor.view, xs, editor.state.selection.from) }}/>
         <span data-menu-editor style={{ display: 'contents' }}>
           <Boton id="enlace" pista="Enlace" on={editor.isActive('link')} accion={e => abreMenu('enlace', e)}><Link2 {...I}/></Boton>
         </span>
         <Boton id="quitar-formato" pista="Quitar formato" accion={() => c().unsetAllMarks().clearNodes().run()}><Eraser {...I}/></Boton>
       </div>
-      {aviso && <div className="ts-aviso" data-aviso-imagen role="status">{AVISO_IMAGEN}</div>}
+      {aviso && <div className="ts-aviso" data-aviso-imagen role="status">{aviso}</div>}
       <div className="ts-zona" onMouseDown={e => { if (e.target === e.currentTarget) { e.preventDefault(); editor.commands.focus('end') } }}><EditorContent editor={editor}/></div>
 
       {menu && (

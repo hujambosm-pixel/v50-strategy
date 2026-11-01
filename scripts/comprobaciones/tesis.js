@@ -138,9 +138,9 @@ const cuenta = (html, s) => html.split(s).length - 1
   const nodos = Object.keys(esquema.nodes), marcas = Object.keys(esquema.marks)
   ok(['heading', 'bulletList', 'orderedList', 'listItem', 'table', 'tableRow', 'tableHeader', 'tableCell', 'recuadro', 'horizontalRule'].every(x => nodos.includes(x)), `editor: admite títulos, listas, tablas, recuadro y línea (${nodos.length} tipos de bloque)`)
   ok(['bold', 'italic', 'underline', 'strike', 'textStyle', 'highlight', 'link'].every(x => marcas.includes(x)), 'editor: admite negrita, cursiva, subrayado, tachado, color, resaltado y enlace')
-  ok(!nodos.includes('image') && !nodos.includes('codeBlock') && !nodos.includes('blockquote') && !marcas.includes('code'), 'editor: NO admite imágenes ni código (se descartan al abrir y al pegar)')
+  ok(!nodos.includes('image') && nodos.includes('imagenTesis') && !nodos.includes('codeBlock') && !nodos.includes('blockquote') && !marcas.includes('code'), 'editor: NO admite imágenes sueltas ni código (se descartan al abrir y al pegar); solo su propia referencia')
   ok(fuenteEditor.includes('levels: [1, 2, 3]'), 'editor: títulos de nivel 1 a 3')
-  ok(['deshacer', 'rehacer', 'negrita', 'cursiva', 'subrayado', 'tachado', 'color', 'resalte', 'vinetas', 'numerada', 'sangria-mas', 'sangria-menos', 'tabla', 'fila-mas', 'fila-menos', 'columna-mas', 'columna-menos', 'tabla-borrar', 'recuadro', 'linea', 'enlace', 'quitar-formato'].every(b => fuenteEditor.includes(`id="${b}"`)) && ['Texto normal', 'Título 1', 'Título 2', 'Título 3'].every(x => fuenteEditor.includes(x)), 'barra: los 22 botones y los 4 estilos')
+  ok(['deshacer', 'rehacer', 'negrita', 'cursiva', 'subrayado', 'tachado', 'color', 'resalte', 'vinetas', 'numerada', 'sangria-mas', 'sangria-menos', 'tabla', 'fila-mas', 'fila-menos', 'columna-mas', 'columna-menos', 'tabla-borrar', 'recuadro', 'linea', 'imagen', 'enlace', 'quitar-formato'].every(b => fuenteEditor.includes(`id="${b}"`)) && ['Texto normal', 'Título 1', 'Título 2', 'Título 3'].every(x => fuenteEditor.includes(x)), 'barra: los 23 botones y los 4 estilos')
 
   // Conversión de texto plano a HTML.
   const plano = 'Si a < b & c > d\n\n"comillas" y \'simples\'\r\nfin'
@@ -193,13 +193,47 @@ const cuenta = (html, s) => html.split(s).length - 1
   ok(T.limpiarPegado(propio) === propio, 'lo copiado del propio editor conserva sus colores')
   ok(!/<script|alert/.test(T.limpiarPegado('<p>a</p><script>alert(1)</script>')), 'un <script> pegado desaparece')
 
-  // Imágenes.
-  ok(T.AVISO_IMAGEN === 'Las imágenes llegarán en la próxima versión.' && fuenteEditor.includes('{AVISO_IMAGEN}') && fuenteEditor.includes('handlePaste') && fuenteEditor.includes('handleDrop'), 'el aviso de imagen, al pegar y al arrastrar')
-  const img = T.imagenEnPegado
-  ok(JSON.stringify(img({ archivos: ['image/png'] })) === '{"bloquea":true,"aviso":true}', 'solo una imagen: no entra y avisa')
-  ok(JSON.stringify(img({ html: '<p>x</p><img src="a.png">', texto: 'x' })) === '{"bloquea":false,"aviso":true}', 'texto con imagen: entra el texto y avisa')
-  ok(JSON.stringify(img({ html: '<p>x</p>', texto: 'x', archivos: ['image/png'] })) === '{"bloquea":false,"aviso":false}', 'Word (texto más su «foto»): entra el texto, sin aviso')
-  ok(JSON.stringify(img({ texto: 'x' })) === '{"bloquea":false,"aviso":false}', 'texto normal: nada que avisar')
+  // Imágenes: qué hacer con lo pegado o arrastrado.
+  ok(T.AVISO_IMAGEN === undefined && !fuenteEditor.includes('llegarán en la próxima') && fuenteEditor.includes('handlePaste') && fuenteEditor.includes('handleDrop'), 'el bloqueo de antes ya no está; se atiende al pegar y al arrastrar')
+  const U1 = '11111111-2222-3333-4444-555555555555', U2 = '99999999-2222-3333-4444-555555555555', UI = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+  const rutaI = `${U1}/7/imagen/${UI}.png`, carp = `${U1}/7/imagen/`
+  const opc = { carpeta: carp, esImagen: (f) => /^image\/(png|jpeg|gif|webp)$/.test(f.type), avisoTipo: 'tipo' }
+  const img = (o) => JSON.stringify(T.imagenEnPegado({ ...opc, ...o }))
+  const PNG = { name: 'image.png', type: 'image/png' }, AVI = 'Las imágenes pegadas junto con texto no se copian: pégalas una a una.'
+  ok(T.AVISO_IMAGENES_PEGADAS === AVI, 'el aviso de una línea, tal cual')
+  ok(img({ archivos: [PNG] }) === '{"subir":true,"bloquea":true,"aviso":null}', 'una imagen sola (captura): se sube')
+  ok(img({ html: `<img src="https://web/a.png">`, archivos: [PNG] }) === '{"subir":true,"bloquea":true,"aviso":null}', 'una imagen copiada de una web, sin texto: se sube, sin aviso')
+  ok(img({ html: '<p>x</p>', texto: 'x', archivos: [PNG] }) === '{"subir":false,"bloquea":false,"aviso":null}', 'Word o Excel (texto más su «foto»): entra el texto, sin aviso')
+  ok(img({ html: '<p>x</p><img src="a.png">', texto: 'x' }) === `{"subir":false,"bloquea":false,"aviso":"${AVI}"}`, 'texto con una imagen: entra el texto y avisa')
+  ok(img({ texto: 'x' }) === '{"subir":false,"bloquea":false,"aviso":null}', 'texto normal: nada que avisar')
+  ok(img({ archivos: [{ name: 'a.pdf', type: 'application/pdf' }] }) === '{"subir":false,"bloquea":true,"aviso":"tipo"}', 'un archivo que no es imagen, en el texto: no entra y avisa')
+  ok(img({ html: `<p>x</p><img data-archivo="${rutaI}" data-tamano="ancho">`, texto: 'x' }) === '{"subir":false,"bloquea":false,"aviso":null}', 'copiar y pegar una imagen de esta misma tesis: se queda, sin aviso')
+  // Solo las referencias de la carpeta propia y de esta tesis.
+  const q = (h, c = carp) => T.quitarImagenesAjenas(h, c)
+  ok(q(`<p>a</p><img data-archivo="${rutaI}" data-tamano="pequena">`).html === `<p>a</p><img data-archivo="${rutaI}" data-tamano="pequena">` && q(`<img data-archivo="${rutaI}">`).quitadas === 0, 'la referencia propia, tal cual')
+  ok(['<img src="data:image/png;base64,AAAA">', '<img src="https://web/x.png">', `<img data-archivo="${U2}/7/imagen/${UI}.png">`, `<img data-archivo="${U1}/8/imagen/${UI}.png">`, `<img data-archivo="${U1}/7/adjunto/${UI}.png">`, `<img data-archivo="${U1}/7/imagen/../../x.png">`, `<IMG SRC=x onerror='a>b'>`].every(e => { const r = q(`<p>a</p>${e}<p>b</p>`); return r.quitadas === 1 && r.html === '<p>a</p><p>b</p>' }), 'fuera: data:, webs, otro usuario, otra tesis, otra clase, rutas con «..» y un onerror')
+  ok(q(`<img data-archivo="${rutaI}">`, null).quitadas === 1, 'en una nueva sin guardar no hay carpeta: ninguna vale')
+  ok(T.rutaImagenValida(rutaI) && !T.rutaImagenValida(`${U1}/7/imagen/${UI}.svg`) && !T.rutaImagenValida('x') && !T.rutaImagenValida(null), 'forma de una ruta de imagen (nunca svg)')
+  // La referencia en «texto»: reconocer, listar y limpiar.
+  const conImagen = `<p>Antes</p><img data-archivo="${rutaI}" data-tamano="mediana"><p>Después</p>`, empieza = `<img data-archivo="${rutaI}" data-tamano="ancho"><p></p>`
+  ok(T.esHtmlTesis(conImagen) && T.esHtmlTesis(empieza) && T.textoAHtml(empieza) === empieza && !T.esHtmlTesis('<img src="x"> texto'), 'un texto que EMPIEZA por una imagen sigue siendo HTML del editor (si no, se vería como texto plano)')
+  ok(T.textoSinEtiquetas(conImagen) === 'Antes Después' && T.buscaTesis([{ id: 1, titulo: 'x', texto: conImagen }], 'imagen', true).length === 0, 'buscar no encuentra la ruta de una imagen')
+  ok(JSON.stringify(T.rutasEnTexto(conImagen + empieza)) === `["${rutaI}"]` && T.rutasEnTexto('<p>a</p>').length === 0 && T.rutasEnTexto(null).length === 0, 'rutas en el texto, sin repetir')
+  const filasI = [{ id: 1, clase: 'imagen', ruta: rutaI }, { id: 2, clase: 'imagen', ruta: 'otra' }, { id: 3, clase: 'adjunto', ruta: 'adj' }]
+  ok(T.imagenesSobrantes(filasI, conImagen).map(f => f.id).join() === '2' && T.imagenesSobrantes(filasI, '<p></p>', conImagen).map(f => f.id).join() === '2' && T.imagenesSobrantes(filasI, '').map(f => f.id).join() === '1,2', 'sobran las imágenes que no están en el texto; los adjuntos, nunca')
+  ok(T.bytesDe(conImagen) < 200 && !conImagen.includes('src='), 'la imagen cuenta solo su referencia en el límite de 100 KB')
+  // El nodo de verdad, sin DOM: de HTML a nodo y de nodo a HTML.
+  const nImg = esquema.nodes.imagenTesis, regla = nImg.spec.parseDOM[0]
+  const elem = (a) => ({ getAttribute: (k) => a[k] ?? null })
+  ok(regla.tag === 'img[data-archivo]' && regla.getAttrs(elem({ 'data-archivo': rutaI })).archivo === rutaI && regla.getAttrs(elem({ 'data-archivo': 'https://web/x.png' })) === false, 'el editor solo lee una referencia con forma de ruta de imagen')
+  const salida = JSON.stringify(nImg.spec.toDOM(nImg.create({ archivo: rutaI, tamano: 'pequena' })))
+  ok(salida === JSON.stringify(['img', { 'data-archivo': rutaI, 'data-tamano': 'pequena' }]), `lo que se guarda no lleva URL: ${salida}`)
+  ok(nImg.create({ archivo: rutaI }).attrs.tamano === 'mediana' && T.tamanoImagen('raro') === 'mediana' && T.TAMANOS_IMAGEN.map(x => x.ancho).join() === '33,60,100' && T.TAMANOS_IMAGEN.map(x => x.nombre).join() === 'Pequeña,Mediana,Ancho completo', 'tres tamaños (33 %, 60 % por defecto y 100 %)')
+  ok(!/setAttribute\('src'[\s\S]{0,40}getHTML/.test(fuenteEditor) && fuenteEditor.includes(`#79c0ff`) && fuenteEditor.includes('Subiendo imagen…') && fuenteEditor.includes('AVISO_SIN_GUARDAR'), 'borde azul, «Subiendo imagen…» y el aviso de la tesis sin guardar')
+  // Limpieza desde la pantalla.
+  ok(fuentePanel.includes('limpiaImagenes(r.id, () => r.texto, () => textoAhora.current)') && fuentePanel.includes('if (fila) limpiaImagenes(fila.id, () => fila.texto)') && fuentePanel.includes('await borrarTodoDeTesis(ctx(), fila.id); await borrarTesis(ctx(), fila.id)'), 'limpieza: al guardar, al descartar y al borrar la tesis (primero los archivos)')
+  h = monta({ tesis: [conRica], abierta: 8, borrador: { titulo: 'x', texto: 'y', estado: 'idea', relacionados: [] } })
+  ok(h.includes('data-guardar'), 'la pantalla se monta con el editor nuevo')
 
   // Enlaces.
   ok(T.direccionEnlace('nvidia.com') === 'https://nvidia.com' && T.direccionEnlace('http://a.b') === 'http://a.b' && T.direccionEnlace('mailto:a@b.c') === 'mailto:a@b.c' && T.direccionEnlace('x.com:8080/a') === 'https://x.com:8080/a', 'enlaces: con https si falta, http, correo y con puerto')

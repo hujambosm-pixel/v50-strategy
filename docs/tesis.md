@@ -93,9 +93,7 @@ editor tipo Word. Es una pantalla **aislada**: no toca el motor, el Builder ni n
 - **Pegar** (`limpiarPegado`): quita el ruido de Word, vuelve listas sus párrafos `mso-list`, sus títulos (`MsoTitle`, h4–h6) a lo
   admitido, y descarta colores de letra y de fondo (suelen ser negro, ilegible sobre la hoja gris). Lo copiado del propio editor
   (`data-pm-slice`) los conserva.
-- **Imágenes: todavía no** (`imagenEnPegado`). No hay nodo de imagen. Una imagen sola no entra y sale «Las imágenes llegarán en la
-  próxima versión.»; un HTML con `<img>` entra sin ella y con el aviso. Word y Excel añaden una «foto» de lo copiado junto al texto: ahí
-  se pega el texto, sin aviso.
+- **Imágenes**: ver «Imágenes y adjuntos». Word y Excel añaden una «foto» de lo copiado junto al texto: ahí se pega el texto, sin aviso.
 - **Colores**: `HOJA`, `COLORES_LETRA` y `COLORES_RESALTE` en `lib/tesis.js`; la prueba mide los contrastes (hoja, ≥ 7:1).
 - **Teclear**: el atajo de `pages/index.js` que abre el buscador de símbolos con cualquier letra no salta dentro del editor (`isContentEditable`).
 - Al abrir otra tesis, el editor se monta de nuevo (`hoja`, su `key`): «deshacer» no trae el texto de la anterior.
@@ -120,6 +118,23 @@ texto con visor a pantalla completa, más un botón para leerlos al lado del tex
   use la API a mano con su propia cuenta. El de 50 MB sí lo imponen el bucket y la tabla.
 - **Copias**: `npm run backup` copia la tabla (descubre todas las de `public`), pero NO los archivos del bucket.
 
+### Imágenes dentro del texto
+
+- **Lo que se guarda** en `texto`: `<img data-archivo="<ruta>" data-tamano="pequena|mediana|ancho">`, NUNCA una URL (las firmadas caducan). El nodo `imagenTesis`
+  (`components/TesisEditor.js`) saca solo eso a `getHTML()`; la URL firmada la pone la vista del nodo (`vistaImagen`) en el `src` de la pantalla, así que no hay nada que
+  quitar al guardar. Ida y vuelta: abrir y guardar no cambia ni un byte (`scripts/comprobaciones/tesis.js`). Cuentan solo su referencia en los 100 KB del texto.
+- **Las URL** (`tiendaUrls`, 1 hora): cada imagen pide la suya y salen todas en un lote. Si una no carga (ha caducado), se pide una vez más; si tampoco, «Imagen no disponible».
+- **Pegar y arrastrar** (`imagenEnPegado`): sin texto, las imágenes (png, jpg, gif y webp) se suben (clase `imagen`) y entran donde está el cursor, en Mediana; botón «Imagen»
+  para elegirlas. Mientras sube, un hueco «Subiendo imagen…» (una decoración, nunca llega al texto) y «Guardar» apagado: la imagen aún no está en el texto.
+- **Solo referencias propias** (`quitarImagenesAjenas`): al pegar, solo se quedan las de la carpeta del usuario y de esa tesis; cualquier otro `<img>` se quita y sale «Las
+  imágenes pegadas junto con texto no se copian: pégalas una a una.». El nodo, además, solo lee rutas con forma de imagen (`rutaImagenValida`, nunca svg) y jamás lee el `src`.
+- **La barrita** al pulsar una imagen: Pequeña (33 %), Mediana (60 %), Ancho completo, Descargar, papelera roja (la quita del texto); borde `#79c0ff`.
+- **Tesis nueva sin guardar**: «Guarda la tesis antes de añadir archivos.» y no se sube nada.
+- **Limpieza** (`imagenesSobrantes`): al guardar, se borran (archivo y fila) las imágenes de esa tesis que no están en el texto guardado ni en lo que se está escribiendo; al
+  «Descartar cambios» o «Salir sin guardar», las que no están en el texto guardado. Si el editor se cierra mientras sube una, se borra al acabar. Al borrar la tesis, primero sus archivos.
+- **Lo que queda sin limpiar hasta la próxima vez**: cerrar la ventana a mitad, o que falle la limpieza. No se pierde nada: la próxima vez que se guarde o se descarte esa tesis se limpia.
+- **Deshacer tras guardar**: una imagen quitada y guardada ya no existe; si se trae con Ctrl+Z, sale «Imagen no disponible».
+
 ### La prueba de seguridad
 
 `scripts/comprobaciones/tesisSeguridad.js` habla con la base de VERDAD (no va en `comunes.sh`). Tres modos:
@@ -140,7 +155,7 @@ texto con visor a pantalla completa, más un botón para leerlos al lado del tex
 errores, 401 → renueva y reintenta), las piezas puras y el montaje con `renderToString` y estado (lista vacía, tres tesis, filtros,
 búsqueda, cambios sin guardar, nueva, las dos preguntas, «(borrado)», la lista para añadir). Desde V9.1093, además, el editor: **TipTap
 necesita un navegador (un DOM) para montarse y Node no lo tiene**, así que la pantalla se monta con un sustituto (`deps.Editor`) y de
-TipTap se comprueba su esquema real (qué admite, sin imágenes); más la conversión, el texto sin etiquetas, «● sin guardar», el pegado
+TipTap se comprueba su esquema real (qué admite, y de imágenes solo su referencia); más la conversión, el texto sin etiquetas, «● sin guardar», el pegado
 de Word, las imágenes, los enlaces, los contrastes y que TipTap no se carga fuera de la pestaña. Desde el 01/11/2026, además, las fechas en
 hora de Madrid (23:30 UTC y el cambio de hora de octubre, con el ordenador en Nueva York a propósito), «Revisada: —», que guardar no toca
 las fechas, los tooltips, «Descartar cambios», los tres caminos de la ventana (también guardar que falla) y el buscador.

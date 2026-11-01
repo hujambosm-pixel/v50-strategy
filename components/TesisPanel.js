@@ -15,7 +15,8 @@ import { esDeTarjetas } from '../lib/pruebaAzar'
 import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
 import { trozosResaltados } from '../lib/builder/buscar'
 import { AYUDA_RELACIONADO, AYUDA_TESIS, COLORES_RESALTE, ESTADOS_TESIS, HOJA, TITULO_NUEVA, borrarTesis, buscaTesis, cambiarTesis, crearTesis, cuentasTesis, estadoTesis, fechaCorta, fechaHora,
-  fichaDe, guardaBuscarEnTexto, haceTexto, igualesTesis, leeBuscarEnTexto, lineaCoincidencia, listarNombresPlanes, listarTesis, marcarRevisada, ordenTesis, problemaDe, respondeSalida } from '../lib/tesis'
+  fichaDe, guardaBuscarEnTexto, haceTexto, igualesTesis, imagenesSobrantes, leeBuscarEnTexto, lineaCoincidencia, listarNombresPlanes, listarTesis, marcarRevisada, ordenTesis, problemaDe, respondeSalida } from '../lib/tesis'
+import { borrar, borrarTodoDeTesis, listar } from '../lib/tesisArchivos'
 
 const NUEVA = Object.freeze({ titulo: TITULO_NUEVA, texto: '', estado: 'idea', relacionados: [] })
 const borradorDe = (t) => ({ titulo: t.titulo, texto: t.texto || '', estado: t.estado, relacionados: Array.isArray(t.relacionados) ? t.relacionados : [] })
@@ -62,6 +63,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   const [ocupado, setOcupado] = useState(false)
   const [foco, setFoco] = useState(0)
   const [hoja, setHoja] = useState(0)   // sube al abrir otra tesis: editor nuevo, sin el «deshacer» de la anterior
+  const [subiendo, setSubiendo] = useState(0)   // imágenes subiendo: hasta que acaben no se guarda (aún no están en el texto)
   const Editor = deps?.Editor || EditorTesis
   const titulo = useRef(null)
   const cajaBusca = useRef(null)
@@ -86,7 +88,9 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   const conCambios = !!borr && !!original && !igualesTesis(borr, original)
   const sinGuardar = !!borr && (nueva || conCambios)
   const problema = borr ? problemaDe(borr) : null
-  const puedeGuardar = sinGuardar && !problema && !ocupado
+  const puedeGuardar = sinGuardar && !problema && !ocupado && !subiendo
+  const textoAhora = useRef('')   // lo que hay escrito en este momento (para no borrar una imagen recién puesta mientras se guardaba)
+  textoAhora.current = borr?.texto || ''
   // La página pregunta antes de cambiar de pestaña; y el navegador, antes de cerrar o recargar.
   useEffect(() => { if (salida) salida.current = (seguir) => { if (!conCambios) return false; setPregunta({ accion: seguir }); return true } })
   useEffect(() => () => { if (salida) salida.current = null }, [])
@@ -109,12 +113,17 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   const creaNueva = () => { setHoja(n => n + 1); setNueva(true); setAbierta(null); setBorr({ ...NUEVA }); setBorrando(false); setAnadiendo(false); setFallo(null); setFoco(n => n + 1) }
   const cambia = (k, v) => setBorr(b => ({ ...b, [k]: v }))
   const pon = (r) => setTesis(xs => [r, ...(xs || []).filter(x => x.id !== r.id)])
+  // Borra (archivo y fila) las imágenes de esa tesis que no están en estos textos. Sin aviso si falla: quedan para la siguiente vez que se guarde o se descarte.
+  const limpiaImagenes = async (id, ...textos) => {
+    try { const c = ctx(), filas = await listar(c, id); await borrar(c, imagenesSobrantes(filas, ...textos.map(t => t()))) } catch (_) {}
+  }
   const guarda = async () => {
     if (!puedeGuardar) return false
     setOcupado(true); setFallo(null)
     try {
       const r = nueva ? await crearTesis(ctx(), borr) : await cambiarTesis(ctx(), fila.id, borr)
       pon(r); setNueva(false); setAbierta(r.id); setBorr(b => ({ ...borradorDe(r), texto: b.texto }))   // lo escrito mientras se guardaba no se pierde
+      limpiaImagenes(r.id, () => r.texto, () => textoAhora.current)
       return true
     } catch (e) { setFallo(e.message); return false } finally { setOcupado(false) }
   }
@@ -125,12 +134,13 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   }
   const siguiente = (resto) => { const o = ordenTesis(resto)[0]; if (o) abre(o); else { setNueva(false); setAbierta(null); setBorr(null) } }
   // Vuelve a lo último guardado (con el editor nuevo); una nueva que nunca se guardó, desaparece.
-  const descarta = () => { setFallo(null); if (nueva) siguiente(tesis || []); else if (fila) abre(fila) }
+  const descarta = () => { setFallo(null); if (fila) limpiaImagenes(fila.id, () => fila.texto); if (nueva) siguiente(tesis || []); else if (fila) abre(fila) }
   const borra = async () => {
     setBorrando(false)
     if (nueva) { siguiente(tesis || []); return }
     setOcupado(true); setFallo(null)
-    try { await borrarTesis(ctx(), fila.id); const resto = (tesis || []).filter(x => x.id !== fila.id); setTesis(resto); siguiente(resto) } catch (e) { setFallo(e.message) } finally { setOcupado(false) }
+    // Primero los archivos del bucket y solo si eso sale bien, la tesis (la base se lleva las filas con ella, no los archivos).
+    try { await borrarTodoDeTesis(ctx(), fila.id); await borrarTesis(ctx(), fila.id); const resto = (tesis || []).filter(x => x.id !== fila.id); setTesis(resto); siguiente(resto) } catch (e) { setFallo(e.message) } finally { setOcupado(false) }
   }
   const responde = async (que) => {
     const p = pregunta
@@ -208,7 +218,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
               <input ref={titulo} aria-label="Título" value={borr.titulo} maxLength={200} onChange={e => cambia('titulo', e.target.value)}
                 style={{ ...campo, flex: '1 1 260px', minWidth: 0, fontSize: 20, fontWeight: 700, color: B.titulo, background: 'transparent', borderColor: 'transparent' }}/>
               {sinGuardar && <span data-sin-guardar style={{ color: AMARILLO, fontSize: 13, whiteSpace: 'nowrap' }}>● sin guardar</span>}
-              <button data-guardar disabled={!puedeGuardar} onClick={guarda} style={boton(puedeGuardar)}>{ocupado ? 'Guardando…' : 'Guardar'}</button>
+              <button data-guardar disabled={!puedeGuardar} onClick={guarda} style={boton(puedeGuardar)}>{ocupado ? 'Guardando…' : subiendo ? 'Subiendo imagen…' : 'Guardar'}</button>
               {sinGuardar && <button data-descartar disabled={ocupado} onClick={descarta} style={S.boton}>Descartar cambios</button>}
               <button data-borrar aria-label="Borrar la tesis" title="Borrar la tesis" onClick={() => setBorrando(true)}
                 style={{ ...S.boton, background: 'transparent', borderColor: '#5a2a2f', padding: '7px 9px', display: 'flex', alignItems: 'center' }}><Papelera/></button>
@@ -230,7 +240,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
               </span>
               <button data-revisada disabled={!fila || ocupado} onClick={revisada} style={{ ...S.boton, padding: '5px 12px', fontSize: 13, opacity: fila ? 1 : 0.5, cursor: fila ? 'pointer' : 'not-allowed' }}>✓ Marcar como revisada hoy</button>
             </div>
-            <Editor key={hoja} valor={borr.texto} onCambio={(v) => cambia('texto', v)}/>
+            <Editor key={hoja} valor={borr.texto} onCambio={(v) => cambia('texto', v)} tesisId={nueva ? null : abierta} ctx={ctx} onSubiendo={(n) => setSubiendo(x => x + n)}/>
 
             <div data-relacionado>
               <div style={{ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 700, color: B.titulo, marginBottom: 8 }}>Relacionado<Ayuda texto={AYUDA_RELACIONADO} etiqueta="Relacionado"/></div>

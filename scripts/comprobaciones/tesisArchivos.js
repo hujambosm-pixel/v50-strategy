@@ -36,6 +36,27 @@ const lanza = async (fn) => { try { await fn(); return null } catch (e) { return
   const res = A.resumenArchivos([{ tesis_id: 1, clase: 'adjunto', bytes: 10 }, { tesis_id: 1, clase: 'imagen', bytes: 5 }, { tesis_id: 2, clase: 'adjunto', bytes: '7' }])
   ok(res.bytes === 22 && res.porTesis[1].adjuntos === 1 && res.porTesis[1].imagenes === 1 && res.porTesis[1].bytes === 15 && res.porTesis[2].bytes === 7, 'resumen por tesis y total')
 
+  // La tienda de URL del editor: todas en un lote; si una falla, se pide una vez más.
+  const lotes = []
+  let responder = (rs) => Object.fromEntries(rs.map(x => [x, `https://f/${x}?v=${lotes.length}`]))
+  const ti = A.tiendaUrls(async (rs) => { lotes.push(rs); return responder(rs) })
+  let cambios = 0
+  const deja = ti.oye(() => { cambios++ })
+  ti.pide('a'); ti.pide('b'); ti.pide('a')
+  await new Promise(x => setTimeout(x, 0))
+  ok(lotes.length === 1 && lotes[0].join() === 'a,b' && ti.url('a') === 'https://f/a?v=1' && cambios === 1, 'las imágenes que se abren juntas salen en UN solo lote')
+  ti.pide('a'); await new Promise(x => setTimeout(x, 0))
+  ok(lotes.length === 1, 'la que ya tiene URL no se pide otra vez')
+  ti.fallo('a'); await new Promise(x => setTimeout(x, 0))
+  ok(lotes.length === 2 && ti.url('a') === 'https://f/a?v=2' && !ti.rota('a'), 'si no carga (ha caducado), se pide una vez más')
+  ti.fallo('a'); await new Promise(x => setTimeout(x, 0))
+  ok(lotes.length === 2 && ti.url('a') === null && ti.rota('a'), 'y si vuelve a fallar: «Imagen no disponible», sin insistir')
+  responder = () => { throw new Error('caída') }
+  ti.pide('c'); await new Promise(x => setTimeout(x, 0))
+  ok(ti.rota('c') && ti.url('c') === null, 'sin poder firmar: tampoco se rompe')
+  ti.pon('d', 'https://u'); deja(); const c0 = cambios; ti.pon('e', 'x')
+  ok(ti.url('d') === 'https://u' && cambios === c0, 'una recién subida trae su URL; quien deja de oír, no recibe más')
+
   // ── 2 · Las llamadas ──
   const llamadas = []
   const responde = (status, cuerpo) => ({ ok: status < 400, status, json: async () => cuerpo })
