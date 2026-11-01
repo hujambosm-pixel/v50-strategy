@@ -2,21 +2,25 @@
 // aprobado «Tesis de inversión», con el estilo del Builder (lib/builder/estilo). Pantalla AISLADA: no toca el motor, el Builder ni
 // ninguna cifra. Las llamadas a la base, en lib/tesis.js (tabla tesis_inversion, sql/tesis_inversion.sql).
 // A la izquierda, el buscador, los filtros por estado y la lista (por revisada_en, la más reciente arriba); a la derecha, la tesis
-// abierta: título, estado, fechas, el cuadro de texto libre y «Relacionado» (estrategias de tarjetas y planes guardados).
+// abierta: título, estado, fechas, el editor de texto (V9.1093, components/TesisEditor.js: TipTap, en un trozo aparte que solo se carga
+// aquí) y «Relacionado» (estrategias de tarjetas y planes guardados).
 // Props: estrategias (las filas de `strategies`), onAbrirEstrategia (abre una en el paso 1 del Builder), salida (un ref: la página
-// pregunta por él antes de cambiar de pestaña; devuelve true si hay cambios y se ha abierto la pregunta). deps ({ ctx }) e inicial
+// pregunta por él antes de cambiar de pestaña; devuelve true si hay cambios y se ha abierto la pregunta). deps ({ ctx, Editor }) e inicial
 // ({ tesis, planes, abierta, borrador, nueva, pregunta, borrando, filtro, busca, anadiendo }): para las pruebas de montaje.
 import { useState, useEffect, useMemo, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import { B, S } from '../lib/builder/estilo'
 import Ayuda from './BuilderAyuda'
 import { esDeTarjetas } from '../lib/pruebaAzar'
 import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
-import { AYUDA_RELACIONADO, AYUDA_TESIS, ESTADOS_TESIS, TITULO_NUEVA, borrarTesis, buscaTesis, cambiarTesis, crearTesis, cuentasTesis, estadoTesis, fechaCorta,
+import { AYUDA_RELACIONADO, AYUDA_TESIS, ESTADOS_TESIS, HOJA, TITULO_NUEVA, borrarTesis, buscaTesis, cambiarTesis, crearTesis, cuentasTesis, estadoTesis, fechaCorta,
   fichaDe, haceTexto, igualesTesis, listarNombresPlanes, listarTesis, marcarRevisada, ordenTesis, problemaDe } from '../lib/tesis'
 
 const NUEVA = Object.freeze({ titulo: TITULO_NUEVA, texto: '', estado: 'idea', relacionados: [] })
 const borradorDe = (t) => ({ titulo: t.titulo, texto: t.texto || '', estado: t.estado, relacionados: Array.isArray(t.relacionados) ? t.relacionados : [] })
 const ROJO = '#f85149', AMARILLO = '#f2cc60'
+// El editor, solo en el navegador y solo al abrir una tesis: el resto de la app no carga TipTap.
+const EditorTesis = dynamic(() => import('./TesisEditor'), { ssr: false, loading: () => <div data-texto data-cargando className="ts-texto" style={{ ...S.apagado, height: 'calc(100vh - 380px)', minHeight: 400, padding: B.aire, boxSizing: 'border-box', background: HOJA.fondo, borderRadius: B.radioBoton }}>Cargando el editor…</div> })
 
 const Etiqueta = ({ estado }) => { const e = estadoTesis(estado); return <span data-estado={e.id} style={{ display: 'inline-block', padding: '1px 9px', borderRadius: 999, background: e.fondo, color: e.color, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>{e.nombre}</span> }
 const Papelera = () => (
@@ -48,6 +52,8 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   const [anadiendo, setAnadiendo] = useState(!!inicial?.anadiendo)
   const [ocupado, setOcupado] = useState(false)
   const [foco, setFoco] = useState(0)
+  const [hoja, setHoja] = useState(0)   // sube al abrir otra tesis: editor nuevo, sin el «deshacer» de la anterior
+  const Editor = deps?.Editor || EditorTesis
   const titulo = useRef(null)
 
   useEffect(() => {
@@ -87,8 +93,8 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
 
   // Con cambios sin guardar, pregunta antes de seguir (una nueva sin tocar se deja sin preguntar).
   const conGuardia = (accion) => { if (conCambios) setPregunta({ accion }); else accion() }
-  const abre = (t) => { setNueva(false); setAbierta(t.id); setBorr(borradorDe(t)); setBorrando(false); setAnadiendo(false); setFallo(null) }
-  const creaNueva = () => { setNueva(true); setAbierta(null); setBorr({ ...NUEVA }); setBorrando(false); setAnadiendo(false); setFallo(null); setFoco(n => n + 1) }
+  const abre = (t) => { setHoja(n => n + 1); setNueva(false); setAbierta(t.id); setBorr(borradorDe(t)); setBorrando(false); setAnadiendo(false); setFallo(null) }
+  const creaNueva = () => { setHoja(n => n + 1); setNueva(true); setAbierta(null); setBorr({ ...NUEVA }); setBorrando(false); setAnadiendo(false); setFallo(null); setFoco(n => n + 1) }
   const cambia = (k, v) => setBorr(b => ({ ...b, [k]: v }))
   const pon = (r) => setTesis(xs => [r, ...(xs || []).filter(x => x.id !== r.id)])
   const guarda = async () => {
@@ -96,7 +102,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
     setOcupado(true); setFallo(null)
     try {
       const r = nueva ? await crearTesis(ctx(), borr) : await cambiarTesis(ctx(), fila.id, borr)
-      pon(r); setNueva(false); setAbierta(r.id); setBorr(borradorDe(r))
+      pon(r); setNueva(false); setAbierta(r.id); setBorr(b => ({ ...borradorDe(r), texto: b.texto }))   // lo escrito mientras se guardaba no se pierde
       return true
     } catch (e) { setFallo(e.message); return false } finally { setOcupado(false) }
   }
@@ -132,7 +138,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   return (
     <div data-tesis className="ts-pagina" style={{ ...S.pagina, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <style>{`.ts-cuerpo { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 16px; align-items: start }
-@media (max-width: 999px) { .ts-cuerpo { grid-template-columns: minmax(0, 1fr) } .ts-texto { height: auto !important } }
+@media (max-width: 999px) { .ts-cuerpo { grid-template-columns: minmax(0, 1fr) } }
 .ts-pagina { box-sizing: border-box; height: calc(100vh - 56px) }`}</style>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Mis tesis de inversión</div>
@@ -194,9 +200,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
               <span data-fechas style={S.apagado}>{fila ? `Creada ${fechaCorta(fila.created_at)} · Revisada ${fechaCorta(fila.revisada_en)}` : 'Sin guardar todavía'}</span>
               <button data-revisada disabled={!fila || ocupado} onClick={revisada} style={{ ...S.boton, padding: '5px 12px', fontSize: 13, opacity: fila ? 1 : 0.5, cursor: fila ? 'pointer' : 'not-allowed' }}>✓ Marcar como revisada hoy</button>
             </div>
-            <textarea data-texto className="ts-texto" aria-label="Texto de la tesis" value={borr.texto} onChange={e => cambia('texto', e.target.value)}
-              placeholder="Qué crees que va a pasar, qué tendría que ocurrir para entrar y qué te haría descartarla…"
-              style={{ ...campo, width: '100%', height: 'calc(100vh - 380px)', minHeight: 400, resize: 'vertical', overflowY: 'auto', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}/>
+            <Editor key={hoja} valor={borr.texto} onCambio={(v) => cambia('texto', v)}/>
 
             <div data-relacionado>
               <div style={{ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 700, color: B.titulo, marginBottom: 8 }}>Relacionado<Ayuda texto={AYUDA_RELACIONADO} etiqueta="Relacionado"/></div>
