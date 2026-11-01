@@ -552,7 +552,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
       <Cifra id="twr" titulo="CAGR del plan" ayuda={AYUDA_PLAN.twr} valor={pct(s.twr)}/>
       <Cifra id="tir" titulo="Rentabilidad de tu dinero (TIR)" ayuda={AYUDA_PLAN.tir} valor={pct(s.tir)}/>
       <Cifra id="costes" titulo="Impuestos y comisiones" ayuda={AYUDA_PLAN.costes} valor={<span style={{ display: 'flex', flexDirection: 'column', fontSize: 15, lineHeight: 1.35 }}>
-        <span data-impuestos>{`Impuestos ${euros(s.impuestos, 0)}`}</span><span data-comisiones>{`Comisiones ${euros(s.costes, 0)}${cifras.ordenes != null ? ` (${cifras.ordenes} órdenes)` : ''}`}</span></span>}/>
+        <span data-impuestos>{`Impuestos ${euros(s.impuestos, 0)}`}</span><span data-comisiones>{`Comisiones ${euros(s.costes, 0)} (${cifras.ordenes} órdenes)`}</span></span>}/>
     </div>
     <Tarjeta id="grafico" titulo="Cómo crece tu dinero" ayuda={`${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franja}`}>
       <GraficoPlan curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes} finales={finalesDe(cifras)}/>
@@ -562,7 +562,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
       <div style={{ overflowX: 'auto' }}><table data-tabla="alternativas" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr>{['', 'Final', 'CAGR', 'TIR', 'Peor caída', 'Impuestos', 'Comisiones'].map(h => <th key={h} style={cab}>{h}</th>)}<th style={cab}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>Órdenes<Ayuda texto={AYUDA_PLAN.ordenes} etiqueta="Órdenes"/></span></th></tr></thead>
         <tbody>{cifras.alternativas.filter(x => !(sinOcioso && x.id === 'OCIOSO_LIQUIDEZ')).map(x => <tr key={x.id} data-fila={x.id} style={x.id === 'PLAN' ? { fontWeight: 700, color: B.titulo } : undefined}>
-          <td style={celda}>{x.nombre}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.final, 0)}</td><td style={celda}>{pct(x.twr)}</td><td style={celda}>{pct(x.tir)}</td><td style={celda}>{pct(x.caida)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.impuestos, 0)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.costes, 0)}</td><td style={celda}>{x.ordenes ?? '—'}</td>
+          <td style={celda}>{x.nombre}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.final, 0)}</td><td style={celda}>{pct(x.twr)}</td><td style={celda}>{pct(x.tir)}</td><td style={celda}>{pct(x.caida)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.impuestos, 0)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.costes, 0)}</td><td style={celda}>{x.ordenes}</td>
         </tr>)}</tbody>
       </table></div>
     </Tarjeta>

@@ -11,7 +11,7 @@
 //       de bolsa de julio de 2021 vendiendo ocioso; al final, nada más.
 //     · Aportación de 1.000 € el primer día de abril, con la operación abierta: «espera» → al ocioso (final + 1.000); «compra» → compra
 //       el valor a la apertura de ese día (112) y lo vende con la operación a 114 (final + 1.000 × 114 / 112).
-// 2 · Los planes de siempre, sin pieza estrategia: evaluaPlan (con sus referencias) y huellaPlan, idénticos a la versión anterior
+// 2 · Los planes de siempre, sin pieza estrategia: evaluaPlan (con sus referencias, salvo costes.ordenes) y huellaPlan, idénticos a la versión anterior
 //     (VIEJO), con el QQQ real de datos/foto_mom.json (SPY = QQQ, ETF sintético ×2).
 // 3 · Coherencia con el paso 1, en la foto: «Prueba editor EMA20» en AAPL, diarias, 2016–2025, 10.000 € sin aportaciones, ocioso
 //     LIQUIDEZ, sin costes ni impuestos, sin apalancamiento: el TWR del plan = el CAGR del paso 1 (lib/builder/ensayo.js cifrasRegla)
@@ -68,7 +68,7 @@ const EMA20 = { tipo: 'editor', motor: 1, formato: 1, nombre: 'Prueba editor EMA
     const uOci1 = (10000 - 10) / 50, cob1 = uOci1 * 50 * 0.999, uT = (cob1 - cob1 * 0.001) / 105, cob2 = uT * 114 * 0.999, uOci2 = (cob2 - cob2 * 0.001) / 50
     const pat = uOci2 * 50, neto = pat - pat * 0.001
     ok(cerca(rc.patrimonio, pat, 1e-12) && cerca(rc.valorNeto, neto, 1e-12), `con 0,1 % de comisión: patrimonio ${pat.toFixed(6)} y neto ${neto.toFixed(6)} (obtenido ${rc.patrimonio.toFixed(6)} y ${rc.valorNeto.toFixed(6)})`)
-    ok(rc.costes.ordenes === 5, `5 órdenes durante el plan (obtenido ${rc.costes.ordenes})`)
+    ok(rc.costes.ordenes === 6, `6 órdenes: 5 durante el plan y la venta final (obtenido ${rc.costes.ordenes})`)
     // Aportación a mitad de operación.
     const da = datosMano(conAbril), ap = { dinero: { capitalInicial: 10000, aportaciones: { importe: 1000, frecuencia: 'mensual' }, extraordinarias: [] } }
     const re = P.ejecutaPlan(plan(conAbril, ap), da), rp = P.ejecutaPlan(plan(conAbril, ap, { aportacionDentro: 'compra' }), da)
@@ -113,9 +113,9 @@ const EMA20 = { tipo: 'editor', motor: 1, formato: 1, nombre: 'Prueba editor EMA
       'solo ETF, sin impuestos ni costes': { ...base, impuestos: { regimen: 'ninguno', reglaDosMeses: true }, costes: null, piezas: [{ id: 'x', tipo: 'activo', activo: 'ETF', peso: 1 }] },
       'SPY + cartera, con los pesos': { ...base, reparto: { aportacionesA: 'pesos', rebalanceo: { calendario: 'trimestral', banda: null } }, piezas: [{ id: 's', tipo: 'activo', activo: 'SPY', peso: 0.4 }, { id: 'c', tipo: 'cartera', regla, peso: 0.6 }] },
     }
-    const corre = (raiz) => { const PP = require(raiz + '/lib/planes/plan.js'), EE = require(raiz + '/lib/planes/evalua.js'), d = datosDe(raiz); return Promise.all(Object.entries(planes).map(async ([k, p]) => [k, JSON.stringify(EE.evaluaPlan(p, d, { detalle: true })), await PP.huellaPlan(p), JSON.stringify(EE.iniciosRodantes(p, d, { desde: '2010-01-01', hasta: '2024-12-31', duracion: 8 }))])) }
+    const corre = (raiz) => { const PP = require(raiz + '/lib/planes/plan.js'), EE = require(raiz + '/lib/planes/evalua.js'), d = datosDe(raiz); return Promise.all(Object.entries(planes).map(async ([k, p]) => [k, JSON.stringify(EE.evaluaPlan(p, d, { detalle: true }), (k, v) => k === 'ordenes' ? undefined : v), await PP.huellaPlan(p), JSON.stringify(EE.iniciosRodantes(p, d, { desde: '2010-01-01', hasta: '2024-12-31', duracion: 8 }))])) }
     const a = await corre(V), b = await corre(R)
-    a.forEach(([k, ja, ha, ra], i) => { const [, jb, hb, rb] = b[i]; ok(ja === jb && ha === hb && ra === rb, `${k}: evaluación, huella e inicios rodantes idénticos a la versión anterior (${(jb.length / 1024).toFixed(0)} KB, huella ${hb.slice(0, 8)})`) })
+    a.forEach(([k, ja, ha, ra], i) => { const [, jb, hb, rb] = b[i]; ok(ja === jb && ha === hb && ra === rb, `${k}: evaluación (salvo el número de órdenes), huella e inicios rodantes idénticos a la versión anterior (${(jb.length / 1024).toFixed(0)} KB, huella ${hb.slice(0, 8)})`) })
   }
 
   // ── 3 · Coherencia con el paso 1 (foto: AAPL) ──

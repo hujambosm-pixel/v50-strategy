@@ -2099,3 +2099,24 @@ se mueve (comprobado antes y después, abajo).
   (Chromium, el texto metido con `insertText` porque la ventana estaba oculta y no admitía teclas): los 4 casos y un punto en medio
   («12345» con el cursor tras el 2 → «12,345», cursor en 3; un 9 → «12,9345»). No comprobado con teclado físico ni en la pantalla entera
   con sesión. Comprobaciones comunes.
+
+## 52. Paso 3 · el contador de órdenes (con o sin comisión y con la venta final)
+
+`lib/planes/plan.js`, `lib/builder/planPantalla.js` y `components/BuilderPlan.js`. Corrige lo que §51 dejó dicho sobre el contador. SOLO cambia el número de órdenes.
+- **Motor**: `costeOrden` cuenta cada compra o venta de un símbolo que no sea LIQUIDEZ con importe > 0, haya o no costes (antes salía antes de contar si
+  `costes` era null). La liquidación final suma una orden por cada símbolo con posición el último día, la misma condición (`u > 0`) con la que ya cobraba
+  su comisión. El cálculo de la comisión y los euros, igual.
+- **Pantalla**: fuera `conComision` / `ordenesDe` y los «—»: la columna «Órdenes», la tarjeta («Comisiones 0 € (N órdenes)») y «Copiar para Claude» enseñan
+  siempre el número. El «?» de «Órdenes» dice que incluye la venta final.
+- **Por qué no sube siempre**: la venta final solo cuenta si queda algo que vender. Con el ocioso en liquidez y la estrategia fuera el último día, todo está en
+  liquidez: no hay orden. «Prueba editor EMA20» · 2016–2025 · 10.000 € + 300 €/mes · GLD · España · 0,1 %: tu plan 623 → 624 (vende GLD), ocioso en liquidez
+  257 → 257 (fuera de AAPL el 31/12/2025), Buy&Hold AAPL, QQQ y SPY 120 → 121. Con 10.000 € sin aportación y comisión 0: Buy&Hold AAPL 2. En 2016–2020 el ocioso
+  en liquidez sí sube, 117 → 118 (dentro de AAPL el último día).
+- **Cuadre**: con comisión fija, comisiones = órdenes × comisión exacto, cosa que antes no daba: 2 € × 624 = 1.248 €; los planes guardados, 0,37 € × 326 = 120,62 €
+  y 0,37 € × 163 = 60,31 €.
+- `scripts/comprobaciones/planes-estrategia.js`: el caso a mano pasa de 5 a 6 órdenes (las 5 de durante el plan y la venta final del ocioso); y la comparación con la
+  versión anterior ignora solo la clave `ordenes`, que es lo único que este cambio mueve (euros, fechas, huellas e inicios rodantes siguen byte a byte).
+- Comprobado: `/api/plan` real (sesión y `leer_velas` simulados, velas de la caché leídas en solo lectura) con la versión anterior y esta, en 12 casos (GLD, liquidez, QQQ,
+  sin comisión, € fijos, % con mínimo, sin impuestos, ×2 con «compra», 2016–2020, sin aportación y los 2 planes guardados): respuesta y cifras de pantalla idénticas byte a
+  byte salvo las órdenes. Planes guardados: ida y vuelta y huellas iguales con las dos versiones y las de la base. Montaje SWC con renderToString, con y sin comisión: las
+  únicas diferencias del HTML son las órdenes y la tarjeta. No comprobado en la pantalla entera con sesión. Comprobaciones comunes.

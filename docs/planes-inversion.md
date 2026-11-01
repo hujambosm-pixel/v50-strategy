@@ -322,3 +322,5 @@ vendrá con el «Modo de asignación» de `lib/mcAsignacion.js`). Se amplía el 
 - **Órdenes por fila** (docs/builder.md §51): `/api/plan` con `curvas: true` añade `ordenesReferencias` (`costes.ordenes` de OCIOSO_LIQUIDEZ,
   ACTIVO, QQQ y SPY, que `evaluaPlan` no devuelve). El contador del motor no incluye la venta final y sin costes se queda en 0 (la
   pantalla enseña «—»). El motor no cambia; la tabla de la pantalla ya no enseña la referencia LIQUIDEZ, aunque se sigue calculando.
+- **Contador de órdenes** (docs/builder.md §52): `costes.ordenes` cuenta todas las compras y ventas de símbolos (no LIQUIDEZ), con o sin costes, y la venta final (una por símbolo
+  con posición el último día). Corrige la línea anterior: ya no se queda en 0 sin costes y la pantalla ya no enseña «—». Ningún importe cambia.
