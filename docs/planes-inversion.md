@@ -319,3 +319,6 @@ vendrá con el «Modo de asignación» de `lib/mcAsignacion.js`). Se amplía el 
 - **Arreglos de la pantalla** (docs/builder.md §50): la base con el token vigente y renovado ante 401/403 (`ctxConSesion`), números con
   coma, la columna de ajustes fija de verdad, «Guardar cambios» solo con cambios y «Duplicar», y el gráfico y la tabla con «Buy&Hold» y
   el importe final de cada línea. Solo pantalla: el motor, los planes guardados y sus huellas no cambian (comprobado byte a byte).
+- **Órdenes por fila** (docs/builder.md §51): `/api/plan` con `curvas: true` añade `ordenesReferencias` (`costes.ordenes` de OCIOSO_LIQUIDEZ,
+  ACTIVO, QQQ y SPY, que `evaluaPlan` no devuelve). El contador del motor no incluye la venta final y sin costes se queda en 0 (la
+  pantalla enseña «—»). El motor no cambia; la tabla de la pantalla ya no enseña la referencia LIQUIDEZ, aunque se sigue calculando.

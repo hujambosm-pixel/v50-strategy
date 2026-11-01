@@ -2069,3 +2069,33 @@ planes no cambia: ninguna cifra se mueve (comprobado con el motor antes y despu�
   Montaje SWC con renderToString y con estado: las etiquetas e importes del gráfico sin solaparse, las cuatro líneas sin rayas con sus
   colores y grosores, la leyenda, la tabla, los botones con y sin cambios, la línea gris del desplegable, los campos con coma y las 6
   cifras y la tabla iguales que antes. Comprobaciones comunes. No comprobado en el navegador: la columna fija a 1920 × 1080.
+
+## 51. Paso 3 · retoques de textos y de la tabla (CAGR del plan, órdenes por fila, comas al teclear)
+
+`components/BuilderPlan.js`, `lib/builder/planPantalla.js` y `pages/api/plan.js`. El motor de planes (`lib/planes/`) no cambia y ninguna cifra
+se mueve (comprobado antes y después, abajo).
+- **Tarjeta**: «CAGR de la estrategia» pasa a «CAGR del plan», también en «Copiar para Claude». El texto de su «?» (`AYUDA_PLAN.twr`) no
+  decía «de la estrategia» y se queda igual.
+- **Tabla «Sin estrategia: el mismo dinero en…»**: columnas «, Final, CAGR, TIR, Peor caída, Impuestos, Comisiones, Órdenes». Sin la fila
+  «En liquidez (0 %)» (fuera de `ORDEN_ALTERNATIVAS` y de `nombreAlternativa`, así que tampoco sale en «Copiar para Claude»; el motor
+  sigue calculando esa referencia). «El mismo plan con el dinero ocioso en liquidez» se queda.
+- **Órdenes de cada fila**: `evaluaPlan` ejecuta las referencias pero solo devuelve sus medidas, sin `costes.ordenes`. Por eso
+  `/api/plan`, con `curvas: true` y una pieza «estrategia», ejecuta también QQQ y SPY (OCIOSO_LIQUIDEZ y ACTIVO ya se ejecutaban para las
+  curvas) y añade `ordenesReferencias: { id: costes.ordenes }`; el resto de la respuesta, igual byte a byte. Dos ejecuciones más por
+  recálculo: unos 10–25 ms de cálculo en esta máquina. Lo que cuenta el contador del motor (y dice el «?» de «Órdenes»): todas las
+  compras y ventas, también las de mover el ocioso, SIN la venta final del último día (se cobra aparte, `costes.ventaFinal`).
+- **Sin comisión** el motor no cuenta órdenes (`costeOrden` sale antes de contar y el contador queda en 0): `cifrasPlan` da `ordenes: null`
+  (en el plan y en cada fila), la tabla enseña «—», la tarjeta solo «Comisiones 0 €» y «Copiar para Claude», «—». Con comisión, la tarjeta
+  sigue como antes: «Comisiones 28.991 € (623 órdenes)».
+- **Comas al teclear** (`CampoNumero`, `conComa`): todo punto se ve al momento como coma. Se cambia en el propio campo y se deja el cursor
+  donde estaba (misma longitud; React no reescribe el valor si ya coincide, así que no lo manda al final). `numeroEs` lee lo mismo que antes:
+  «0.1» → «0,1» y 0,1; «0,36» igual; «10000» igual; «-2.5» en «Cuánto sube cada año» → «-2,5» y −2,5; «1.5.2» sigue sin ser un número.
+- Comprobado: `/api/plan` real (manejador con la sesión y `leer_velas` simulados y velas de la caché) con la versión anterior y esta, en 5
+  casos (GLD, sin comisión, liquidez, € fijos, % con mínimo): la respuesta, idéntica byte a byte salvo `ordenesReferencias`, y las filas,
+  iguales salvo LIQUIDEZ y las órdenes. «Prueba editor EMA20» · AAPL · 2016–2025 · 10.000 € + 300 €/mes · GLD · espera · España · 0,1 % →
+  114.341 €, TWR 15,84 %, TIR 14,50 %, −34,02 %. Órdenes: tu plan 623, con el ocioso en liquidez 257, Buy&Hold AAPL, QQQ y SPY 120 cada
+  uno (1 compra + 119 aportaciones); Buy&Hold AAPL, 201.922 €. Los 2 planes guardados: ida y vuelta y huellas iguales con las dos versiones
+  y las de la base. Montaje SWC con renderToString, con y sin comisión: columnas, filas, «?», tarjetas. `CampoNumero` real en un navegador
+  (Chromium, el texto metido con `insertText` porque la ventana estaba oculta y no admitía teclas): los 4 casos y un punto en medio
+  («12345» con el cursor tras el 2 → «12,345», cursor en 3; un 9 → «12,9345»). No comprobado con teclado físico ni en la pantalla entera
+  con sesión. Comprobaciones comunes.

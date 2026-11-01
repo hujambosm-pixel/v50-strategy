@@ -2,10 +2,11 @@
 // definitiva irá en el futuro «Builder» guiado (decisión 9). Sirve para probarlo desde la app o con «Copiar para Claude».
 //
 //   POST { plan, rodantes?: { duracion?: 10, hastaElFinal?: false, desde?, hasta? }, curvas?: false }
-//   → { evaluacion: { plan: { medidas, ejecucion }, referencias: [...], comparaciones: [...], descorrelacion? }, rodantes?, curvas?, huella, tiempos }
+//   → { evaluacion: { plan: { medidas, ejecucion }, referencias: [...], comparaciones: [...], descorrelacion? }, rodantes?, curvas?, ordenesReferencias?, huella, tiempos }
 //   curvas (docs/builder.md §48, la pantalla del paso 3): con una pieza «estrategia», el patrimonio y el VL de cada día de las referencias
 //   OCIOSO_LIQUIDEZ y ACTIVO ({ id: { patrimonio: [...], vl: [...] } }, en las fechas de la serie del plan), con el mismo motor y los mismos
-//   datos; las medidas siguen siendo las de evaluacion.referencias.
+//   datos; las medidas siguen siendo las de evaluacion.referencias. §51: con curvas, también ordenesReferencias: { id: costes.ordenes de su
+//   ejecución } de OCIOSO_LIQUIDEZ, ACTIVO, QQQ y SPY (evaluaPlan no las devuelve): las filas de la tabla de la pantalla.
 //
 // Datos: lib/planes/datosServidor.js (QQQ, SPY y el ETF del plan, con dividendos, desde 3 años antes del periodo; las velas de
 // la referencia de cada pieza de cartera que la tenga; con una pieza «estrategia», las del valor, del ocioso y de los índices de
@@ -39,9 +40,10 @@ export default async function handler(req, res) {
     const t1 = Date.now()
     const evaluacion = evaluaPlan(plan, c.datos, { detalle: true })
     const ro = rodantes ? iniciosRodantes(plan, c.datos, { desde: rodantes.desde || plan.periodo.desde, hasta: rodantes.hasta || plan.periodo.hasta, duracion: rodantes.duracion ?? 10, hastaElFinal: !!rodantes.hastaElFinal }) : null
-    const cu = curvas && plan.piezas.some(x => x.tipo === 'estrategia') ? Object.fromEntries(referenciasDe(plan).filter(x => ['OCIOSO_LIQUIDEZ', 'ACTIVO'].includes(x.id))
-      .map(x => { const r = ejecutaPlan(x.plan, c.datos, { detalle: false }); return [x.id, { patrimonio: r.serie.map(p => p.patrimonio), vl: r.serie.map(p => p.vl) }] })) : null
-    return res.status(200).json({ evaluacion, ...(ro ? { rodantes: ro } : {}), ...(cu ? { curvas: cu } : {}), huella: await huellaPlan(plan), tiempos: { datosMs: t1 - t0, calculoMs: Date.now() - t1 } })
+    const ej = curvas && plan.piezas.some(x => x.tipo === 'estrategia') ? referenciasDe(plan).filter(x => ['OCIOSO_LIQUIDEZ', 'ACTIVO', 'QQQ', 'SPY'].includes(x.id)).map(x => [x.id, ejecutaPlan(x.plan, c.datos, { detalle: false })]) : null
+    const cu = ej ? Object.fromEntries(ej.filter(([id]) => ['OCIOSO_LIQUIDEZ', 'ACTIVO'].includes(id)).map(([id, r]) => [id, { patrimonio: r.serie.map(p => p.patrimonio), vl: r.serie.map(p => p.vl) }])) : null
+    const ordenesReferencias = ej ? Object.fromEntries(ej.map(([id, r]) => [id, r.costes.ordenes])) : null
+    return res.status(200).json({ evaluacion, ...(ro ? { rodantes: ro } : {}), ...(cu ? { curvas: cu, ordenesReferencias } : {}), huella: await huellaPlan(plan), tiempos: { datosMs: t1 - t0, calculoMs: Date.now() - t1 } })
   } catch (e) {
     return res.status(500).json({ error: e.message || 'Error interno' })
   }
