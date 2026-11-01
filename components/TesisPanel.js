@@ -6,15 +6,16 @@
 // aquí) y «Relacionado» (estrategias de tarjetas y planes guardados).
 // Props: estrategias (las filas de `strategies`), onAbrirEstrategia (abre una en el paso 1 del Builder), salida (un ref: la página
 // pregunta por él antes de cambiar de pestaña; devuelve true si hay cambios y se ha abierto la pregunta). deps ({ ctx, Editor }) e inicial
-// ({ tesis, planes, abierta, borrador, nueva, pregunta, borrando, filtro, busca, anadiendo }): para las pruebas de montaje.
+// ({ tesis, planes, abierta, borrador, nueva, pregunta, falloPregunta, fallo, borrando, filtro, busca, enTexto, anadiendo }): para las pruebas de montaje.
 import { useState, useEffect, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { B, S } from '../lib/builder/estilo'
 import Ayuda from './BuilderAyuda'
 import { esDeTarjetas } from '../lib/pruebaAzar'
 import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
-import { AYUDA_RELACIONADO, AYUDA_TESIS, ESTADOS_TESIS, HOJA, TITULO_NUEVA, borrarTesis, buscaTesis, cambiarTesis, crearTesis, cuentasTesis, estadoTesis, fechaCorta,
-  fichaDe, haceTexto, igualesTesis, listarNombresPlanes, listarTesis, marcarRevisada, ordenTesis, problemaDe } from '../lib/tesis'
+import { trozosResaltados } from '../lib/builder/buscar'
+import { AYUDA_RELACIONADO, AYUDA_TESIS, COLORES_RESALTE, ESTADOS_TESIS, HOJA, TITULO_NUEVA, borrarTesis, buscaTesis, cambiarTesis, crearTesis, cuentasTesis, estadoTesis, fechaCorta, fechaHora,
+  fichaDe, guardaBuscarEnTexto, haceTexto, igualesTesis, leeBuscarEnTexto, lineaCoincidencia, listarNombresPlanes, listarTesis, marcarRevisada, ordenTesis, problemaDe, respondeSalida } from '../lib/tesis'
 
 const NUEVA = Object.freeze({ titulo: TITULO_NUEVA, texto: '', estado: 'idea', relacionados: [] })
 const borradorDe = (t) => ({ titulo: t.titulo, texto: t.texto || '', estado: t.estado, relacionados: Array.isArray(t.relacionados) ? t.relacionados : [] })
@@ -27,11 +28,18 @@ const Papelera = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ROJO} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
   </svg>)
+const HojaLineas = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/>
+  </svg>)
+// Un texto en trozos ([{ t, marca }]), con lo buscado resaltado. React lo escapa: nada se interpreta como HTML.
+const Resaltado = ({ trozos }) => trozos.map((x, k) => x.marca ? <mark key={k} data-marca style={{ background: COLORES_RESALTE[0].color, color: B.titulo, borderRadius: 2 }}>{x.t}</mark> : <span key={k}>{x.t}</span>)
 // Una ventana de pregunta (sin guardar, borrar), encima de todo.
-const Pregunta = ({ id, texto, children }) => (
+const Pregunta = ({ id, texto, aviso, children }) => (
   <div data-pregunta={id} role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
     <div style={{ ...S.tarjeta, padding: 20, maxWidth: 440, width: '100%' }}>
       <div style={{ color: B.titulo, marginBottom: 16 }}>{texto}</div>
+      {aviso && <div data-aviso-pregunta style={{ color: '#ff8b8b', marginBottom: 16 }}>⚠ {aviso}</div>}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>{children}</div>
     </div>
   </div>)
@@ -41,13 +49,14 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   const ctx = () => deps?.ctx || (hayConfigSupabase() ? ctxConSesion() : null)
   const [tesis, setTesis] = useState(inicial?.tesis || null)
   const [planes, setPlanes] = useState(inicial?.planes || [])
-  const [fallo, setFallo] = useState(null)
+  const [fallo, setFallo] = useState(inicial?.fallo || null)
   const [abierta, setAbierta] = useState(inicial?.abierta ?? null)   // id de la tesis abierta (null: ninguna o la nueva)
   const [nueva, setNueva] = useState(!!inicial?.nueva)   // la abierta es una nueva sin guardar
   const [borr, setBorr] = useState(inicial?.borrador || null)   // lo que se está escribiendo
   const [filtro, setFiltro] = useState(inicial?.filtro || 'todas')
   const [busca, setBusca] = useState(inicial?.busca || '')
-  const [pregunta, setPregunta] = useState(inicial?.pregunta ? { accion: () => {} } : null)   // «Tienes cambios sin guardar…»
+  const [enTexto, setEnTexto] = useState(!!inicial?.enTexto)   // «Buscar también en el texto»
+  const [pregunta, setPregunta] = useState(inicial?.pregunta ? { accion: () => {}, fallo: !!inicial?.falloPregunta } : null)   // «Tienes cambios sin guardar…»
   const [borrando, setBorrando] = useState(!!inicial?.borrando)
   const [anadiendo, setAnadiendo] = useState(!!inicial?.anadiendo)
   const [ocupado, setOcupado] = useState(false)
@@ -55,7 +64,9 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   const [hoja, setHoja] = useState(0)   // sube al abrir otra tesis: editor nuevo, sin el «deshacer» de la anterior
   const Editor = deps?.Editor || EditorTesis
   const titulo = useRef(null)
+  const cajaBusca = useRef(null)
 
+  useEffect(() => { if (inicial?.enTexto == null) setEnTexto(leeBuscarEnTexto()) }, [])
   useEffect(() => {
     if (inicial?.tesis) return
     const c = ctx()
@@ -86,7 +97,8 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
     return () => window.removeEventListener('beforeunload', avisa)
   }, [conCambios])
 
-  const vistas = useMemo(() => buscaTesis(ordenadas, busca), [ordenadas, busca])
+  const vistas = useMemo(() => buscaTesis(ordenadas, busca, enTexto), [ordenadas, busca, enTexto])
+  const lineas = useMemo(() => new Map(enTexto ? vistas.map(t => [t.id, lineaCoincidencia(t, busca)]) : []), [vistas, busca, enTexto])
   const cuentas = useMemo(() => cuentasTesis(vistas), [vistas])
   const lista = filtro === 'todas' ? vistas : vistas.filter(t => t.estado === filtro)
   const nombreEn = (x) => `«${(x?.titulo || '').trim() || TITULO_NUEVA}»`
@@ -111,19 +123,21 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
     setOcupado(true); setFallo(null)
     try { pon(await marcarRevisada(ctx(), fila.id)) } catch (e) { setFallo(e.message) } finally { setOcupado(false) }
   }
+  const siguiente = (resto) => { const o = ordenTesis(resto)[0]; if (o) abre(o); else { setNueva(false); setAbierta(null); setBorr(null) } }
+  // Vuelve a lo último guardado (con el editor nuevo); una nueva que nunca se guardó, desaparece.
+  const descarta = () => { setFallo(null); if (nueva) siguiente(tesis || []); else if (fila) abre(fila) }
   const borra = async () => {
     setBorrando(false)
-    const siguiente = (resto) => { const o = ordenTesis(resto)[0]; if (o) abre(o); else { setNueva(false); setAbierta(null); setBorr(null) } }
     if (nueva) { siguiente(tesis || []); return }
     setOcupado(true); setFallo(null)
     try { await borrarTesis(ctx(), fila.id); const resto = (tesis || []).filter(x => x.id !== fila.id); setTesis(resto); siguiente(resto) } catch (e) { setFallo(e.message) } finally { setOcupado(false) }
   }
   const responde = async (que) => {
     const p = pregunta
-    if (que === 'cancelar') { setPregunta(null); return }
-    if (que === 'guardar' && !(await guarda())) { setPregunta(null); return }
-    setPregunta(null); p?.accion?.()
+    const r = await respondeSalida(que, { guardar: guarda, descartar: descarta, seguir: () => p?.accion?.() })
+    setPregunta(r === 'fallo' ? { ...p, fallo: true } : null)   // si guardar falla, se queda abierta y dice por qué
   }
+  const cambiaEnTexto = () => { const v = !enTexto; setEnTexto(v); guardaBuscarEnTexto(v) }
 
   const tarjetas = useMemo(() => estrategias.filter(esDeTarjetas).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
   const fichas = (borr?.relacionados || []).map(r => fichaDe(r, estrategias, planes))
@@ -151,7 +165,15 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
       <div className="ts-cuerpo">
         {/* ── Izquierda: buscador, filtros y lista ── */}
         <div data-lista style={{ ...S.tarjeta, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <input aria-label="Buscar" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar en títulos y textos…" style={{ ...campo, width: '100%' }}/>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+              <input ref={cajaBusca} aria-label="Buscar" value={busca} onChange={e => setBusca(e.target.value)} placeholder={enTexto ? 'Buscar en títulos y textos…' : 'Buscar en los títulos…'} style={{ ...campo, width: '100%', paddingRight: 30 }}/>
+              {!!busca && <button data-borrar-busca aria-label="Borrar la búsqueda" title="Borrar la búsqueda" onClick={() => { setBusca(''); cajaBusca.current?.focus() }}
+                style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: B.apagado, cursor: 'pointer', fontSize: 13, padding: '2px 6px' }}>✕</button>}
+            </div>
+            <button data-buscar-texto aria-pressed={enTexto} aria-label="Buscar también en el texto" title={enTexto ? 'Buscar también en el texto' : 'Buscar solo en títulos'} onClick={cambiaEnTexto}
+              style={{ ...S.boton, padding: '7px 8px', display: 'flex', alignItems: 'center', background: enTexto ? B.siguienteFondo : 'transparent', borderColor: enTexto ? B.siguienteBorde : B.borde, color: enTexto ? B.titulo : B.apagado }}><HojaLineas/></button>
+          </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {filtros.map(f => (
               <button key={f.id} data-filtro={f.id} aria-pressed={filtro === f.id} onClick={() => setFiltro(f.id)}
@@ -168,11 +190,12 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
                 <div style={{ fontWeight: 600, color: B.titulo }}>{(borr?.titulo || '').trim() || TITULO_NUEVA}</div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}><Etiqueta estado={borr?.estado}/><span style={{ ...S.apagado, color: AMARILLO }}>sin guardar</span></div>
               </div>)}
-            {lista.map(t => { const on = !nueva && t.id === abierta; return (
+            {lista.map(t => { const on = !nueva && t.id === abierta, linea = lineas.get(t.id); return (
               <button key={t.id} data-item={t.id} aria-current={on ? 'true' : undefined} onClick={() => { if (!on) conGuardia(() => abre(t)) }}
                 style={{ textAlign: 'left', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, padding: '8px 10px', borderRadius: B.radioBoton,
                   background: on ? B.siguienteFondo : 'transparent', border: `1px solid ${on ? B.siguienteBorde : 'transparent'}` }}>
-                <div style={{ fontWeight: 600, color: B.titulo, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.titulo}</div>
+                <div style={{ fontWeight: 600, color: B.titulo, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><Resaltado trozos={trozosResaltados(t.titulo, busca)}/></div>
+                {linea && <div data-linea-texto style={{ ...S.apagado, fontSize: 12, lineHeight: 1.35, marginTop: 3, overflowWrap: 'anywhere' }}><Resaltado trozos={linea}/></div>}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}><Etiqueta estado={t.estado}/><span style={S.apagado}>{haceTexto(t)}</span></div>
               </button>) })}
           </div>
@@ -186,6 +209,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
                 style={{ ...campo, flex: '1 1 260px', minWidth: 0, fontSize: 20, fontWeight: 700, color: B.titulo, background: 'transparent', borderColor: 'transparent' }}/>
               {sinGuardar && <span data-sin-guardar style={{ color: AMARILLO, fontSize: 13, whiteSpace: 'nowrap' }}>● sin guardar</span>}
               <button data-guardar disabled={!puedeGuardar} onClick={guarda} style={boton(puedeGuardar)}>{ocupado ? 'Guardando…' : 'Guardar'}</button>
+              {sinGuardar && <button data-descartar disabled={ocupado} onClick={descarta} style={S.boton}>Descartar cambios</button>}
               <button data-borrar aria-label="Borrar la tesis" title="Borrar la tesis" onClick={() => setBorrando(true)}
                 style={{ ...S.boton, background: 'transparent', borderColor: '#5a2a2f', padding: '7px 9px', display: 'flex', alignItems: 'center' }}><Papelera/></button>
             </div>
@@ -197,7 +221,13 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
                     style={{ fontFamily: B.letra, fontSize: 13, padding: '6px 12px', cursor: 'pointer', border: 'none', borderLeft: k ? `1px solid ${B.borde}` : 'none',
                       background: on ? e.fondo : 'transparent', color: on ? e.color : B.secundario, fontWeight: on ? 700 : 400 }}>{e.nombre}</button>) })}
               </div>
-              <span data-fechas style={S.apagado}>{fila ? `Creada ${fechaCorta(fila.created_at)} · Revisada ${fechaCorta(fila.revisada_en)}` : 'Sin guardar todavía'}</span>
+              <span data-fechas style={S.apagado}>
+                {fila ? <span data-fecha="creada" title={`Creada el ${fechaHora(fila.created_at)}`}>Creada {fechaCorta(fila.created_at)}</span> : 'Sin guardar todavía'}
+                {' · '}
+                {fila?.revisada_en
+                  ? <span data-fecha="revisada" title={`Revisada el ${fechaHora(fila.revisada_en)}`}>Revisada {fechaCorta(fila.revisada_en)}</span>
+                  : <span data-fecha="revisada" title="Todavía sin revisar">Revisada: —</span>}
+              </span>
               <button data-revisada disabled={!fila || ocupado} onClick={revisada} style={{ ...S.boton, padding: '5px 12px', fontSize: 13, opacity: fila ? 1 : 0.5, cursor: fila ? 'pointer' : 'not-allowed' }}>✓ Marcar como revisada hoy</button>
             </div>
             <Editor key={hoja} valor={borr.texto} onCambio={(v) => cambia('texto', v)}/>
@@ -232,10 +262,10 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
       </div>
 
       {pregunta && (
-        <Pregunta id="sin-guardar" texto={`Tienes cambios sin guardar en ${nombreEn(borr)}. ¿Guardarlos?`}>
-          <button onClick={() => responde('guardar')} disabled={!!problema} style={boton(!problema)}>Guardar</button>
-          <button onClick={() => responde('descartar')} style={S.boton}>Descartar</button>
-          <button onClick={() => responde('cancelar')} style={S.boton}>Cancelar</button>
+        <Pregunta id="sin-guardar" texto={`Tienes cambios sin guardar en ${nombreEn(borr)}.`} aviso={pregunta.fallo ? fallo : problema}>
+          <button data-salida="guardar" onClick={() => responde('guardar')} disabled={!puedeGuardar} style={boton(puedeGuardar)}>{ocupado ? 'Guardando…' : 'Guardar'}</button>
+          <button data-salida="salir" onClick={() => responde('salir')} disabled={ocupado} style={S.boton}>Salir sin guardar</button>
+          <button data-salida="cancelar" onClick={() => responde('cancelar')} disabled={ocupado} style={S.boton}>Cancelar</button>
         </Pregunta>)}
       {borrando && (
         <Pregunta id="borrar" texto={`¿Borrar la tesis ${nombreEn(fila || borr)}? Desaparece del todo.`}>

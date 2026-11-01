@@ -8,6 +8,8 @@
 // 4 · El editor (V9.1093): TipTap necesita un navegador (un DOM) para montarse y aquí no lo hay, así que la pantalla se monta con un SUSTITUTO
 //     (deps.Editor, que pinta el valor); del TipTap de verdad se comprueba su esquema (qué admite; sin imágenes). Además: la conversión de texto
 //     plano, el texto sin etiquetas, «● sin guardar», el pegado de Word, las imágenes, los enlaces, los contrastes y que TipTap no se carga fuera de la pestaña.
+// 5 · Fechas en hora de Madrid (23:30 UTC, cambio de hora de octubre, con el ordenador en otra zona), «Revisada: —», tooltips, «Descartar cambios»,
+//     la ventana de salida con sus tres caminos (también guardar que falla) y el buscador (solo títulos, con texto, ✕, acentos, trozo resaltado).
 const path = require('path'), fs = require('fs')
 const C0 = require('./cargador'), R = C0.RAIZ
 let fallos = 0
@@ -33,14 +35,14 @@ const cuenta = (html, s) => html.split(s).length - 1
   await T.crearTesis(ctx, { titulo: '  Semis   2027 ', texto: 'línea 1\nlínea 2', estado: 'estudio', relacionados: [{ tipo: 'estrategia', id: 5 }, { tipo: 'otro', id: 1 }] }, ahora)
   let l = llamadas.pop(), b = JSON.parse(l.o.body)
   ok(l.o.method === 'POST' && l.u.startsWith('https://x/rest/v1/tesis_inversion?select=') && l.o.headers.Prefer === 'return=representation', 'crear: POST a tesis_inversion con return=representation')
-  ok(b.titulo === 'Semis 2027' && b.texto === 'línea 1\nlínea 2' && b.estado === 'estudio' && JSON.stringify(b.relacionados) === '[{"tipo":"estrategia","id":"5"}]' && b.revisada_en === ahora.toISOString() && !('user_id' in b),
-    'crear: título limpio, texto con saltos tal cual, estado, enlaces válidos, revisada_en = ahora y sin user_id')
+  ok(b.titulo === 'Semis 2027' && b.texto === 'línea 1\nlínea 2' && b.estado === 'estudio' && JSON.stringify(b.relacionados) === '[{"tipo":"estrategia","id":"5"}]' && !('revisada_en' in b) && !('created_at' in b) && !('user_id' in b),
+    'crear: título limpio, texto con saltos tal cual, estado, enlaces válidos, y sin revisada_en, created_at ni user_id')
   await T.cambiarTesis(ctx, 7, { titulo: 'Semis', texto: 'b', estado: 'marcha', relacionados: [] }, ahora)
   l = llamadas.pop(); b = JSON.parse(l.o.body)
-  ok(l.o.method === 'PATCH' && l.u.includes('id=eq.7') && b.texto === 'b' && b.estado === 'marcha' && b.revisada_en === ahora.toISOString(), 'cambiar: PATCH de id=7 con el texto, el estado y revisada_en = ahora')
+  ok(l.o.method === 'PATCH' && l.u.includes('id=eq.7') && b.texto === 'b' && b.estado === 'marcha' && !('revisada_en' in b) && !('created_at' in b) && !('updated_at' in b), 'guardar: PATCH de id=7 con el texto y el estado; NO cambia ni la creación ni la revisión')
   await T.marcarRevisada(ctx, 7, ahora)
   l = llamadas.pop(); b = JSON.parse(l.o.body)
-  ok(l.o.method === 'PATCH' && l.u.includes('id=eq.7') && JSON.stringify(Object.keys(b)) === '["revisada_en"]', 'marcar revisada: solo revisada_en, sin tocar el texto')
+  ok(l.o.method === 'PATCH' && l.u.includes('id=eq.7') && JSON.stringify(Object.keys(b)) === '["revisada_en"]' && b.revisada_en === ahora.toISOString(), 'marcar revisada: solo revisada_en = ahora, sin tocar el texto')
   ok(await T.borrarTesis(ctx, 7) === true && llamadas.pop().o.method === 'DELETE', 'borrar: DELETE de id=7')
   const vacio = { ...ctx, fetch: async () => responde(200, []) }
   let e1 = null; try { await T.borrarTesis(vacio, 8) } catch (e) { e1 = e.message }
@@ -64,13 +66,13 @@ const cuenta = (html, s) => html.split(s).length - 1
   const dias = (n) => { const x = new Date(); x.setDate(x.getDate() - n); return x.toISOString() }   // días de calendario (el cambio de hora no cuenta)
   const tres = [
     { id: 1, titulo: 'Semiconductores 2027', texto: 'La demanda de chips de IA sigue fuerte.\nEntrar si NVDA supera máximos.', estado: 'estudio', relacionados: [{ tipo: 'estrategia', id: 'e1' }, { tipo: 'plan', id: 3 }, { tipo: 'estrategia', id: 'borrada' }], created_at: dias(30), updated_at: dias(3), revisada_en: dias(3) },
-    { id: 2, titulo: 'Oro como cobertura', texto: 'Si caen los tipos reales, el oro sube.', estado: 'marcha', relacionados: [], created_at: dias(0), updated_at: dias(0), revisada_en: dias(0) },
-    { id: 3, titulo: 'Bancos europeos', texto: 'Tecnología bancaria y márgenes.', estado: 'idea', relacionados: [], created_at: dias(10), updated_at: dias(10), revisada_en: dias(10) },
+    { id: 2, titulo: 'Oro como cobertura', texto: 'Si caen los tipos reales, el oro sube.', estado: 'marcha', relacionados: [], created_at: dias(0), updated_at: dias(0), revisada_en: null },
+    { id: 3, titulo: 'Bancos europeos', texto: 'Tecnología bancaria y márgenes.', estado: 'idea', relacionados: [], created_at: dias(10), updated_at: dias(10), revisada_en: null },
   ]
   const c = T.cuentasTesis(tres)
   ok(c.todas === 3 && c.idea === 1 && c.estudio === 1 && c.marcha === 1 && c.descartada === 0, 'cuentas: 3 · idea 1 · estudio 1 · marcha 1 · descartada 0')
-  ok(JSON.stringify(T.ordenTesis(tres).map(t => t.id)) === '[2,1,3]', 'orden: la revisada más reciente arriba (2, 1, 3)')
-  ok(JSON.stringify(T.buscaTesis(tres, 'TECNOLOGIA').map(t => t.id)) === '[3]' && T.buscaTesis(tres, 'nvda maximos').length === 1, 'búsqueda en títulos y textos, sin mayúsculas ni tildes')
+  ok(JSON.stringify(T.ordenTesis(tres).map(t => t.id)) === '[2,1,3]', 'orden: lo más reciente arriba; las sin revisar, por su creación (2, 1, 3)')
+  ok(JSON.stringify(T.buscaTesis(tres, 'TECNOLOGIA', true).map(t => t.id)) === '[3]' && T.buscaTesis(tres, 'nvda maximos', true).length === 1, 'búsqueda con el texto: en títulos y textos, sin mayúsculas ni tildes')
   ok(T.haceTexto(tres[1]) === 'creada hoy' && T.haceTexto(tres[0]) === 'revisada hace 3 días' && T.haceTexto(tres[2]) === 'creada hace 10 días', `«${T.haceTexto(tres[1])}», «${T.haceTexto(tres[0])}», «${T.haceTexto(tres[2])}»`)
   ok(T.fechaCorta(new Date(2026, 9, 5, 12)) === '05/10/2026', 'fecha dd/mm/aaaa')
 
@@ -78,6 +80,7 @@ const cuenta = (html, s) => html.split(s).length - 1
   const React = require(path.join(R, 'node_modules', 'react'))
   const { renderToString } = require(path.join(R, 'node_modules', 'react-dom', 'server'))
   const P = require(path.join(R, 'components', 'TesisPanel.js')).default
+  const B0 = require(path.join(R, 'lib', 'builder', 'estilo.js')).B
   const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'x', stops: [], entrada: { orden: { tipo: 'apertura' }, senal: { c: 'cruza', de: { c: 'precioVsMedia', p: { lado: 'encima', tipo: 'EMA', periodo: 20 } } } }, salidas: [] }
   const estrategias = [{ id: 'e1', name: 'Cruce EMA20', definition: EMA, params: {} }, { id: 'c1', name: 'De código', definition: null, code: 'x' }]
   const planes = [{ id: 3, nombre: 'Mi plan QQQ' }]
@@ -93,20 +96,21 @@ const cuenta = (html, s) => html.split(s).length - 1
   ok(h.includes('revisada hace 3 días') && h.includes('creada hoy') && h.includes('creada hace 10 días'), '«revisada hace 3 días», «creada hoy», «creada hace 10 días»')
   ok(h.includes('data-estado="estudio"') && h.includes('data-estado="marcha"') && h.includes('data-estado="idea"') && h.includes('#79c0ff') && h.includes('#56d364'), 'etiquetas de estado con su color (En estudio azul, En marcha verde, Idea gris)')
   ok(!h.includes('data-sin-guardar') && /data-guardar="true" disabled=""/.test(h), 'sin cambios: ni «● sin guardar» ni Guardar activo')
-  ok(h.includes(`Creada ${T.fechaCorta(tres[0].created_at)} · Revisada ${T.fechaCorta(tres[0].revisada_en)}`) && h.includes('✓ Marcar como revisada hoy'), 'fechas de creada y revisada, y «Marcar como revisada hoy»')
+  ok(h.includes(`>Creada ${T.fechaCorta(tres[0].created_at)}<`) && h.includes(`>Revisada ${T.fechaCorta(tres[0].revisada_en)}<`) && h.includes('✓ Marcar como revisada hoy'), 'fechas de creada y revisada, y «Marcar como revisada hoy»')
   ok(/data-texto[^>]*data-sustituto/.test(h) && h.includes('Entrar si NVDA supera máximos.') && !h.includes('<textarea'), 'el texto va en el editor (aquí, su sustituto), con su texto, y ya no hay cuadro de texto plano')
   ok(h.includes('Estrategia · Cruce EMA20') && h.includes('Plan · Mi plan QQQ') && h.includes('data-borrado') && h.includes('Estrategia · (borrado)') && cuenta(h, 'data-abrir') === 1, 'Relacionado: estrategia con «Abrir», plan sin él y la borrada como «(borrado)» con su ×')
   ok(cuenta(h, 'aria-label="Quitar') === 3, 'cada ficha con su ×')
   h = monta({ ...abre1, filtro: 'marcha' })
   ok(cuenta(h, 'data-item="') === 1 && h.includes('data-item="2"') && /data-filtro="marcha" aria-pressed="true"/.test(h), 'filtro «En marcha»: solo la del oro')
-  h = monta({ ...abre1, busca: 'tecnologia' })
+  h = monta({ ...abre1, busca: 'tecnologia', enTexto: true })
   ok(cuenta(h, 'data-item="') === 1 && h.includes('data-item="3"') && h.includes('Todas (1)') && h.includes('Idea (1)') && h.includes('En estudio (0)'), 'búsqueda «tecnologia»: solo «Bancos europeos», con las cuentas de lo encontrado')
   h = monta({ ...abre1, borrador: { ...abre1.borrador, texto: abre1.borrador.texto + ' Y más.' } })
   ok(h.includes('● sin guardar') && !/data-guardar="true" disabled=""/.test(h), 'con cambios: «● sin guardar» y Guardar activo')
   h = monta({ ...abre1, borrador: { ...abre1.borrador, estado: 'descartada' } })
   ok(h.includes('● sin guardar') && /data-estado-boton="descartada" aria-pressed="true"/.test(h) && h.includes('#ff8b8b'), 'cambiar el estado a Descartada: botón marcado (rojo) y sin guardar')
   h = monta({ ...abre1, borrador: { ...abre1.borrador, texto: 'otro' }, pregunta: true })
-  ok(h.includes('Tienes cambios sin guardar en «Semiconductores 2027». ¿Guardarlos?') && ['>Guardar<', '>Descartar<', '>Cancelar<'].every(s => h.includes(s)), 'pregunta de cambios sin guardar: Guardar / Descartar / Cancelar')
+  const ventana = h.slice(h.indexOf('data-pregunta="sin-guardar"'))
+  ok(ventana.includes('Tienes cambios sin guardar en «Semiconductores 2027».') && !ventana.includes('¿Guardarlos?') && ['>Guardar<', '>Salir sin guardar<', '>Cancelar<'].every(s => ventana.includes(s)), 'ventana propia de cambios sin guardar: Guardar / Salir sin guardar / Cancelar')
   h = monta({ ...abre1, borrando: true })
   ok(h.includes('¿Borrar la tesis «Semiconductores 2027»? Desaparece del todo.') && h.includes('Sí, borrar') && h.includes('#f85149'), 'aviso de borrar con «Sí, borrar» / «Cancelar» y la papelera roja')
   h = monta({ tesis: tres, nueva: true, borrador: { titulo: 'Nueva tesis', texto: '', estado: 'idea', relacionados: [] } })
@@ -150,8 +154,8 @@ const cuenta = (html, s) => html.split(s).length - 1
   ok(T.textoSinEtiquetas(rico) === 'Tesis Chips IA de R&D <fuerte> uno celda enlace', `sin etiquetas: «${T.textoSinEtiquetas(rico)}»`)
   ok(T.textoSinEtiquetas(plano) === plano, 'el texto plano se queda como está')
   const conHtml = [{ id: 1, titulo: 'A', texto: rico }, { id: 2, titulo: 'B', texto: 'tabla strong en plano' }]
-  ok(T.buscaTesis(conHtml, 'strong').map(t => t.id).join() === '2' && T.buscaTesis(conHtml, 'href').length === 0 && T.buscaTesis(conHtml, 'amp').length === 0, 'buscar «strong», «href» o «amp» no encuentra las etiquetas')
-  ok(T.buscaTesis(conHtml, 'r&d').map(t => t.id).join() === '1' && T.buscaTesis(conHtml, 'chips ia celda').map(t => t.id).join() === '1' && T.buscaTesis(conHtml, 'fuerte').length === 1, 'buscar el texto de verdad sí lo encuentra, también «R&D»')
+  ok(T.buscaTesis(conHtml, 'strong', true).map(t => t.id).join() === '2' && T.buscaTesis(conHtml, 'href', true).length === 0 && T.buscaTesis(conHtml, 'amp', true).length === 0 && T.buscaTesis(conHtml, 'x.com', true).length === 0, 'buscar «strong», «href», «amp» o la dirección de un enlace no encuentra las etiquetas')
+  ok(T.buscaTesis(conHtml, 'r&d', true).map(t => t.id).join() === '1' && T.buscaTesis(conHtml, 'chips ia celda', true).map(t => t.id).join() === '1' && T.buscaTesis(conHtml, 'fuerte', true).length === 1, 'buscar el texto de verdad sí lo encuentra, también «R&D»')
   const conRica = { id: 8, titulo: 'Tesis rica', texto: rico, estado: 'idea', relacionados: [], created_at: dias(1), updated_at: dias(1), revisada_en: dias(1) }
   h = monta({ tesis: [conRica], abierta: 8, borrador: { titulo: 'Tesis rica', texto: rico, estado: 'idea', relacionados: [] } })
   const trozoLista = h.slice(h.indexOf('data-lista'), h.indexOf('data-abierta'))
@@ -211,6 +215,107 @@ const cuenta = (html, s) => html.split(s).length - 1
   ok(contraste(H.texto, H.recuadroFondo) >= 7, `letra sobre el recuadro: ${contraste(H.texto, H.recuadroFondo).toFixed(1)}:1`)
   ok(T.COLORES_LETRA.length >= 6 && T.COLORES_LETRA.length <= 8 && T.COLORES_LETRA.every(x => contraste(x.color, H.fondo) >= 7), `${T.COLORES_LETRA.length} colores de letra, todos ≥ 7:1 (el peor, ${Math.min(...T.COLORES_LETRA.map(x => contraste(x.color, H.fondo))).toFixed(1)}:1)`)
   ok(T.COLORES_RESALTE.length >= 3 && T.COLORES_RESALTE.length <= 4 && T.COLORES_RESALTE.every(x => contraste(H.texto, x.color) >= 4.5), `${T.COLORES_RESALTE.length} resaltados, se lee la letra encima (el peor, ${Math.min(...T.COLORES_RESALTE.map(x => contraste(H.texto, x.color))).toFixed(1)}:1)`)
+
+  // ── 5 · Fechas, salir sin guardar y buscador ──
+  // Hora de Madrid, con el ordenador en otra zona a propósito (Nueva York): antes salía el día de allí.
+  const zona = process.env.TZ
+  process.env.TZ = 'America/New_York'
+  ok(new Date('2026-07-15T23:30:00Z').getDate() === 15 && T.fechaCorta('2026-07-15T23:30:00Z') === '16/07/2026' && T.fechaHora('2026-07-15T23:30:00Z') === '16/07/2026 a las 01:30', 'verano, 23:30 UTC: en Madrid ya es el día siguiente, a la 01:30 (con el ordenador en Nueva York)')
+  ok(T.fechaCorta('2026-12-15T23:30:00Z') === '16/12/2026' && T.fechaHora('2026-12-15T23:30:00Z') === '16/12/2026 a las 00:30', 'invierno, 23:30 UTC: en Madrid, las 00:30 del día siguiente')
+  ok(T.fechaHora('2026-10-31T23:21:14.485576+00:00') === '01/11/2026 a las 00:21', 'la tesis de las 23:21 UTC del 31/10: «01/11/2026 a las 00:21» (la medianoche es 00, no 24)')
+  ok(T.fechaHora('2026-10-25T00:30:00Z') === '25/10/2026 a las 02:30' && T.fechaHora('2026-10-25T01:30:00Z') === '25/10/2026 a las 02:30', 'cambio de hora de octubre: las 02:30 ocurren dos veces (00:30 y 01:30 UTC)')
+  ok(T.fechaHora('2026-10-24T22:30:00Z') === '25/10/2026 a las 00:30' && T.fechaHora('2026-10-25T22:30:00Z') === '25/10/2026 a las 23:30' && T.fechaHora('2026-10-25T23:30:00Z') === '26/10/2026 a las 00:30', 'el día del cambio: antes suma 2 horas, después suma 1 (23:30 UTC ya es el 26)')
+  ok(T.diasEntre('2026-10-24T22:30:00Z', '2026-10-25T23:30:00Z') === 1 && T.diasEntre('2026-10-31T23:21:00Z', '2026-11-01T22:00:00Z') === 0, 'los días pasados se cuentan en días de Madrid, también con el cambio de hora')
+  if (zona === undefined) delete process.env.TZ; else process.env.TZ = zona
+  ok(T.fechaCorta(null) === '—' && T.fechaHora(null) === '—' && T.fechaCorta('nada') === '—', 'sin fecha, o una que no se entiende: «—»')
+
+  // «Revisada: —» y tooltips.
+  const creada = { id: 3, titulo: 'Breakouts', texto: 'x', estado: 'idea', relacionados: [], created_at: '2026-10-31T23:21:14Z', updated_at: '2026-10-31T23:21:14Z', revisada_en: null }
+  const borrador3 = { titulo: 'Breakouts', texto: 'x', estado: 'idea', relacionados: [] }
+  h = monta({ tesis: [creada], abierta: 3, borrador: borrador3 })
+  ok(h.includes('>Revisada: —<') && h.includes('>Creada 01/11/2026<') && h.includes('title="Creada el 01/11/2026 a las 00:21"'), 'guardada y sin revisar: «Creada 01/11/2026 · Revisada: —», con el tooltip de día y hora')
+  ok(T.haceTexto(creada, new Date('2026-11-01T12:00:00Z')) === 'creada hoy', 'en la lista, una sin revisar dice «creada…»')
+  h = monta({ tesis: [{ ...creada, revisada_en: '2026-11-05T19:05:00Z' }], abierta: 3, borrador: borrador3 })
+  ok(h.includes('>Revisada 05/11/2026<') && h.includes('title="Revisada el 05/11/2026 a las 20:05"') && !h.includes('Revisada: —'), 'tras «Marcar como revisada hoy»: su fecha, con el tooltip de día y hora')
+  ok(T.haceTexto({ ...creada, revisada_en: '2026-10-31T23:21:30Z' }, new Date('2026-11-01T12:00:00Z')) === 'revisada hoy', 'revisarla un momento después de crearla ya cuenta como revisada')
+  h = monta({ tesis: [creada], nueva: true, borrador: { titulo: 'Nueva tesis', texto: '', estado: 'idea', relacionados: [] } })
+  ok(h.includes('Sin guardar todavía') && h.includes('>Revisada: —<') && /data-revisada="true" disabled=""/.test(h), 'nueva: «Sin guardar todavía · Revisada: —», y sin poder marcarla aún')
+  ok(!('revisada_en' in T.camposDe({ titulo: 'x', revisada_en: 'a', created_at: 'b' })) && !('created_at' in T.camposDe({ titulo: 'x', created_at: 'b' })), 'lo que se guarda nunca lleva fechas, ni aunque vinieran en el borrador')
+  ok(/revisada_en  timestamptz,/.test(leer('sql', 'tesis_inversion.sql')) && !/revisada_en\s+timestamptz NOT NULL/.test(leer('sql', 'tesis_inversion.sql')), 'la tabla admite la revisión vacía')
+
+  // «Descartar cambios»: solo con cambios sin guardar.
+  h = monta({ tesis: [creada], abierta: 3, borrador: borrador3 })
+  ok(!h.includes('data-descartar') && !h.includes('Descartar cambios'), 'sin cambios: no hay «Descartar cambios»')
+  h = monta({ tesis: [creada], abierta: 3, borrador: { ...borrador3, texto: 'otro' } })
+  ok(h.includes('data-descartar') && h.includes('>Descartar cambios<') && h.indexOf('data-guardar') < h.indexOf('data-descartar'), 'con cambios: «Descartar cambios», junto a «Guardar»')
+  h = monta({ tesis: [creada], nueva: true, borrador: { titulo: 'Nueva tesis', texto: '', estado: 'idea', relacionados: [] } })
+  ok(h.includes('>Descartar cambios<'), 'en una nueva sin guardar, también')
+  ok(fuentePanel.includes(`if (nueva) siguiente(tesis || []); else if (fila) abre(fila)`), 'descartar: la nueva desaparece (se abre la siguiente); la guardada vuelve a lo guardado, con el editor nuevo')
+  ok(fuentePanel.includes(`setBorr(borradorDe(t))`) && fuentePanel.includes(`setHoja(n => n + 1); setNueva(false)`), 'abrir vuelve al título, el texto, el estado y los enlaces guardados')
+  const guardada = T.igualesTesis(borrador3, { titulo: 'Breakouts', texto: 'x', estado: 'idea', relacionados: [] })
+  ok(guardada && !T.igualesTesis({ ...borrador3, relacionados: [{ tipo: 'plan', id: '1' }] }, borrador3) && !T.igualesTesis({ ...borrador3, estado: 'marcha' }, borrador3) && !T.igualesTesis({ ...borrador3, titulo: 'Y' }, borrador3), 'lo guardado no marca cambios; cambiar título, estado o enlaces, sí')
+
+  // La ventana de salida, sus tres caminos.
+  const camino = async (que, guardarDa) => { const hecho = []; const r = await T.respondeSalida(que, { guardar: async () => { hecho.push('guardar'); return guardarDa }, descartar: () => hecho.push('descartar'), seguir: () => hecho.push('seguir') }); return `${r}:${hecho.join('+')}` }
+  ok(await camino('guardar', true) === 'sigue:guardar+seguir', 'Guardar: guarda y continúa')
+  ok(await camino('guardar', false) === 'fallo:guardar', 'Guardar que falla: NO continúa')
+  ok(await camino('salir') === 'sigue:descartar+seguir', 'Salir sin guardar: descarta y continúa')
+  ok(await camino('cancelar') === 'queda:', 'Cancelar: te quedas, sin tocar nada')
+  const conFallo = { ...ctx, fetch: async () => responde(500, { message: 'caída' }) }
+  let e3 = null; try { await T.cambiarTesis(conFallo, 3, borrador3) } catch (e) { e3 = e.message }
+  ok(e3 === 'No se pudo guardar los cambios (HTTP 500: caída).', `guardar que falla da su error: «${e3}»`)
+  h = monta({ tesis: [creada], abierta: 3, borrador: { ...borrador3, texto: 'otro' }, pregunta: true, falloPregunta: true, fallo: e3 })
+  ok(h.slice(h.indexOf('data-pregunta="sin-guardar"')).includes(`⚠ ${e3}`) && h.includes('data-pregunta="sin-guardar"'), 'si guardar falla, la ventana sigue abierta y muestra el error')
+  h = monta({ tesis: [creada], abierta: 3, borrador: { ...borrador3, titulo: ' ' }, pregunta: true })
+  ok(h.includes('data-aviso-pregunta') && h.includes('Ponle un título.') && /data-salida="guardar" disabled=""/.test(h) && !/data-salida="salir" disabled=""/.test(h), 'sin título no se puede guardar: dice por qué y deja salir sin guardar')
+  ok(!/confirm\(/.test(fuentePanel) && fuentePanel.includes(`window.addEventListener('beforeunload', avisa)`), 'ni un confirm() del navegador; al cerrar o recargar sigue avisando el navegador')
+  ok(fuentePanel.includes('data-nueva onClick={() => conGuardia(creaNueva)}') && fuentePanel.includes('conGuardia(() => abre(t))') && fuentePanel.includes('conGuardia(() => onAbrirEstrategia(f.fila))') && fuentePanel.includes('salida.current = (seguir)') && leer('pages', 'index.js').includes('tesisSalida.current?.(()=>setSidePanel(item.id))'), 'pregunta en los cuatro caminos: otra tesis, «+ Nueva tesis», «Abrir» y el menú')
+
+  // El buscador.
+  const tres2 = [
+    { id: 1, titulo: 'Métricas para screener', texto: '<p>Sin más</p>', estado: 'idea', relacionados: [], created_at: dias(1), revisada_en: null },
+    { id: 2, titulo: 'Growth investing', texto: '<p>Una frase larga que sirve para <strong>describir</strong> la entrada del valor y lo que tiene que pasar después de comprar.</p><p><a href="https://descripcion.example/scr">enlace</a></p>', estado: 'idea', relacionados: [], created_at: dias(2), revisada_en: null },
+    { id: 3, titulo: 'Bancos', texto: 'La descripción en texto plano de antes', estado: 'idea', relacionados: [], created_at: dias(3), revisada_en: null },
+  ]
+  const idsDe = (xs) => xs.map(t => t.id).join()
+  const textoDe = (trozos) => trozos.map(x => x.t).join('')
+  const marcado = (trozos) => trozos.filter(x => x.marca).map(x => x.t).join('|')
+  ok(idsDe(T.buscaTesis(tres2, 'descripcion')) === '' && idsDe(T.buscaTesis(tres2, 'BANCOS')) === '3', 'por defecto, SOLO en los títulos')
+  ok(idsDe(T.buscaTesis(tres2, 'metricas')) === '1' && idsDe(T.buscaTesis(tres2, 'MÉTRICAS')) === '1', 'sin distinguir mayúsculas ni acentos, en el título')
+  ok(idsDe(T.buscaTesis(tres2, 'descripcion', true)) === '3' && idsDe(T.buscaTesis(tres2, 'DESCRIPCIÓN', true)) === '3', 'con el texto: «descripcion» encuentra «descripción», y no la dirección de un enlace')
+  ok(idsDe(T.buscaTesis(tres2, 'scr', true)) === '1,2,3' && T.buscaTesis(tres2, 'example', true).length === 0 && T.buscaTesis(tres2, 'strong', true).length === 0, 'con el texto: «scr» en las tres; «example» y «strong» (dirección y etiqueta) en ninguna')
+  ok(idsDe(T.buscaTesis(tres2, '')) === '1,2,3', 'sin nada escrito (también tras pulsar ✕), todas')
+  const linea = T.lineaCoincidencia(tres2[1], 'scr')
+  ok(marcado(linea) === 'scr' && textoDe(linea).includes('para describir la entrada') && textoDe(linea).startsWith('…') && textoDe(linea).endsWith('…') && textoDe(linea).length < 90 && !/<|href/.test(textoDe(linea)), `la línea corta, con lo buscado resaltado: «${textoDe(linea)}»`)
+  const lineaAcento = T.lineaCoincidencia(tres2[2], 'descripcion')
+  ok(marcado(lineaAcento) === 'descripción' && textoDe(lineaAcento) === 'La descripción en texto plano de antes', `con acentos, se resalta la palabra original: «${marcado(lineaAcento)}»`)
+  ok(T.lineaCoincidencia(tres2[0], 'screener') === null && T.lineaCoincidencia(tres2[0], 'METRICAS') === null, 'si coincide en el título, no hay línea')
+  ok(marcado(T.lineaCoincidencia(tres2[0], 'metricas sin')) === 'Sin', 'dos palabras, una en el título y otra en el texto: la línea, por la del texto')
+  ok(T.lineaCoincidencia(tres2[0], 'nada') === null && T.lineaCoincidencia(tres2[0], '') === null, 'sin nada que enseñar, sin línea')
+  ok(textoDe(T.lineaCoincidencia({ titulo: 'x', texto: '<p>a &lt;b&gt; c</p>' }, 'c')) === 'a <b> c', 'la línea es texto visible (lo escrito con «<» no es una etiqueta)')
+  h = monta({ tesis: tres2, abierta: 1, borrador: { titulo: tres2[0].titulo, texto: tres2[0].texto, estado: 'idea', relacionados: [] } })
+  ok(/data-buscar-texto="true" aria-pressed="false"/.test(h) && h.includes('title="Buscar solo en títulos"') && h.includes('placeholder="Buscar en los títulos…"') && !h.includes('data-borrar-busca'), 'de entrada: el icono apagado, «Buscar solo en títulos» y sin ✕ (no hay nada escrito)')
+  h = monta({ tesis: tres2, abierta: 1, borrador: { titulo: tres2[0].titulo, texto: tres2[0].texto, estado: 'idea', relacionados: [] }, enTexto: true })
+  ok(/data-buscar-texto="true" aria-pressed="true"/.test(h) && h.includes('title="Buscar también en el texto"') && h.includes(B0.siguienteBorde) && !h.includes('data-linea-texto'), 'encendido: resaltado, «Buscar también en el texto»; sin buscar nada, sin líneas')
+  const bor1 = { titulo: tres2[0].titulo, texto: tres2[0].texto, estado: 'idea', relacionados: [] }
+  h = monta({ tesis: tres2, abierta: 1, borrador: bor1, busca: 'scr' })
+  ok(h.includes('data-borrar-busca') && h.includes('>✕<') && cuenta(h, 'data-item="') === 1 && h.includes('data-item="1"') && !h.includes('data-linea-texto') && /<mark[^>]*>scr<\/mark>/.test(h), 'buscar «scr» solo en títulos: una tesis, resaltada en el título, sin línea, y con la ✕')
+  ok(fuentePanel.includes(`onClick={() => { setBusca('');`), 'la ✕ borra lo escrito')
+  h = monta({ tesis: tres2, abierta: 1, borrador: bor1, busca: 'scr', enTexto: true })
+  const trozoLista2 = h.slice(h.indexOf('data-lista'), h.indexOf('data-abierta'))
+  ok(cuenta(trozoLista2, 'data-item="') === 3 && cuenta(trozoLista2, 'data-linea-texto') === 2 && cuenta(trozoLista2, '<mark') === 3 && !/href|&lt;strong/.test(trozoLista2), 'buscar «scr» con el texto: tres tesis; una resaltada en el título y dos con su línea resaltada')
+  h = monta({ tesis: [{ ...tres2[0], titulo: '<b>x</b> scr' }], abierta: 1, borrador: bor1, busca: 'scr' })
+  ok(h.slice(h.indexOf('data-lista'), h.indexOf('data-abierta')).includes('&lt;b&gt;x&lt;/b&gt;'), 'un título con «<b>» se ve como texto: resaltar nunca interpreta HTML')
+  const memoria = () => { const m = {}; return { m, getItem: (k) => m[k] ?? null, setItem: (k, v) => { m[k] = v } } }
+  const alm = memoria()
+  ok(T.leeBuscarEnTexto(alm) === false, 'recordar: apagado por defecto')
+  T.guardaBuscarEnTexto(true, alm)
+  ok(T.leeBuscarEnTexto(alm) === true, 'recordar: encendido se queda encendido')
+  T.guardaBuscarEnTexto(false, alm)
+  ok(T.leeBuscarEnTexto(alm) === false, 'recordar: y apagado, apagado')
+  const roto = { getItem: () => { throw new Error('bloqueado') }, setItem: () => { throw new Error('bloqueado') } }
+  let sinFallo = true; try { T.guardaBuscarEnTexto(true, roto); sinFallo = T.leeBuscarEnTexto(roto) === false && T.leeBuscarEnTexto() === false } catch (_) { sinFallo = false }
+  ok(sinFallo, 'con el navegador sin permiso para guardar: ni falla ni se enciende')
 
   console.log(fallos ? `tesis: ${fallos} fallos` : 'tesis: todas bien')
   process.exit(fallos ? 1 : 0)
