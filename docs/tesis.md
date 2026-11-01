@@ -97,6 +97,7 @@ editor tipo Word. Es una pantalla **aislada**: no toca el motor, el Builder ni n
   próxima versión.»; un HTML con `<img>` entra sin ella y con el aviso. Word y Excel añaden una «foto» de lo copiado junto al texto: ahí
   se pega el texto, sin aviso.
 - **Colores**: `HOJA`, `COLORES_LETRA` y `COLORES_RESALTE` en `lib/tesis.js`; la prueba mide los contrastes (hoja, ≥ 7:1).
+- **Teclear**: el atajo de `pages/index.js` que abre el buscador de símbolos con cualquier letra no salta dentro del editor (`isContentEditable`).
 - Al abrir otra tesis, el editor se monta de nuevo (`hoja`, su `key`): «deshacer» no trae el texto de la anterior.
 
 ## Comprobaciones
