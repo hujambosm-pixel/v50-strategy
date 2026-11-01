@@ -135,6 +135,20 @@ texto con visor a pantalla completa, más un botón para leerlos al lado del tex
 - **Lo que queda sin limpiar hasta la próxima vez**: cerrar la ventana a mitad, o que falle la limpieza. No se pierde nada: la próxima vez que se guarde o se descarte esa tesis se limpia.
 - **Deshacer tras guardar**: una imagen quitada y guardada ya no existe; si se trae con Ctrl+Z, sale «Imagen no disponible».
 
+### La zona «Adjuntos» y el visor (opción A)
+
+- **`components/TesisAdjuntos.js`** solo pinta; el estado y las llamadas, en `TesisPanel`. Los adjuntos se guardan al subirlos: no pasan por «Guardar» ni por «● sin guardar».
+- **La zona**, entre el editor y «Relacionado»: «Adjuntos (N)», su «?», «Ocupan X», «Arrastra archivos aquí o» y «+ Añadir archivos» (varios). Al arrastrar, recuadro azul discontinuo. Subiendo, una fila
+  con «Subiendo… 62 %» y barra verde (`alProgreso`). Rejilla de hasta 4 columnas, más reciente primero; las tarjetas abren el visor, con Descargar y papelera roja. En una nueva sin guardar, el aviso en ámbar.
+- **Las URL de las miniaturas** se piden en lote al abrir la tesis y otra vez al abrir el visor (pueden llevar más de una hora).
+- **El visor**: encima de todo, con «‹ 1 de N ›», tipo, nombre, tamaño, «de la tesis», Descargar, Abrir en pestaña nueva y ×; abajo, la tira de miniaturas. Esc y × cierran; las flechas pasan de archivo, solo con el visor abierto.
+  Imagen: ajustada, con clic a tamaño real. PDF: el visor del navegador en un iframe con la URL firmada (sin librerías; la respuesta del bucket no lleva `x-frame-options` ni CSP, comprobado con el modo `anon`). Word, Excel y demás: el aviso con «Descargar».
+- **Límite conocido**: con un PDF abierto y el foco dentro de él, las teclas se las queda el visor del navegador (Esc y flechas no llegan a la app); la × y ‹ › sí funcionan.
+- **Pulsar dos veces una imagen del texto**: el visor, recorriendo las imágenes de esa tesis.
+- **Borrar un adjunto**: ventana propia. **Borrar una tesis**: dice cuántos archivos se van (`avisoBorrarTesis`); primero los archivos y solo si eso sale bien, la tesis. Si falla, se queda y sale el error.
+- **La lista**: clip con el número de adjuntos (las imágenes del texto no cuentan); abajo, siempre a la vista, «Espacio usado (todas las tesis)» con barra verde, ámbar desde el 80 % y roja desde el 95 %. Por eso la
+  columna izquierda se queda fija al desplazar la página y su lista lleva barra propia si no cabe.
+
 ### La prueba de seguridad
 
 `scripts/comprobaciones/tesisSeguridad.js` habla con la base de VERDAD (no va en `comunes.sh`). Tres modos:

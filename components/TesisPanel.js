@@ -6,7 +6,8 @@
 // aquí) y «Relacionado» (estrategias de tarjetas y planes guardados).
 // Props: estrategias (las filas de `strategies`), onAbrirEstrategia (abre una en el paso 1 del Builder), salida (un ref: la página
 // pregunta por él antes de cambiar de pestaña; devuelve true si hay cambios y se ha abierto la pregunta). deps ({ ctx, Editor }) e inicial
-// ({ tesis, planes, abierta, borrador, nueva, pregunta, falloPregunta, fallo, borrando, filtro, busca, enTexto, anadiendo }): para las pruebas de montaje.
+// ({ tesis, planes, abierta, borrador, nueva, pregunta, falloPregunta, fallo, borrando, filtro, busca, enTexto, anadiendo, archivos, resumen, urls, subidas, avisosAdjuntos, arrastrando, visor, borrandoAdjunto }): para las pruebas de montaje.
+// Los adjuntos (components/TesisAdjuntos.js) se guardan al subirlos: no pasan por «Guardar» ni por «cambios sin guardar».
 import { useState, useEffect, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { B, S } from '../lib/builder/estilo'
@@ -16,7 +17,8 @@ import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
 import { trozosResaltados } from '../lib/builder/buscar'
 import { AYUDA_RELACIONADO, AYUDA_TESIS, COLORES_RESALTE, ESTADOS_TESIS, HOJA, TITULO_NUEVA, borrarTesis, buscaTesis, cambiarTesis, crearTesis, cuentasTesis, estadoTesis, fechaCorta, fechaHora,
   fichaDe, guardaBuscarEnTexto, haceTexto, igualesTesis, imagenesSobrantes, leeBuscarEnTexto, lineaCoincidencia, listarNombresPlanes, listarTesis, marcarRevisada, ordenTesis, problemaDe, respondeSalida } from '../lib/tesis'
-import { borrar, borrarTodoDeTesis, listar } from '../lib/tesisArchivos'
+import { AVISO_SIN_GUARDAR, avisoBorrarTesis, avisoDe, borrar, borrarTodoDeTesis, colorEspacio, descargar, espacioUsado, filasDeTodas, listar, porcentajeEspacio, resumenArchivos, subir, tamanoLegible, urlsFirmadas } from '../lib/tesisArchivos'
+import { IconoClip, Visor, ZonaAdjuntos } from './TesisAdjuntos'
 
 const NUEVA = Object.freeze({ titulo: TITULO_NUEVA, texto: '', estado: 'idea', relacionados: [] })
 const borradorDe = (t) => ({ titulo: t.titulo, texto: t.texto || '', estado: t.estado, relacionados: Array.isArray(t.relacionados) ? t.relacionados : [] })
@@ -36,10 +38,11 @@ const HojaLineas = () => (
 // Un texto en trozos ([{ t, marca }]), con lo buscado resaltado. React lo escapa: nada se interpreta como HTML.
 const Resaltado = ({ trozos }) => trozos.map((x, k) => x.marca ? <mark key={k} data-marca style={{ background: COLORES_RESALTE[0].color, color: B.titulo, borderRadius: 2 }}>{x.t}</mark> : <span key={k}>{x.t}</span>)
 // Una ventana de pregunta (sin guardar, borrar), encima de todo.
-const Pregunta = ({ id, texto, aviso, children }) => (
+const Pregunta = ({ id, texto, detalle, aviso, children }) => (
   <div data-pregunta={id} role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
     <div style={{ ...S.tarjeta, padding: 20, maxWidth: 440, width: '100%' }}>
       <div style={{ color: B.titulo, marginBottom: 16 }}>{texto}</div>
+      {detalle && <div data-detalle-pregunta style={{ color: B.secundario, marginTop: -8, marginBottom: 16 }}>{detalle}</div>}
       {aviso && <div data-aviso-pregunta style={{ color: '#ff8b8b', marginBottom: 16 }}>⚠ {aviso}</div>}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>{children}</div>
     </div>
@@ -64,6 +67,14 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   const [foco, setFoco] = useState(0)
   const [hoja, setHoja] = useState(0)   // sube al abrir otra tesis: editor nuevo, sin el «deshacer» de la anterior
   const [subiendo, setSubiendo] = useState(0)   // imágenes subiendo: hasta que acaben no se guarda (aún no están en el texto)
+  const [archivos, setArchivos] = useState(inicial?.archivos || [])   // los de la tesis abierta (imágenes y adjuntos), el más reciente primero
+  const [resumen, setResumen] = useState(inicial?.resumen || resumenArchivos([]))   // de todas las tesis: el clip de la lista y el espacio usado
+  const [urls, setUrls] = useState(inicial?.urls || {})   // { ruta: url firmada }, solo en pantalla
+  const [subidas, setSubidas] = useState(inicial?.subidas || [])   // [{ id, nombre, progreso }]
+  const [avisosA, setAvisosA] = useState(inicial?.avisosAdjuntos || [])
+  const [arrastrando, setArrastrando] = useState(!!inicial?.arrastrando)
+  const [visor, setVisor] = useState(inicial?.visor || null)   // { clase, id }: la lista que recorre y el archivo abierto
+  const [borrandoA, setBorrandoA] = useState(inicial?.borrandoAdjunto || null)   // la fila que se va a borrar
   const Editor = deps?.Editor || EditorTesis
   const titulo = useRef(null)
   const cajaBusca = useRef(null)
@@ -82,6 +93,24 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   // Leídas las tesis, se abre la más reciente.
   useEffect(() => { if (tesis && abierta == null && !nueva && !borr && ordenadas[0]) { setAbierta(ordenadas[0].id); setBorr(borradorDe(ordenadas[0])) } }, [tesis])
   useEffect(() => { if (foco && titulo.current) { titulo.current.focus(); titulo.current.select() } }, [foco])
+  // Los archivos de la tesis abierta, con sus URL para las miniaturas, y el resumen de todas.
+  const idAbierta = useRef(null)
+  idAbierta.current = nueva ? null : abierta
+  const leeResumen = async () => { try { const c = ctx(); if (c) setResumen(resumenArchivos(await filasDeTodas(c))) } catch (_) {} }
+  const leeArchivos = async () => {
+    const id = idAbierta.current, c = ctx()
+    if (id == null || !c) { setArchivos([]); return [] }
+    try {
+      const xs = await listar(c, id)
+      if (idAbierta.current !== id) return []
+      setArchivos(xs)
+      const firmadas = await urlsFirmadas(c, xs.map(f => f.ruta))
+      setUrls(u => ({ ...u, ...firmadas }))
+      return xs
+    } catch (e) { setAvisosA([`⚠ ${e.message}`]); return [] }
+  }
+  useEffect(() => { if (!inicial?.resumen) leeResumen() }, [])
+  useEffect(() => { if (inicial?.archivos) return; setVisor(null); setAvisosA([]); leeArchivos() }, [abierta, nueva])
 
   const fila = nueva ? null : ordenadas.find(t => t.id === abierta) || null
   const original = nueva ? NUEVA : fila ? borradorDe(fila) : null
@@ -116,6 +145,48 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   // Borra (archivo y fila) las imágenes de esa tesis que no están en estos textos. Sin aviso si falla: quedan para la siguiente vez que se guarde o se descarte.
   const limpiaImagenes = async (id, ...textos) => {
     try { const c = ctx(), filas = await listar(c, id); await borrar(c, imagenesSobrantes(filas, ...textos.map(t => t()))) } catch (_) {}
+    leeArchivos(); leeResumen()
+  }
+  // ── Adjuntos ──
+  // Uno a uno, con su barra. Un archivo que no cabe o no se admite da su aviso y los demás siguen. Se guardan al subirlos: no cuentan como «cambios sin guardar».
+  const anadeArchivos = async (lista) => {
+    const id = idAbierta.current, c0 = ctx()
+    if (id == null || !c0) { setAvisosA([AVISO_SIN_GUARDAR]); return }
+    setAvisosA([])
+    let usados = 0
+    try { usados = await espacioUsado(c0) } catch (e) { setAvisosA([`⚠ ${e.message}`]); return }
+    const cola = []
+    for (const archivo of lista) {
+      const no = avisoDe(archivo, usados)
+      if (no) { setAvisosA(a => [...a, no]); continue }
+      usados += archivo.size
+      cola.push({ id: `${archivo.name}-${cola.length}-${Date.now()}`, archivo })
+    }
+    setSubidas(s => [...s, ...cola.map(x => ({ id: x.id, nombre: x.archivo.name, progreso: 0 }))])
+    for (const { id: sid, archivo } of cola) {
+      try { await subir(ctx(), { tesisId: id, clase: 'adjunto', archivo, alProgreso: (p) => setSubidas(s => s.map(x => x.id === sid ? { ...x, progreso: p } : x)) }) }
+      catch (e) { setAvisosA(a => [...a, `⚠ ${e.message}`]) }
+      setSubidas(s => s.filter(x => x.id !== sid))
+      if (idAbierta.current === id) await leeArchivos()
+      leeResumen()
+    }
+  }
+  const bajaArchivo = async (f) => { try { await descargar(ctx(), f) } catch (e) { setAvisosA([`⚠ ${e.message}`]) } }
+  const borraAdjunto = async () => {
+    const f = borrandoA
+    setBorrandoA(null)
+    try { await borrar(ctx(), [f]); setArchivos(xs => xs.filter(x => x.id !== f.id)); leeResumen() } catch (e) { setAvisosA([`⚠ ${e.message}`]) }
+  }
+  // Abrir el visor vuelve a firmar: las URL de la lista pueden llevar más de una hora abiertas.
+  const abreVisor = (f) => {
+    setVisor({ clase: f.clase, id: f.id })
+    const c = ctx()
+    if (c) urlsFirmadas(c, archivos.filter(x => x.clase === f.clase).map(x => x.ruta)).then(u => setUrls(v => ({ ...v, ...u }))).catch(() => {})
+  }
+  // Pulsar dos veces una imagen del texto: el visor, recorriendo las imágenes de la tesis.
+  const abreImagen = async (ruta) => {
+    const f = archivos.find(x => x.ruta === ruta) || (await leeArchivos()).find(x => x.ruta === ruta)
+    if (f) abreVisor(f)
   }
   const guarda = async () => {
     if (!puedeGuardar) return false
@@ -140,7 +211,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
     if (nueva) { siguiente(tesis || []); return }
     setOcupado(true); setFallo(null)
     // Primero los archivos del bucket y solo si eso sale bien, la tesis (la base se lleva las filas con ella, no los archivos).
-    try { await borrarTodoDeTesis(ctx(), fila.id); await borrarTesis(ctx(), fila.id); const resto = (tesis || []).filter(x => x.id !== fila.id); setTesis(resto); siguiente(resto) } catch (e) { setFallo(e.message) } finally { setOcupado(false) }
+    try { await borrarTodoDeTesis(ctx(), fila.id); await borrarTesis(ctx(), fila.id); const resto = (tesis || []).filter(x => x.id !== fila.id); setTesis(resto); siguiente(resto); leeResumen() } catch (e) { setFallo(e.message); leeArchivos(); leeResumen() } finally { setOcupado(false) }
   }
   const responde = async (que) => {
     const p = pregunta
@@ -158,12 +229,19 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   const boton = (activo) => activo ? S.botonVerde : S.botonDesactivado
   const campo = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '8px 10px', boxSizing: 'border-box' }
   const filtros = [{ id: 'todas', nombre: 'Todas' }, ...ESTADOS_TESIS]
+  const adjuntos = archivos.filter(f => f.clase === 'adjunto')
+  const listaVisor = visor ? archivos.filter(f => f.clase === visor.clase) : []
+  const indiceVisor = visor ? listaVisor.findIndex(f => f.id === visor.id) : -1
+  const avisoBorrar = fila ? avisoBorrarTesis(resumen.porTesis[fila.id]) : null
 
   return (
     <div data-tesis className="ts-pagina" style={{ ...S.pagina, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <style>{`.ts-cuerpo { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 16px; align-items: start }
 @media (max-width: 999px) { .ts-cuerpo { grid-template-columns: minmax(0, 1fr) } }
-.ts-pagina { box-sizing: border-box; height: calc(100vh - 56px) }`}</style>
+.ts-pagina { box-sizing: border-box; height: calc(100vh - 56px) }
+.ts-lista { position: sticky; top: 0; max-height: calc(100vh - 150px) }
+.ts-lista-filas { flex: 1; min-height: 0; overflow-y: auto }
+@media (max-width: 999px) { .ts-lista { position: static; max-height: none } }`}</style>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Mis tesis de inversión</div>
         <Ayuda texto={AYUDA_TESIS} etiqueta="Mis tesis de inversión"/>
@@ -174,7 +252,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
 
       <div className="ts-cuerpo">
         {/* ── Izquierda: buscador, filtros y lista ── */}
-        <div data-lista style={{ ...S.tarjeta, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div data-lista className="ts-lista" style={{ ...S.tarjeta, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
               <input ref={cajaBusca} aria-label="Buscar" value={busca} onChange={e => setBusca(e.target.value)} placeholder={enTexto ? 'Buscar en títulos y textos…' : 'Buscar en los títulos…'} style={{ ...campo, width: '100%', paddingRight: 30 }}/>
@@ -194,20 +272,27 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
           {tesis == null && <div style={S.apagado}>Leyendo tus tesis…</div>}
           {tesis != null && !tesis.length && !nueva && <div data-vacia style={{ ...S.secundario, padding: '8px 2px' }}>Aún no tienes tesis. Pulsa «+ Nueva tesis» para escribir la primera.</div>}
           {tesis != null && !!tesis.length && !lista.length && <div style={S.apagado}>Ninguna tesis con esa búsqueda o ese estado.</div>}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div className="ts-lista-filas" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {nueva && (
               <div data-item="nueva" aria-current="true" style={{ padding: '8px 10px', borderRadius: B.radioBoton, background: B.siguienteFondo, border: `1px solid ${B.siguienteBorde}` }}>
                 <div style={{ fontWeight: 600, color: B.titulo }}>{(borr?.titulo || '').trim() || TITULO_NUEVA}</div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}><Etiqueta estado={borr?.estado}/><span style={{ ...S.apagado, color: AMARILLO }}>sin guardar</span></div>
               </div>)}
-            {lista.map(t => { const on = !nueva && t.id === abierta, linea = lineas.get(t.id); return (
+            {lista.map(t => { const on = !nueva && t.id === abierta, linea = lineas.get(t.id), nAdjuntos = resumen.porTesis[t.id]?.adjuntos || 0; return (
               <button key={t.id} data-item={t.id} aria-current={on ? 'true' : undefined} onClick={() => { if (!on) conGuardia(() => abre(t)) }}
-                style={{ textAlign: 'left', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, padding: '8px 10px', borderRadius: B.radioBoton,
+                style={{ flex: 'none', textAlign: 'left', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, padding: '8px 10px', borderRadius: B.radioBoton,
                   background: on ? B.siguienteFondo : 'transparent', border: `1px solid ${on ? B.siguienteBorde : 'transparent'}` }}>
-                <div style={{ fontWeight: 600, color: B.titulo, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><Resaltado trozos={trozosResaltados(t.titulo, busca)}/></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ flex: 1, minWidth: 0, fontWeight: 600, color: B.titulo, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><Resaltado trozos={trozosResaltados(t.titulo, busca)}/></div>
+                  {!!nAdjuntos && <span data-clip={nAdjuntos} title={`${nAdjuntos} ${nAdjuntos === 1 ? 'adjunto' : 'adjuntos'}`} style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 2, color: B.secundario, fontSize: 12 }}><IconoClip/>{nAdjuntos}</span>}
+                </div>
                 {linea && <div data-linea-texto style={{ ...S.apagado, fontSize: 12, lineHeight: 1.35, marginTop: 3, overflowWrap: 'anywhere' }}><Resaltado trozos={linea}/></div>}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}><Etiqueta estado={t.estado}/><span style={S.apagado}>{haceTexto(t)}</span></div>
               </button>) })}
+          </div>
+          <div data-espacio style={{ flex: 'none', borderTop: `1px solid ${B.borde}`, paddingTop: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, color: B.secundario }}><span>Espacio usado (todas las tesis)</span><span style={{ whiteSpace: 'nowrap' }}>{tamanoLegible(resumen.bytes)} de 1 GB</span></div>
+            <div style={{ height: 4, marginTop: 4, borderRadius: 2, background: B.borde, overflow: 'hidden' }}><div data-espacio-barra style={{ height: '100%', width: `${porcentajeEspacio(resumen.bytes)}%`, background: colorEspacio(resumen.bytes) }}/></div>
           </div>
         </div>
 
@@ -240,7 +325,10 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
               </span>
               <button data-revisada disabled={!fila || ocupado} onClick={revisada} style={{ ...S.boton, padding: '5px 12px', fontSize: 13, opacity: fila ? 1 : 0.5, cursor: fila ? 'pointer' : 'not-allowed' }}>✓ Marcar como revisada hoy</button>
             </div>
-            <Editor key={hoja} valor={borr.texto} onCambio={(v) => cambia('texto', v)} tesisId={nueva ? null : abierta} ctx={ctx} onSubiendo={(n) => setSubiendo(x => x + n)}/>
+            <Editor key={hoja} valor={borr.texto} onCambio={(v) => cambia('texto', v)} tesisId={nueva ? null : abierta} ctx={ctx} onSubiendo={(n) => { setSubiendo(x => x + n); if (n < 0) { leeArchivos(); leeResumen() } }} onAbrirImagen={abreImagen}/>
+
+            <ZonaAdjuntos filas={adjuntos} bytes={adjuntos.reduce((s, f) => s + Number(f.bytes), 0)} nueva={nueva} urls={urls} subidas={subidas} avisos={avisosA} arrastrando={arrastrando} onArrastrando={setArrastrando}
+              onAnadir={anadeArchivos} onAbrir={abreVisor} onDescargar={bajaArchivo} onBorrar={setBorrandoA}/>
 
             <div data-relacionado>
               <div style={{ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 700, color: B.titulo, marginBottom: 8 }}>Relacionado<Ayuda texto={AYUDA_RELACIONADO} etiqueta="Relacionado"/></div>
@@ -278,10 +366,17 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
           <button data-salida="cancelar" onClick={() => responde('cancelar')} disabled={ocupado} style={S.boton}>Cancelar</button>
         </Pregunta>)}
       {borrando && (
-        <Pregunta id="borrar" texto={`¿Borrar la tesis ${nombreEn(fila || borr)}? Desaparece del todo.`}>
+        <Pregunta id="borrar" texto={`¿Borrar la tesis ${nombreEn(fila || borr)}? Desaparece del todo.`} detalle={avisoBorrar}>
           <button onClick={borra} style={{ ...S.botonVerde, background: ROJO, borderColor: ROJO, color: '#fff' }}>Sí, borrar</button>
           <button onClick={() => setBorrando(false)} style={S.boton}>Cancelar</button>
         </Pregunta>)}
+      {borrandoA && (
+        <Pregunta id="borrar-adjunto" texto={`¿Borrar «${borrandoA.nombre}»?`} detalle="Se borra de la nube de la app y no se puede recuperar. El archivo de tu PC no se toca.">
+          <button data-cancelar-adjunto onClick={() => setBorrandoA(null)} style={S.boton}>Cancelar</button>
+          <button data-confirmar-adjunto onClick={borraAdjunto} style={{ ...S.botonVerde, background: ROJO, borderColor: ROJO, color: '#fff' }}>Sí, borrar</button>
+        </Pregunta>)}
+      {visor && indiceVisor >= 0 && (
+        <Visor lista={listaVisor} indice={indiceVisor} tituloTesis={(borr?.titulo || '').trim() || TITULO_NUEVA} urls={urls} onIr={(k) => setVisor({ clase: visor.clase, id: listaVisor[k].id })} onCierra={() => setVisor(null)} onDescargar={bajaArchivo}/>)}
     </div>
   )
 }

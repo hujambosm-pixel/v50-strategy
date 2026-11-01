@@ -6,6 +6,7 @@ const C0 = require('./cargador'), R = C0.RAIZ
 let fallos = 0
 const ok = (c, t) => { console.log(`${c ? 'OK  ' : 'MAL '} ${t}`); if (!c) fallos++ }
 const lanza = async (fn) => { try { await fn(); return null } catch (e) { return e.message } }
+const B_AMAR = () => '#f2cc60'
 
 ;(async () => {
   await C0.prepara(); C0.registra(R)
@@ -125,6 +126,70 @@ const lanza = async (fn) => { try { await fn(); return null } catch (e) { return
   ok(await A.borrar(ctx, []) === 0 && !llamadas.length, 'borrar nada: sin llamadas')
   ok(await A.borrarTodoDeTesis(ctx, 7) === 2 && llamadas.length === 3 && llamadas[0].u.includes('tesis_id=eq.7'), 'borrar todo lo de una tesis')
   llamadas.length = 0
+
+  // ── Piezas de la zona Adjuntos y del visor ──
+  ok(A.etiquetaTipo('a.PDF').texto === 'PDF' && A.etiquetaTipo('a.pdf').color === '#d1242f' && A.etiquetaTipo('a.docx').texto === 'DOCX' && A.etiquetaTipo('a.docx').color === '#1f6feb' && A.etiquetaTipo('a.xlsx').color === '#1a7f37' && A.etiquetaTipo('a.csv').texto === 'CSV' && A.etiquetaTipo('a.csv').color === '#57606a', 'etiquetas: PDF rojo, DOCX azul, XLSX verde, el resto su extensión en gris')
+  ok(A.nombreDocumento('a.docx') === 'Word' && A.nombreDocumento('a.xls') === 'Excel' && A.nombreDocumento('a.pptx') === 'PowerPoint', '«Los archivos de Word / Excel / PowerPoint…»')
+  ok(A.avisoBorrarTesis({ adjuntos: 2, imagenes: 3, bytes: 1153434 }) === 'Se borran también sus 2 adjuntos y 3 imágenes del texto (1,1 MB en total). No se puede recuperar.', A.avisoBorrarTesis({ adjuntos: 2, imagenes: 3, bytes: 1153434 }))
+  ok(A.avisoBorrarTesis({ adjuntos: 1, imagenes: 0, bytes: 87040 }) === 'Se borran también sus 1 adjunto (85 KB en total). No se puede recuperar.' && A.avisoBorrarTesis({ adjuntos: 0, imagenes: 1, bytes: 1024 }).includes('1 imagen del texto') && A.avisoBorrarTesis({ adjuntos: 0, imagenes: 0, bytes: 0 }) === null && A.avisoBorrarTesis(undefined) === null, 'con uno solo y sin archivos: sin aviso de más')
+  const G = 1073741824
+  ok(A.colorEspacio(0) === '#3fb950' && A.colorEspacio(G * 0.79) === '#3fb950' && A.colorEspacio(G * 0.8) === '#d4a72c' && A.colorEspacio(G * 0.949) === '#d4a72c' && A.colorEspacio(G * 0.95) === '#f85149', 'barra de espacio: verde, ámbar desde el 80 % y roja desde el 95 %')
+  ok(A.porcentajeEspacio(G / 2) === 50 && A.porcentajeEspacio(G * 2) === 100 && A.porcentajeEspacio(0) === 0, 'la barra no se sale')
+
+  // ── Montaje de la zona y del visor (sin navegador) ──
+  const React = require(path.join(R, 'node_modules', 'react')), { renderToString } = require(path.join(R, 'node_modules', 'react-dom', 'server'))
+  const P = require(path.join(R, 'components', 'TesisPanel.js')).default
+  const pinta = (o) => renderToString(React.createElement(P, { estrategias: [], deps: { ctx, Editor: () => React.createElement('div', { 'data-texto': '' }) }, inicial: { planes: [], ...o } })).split('<!-- -->').join('')
+  const cuenta = (h, s) => h.split(s).length - 1
+  const tes = { id: 7, titulo: 'Semis', texto: '', estado: 'idea', relacionados: [], created_at: '2026-10-01T10:00:00Z', revisada_en: null }
+  const otra = { ...tes, id: 8, titulo: 'Oro' }
+  const bor = { titulo: 'Semis', texto: '', estado: 'idea', relacionados: [] }
+  const arch = [
+    fila({ id: 1, nombre: 'Guía de 24 páginas con un nombre larguísimo.pdf', ruta: 'r1', bytes: 1153434 }),
+    fila({ id: 2, nombre: 'Hoja.xlsx', ruta: 'r2', bytes: 87040 }),
+    fila({ id: 3, nombre: 'Informe.docx', ruta: 'r3', bytes: 1024 }),
+    fila({ id: 4, nombre: 'Captura.png', ruta: 'r4', bytes: 2048 }),
+    fila({ id: 5, nombre: 'Datos.csv', ruta: 'r5', bytes: 10 }),
+    fila({ id: 6, clase: 'imagen', nombre: 'Pegada.png', ruta: 'r6', bytes: 2048 }),
+  ]
+  const base = { tesis: [tes, otra], abierta: 7, borrador: bor, archivos: arch, urls: { r1: 'https://f/r1', r4: 'https://f/r4', r6: 'https://f/r6' }, resumen: A.resumenArchivos(arch) }
+  let h = pinta(base)
+  ok(h.includes('Adjuntos (5)') && cuenta(h, 'data-adjunto="') === 5 && !h.includes('Pegada.png') && h.includes('Ocupan 1,2 MB') && h.indexOf('data-adjuntos') < h.indexOf('data-relacionado') && h.indexOf('data-texto') < h.indexOf('data-adjuntos'), 'la zona: debajo del editor y encima de «Relacionado», sin las imágenes del texto')
+  ok(h.includes('Arrastra archivos aquí o') && h.includes('+ Añadir archivos') && /type="file"[^>]*multiple/.test(h), '«Arrastra archivos aquí o» y «+ Añadir archivos» (varios a la vez)')
+  ok(h.includes('<img src="https://f/r4"') && ['data-etiqueta-tipo="PDF"', 'data-etiqueta-tipo="XLSX"', 'data-etiqueta-tipo="DOCX"', 'data-etiqueta-tipo="CSV"'].every(x => h.includes(x)), 'miniaturas: la imagen, y la etiqueta del tipo en lo demás')
+  ok(h.includes('title="Guía de 24 páginas con un nombre larguísimo.pdf"') && h.includes('85 KB · solo descargar') && h.includes('1 KB · solo descargar') && h.includes('>1,1 MB<') && cuenta(h, 'data-borrar-adjunto') === 5 && cuenta(h, 'data-descargar-adjunto') === 5, 'cada tarjeta: nombre con tooltip, tamaño («· solo descargar» en Word y Excel), descargar y borrar')
+  ok(h.includes('Espacio usado (todas las tesis)') && h.includes('1,2 MB de 1 GB') && /data-espacio-barra[^>]*#3fb950/.test(h), 'abajo de la lista: el espacio usado, con su barra verde')
+  ok(h.includes('data-clip="4"') === false && h.includes('data-clip="5"') && !/data-item="8"[\s\S]*?data-clip[\s\S]*?data-espacio/.test(h.slice(h.indexOf('data-item="8"'), h.indexOf('data-espacio'))), 'el clip con el número, solo en la tesis con adjuntos (las imágenes no cuentan)')
+  h = pinta({ ...base, subidas: [{ id: 'a', nombre: 'Guía.pdf', progreso: 0.62 }], avisosAdjuntos: [A.avisoPesa('Grande.pdf', 62914560)], arrastrando: true })
+  ok(h.includes('Subiendo… 62 %') && h.includes('width:62%') && h.includes('⚠ «Grande.pdf» pesa 60 MB') && h.includes('Suelta aquí para añadirlos a esta tesis') && h.includes('dashed'), 'mientras sube: fila con barra y «Subiendo… 62 %»; avisos; recuadro discontinuo al arrastrar')
+  h = pinta({ tesis: [tes], nueva: true, borrador: bor, archivos: [] })
+  ok(h.includes('Adjuntos (0)') && h.includes('data-adjuntos-sin-guardar') && h.includes(A.AVISO_SIN_GUARDAR) && !h.includes('+ Añadir archivos') && h.includes(B_AMAR()), 'tesis nueva: se ve la tarjeta y, en vez de los botones, el aviso en ámbar')
+  h = pinta({ ...base, borrando: true })
+  ok(h.includes('Desaparece del todo.') && h.includes('Se borran también sus 5 adjuntos y 1 imagen del texto (1,2 MB en total). No se puede recuperar.'), 'borrar una tesis con archivos: lo dice')
+  h = pinta({ ...base, tesis: [{ ...tes }], resumen: A.resumenArchivos([]), borrando: true })
+  ok(h.includes('Desaparece del todo.') && !h.includes('data-detalle-pregunta'), 'sin archivos, el aviso de siempre')
+  h = pinta({ ...base, borrandoAdjunto: arch[1] })
+  const v = h.slice(h.indexOf('data-pregunta="borrar-adjunto"'))
+  ok(v.includes('¿Borrar «Hoja.xlsx»?') && v.includes('Se borra de la nube de la app y no se puede recuperar. El archivo de tu PC no se toca.') && v.indexOf('Cancelar') < v.indexOf('Sí, borrar') && v.includes('#f85149'), 'borrar un adjunto: su ventana, «Cancelar» y «Sí, borrar» en rojo')
+  const conVisor = (id, clase = 'adjunto') => pinta({ ...base, visor: { clase, id } })
+  h = conVisor(1)
+  const barra = h.slice(h.indexOf('data-visor'))
+  ok(barra.includes('1 de 5') && barra.includes('Guía de 24 páginas') && barra.includes('1,1 MB · de la tesis «Semis»') && ['data-visor-descargar', 'Abrir en pestaña nueva', 'data-visor-cerrar', 'data-visor-anterior', 'data-visor-siguiente'].every(x => barra.includes(x)), 'visor: «1 de 5», tipo, nombre, tamaño, «de la tesis», Descargar, Abrir en pestaña nueva y ×')
+  ok(/<iframe[^>]*data-vista="pdf"[^>]*src="https:\/\/f\/r1"/.test(barra) && !/sandbox/.test(barra), 'PDF: el visor del navegador, con la URL firmada en un iframe')
+  ok(cuenta(barra, 'data-visor-miniatura') === 5 && /data-visor-miniatura="1" aria-current="true"/.test(barra) && barra.includes('#79c0ff'), 'la tira de miniaturas, con la abierta en azul')
+  h = conVisor(4)
+  ok(/data-vista="imagen"/.test(h) && h.includes('zoom-in') && h.includes('alt="Captura.png"') && h.includes('4 de 5'), 'imagen: ajustada, clic para verla a tamaño real')
+  h = conVisor(3)
+  ok(h.includes('Los archivos de Word no se ven dentro de la app') && h.includes('Descárgalo para abrirlo en tu PC. Si quieres leerlo aquí, guárdalo como PDF y súbelo.') && h.includes('data-descargar-grande') && !/<iframe/.test(h), 'Word: el aviso, «Descargar» y sin iframe')
+  h = conVisor(2)
+  ok(h.includes('Los archivos de Excel no se ven dentro de la app'), 'Excel: lo mismo')
+  h = conVisor(6, 'imagen')
+  ok(h.includes('1 de 1') && h.includes('alt="Pegada.png"') && !h.includes('data-visor-tira'), 'pulsar dos veces una imagen del texto: el visor, por las imágenes de la tesis')
+  ok(!pinta(base).includes('data-visor='), 'cerrado, no hay visor')
+  const fA = leer('components', 'TesisAdjuntos.js')
+  ok(fA.includes(`window.addEventListener('keydown', tecla, true)`) && fA.includes(`window.removeEventListener('keydown', tecla, true)`) && ['Escape', 'ArrowLeft', 'ArrowRight'].every(x => fA.includes(x)), 'Esc y flechas, solo mientras el visor está abierto')
+  ok(!/pdfjs|pdf\.js|react-pdf/.test(fA) && !/"pdfjs|"react-pdf/.test(leer('package.json')), 'sin librerías de PDF')
+  ok(leer('components', 'TesisPanel.js').includes('await borrarTodoDeTesis(ctx(), fila.id); await borrarTesis(ctx(), fila.id)'), 'borrar una tesis: si los archivos fallan, la tesis no se borra')
 
   // ── 3 · El SQL guardado ──
   const sql = leer('sql', 'tesis_adjuntos.sql')
