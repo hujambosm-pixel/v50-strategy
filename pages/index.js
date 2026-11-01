@@ -35,7 +35,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1094'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1095'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1068,8 +1068,10 @@ export default function Home() {
   const [builderAbrir,setBuilderAbrir]=useState(null)
   const abrirEnBuilder=(s)=>{ setBuilderAbrir({fila:s?{...s}:null,n:Date.now()}); setSidePanel('builder') }
   // V9.1092: la pantalla «Tesis» (components/TesisPanel.js, docs/tesis.md) deja aquí su pregunta de «cambios sin guardar»: antes de
-  // cambiar de pestaña desde el menú se le pregunta; devuelve true si ha abierto la pregunta (y seguirá ella al responder).
+  // salir de la pestaña se le pregunta; devuelve true si ha abierto la pregunta (y seguirá ella al responder). Todo lo que saca de «Tesis»
+  // desde fuera de la pantalla (menú, logo, cerrar sesión) pasa por salirDeTesis.
   const tesisSalida=useRef(null)
+  const salirDeTesis=(seguir)=>{ if(sidePanel==='tesis'&&tesisSalida.current?.(seguir)) return; seguir() }
   // Ficha fundamental del símbolo activo. Se pide SOLO con la sección abierta (ver el efecto más abajo).
   const [fundFicha,setFundFicha]=useState(null)
   const [fundCargando,setFundCargando]=useState(false)
@@ -6313,7 +6315,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1094</title>
+        <title>Trading Simulator V9.1095</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6396,13 +6398,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               Si ^GSPC no estuviera en la watchlist se va a la Watchlist SIN tocar el símbolo, que deja lo
               último que se estuviera mirando: seleccionar un activo que no está en la lista dejaría el
               gráfico cargado y ninguna fila resaltada, y eso se lee como un fallo. */}
-          <div className="header-logo" onClick={()=>{
+          <div className="header-logo" onClick={()=>salirDeTesis(()=>{
               const enDashboard=sidePanel==='tradelog'&&tlTab==='dashboard'
               if(!enDashboard){ setSidePanel('tradelog'); setTlTab('dashboard'); return }
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
-            }} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1094
+            })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
+            <span className="dot"/>Trading Simulator V9.1095
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6487,7 +6489,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                 display:'flex',alignItems:'center',gap:5}}>
               🔑 Contraseña
             </button>
-            <button onClick={handleLogout} title={`Cerrar sesión (${session?.user?.email||''})`}
+            <button onClick={()=>salirDeTesis(handleLogout)} title={`Cerrar sesión (${session?.user?.email||''})`}
               style={{background:'rgba(255,77,109,0.06)',border:'1px solid rgba(255,77,109,0.2)',color:'#ff4d6d',
                 fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:6,cursor:'pointer',
                 display:'flex',alignItems:'center',gap:5,transition:'background 0.15s,border-color 0.15s'}}
@@ -6551,7 +6553,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               {id:'risk',       icon:'⚖️', label:'Risk Mgmt', accent:'#378add'},
             ].map(item=>(
               <button key={item.id}
-                onClick={()=>{ if(sidePanel==='tesis'&&item.id!=='tesis'&&tesisSalida.current?.(()=>setSidePanel(item.id))) return; setSidePanel(item.id) }}
+                onClick={()=>{ if(item.id==='tesis') setSidePanel('tesis'); else salirDeTesis(()=>setSidePanel(item.id)) }}
                 title={!navExpanded?item.label:undefined}
                 style={{display:'flex',alignItems:'center',gap:10,padding:'9px 8px',width:'100%',
                   background:sidePanel===item.id?'var(--bg3)':'transparent',

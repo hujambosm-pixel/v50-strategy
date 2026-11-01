@@ -269,7 +269,13 @@ const cuenta = (html, s) => html.split(s).length - 1
   h = monta({ tesis: [creada], abierta: 3, borrador: { ...borrador3, titulo: ' ' }, pregunta: true })
   ok(h.includes('data-aviso-pregunta') && h.includes('Ponle un título.') && /data-salida="guardar" disabled=""/.test(h) && !/data-salida="salir" disabled=""/.test(h), 'sin título no se puede guardar: dice por qué y deja salir sin guardar')
   ok(!/confirm\(/.test(fuentePanel) && fuentePanel.includes(`window.addEventListener('beforeunload', avisa)`), 'ni un confirm() del navegador; al cerrar o recargar sigue avisando el navegador')
-  ok(fuentePanel.includes('data-nueva onClick={() => conGuardia(creaNueva)}') && fuentePanel.includes('conGuardia(() => abre(t))') && fuentePanel.includes('conGuardia(() => onAbrirEstrategia(f.fila))') && fuentePanel.includes('salida.current = (seguir)') && leer('pages', 'index.js').includes('tesisSalida.current?.(()=>setSidePanel(item.id))'), 'pregunta en los cuatro caminos: otra tesis, «+ Nueva tesis», «Abrir» y el menú')
+  ok(fuentePanel.includes('data-nueva onClick={() => conGuardia(creaNueva)}') && fuentePanel.includes('conGuardia(() => abre(t))') && fuentePanel.includes('conGuardia(() => onAbrirEstrategia(f.fila))') && fuentePanel.includes('salida.current = (seguir)'), 'pregunta en la pantalla: otra tesis, «+ Nueva tesis» y «Abrir»')
+  // Las salidas desde fuera de la pantalla: pages/index.js es demasiado grande para montarlo aquí, así que se mira su código (y se probó con clics en el navegador).
+  const fuenteIndex = leer('pages', 'index.js')
+  ok(fuenteIndex.includes(`if(sidePanel==='tesis'&&tesisSalida.current?.(seguir)) return; seguir()`), 'salirDeTesis: en Tesis y con cambios pregunta y sigue al responder; si no, sigue sin más')
+  ok(fuenteIndex.includes(`else salirDeTesis(()=>setSidePanel(item.id))`) && fuenteIndex.includes(`className="header-logo" onClick={()=>salirDeTesis(()=>{`) && fuenteIndex.includes(`onClick={()=>salirDeTesis(handleLogout)}`), 'también preguntan el menú, el logo y «Cerrar sesión»')
+  const llamadasPanel = fuenteIndex.split('\n').map((x, k) => [x, k + 1]).filter(([x]) => /setSidePanel\(/.test(x)).length
+  ok(llamadasPanel === 15, `los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
 
   // El buscador.
   const tres2 = [

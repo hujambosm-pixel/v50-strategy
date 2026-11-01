@@ -11,7 +11,7 @@
 -- REVERSIÓN: DROP TABLE public.tesis_inversion; DROP FUNCTION public.tesis_inversion_al_cambiar(); (no los usa nada más).
 --
 -- CAMBIO DEL 01/11/2026 (ya aplicado, y ya incluido en el CREATE de abajo): revisada_en admite vacío y no tiene valor por defecto, y las
--- tesis 3 y 4, que nunca se revisaron, pasaron a vacío sin tocar created_at ni updated_at:
+-- tesis 3, 4 y 5, que nunca se revisaron, pasaron a vacío sin tocar created_at ni updated_at:
 --   ALTER TABLE public.tesis_inversion ALTER COLUMN revisada_en DROP NOT NULL, ALTER COLUMN revisada_en DROP DEFAULT;
 -- Para deshacerlo: UPDATE public.tesis_inversion SET revisada_en = created_at WHERE revisada_en IS NULL;
 --   ALTER TABLE public.tesis_inversion ALTER COLUMN revisada_en SET DEFAULT now(), ALTER COLUMN revisada_en SET NOT NULL;

@@ -16,7 +16,7 @@ editor tipo Word. Es una pantalla **aislada**: no toca el motor, el Builder ni n
 - **`components/TesisPanel.js`**: la pantalla, con el estilo del Builder (`lib/builder/estilo`). El token se pide en cada llamada con
   `ctxConSesion()` (renueva la sesión y reintenta una vez ante 401).
 - **`pages/index.js`**: la entrada del menú, la barra lateral a 0 (como el Builder), el montaje y la pregunta de «cambios sin guardar»
-  al cambiar de pestaña desde el menú (`tesisSalida`).
+  al salir de la pestaña por el menú, el logo o «Cerrar sesión» (`tesisSalida` y `salirDeTesis`).
 
 ## La pantalla
 
@@ -37,12 +37,19 @@ editor tipo Word. Es una pantalla **aislada**: no toca el motor, el Builder ni n
 
 - **«Descartar cambios»**, junto a «Guardar» y solo con cambios: vuelve a lo último guardado (texto, título, estado y enlaces), con el
   editor nuevo, y quita «● sin guardar». Una tesis nueva que nunca se guardó desaparece y se abre la más reciente.
-- **La ventana**: con cambios sin guardar, al elegir otra tesis, crear una nueva, pulsar «Abrir» o salir por el menú izquierdo: «Tienes
+- **La ventana**: con cambios sin guardar, al elegir otra tesis, crear una nueva, pulsar «Abrir», o salir por el menú izquierdo, el logo de
+  arriba o «Cerrar sesión»: «Tienes
   cambios sin guardar en «X».» y tres botones (`respondeSalida`): «Guardar» (guarda y continúa), «Salir sin guardar» (descarta y
   continúa), «Cancelar» (te quedas). Si guardar falla, no continúa: la ventana sigue abierta y muestra el error. Sin título o con más de
   100 KB, «Guardar» está apagado y dice por qué. Es una ventana de la app, sin `confirm()`.
 - Una nueva sin tocar se deja sin preguntar. Al cerrar o recargar la ventana, el aviso del navegador, como siempre.
-- **El logo de arriba no pregunta**: va al Dashboard directamente (`pages/index.js`, `header-logo`). No estaba en este encargo.
+- **Salidas revisadas una a una** (`pages/index.js`, todos los `setSidePanel` y lo que se ve con Tesis abierta). Pasan por `salirDeTesis`: el
+  menú, el logo y «Cerrar sesión». No sacan de Tesis: el desplegable de estrategias de arriba (carga la estrategia, sin cambiar de pestaña),
+  el buscador de símbolos, Ajustes y Contraseña (ventanas encima), y SP500, TradingView y Supabase (pestaña nueva). La barra lateral con
+  más botones está a 0 en Tesis, y los demás `setSidePanel` están dentro de otras pestañas. Una salida nueva tiene que pasar por `salirDeTesis`;
+  la prueba cuenta los `setSidePanel` para avisar si aparece uno.
+- **Lo que no puede preguntar**: que la sesión caduque o se cierre en otra ventana. No lo pide nadie desde esta pantalla: la app vuelve al
+  acceso y lo no guardado se pierde.
 
 ## Las fechas
 
@@ -53,10 +60,10 @@ editor tipo Word. Es una pantalla **aislada**: no toca el motor, el Builder ni n
   esté donde esté el ordenador. También cuenta en días de Madrid «hace X días». Encima de cada fecha, un tooltip con día y hora:
   «Creada el 01/11/2026 a las 00:21».
 - **Cambio en la base, 01/11/2026** (`sql/tesis_inversion.sql`, con la reversión): revisada_en pasó a admitir vacío y sin valor por
-  defecto. Las tesis 3 y 4 («Breakouts blueprint» y «Growth investing»), que nunca se revisaron, pasaron a vacío en la misma transacción,
+  defecto. Las tesis 3, 4 y 5 («Breakouts blueprint», «Growth investing» y «Métricas para screener»), que nunca se revisaron, pasaron a vacío,
   con el disparador parado para no mover updated_at; created_at y el contenido siguen idénticos. Copia antes:
   `backups/datos_completos_20261101-1415`. Eran «Creada 01/11/2026» porque se crearon a las 00:21 y 00:22 de Madrid (23:21 y 23:22 UTC
-  del 31/10): no había fallo. La tesis 5 se creó después de la auditoría y no se tocó: sigue con la fecha que se le puso sola al crearla.
+  del 31/10): no había fallo.
 
 ## El buscador
 
