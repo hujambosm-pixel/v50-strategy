@@ -149,6 +149,17 @@ texto con visor a pantalla completa, más un botón para leerlos al lado del tex
 - **La lista**: clip con el número de adjuntos (las imágenes del texto no cuentan); abajo, siempre a la vista, «Espacio usado (todas las tesis)» con barra verde, ámbar desde el 80 % y roja desde el 95 %. Por eso la
   columna izquierda se queda fija al desplazar la página y su lista lleva barra propia si no cabe.
 
+### Leer al lado del texto (opción B)
+
+- **El botón** de dos columnas («Ver al lado del texto»), en la cabecera de Adjuntos y en la barra del visor. Con la ventana de menos de 1100 px no aparece y se usa A, aunque estuviera recordado.
+- **Al pulsarlo**: la lista de tesis se pliega a 44 px, con un botón de tres rayas («Mostrar la lista de tesis»; desplegada, otro igual la vuelve a plegar). A la derecha, `PanelLado`, de 560 px:
+  «Adjuntos (N) · X MB», «+ Añadir», ampliar (el visor de A), × (cierra y vuelve a A); filas compactas, la abierta con fondo `#13283f`; debajo, el archivo elegido y «Descargar». El editor sigue en medio y se puede escribir mientras se lee.
+- **La zona de abajo se queda** en modo B: de ahí se borran los adjuntos. Los avisos y las barras de subida salen en el panel.
+- **Recordado** en este navegador (`localStorage`, clave `tesis_adjuntos_al_lado`, con try/catch).
+- **Las URL no cambian a mitad de lectura**: cambiarlas recargaría el PDF y volvería a la página 1, y escribir y guardar relee la lista. Solo se firman las que faltan, y todas de nuevo, al abrir o elegir un archivo, si llevan más de 50 minutos.
+  Un PDF abierto más de una hora sigue funcionando (ya está cargado); al elegir otro archivo se renuevan.
+- La guardia de «cambios sin guardar» es la misma en los dos modos.
+
 ### La prueba de seguridad
 
 `scripts/comprobaciones/tesisSeguridad.js` habla con la base de VERDAD (no va en `comunes.sh`). Tres modos:

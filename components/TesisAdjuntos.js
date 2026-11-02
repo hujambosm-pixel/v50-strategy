@@ -22,16 +22,73 @@ const Miniatura = ({ fila, url, alto = 96 }) => (
     {visorDe(fila.nombre) === 'imagen' && url ? <img src={url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : <EtiquetaTipo nombre={fila.nombre}/>}
   </div>)
 
+// Soltar archivos encima: en la zona y en el panel de al lado.
+const conArchivos = (e) => [...(e.dataTransfer?.types || [])].includes('Files')
+const alSoltar = (onArrastrando, onAnadir) => ({
+  onDragOver: (e) => { if (conArchivos(e)) { e.preventDefault(); onArrastrando?.(true) } },
+  onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) onArrastrando?.(false) },
+  onDrop: (e) => { if (conArchivos(e)) { e.preventDefault(); onArrastrando?.(false); onAnadir?.([...e.dataTransfer.files]) } },
+})
+const Soltar = () => <div data-soltar style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(19, 40, 63, 0.92)', border: `2px dashed ${AZUL}`, borderRadius: B.radioBoton, color: AZUL, fontWeight: 600, pointerEvents: 'none', zIndex: 2 }}>Suelta aquí para añadirlos a esta tesis</div>
+const Subidas = ({ subidas, margen = 8 }) => subidas.map(s => (
+  <div key={s.id} data-subiendo style={{ marginTop: margen, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
+    <span style={{ flex: '0 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: B.texto }}>{s.nombre}</span>
+    <span style={{ ...S.apagado, whiteSpace: 'nowrap' }}>Subiendo… {Math.round(s.progreso * 100)} %</span>
+    <span style={{ flex: 1, minWidth: 60, height: 5, borderRadius: 3, background: B.borde, overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', width: `${Math.round(s.progreso * 100)}%`, background: VERDE }}/></span>
+  </div>))
+const Avisos = ({ avisos }) => avisos.map((a, k) => <div key={k} data-aviso-adjuntos role="status" style={{ color: AMARILLO, fontSize: 13, marginTop: 8 }}>{a}</div>)
+
+// «Ver al lado del texto», en la cabecera de Adjuntos y en la barra del visor. Solo sale con la ventana ancha (lo decide TesisPanel).
+export const BotonLado = ({ activo = false, onClick }) => (
+  <button data-ver-al-lado aria-pressed={activo} aria-label="Ver al lado del texto" title="Ver al lado del texto" onClick={onClick}
+    style={{ ...S.boton, padding: '4px 7px', display: 'inline-flex', alignItems: 'center', background: activo ? B.siguienteFondo : 'transparent', borderColor: activo ? B.siguienteBorde : B.borde }}>
+    <Icono><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></Icono>
+  </button>)
+// Las tres rayas de la lista de tesis plegada.
+export const BotonLista = ({ pista, onClick }) => (
+  <button data-mostrar-lista aria-label={pista} title={pista} onClick={onClick} style={{ ...S.boton, padding: '6px 7px', display: 'inline-flex', alignItems: 'center', background: 'transparent' }}>
+    <Icono><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></Icono>
+  </button>)
+
+// ── El panel de al lado (opción B): la lista compacta y, debajo, el archivo elegido. El editor sigue funcionando a su izquierda ──
+export function PanelLado({ filas = [], bytes = 0, nueva = false, urls = {}, elegida = null, subidas = [], avisos = [], arrastrando = false, onArrastrando, onAnadir, onElegir, onAmpliar, onCierra, onDescargar }) {
+  return (
+    <div data-panel-lado {...(nueva ? {} : alSoltar(onArrastrando, onAnadir))} className="ts-lado" style={{ ...S.tarjeta, position: 'sticky', top: 0, height: 'calc(100vh - 150px)', minHeight: 420, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ ...S.cabeceraTarjeta, flex: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Adjuntos ({filas.length}) · {tamanoLegible(bytes)}</span>
+        {!nueva && <label data-lado-anadir style={{ ...S.boton, padding: '4px 10px', fontSize: 13, fontWeight: 400, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Añadir
+          <input type="file" multiple hidden accept={ACEPTA_ARCHIVOS} onChange={e => { const xs = [...e.target.files]; e.target.value = ''; onAnadir?.(xs) }}/>
+        </label>}
+        <button data-lado-ampliar aria-label="Ver a pantalla completa" title="Ver a pantalla completa" disabled={!elegida} onClick={() => elegida && onAmpliar?.(elegida)} style={{ ...S.boton, padding: '4px 7px', display: 'inline-flex', alignItems: 'center', background: 'transparent', opacity: elegida ? 1 : 0.5 }}>
+          <Icono><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></Icono>
+        </button>
+        <button data-lado-cerrar aria-label="Cerrar el panel" title="Cerrar el panel" onClick={() => onCierra?.()} style={{ ...S.enlace, color: B.texto, fontSize: 20, padding: '0 6px' }}>×</button>
+      </div>
+      {nueva && <div data-adjuntos-sin-guardar style={{ color: AMARILLO, fontSize: 13, padding: 12 }}>{AVISO_SIN_GUARDAR}</div>}
+      {(!!avisos.length || !!subidas.length) && <div style={{ flex: 'none', padding: '0 12px 8px' }}><Avisos avisos={avisos}/><Subidas subidas={subidas}/></div>}
+      {!nueva && !filas.length && <div style={{ ...S.secundario, padding: 12 }}>Esta tesis no tiene adjuntos. Arrastra archivos aquí o pulsa «+ Añadir».</div>}
+      {!!filas.length && <div data-lado-lista style={{ flex: 'none', maxHeight: 148, overflowY: 'auto', borderBottom: `1px solid ${B.borde}` }}>
+        {filas.map(f => { const on = elegida?.id === f.id; return (
+          <button key={f.id} data-lado-fila={f.id} aria-current={on ? 'true' : undefined} onClick={() => onElegir?.(f)} title={f.nombre}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 12px', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: B.letra, fontSize: 13, color: B.texto, background: on ? '#13283f' : 'transparent' }}>
+            <EtiquetaTipo nombre={f.nombre}/>
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.nombre}</span>
+            <span style={{ ...S.apagado, fontSize: 12, whiteSpace: 'nowrap' }}>{tamanoLegible(f.bytes)}</span>
+          </button>) })}
+      </div>}
+      {elegida && <>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}><VistaArchivo key={elegida.id} fila={elegida} url={urls[elegida.ruta]} onDescargar={onDescargar}/></div>
+        <div style={{ flex: 'none', display: 'flex', justifyContent: 'flex-end', padding: '6px 12px', borderTop: `1px solid ${B.borde}` }}><button data-lado-descargar onClick={() => onDescargar?.(elegida)} style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }}>Descargar</button></div>
+      </>}
+      {arrastrando && <Soltar/>}
+    </div>)
+}
+
 // ── La zona «Adjuntos» ──
 // Props: filas (solo clase adjunto, la más reciente primero), bytes, nueva, urls ({ ruta: url }), subidas ([{ id, nombre, progreso }]), avisos (líneas), arrastrando,
 // onArrastrando, onAnadir(archivos), onAbrir(fila), onDescargar(fila), onBorrar(fila), extraCabecera (botones de más en la cabecera).
 export function ZonaAdjuntos({ filas = [], bytes = 0, nueva = false, urls = {}, subidas = [], avisos = [], arrastrando = false, onArrastrando, onAnadir, onAbrir, onDescargar, onBorrar, extraCabecera = null }) {
-  const conArchivos = (e) => [...(e.dataTransfer?.types || [])].includes('Files')
-  const sobre = nueva ? {} : {
-    onDragOver: (e) => { if (conArchivos(e)) { e.preventDefault(); onArrastrando?.(true) } },
-    onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) onArrastrando?.(false) },
-    onDrop: (e) => { if (conArchivos(e)) { e.preventDefault(); onArrastrando?.(false); onAnadir?.([...e.dataTransfer.files]) } },
-  }
+  const sobre = nueva ? {} : alSoltar(onArrastrando, onAnadir)
   return (
     <div data-adjuntos {...sobre} style={{ position: 'relative', border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, background: B.fondo, padding: 12 }}>
       <style>{`.ts-rejilla { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(max(170px, calc(25% - 9px)), 1fr)) }
@@ -51,13 +108,8 @@ export function ZonaAdjuntos({ filas = [], bytes = 0, nueva = false, urls = {}, 
             </label>
           </>}
       </div>
-      {avisos.map((a, k) => <div key={k} data-aviso-adjuntos role="status" style={{ color: AMARILLO, fontSize: 13, marginTop: 8 }}>{a}</div>)}
-      {subidas.map(s => (
-        <div key={s.id} data-subiendo style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
-          <span style={{ flex: '0 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: B.texto }}>{s.nombre}</span>
-          <span style={{ ...S.apagado, whiteSpace: 'nowrap' }}>Subiendo… {Math.round(s.progreso * 100)} %</span>
-          <span style={{ flex: 1, minWidth: 60, height: 5, borderRadius: 3, background: B.borde, overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', width: `${Math.round(s.progreso * 100)}%`, background: VERDE }}/></span>
-        </div>))}
+      <Avisos avisos={avisos}/>
+      <Subidas subidas={subidas}/>
       {!!filas.length && (
         <div className="ts-rejilla" style={{ marginTop: 12 }}>
           {filas.map(f => (
@@ -74,7 +126,7 @@ export function ZonaAdjuntos({ filas = [], bytes = 0, nueva = false, urls = {}, 
               </div>
             </div>))}
         </div>)}
-      {arrastrando && <div data-soltar style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(19, 40, 63, 0.92)', border: `2px dashed ${AZUL}`, borderRadius: B.radioBoton, color: AZUL, fontWeight: 600, pointerEvents: 'none', zIndex: 2 }}>Suelta aquí para añadirlos a esta tesis</div>}
+      {arrastrando && <Soltar/>}
     </div>)
 }
 
