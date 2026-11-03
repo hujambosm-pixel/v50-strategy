@@ -1,7 +1,7 @@
 // components/BuilderAzarResultado.js — el resultado del paso 2: «Cómo creció el dinero, frente al azar» (boceto «Paso 2 · resultado frente al azar y borrar pruebas», opción A; docs/builder.md, §61).
 // El veredicto y sus cifras salen SOLO de lo guardado (`resultado`, lib/pruebaAzar.js formato 1): nunca se recalculan. El gráfico, de lib/azarGraficos.js: lo que no está guardado se calcula una vez y se guarda aparte.
 //   onVolver: a la pantalla de confirmación; onPaso1; onPaso3; onBorrar: la papelera; obtenerPrecios(): las velas diarias de la prueba; ctx y version: para leer y guardar el gráfico.
-//   graficosInicial, preciosInicial y pestanaInicial: para las pruebas de montaje.
+//   graficosInicial, preciosInicial, pestanaInicial y velasInicial: para las pruebas de montaje.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import BotonCopiar from './BotonCopiar'
@@ -13,6 +13,7 @@ import { textoParaClaude } from '../lib/pruebaAzar'
 import { AYUDA_ABANICO, AYUDA_COPIAS, AYUDA_GRAFICO_AZAR, ayudaFiabilidad, ayudaVeredicto, euros, textosResultado, numero, pctTexto } from '../lib/resultadoAzar'
 import { calculaGraficos, guardarGraficos, leerGraficos, mismosPrecios, pestanasDe, vistaPestana } from '../lib/azarGraficos'
 import { marcasLog, separaEtiquetas } from '../lib/builder/escalaGrafico'
+import BuilderAzarVelas from './BuilderAzarVelas'
 
 const R = REGLA_AZAR_REGLAS
 const AZUL = '#58a6ff', VERDE = '#3fb950', ROJO = '#ff7b72', AMARILLO = '#f2cc60', NARANJA = '#f0883e', CLARO = '#c9d1d9', GRIS = '#6e7681'
@@ -66,7 +67,7 @@ function GraficoAzar({ v, alto }) {
 }
 const Fila = ({ k, t, v, color, fuerte }) => <div data-cifra={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '5px 0', borderBottom: `1px solid ${B.borde}` }}><span style={{ color: B.secundario }}>{t}</span><span style={{ color: color || B.texto, fontWeight: fuerte ? 700 : 400, whiteSpace: 'nowrap' }}>{v}</span></div>
 
-export default function BuilderAzarResultado({ prueba, resultado, onVolver = null, onPaso1, onPaso3 = null, onBorrar = null, obtenerPrecios = null, ctx = null, version = null, graficosInicial = null, preciosInicial = null, pestanaInicial = 'completo' }) {
+export default function BuilderAzarResultado({ prueba, resultado, onVolver = null, onPaso1, onPaso3 = null, onBorrar = null, obtenerPrecios = null, ctx = null, version = null, graficosInicial = null, preciosInicial = null, pestanaInicial = 'completo', velasInicial = null }) {
   const t = textosResultado(resultado), [txtV, colorV, fondoV] = VEREDICTO[resultado.veredicto] || VEREDICTO.sinVeredicto
   const velas = prueba.velas || resultado.velas, ps = resultado.periodos || []
   const pestanas = useMemo(() => pestanasDe(prueba), [prueba])
@@ -77,6 +78,7 @@ export default function BuilderAzarResultado({ prueba, resultado, onVolver = nul
   const [avisoGuardar, setAvisoGuardar] = useState(null)
   const [otrosPrecios, setOtrosPrecios] = useState(false)
   const [alto, setAlto] = useState(420)
+  const [velasDe, setVelasDe] = useState(velasInicial)   // §62: «Ver en velas»: 'estrategia' o la copia
   const caja = useRef(null), leyenda = useRef(null)
   useEffect(() => {
     let vivo = true
@@ -112,6 +114,7 @@ export default function BuilderAzarResultado({ prueba, resultado, onVolver = nul
   const completo = clave === 'completo', percentil = completo ? (graficos?.pestanas?.completo?.percentil ?? null) : per?.percentil
   const pestana = pestanas.find(x => x.clave === clave)
   const marca = (p) => p.gana ? '✓' : '✕', colorMarca = (p) => p.gana ? VERDE : ROJO
+  const verVelas = (cual) => <button data-ver-velas={cual} onClick={() => setVelasDe(cual)} style={{ ...S.enlace, fontSize: 12 }}>Ver en velas</button>
 
   return (
     <div data-pantalla="resultado-azar" data-caso={t.caso}>
@@ -149,8 +152,8 @@ export default function BuilderAzarResultado({ prueba, resultado, onVolver = nul
               : <div data-sin-grafico style={{ height: alto, display: 'flex', alignItems: 'center', justifyContent: 'center', color: fallo || vista?.error ? ROJO : B.secundario, textAlign: 'center' }}>{fallo || vista?.error ? `✕ No se pudo preparar el gráfico: ${fallo || vista.error}` : 'Preparando el gráfico…'}</div>}
           </div>
           <div ref={leyenda} data-leyenda-azar style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 18px', alignItems: 'center', marginTop: 8, fontSize: 12.5, color: B.texto }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 20, borderTop: `3px solid ${AZUL}` }}/><b>Tu estrategia</b></span>
-            {LINEAS_COPIAS.map(([k, n, c]) => <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 20, borderTop: `2px solid ${c}` }}/>{n}</span>)}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 20, borderTop: `3px solid ${AZUL}` }}/><b>Tu estrategia</b>{listo && <> · {verVelas('estrategia')}</>}</span>
+            {LINEAS_COPIAS.map(([k, n, c]) => <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 20, borderTop: `2px solid ${c}` }}/>{n}{listo && <> · {verVelas(k)}</>}</span>)}
             <Ayuda texto={AYUDA_COPIAS} etiqueta="Las copias"/>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: B.secundario }}><span style={{ width: 20, height: 10, background: 'rgba(139,148,158,0.25)', marginRight: 4 }}/>El azar: 5 líneas (percentiles 5, 25, 50, 75 y 95)<Ayuda texto={AYUDA_ABANICO} etiqueta="El azar"/></span>
           </div>
@@ -175,6 +178,7 @@ export default function BuilderAzarResultado({ prueba, resultado, onVolver = nul
           </div>
         </div>
       </div>
+      {velasDe && listo && <BuilderAzarVelas v={vista} simbolo={prueba.valor} velasTexto={velas} inicial={velasDe} onCierra={() => setVelasDe(null)}/>}
     </div>
   )
 }

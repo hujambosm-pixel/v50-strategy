@@ -2221,3 +2221,13 @@ Decidido por Sergi el 03/11/2026. Ninguna cifra cambia. La prueba es la del paso
 - **Prueba existente de EMA20**: calculado una vez con su semilla y guardado, con la prueba y su resultado iguales por md5. Completa: tu estrategia 55.706 €, mejor 111.156 €, típica 44.332 €, peor 13.824 €, ganó al 73,9 %. Una prueba sin gráfico guardado (una nueva, o una que no lo pudo guardar) lo calcula al abrirla y lo guarda: un solo camino.
 - **Si los precios han cambiado** desde que se congeló (la huella del resultado), una línea lo avisa: el dibujo se hace con los de ahora.
 - Comprobado: `scripts/comprobaciones/azar-graficos.js` (en `comunes.sh`): cuentas a mano; la prueba de EMA20 congelada con sus precios en `scripts/comprobaciones/prueba-ema20/` (sirve aunque se borre de la app), `ejecutarPrueba` byte a byte; y la pantalla montada. Permisos: `pruebasAzarSeguridad.js`. En un navegador, con una página temporal no subida: las pestañas, la ventana de borrar, sin errores.
+
+## 62. Paso 2 · velas a pantalla completa (boceto «Pulsar una copia → velas a pantalla completa»)
+
+`components/BuilderAzarVelas.js` (nuevo) y `components/BuilderAzarResultado.js`. Ninguna cifra cambia; no escribe nada.
+- **«Ver en velas»**, en la leyenda, en tu estrategia y en cada copia: las velas del valor en el periodo de la pestaña, a pantalla completa, con lightweight-charts. Tus compras ▲ y ventas ▼ azules y la zona sombreada mientras estás dentro; las compras ● y ventas ○ naranjas de la copia.
+- **Los círculos de la copia van en una capa SVG** encima del gráfico, recolocada al moverse o hacer zoom: lightweight-charts no tiene marcas huecas. La zona sombreada llena todo el alto, detrás de las velas.
+- **Arriba**: «Tu estrategia frente a la copia típica», símbolo y periodo, selector La mejor / La típica / La peor, «Rueda: zoom · arrastrar: moverse» y × (también Esc). **Debajo**, la tabla lado a lado: Final (10.000 € al empezar), Operaciones, Ganadoras, Peor caída y Tiempo dentro del valor. Con una operación aún abierta al final, su venta es la del último día, como dice la norma de cierre.
+- **Desde tu estrategia**: solo tus operaciones. El selector sigue, para comparar con una copia si se quiere.
+- **La barra pequeña de abajo del gráfico del boceto («2021 ··· 2025») no se ha hecho**: el encargo no la nombra, y la rueda y el arrastre ya mueven. No se muestran marcas de stop.
+- Comprobado: `azar-graficos.js` (la zona y las marcas a mano; título, selector, tabla, cerrar y «solo tus operaciones», montados). Las velas de verdad, en un navegador con una página temporal no subida.
