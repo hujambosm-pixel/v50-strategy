@@ -19,7 +19,7 @@
 //   de las pruebas donde está; si no, se buscan por la huella) y buscarInicial.
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { B, S } from '../lib/builder/estilo'
-import { BarraPasos } from './BuilderPanel'
+import { CabeceraPasos } from './BuilderPanel'
 import { CONDICIONES_EDITOR, validaDefinicion, valoresDe, esquemaDe, huellaDefinicion, paraHuella } from '../lib/editor/definicion'
 import { jsonCanonico } from '../lib/lotesLab'
 import { GRUPOS, buscaCatalogo, nombreCond, explicacionCond, filaNueva, soloDelValor, avisoSoloValor, ayudaFila, AYUDA_NO, AYUDA_CRUZA, leeCompra, escribeCompra, leeFiltro, escribeFiltro, cambiaIndice, INDICES, nombreQuien,
@@ -429,12 +429,11 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
 
   return (
     <div style={S.pagina}>
-      {/* §45: la barra de los pasos; el paso 2 («Probarla contra el azar») abre la estrategia GUARDADA (una nueva, al guardarla). */}
-      <BarraPasos actual={1} onPaso={onPaso2 ? (n) => { if (n === 2 && fila?.id) onPaso2(fila); else if (n === 3 && fila?.id) onPaso3?.(fila) } : null}
+      {/* §45 y §54: la cabecera B; el paso 2 («Probarla contra el azar») abre la estrategia GUARDADA (una nueva, al guardarla). */}
+      <CabeceraPasos actual={1} estrategia={est.nombre.trim() || null} onVolver={onVolver} onPaso={onPaso2 ? (n) => { if (n === 2 && fila?.id) onPaso2(fila); else if (n === 3 && fila?.id) onPaso3?.(fila) } : null}
         desactivados={nueva ? { 2: 'Guárdala primero: el paso 2 prueba la estrategia tal como está guardada', 3: 'Guárdala primero: el plan usa la estrategia tal como está guardada' } : esSemanal(fila) ? { 3: 'El paso 3, por ahora, solo con estrategias de velas diarias' } : {}}/>
       {/* V9.1073: la fila del título, fija arriba al desplazarse (con la barra de los cambios). */}
       <div data-fila-titulo style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 20, background: B.fondo, padding: '6px 0' }}>
-        <button style={{ ...S.enlace, color: B.secundario }} onClick={() => onVolver?.()}>← Builder · Mi trabajo</button>
         <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Paso 1 · Crear la estrategia</span>
         <span data-cabecera-nombre style={{ color: B.secundario }}>{est.nombre.trim() || 'Sin nombre'} · velas {intervalo === 'semanal' ? 'semanales' : 'diarias'}</span>
         <span data-barra-cambios={cambiado ? 'cambios' : nueva ? 'nueva' : 'sin-cambios'} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>

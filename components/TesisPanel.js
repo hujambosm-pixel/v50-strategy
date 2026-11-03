@@ -19,6 +19,7 @@ import { AYUDA_RELACIONADO, AYUDA_TESIS, COLORES_RESALTE, ESTADOS_TESIS, HOJA, T
   fichaDe, guardaBuscarEnTexto, haceTexto, igualesTesis, imagenesSobrantes, leeBuscarEnTexto, lineaCoincidencia, listarNombresPlanes, listarTesis, marcarRevisada, ordenTesis, problemaDe, respondeSalida } from '../lib/tesis'
 import { ANCHO_MIN_LADO, AVISO_SIN_GUARDAR, avisoBorrarTesis, avisoDe, borrar, borrarTodoDeTesis, colorEspacio, descargar, espacioUsado, filasDeTodas, listaPlegadaDe, listar, olvidaAlLadoViejo, porcentajeEspacio, resumenArchivos, subir, tamanoLegible, urlsFirmadas } from '../lib/tesisArchivos'
 import { BotonLado, BotonLista, IconoClip, PanelLado, Visor, ZonaAdjuntos } from './TesisAdjuntos'
+import { Papelera, Pregunta } from './VentanaPregunta'
 
 const NUEVA = Object.freeze({ titulo: TITULO_NUEVA, texto: '', estado: 'idea', relacionados: [] })
 const borradorDe = (t) => ({ titulo: t.titulo, texto: t.texto || '', estado: t.estado, relacionados: Array.isArray(t.relacionados) ? t.relacionados : [] })
@@ -27,26 +28,12 @@ const ROJO = '#f85149', AMARILLO = '#f2cc60'
 const EditorTesis = dynamic(() => import('./TesisEditor'), { ssr: false, loading: () => <div data-texto data-cargando className="ts-texto" style={{ ...S.apagado, height: 'calc(100vh - 380px)', minHeight: 400, padding: B.aire, boxSizing: 'border-box', background: HOJA.fondo, borderRadius: B.radioBoton }}>Cargando el editor…</div> })
 
 const Etiqueta = ({ estado }) => { const e = estadoTesis(estado); return <span data-estado={e.id} style={{ display: 'inline-block', padding: '1px 9px', borderRadius: 999, background: e.fondo, color: e.color, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>{e.nombre}</span> }
-const Papelera = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ROJO} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
-  </svg>)
 const HojaLineas = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/>
   </svg>)
 // Un texto en trozos ([{ t, marca }]), con lo buscado resaltado. React lo escapa: nada se interpreta como HTML.
 const Resaltado = ({ trozos }) => trozos.map((x, k) => x.marca ? <mark key={k} data-marca style={{ background: COLORES_RESALTE[0].color, color: B.titulo, borderRadius: 2 }}>{x.t}</mark> : <span key={k}>{x.t}</span>)
-// Una ventana de pregunta (sin guardar, borrar), encima de todo.
-const Pregunta = ({ id, texto, detalle, aviso, children }) => (
-  <div data-pregunta={id} role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-    <div style={{ ...S.tarjeta, padding: 20, maxWidth: 440, width: '100%' }}>
-      <div style={{ color: B.titulo, marginBottom: 16 }}>{texto}</div>
-      {detalle && <div data-detalle-pregunta style={{ color: B.secundario, marginTop: -8, marginBottom: 16 }}>{detalle}</div>}
-      {aviso && <div data-aviso-pregunta style={{ color: '#ff8b8b', marginBottom: 16 }}>⚠ {aviso}</div>}
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>{children}</div>
-    </div>
-  </div>)
 
 export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida = null, deps = null, inicial = null }) {
   // El ctx en cada llamada: ctxConSesion() pone el token vigente y renueva la sesión ante 401 (nada congelado al montar).

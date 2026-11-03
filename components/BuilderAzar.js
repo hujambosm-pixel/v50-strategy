@@ -12,7 +12,7 @@
 //   del resultado abierta).
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { B, S } from '../lib/builder/estilo'
-import { BarraPasos } from './BuilderPanel'
+import { CabeceraPasos } from './BuilderPanel'
 import Ayuda from './BuilderAyuda'
 import BuilderAzarResultado from './BuilderAzarResultado'
 import BuscadorValor from './BuscadorValor'
@@ -246,22 +246,15 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
     const aPaso1 = () => onPaso1?.(tarjetas.find(s => String(s.id) === String(viendo.fila.estrategia_id)) || estrategia)
     return (
       <div style={S.pagina}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-          <button data-boton="volver" style={{ ...S.enlace, color: B.secundario }} onClick={() => setViendo(null)}>← Volver</button>
-          <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Builder</span>
-        </div>
-        <BarraPasos actual={2} onPaso={(n) => { if (n === 1) aPaso1(); else if (n === 3) onPaso3?.(viendo.fila.estrategia_id) }}/>
+        <CabeceraPasos actual={2} estrategia={viendo.fila.estrategia_nombre || nombre} onVolver={onVolver} onPaso={(n) => { if (n === 1) aPaso1(); else if (n === 3) onPaso3?.(viendo.fila.estrategia_id) }}/>
+        <div style={{ marginBottom: 12 }}><button data-boton="volver" style={{ ...S.enlace, color: B.secundario }} onClick={() => setViendo(null)}>← Volver</button></div>
         <BuilderAzarResultado prueba={viendo.fila} resultado={viendo.resultado} onPaso1={aPaso1} onPaso3={() => onPaso3?.(viendo.fila.estrategia_id)}/>
       </div>
     )
   }
   return (
     <div style={S.pagina}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-        <button style={{ ...S.enlace, color: B.secundario }} disabled={enMarcha} onClick={() => onVolver?.()}>← Builder · Mi trabajo</button>
-        <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Builder</span>
-      </div>
-      <BarraPasos actual={2} onPaso={enMarcha ? null : (n) => { if (n === 1) onPaso1?.(estrategia); else if (n === 3) onPaso3?.(estrategia?.id ?? null) }}/>
+      <CabeceraPasos actual={2} estrategia={estrategia?.name || null} onVolver={onVolver} bloqueada={enMarcha} onPaso={(n) => { if (n === 1) onPaso1?.(estrategia); else if (n === 3) onPaso3?.(estrategia?.id ?? null) }}/>
       <div style={{ fontSize: 20, fontWeight: 700, color: B.titulo, marginTop: 8 }}>¿Gana «{nombre}» por algo más que suerte?</div>
       <div style={{ ...S.secundario, marginTop: 4, marginBottom: 16 }}>Tú eliges dónde probarla y confirmas. Lo demás lo hace la app sola, en orden.</div>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>

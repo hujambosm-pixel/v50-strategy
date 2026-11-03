@@ -35,7 +35,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1108'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1109'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1070,8 +1070,9 @@ export default function Home() {
   // V9.1092: la pantalla «Tesis» (components/TesisPanel.js, docs/tesis.md) deja aquí su pregunta de «cambios sin guardar»: antes de
   // salir de la pestaña se le pregunta; devuelve true si ha abierto la pregunta (y seguirá ella al responder). Todo lo que saca de «Tesis»
   // desde fuera de la pantalla (menú, logo, cerrar sesión) pasa por salirDeTesis.
-  const tesisSalida=useRef(null)
-  const salirDeTesis=(seguir)=>{ if(sidePanel==='tesis'&&tesisSalida.current?.(seguir)) return; seguir() }
+  // §54: lo mismo con los cambios sin guardar de un plan (el paso 3 del Builder).
+  const tesisSalida=useRef(null), builderSalida=useRef(null)
+  const salirDeTesis=(seguir)=>{ if(sidePanel==='tesis'&&tesisSalida.current?.(seguir)) return; if(sidePanel==='builder'&&builderSalida.current?.(seguir)) return; seguir() }
   // Ficha fundamental del símbolo activo. Se pide SOLO con la sección abierta (ver el efecto más abajo).
   const [fundFicha,setFundFicha]=useState(null)
   const [fundCargando,setFundCargando]=useState(false)
@@ -6315,7 +6316,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1108</title>
+        <title>Trading Simulator V9.1109</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6404,7 +6405,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1108
+            <span className="dot"/>Trading Simulator V9.1109
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6553,7 +6554,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               {id:'risk',       icon:'⚖️', label:'Risk Mgmt', accent:'#378add'},
             ].map(item=>(
               <button key={item.id}
-                onClick={()=>{ if(item.id==='tesis') setSidePanel('tesis'); else salirDeTesis(()=>setSidePanel(item.id)) }}
+                onClick={()=>{ if(item.id===sidePanel) setSidePanel(item.id); else salirDeTesis(()=>setSidePanel(item.id)) }}
                 title={!navExpanded?item.label:undefined}
                 style={{display:'flex',alignItems:'center',gap:10,padding:'9px 8px',width:'100%',
                   background:sidePanel===item.id?'var(--bg3)':'transparent',
@@ -9467,7 +9468,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 página recarga sus estrategias. ══ */}
             {(builderVisitado||sidePanel==='builder')&&(
               <div style={{display:sidePanel==='builder'?'contents':'none'}}>
-                <ProteccionPanel nombre="Builder"><BuilderPanel estrategias={strategies} visible={sidePanel==='builder'} apiFetch={apiFetch} version={VERSION_APP} abrir={builderAbrir} comisiones={indComisiones}
+                <ProteccionPanel nombre="Builder"><BuilderPanel estrategias={strategies} salida={builderSalida} visible={sidePanel==='builder'} apiFetch={apiFetch} version={VERSION_APP} abrir={builderAbrir} comisiones={indComisiones}
                   onGuardada={()=>reloadStrategies()}
                   onAbrirEstrategia={(s,como)=>{if(como==='editor'){setEditorFila({...s});setSidePanel('editor')}}}
                   onBacktestValor={()=>setSidePanel('config')}/></ProteccionPanel>{/* V9.1066 */}

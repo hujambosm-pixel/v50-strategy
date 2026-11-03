@@ -68,6 +68,33 @@ export function BarraPasos({ actual = 1, onPaso = null, desactivados = {} }) {
   )
 }
 
+// §54: la CABECERA B de los pasos 1, 2 y 3: a la izquierda, la ruta «Builder › Mi trabajo › <estrategia>» (onVolver(): «Builder»; onVolver('miTrabajo'): «Mi trabajo»); a la derecha, los pasos como
+// círculos pequeños: ✓ en los hechos (hechos: { n: true/false }; por defecto, los anteriores al actual), el actual en verde. Se pulsan como la barra: desactivados (string: el motivo, en el tooltip) no.
+// bloqueada: mientras corre algo, nada se pulsa.
+export function CabeceraPasos({ actual = 1, onPaso = null, desactivados = {}, hechos = {}, estrategia = null, onVolver = null, bloqueada = false }) {
+  const miga = { ...S.enlace, color: B.secundario, fontSize: 13 }, sep = <span aria-hidden="true" style={{ color: B.apagado }}>›</span>
+  return (
+    <div data-cabecera-b style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+      <nav aria-label="Dónde estás" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: '1 1 240px' }}>
+        <button data-ruta="builder" style={miga} disabled={bloqueada || !onVolver} onClick={() => onVolver?.()}>Builder</button>{sep}
+        <button data-ruta="mi-trabajo" style={miga} disabled={bloqueada || !onVolver} onClick={() => onVolver?.('miTrabajo')}>Mi trabajo</button>
+        {estrategia && <>{sep}<span data-ruta="estrategia" title={estrategia} style={{ color: B.titulo, fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{estrategia}</span></>}
+      </nav>
+      <div aria-label="Pasos del Builder" style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
+        {PASOS.map((p, k) => {
+          const n = k + 1, on = n === actual, hecho = hechos[n] ?? n < actual, pulsable = !!onPaso && !on && !desactivados[n] && !bloqueada, Caja = pulsable ? 'button' : 'span'
+          return (<span key={p} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {k > 0 && <span aria-hidden="true" style={{ width: 12, height: 1, background: B.borde }}/>}
+            <Caja data-paso={n} data-hecho={hecho && !on ? '1' : undefined} aria-current={on ? 'step' : undefined} aria-label={`Paso ${n}: ${p}`} onClick={pulsable ? () => onPaso(n) : undefined} title={desactivados[n] || (pulsable ? `Ir al paso ${n}: ${p}` : `Paso ${n}: ${p}`)}
+              style={{ width: 24, height: 24, padding: 0, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: B.letra, fontSize: 12, fontWeight: 700, cursor: pulsable ? 'pointer' : 'default',
+                background: on ? B.verde : 'transparent', color: on ? B.sobreVerde : hecho ? '#7ee2a0' : desactivados[n] ? B.apagado : B.secundario, border: on ? 'none' : `1px solid ${hecho ? B.pasoBorde : pulsable ? B.siguienteBorde : B.borde}` }}>{hecho && !on ? '✓' : n}</Caja>
+          </span>)
+        })}
+      </div>
+    </div>
+  )
+}
+
 // La fila que se manda al editor para una copia nueva de una estrategia guardada: sin id, «<nombre> (copia)». Una de código
 // (V9.1048) se copia entera, con su código: se abre en el apartado «Código de la estrategia».
 export const filaCopia = (s) => esDeCodigo(s) ? filaCopiaCodigo(s) : ({ id: null, name: `${s.name} (copia)`, description: s.description || '', definition: copia(s.definition), params: params(s.params), copiaDe: s.name })
@@ -86,7 +113,7 @@ export const filaCopia = (s) => esDeCodigo(s) ? filaCopiaCodigo(s) : ({ id: null
 // abrir una estrategia (al pulsar su nombre en «Backtest de un valor»); cada n nuevo la abre. V9.1058: buscarInicial y
 // buscarCopiaInicial (para las pruebas de montaje): lo escrito en los buscadores de «Mi trabajo» y de «Desde una de mis estrategias».
 // V9.1060: copiaInicial (el id elegido para copiar) y copiaAbiertaInicial (la lista del buscador abierta), también para el montaje.
-export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '', buscarCopiaInicial = '', copiaInicial = '', copiaAbiertaInicial = false }) {
+export default function BuilderPanel({ estrategias = [], salida = null, onAbrirEstrategia, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '', buscarCopiaInicial = '', copiaInicial = '', copiaAbiertaInicial = false }) {
   const [datos, setDatos] = useState(() => datosIniciales || { lotes: [], pruebas: [], cargando: !datosIniciales, error: null })
   const [filasE, setFilasE] = useState(listasIniciales?.estrategias || null)
   const [filasP, setFilasP] = useState(listasIniciales?.pruebas || null)
@@ -174,6 +201,11 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   // Devuelve { velas, semanaAbierta, origen }.
   const cargaVelas = useCallback(async (sym) => { const r = await apiFetch(`/api/velas?simbolo=${encodeURIComponent(sym)}`); if (!r.ok) throw new Error(`HTTP ${r.status}`); return await r.json() }, [apiFetch])
   useEffect(() => { if (abrir?.fila) { setPrueba(null); setAzar(null); setPlan(null); setGuia(false); setEditor({ fila: abrir.fila, n: abrir.n }) } }, [abrir?.n])
+  // §54: «Mi trabajo» de la cabecera B: a «Mi trabajo», ya en su sitio de la página.
+  const [irMiTrabajo, setIrMiTrabajo] = useState(0)
+  const seccionMiTrabajo = useRef(null)
+  useEffect(() => { if (irMiTrabajo) seccionMiTrabajo.current?.scrollIntoView?.({ block: 'start' }) }, [irMiTrabajo])
+  const alVolver = (cierra) => (donde) => { cierra(); recarga(); if (donde === 'miTrabajo') setIrMiTrabajo(Date.now()) }
   const abreAzar = (estrategiaId) => setAzar({ estrategiaId, n: Date.now() })
   const abrePlan = (estrategiaId) => setPlan({ estrategiaId, n: Date.now() })
   // Guardada en el paso 1: la página recarga sus estrategias y se pasa al paso 2 con ella (la versión nueva, si se creó). §46: a la
@@ -197,13 +229,13 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
   if (editor && esDeCodigo(editor.fila)) return <ProteccionPanel nombre="Estrategia de código"><BuilderCodigo key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
     onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardarCodigo}/></ProteccionPanel>
   if (editor) return <ProteccionPanel nombre="Editor por tarjetas"><BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} lotes={datos.lotes} apiFetch={apiFetch}
-    onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} onPaso2={f => { setEditor(null); abreAzar(f.id) }} onPaso3={f => { setEditor(null); abrePlan(f.id) }} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'} entradaBuilder={entrada}/></ProteccionPanel>
+    onVolver={alVolver(() => setEditor(null))} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} onPaso2={f => { setEditor(null); abreAzar(f.id) }} onPaso3={f => { setEditor(null); abrePlan(f.id) }} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'} entradaBuilder={entrada}/></ProteccionPanel>
   if (azar) return <ProteccionPanel nombre="Probarla contra el azar"><BuilderAzar key={azar.n} estrategias={estrategiasEf} estrategiaId={azar.estrategiaId} version={version}
-    cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} onVolver={() => { setAzar(null); recarga() }} onPaso1={f => { setAzar(null); if (f) abreEditor(f); else recarga() }} onPaso3={id => { setAzar(null); abrePlan(id) }}/></ProteccionPanel>
-  if (plan) return <ProteccionPanel nombre="Convertirla en plan"><BuilderPlan key={plan.n} estrategias={estrategiasEf} estrategiaId={plan.estrategiaId} apiFetch={apiFetch} version={version}
-    cargaSimbolos={cargaSimbolosCache} onVolver={() => { setPlan(null); recarga() }} onPaso1={f => { setPlan(null); if (f) abreEditor(f); else recarga() }} onPaso2={id => { setPlan(null); abreAzar(id) }}/></ProteccionPanel>
+    cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} onVolver={alVolver(() => setAzar(null))} onPaso1={f => { setAzar(null); if (f) abreEditor(f); else recarga() }} onPaso3={id => { setAzar(null); abrePlan(id) }}/></ProteccionPanel>
+  if (plan) return <ProteccionPanel nombre="Convertirla en plan"><BuilderPlan key={plan.n} estrategias={estrategiasEf} estrategiaId={plan.estrategiaId} planId={plan.planId ?? null} salida={salida} apiFetch={apiFetch} version={version}
+    cargaSimbolos={cargaSimbolosCache} onVolver={alVolver(() => setPlan(null))} onPaso1={f => { setPlan(null); if (f) abreEditor(f); else recarga() }} onPaso2={id => { setPlan(null); abreAzar(id) }}/></ProteccionPanel>
   if (prueba) return <ProteccionPanel nombre="Probarla contra el azar"><BuilderPrueba key={prueba.n} estrategias={estrategiasEf} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
-    onVolver={() => { setPrueba(null); recarga() }} onNuevaPrueba={() => setPrueba({ n: Date.now() })} onCambio={recarga}/></ProteccionPanel>
+    onVolver={alVolver(() => setPrueba(null))} onNuevaPrueba={() => setPrueba({ n: Date.now() })} onCambio={recarga}/></ProteccionPanel>
   const pestanaBtn = (k, t, n) => (
     <button key={k} role="tab" aria-selected={pestana === k} onClick={() => setPestana(k)}
       style={{ ...S.boton, borderRadius: `${B.radioBoton}px ${B.radioBoton}px 0 0`, borderBottom: 'none', fontWeight: pestana === k ? 700 : 400,
@@ -264,7 +296,7 @@ export default function BuilderPanel({ estrategias = [], onAbrirEstrategia, onBa
         </div>
       </div>
 
-      <div style={S.tituloSeccion}>Mi trabajo</div>
+      <div ref={seccionMiTrabajo} style={S.tituloSeccion}>Mi trabajo</div>
       <div style={{ ...S.subtituloSeccion }} data-que-es>{QUE_ES}</div>
       <div role="tablist" aria-label="Mi trabajo" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
         {pestanaBtn('estrategias', 'Mis estrategias', cuenta(buscadasE, filasE))}

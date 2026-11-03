@@ -12,7 +12,7 @@
 //   estadoInicial (opcional, para las pruebas de montaje): { fila, est } ya leídos.
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { B, S } from '../lib/builder/estilo'
-import { BarraPasos } from './BuilderPanel'
+import { CabeceraPasos } from './BuilderPanel'
 import BotonCopiar from './BotonCopiar'
 import { textoAIso } from './CampoFecha'
 import { isoAMostrar } from './SelectorPeriodo'
@@ -404,11 +404,7 @@ export default function BuilderPrueba({ estrategias = [], lotes = [], inicio = {
 
   return (
     <div style={S.pagina}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-        <button style={{ ...S.enlace, color: B.secundario }} onClick={() => onVolver?.()}>← Builder</button>
-        <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Builder</span>
-      </div>
-      <BarraPasos actual={2}/>
+      <CabeceraPasos actual={2} estrategia={titulo} onVolver={onVolver}/>
 
       <div style={{ fontSize: 20, fontWeight: 700, color: B.titulo, marginTop: 8 }}>¿Gana «{titulo}» por algo más que suerte?</div>
       <div style={{ ...S.secundario, marginTop: 4 }}>Tú solo confirmas qué vas a probar. Todo lo demás va solo y en orden.</div>

@@ -24,9 +24,14 @@
 //   (las filas guardadas), pestana (la abierta: «g<id>» o «n1»), cambio ({ cambiada, borrada }), pideNombre, borrando, huellas ({ id: huella }
 //   de cada estrategia, para su etiqueta), nuevas ([{ clave, nombre, base }]), cerrando (la clave de la pestaña que pide confirmación) }.
 //   pruebas: las de todas las estrategias (con estrategia_id).
+// §54: la cabecera B (CabeceraPasos) y las PESTAÑAS DE PLANES (components/BuilderPestanas.js, lib/builder/pestanasPlan.js): una por plan abierto, con su orden guardado en la base
+// (builder_pestanas); con cambios sin guardar, cualquier salida pregunta (la misma ventana que en Tesis). Esto deja atrás lo de «una pestaña por plan guardado» de la parte 2 y la «×» de §49.
+//   planId: el plan que se pide abrir (desde una tesis). salida: un ref; la página pregunta por él antes de salir del Builder. inicial, además: orden, pregunta ({ tipo }), ventana ('nuevo' | { duplica }), borrando (la clave), avisoPlan, anchoPestanas.
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { B, S } from '../lib/builder/estilo'
-import { BarraPasos } from './BuilderPanel'
+import { CabeceraPasos } from './BuilderPanel'
+import BuilderPestanas from './BuilderPestanas'
+import { Pregunta } from './VentanaPregunta'
 import Ayuda from './BuilderAyuda'
 import BuscadorValor from './BuscadorValor'
 import BotonCopiar from './BotonCopiar'
@@ -34,12 +39,14 @@ import { marcasLog, separaEtiquetas } from './BuilderCurvas'
 import { esDeTarjetas, huellaEstrategia, leerResultado } from '../lib/pruebaAzar'
 import { validaPlan, paraHuellaPlan } from '../lib/planes/plan'
 import { jsonCanonico } from '../lib/lotesLab'
-import { AVISO_BORRADA, AVISO_CAMBIADA, AYUDA_CAMBIADA, AYUDA_COMPARAR, borrarPlan, cambiarPlan, comparaEstrategia, crearPlan, fotoDelPlan, listarPlanes, listarPruebasUsuario, nombreLimpio } from '../lib/builder/planesGuardados'
+import { AVISO_BORRADA, AVISO_CAMBIADA, AYUDA_CAMBIADA, borrarPlan, cambiarPlan, comparaEstrategia, crearPlan, fotoDelPlan, guardarPestanas, leerPestanas, listarPlanes, listarPruebasUsuario, nombreLimpio } from '../lib/builder/planesGuardados'
+import { cambiaClave, claveDe, conPestana, eligeEntrada, idDe, idsDe, ordenInicial, sinPestana, trasDe, vecina } from '../lib/builder/pestanasPlan'
+import { respondeSalida } from '../lib/tesis'
 import { esDeCodigo } from '../lib/builder/codigo'
 import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
 import { numeroEs } from '../lib/utils'
-import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_PRUEBA, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
-  ayudaCaida, ayudaPrueba, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, trasCerrar, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo,
+import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, AVISO_PRUEBA, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
+  ayudaCaida, ayudaPrueba, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS } from '../lib/builder/planPantalla'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0', AZUL = '#58a6ff', GRIS_FRANJA = '#3a4656'
@@ -161,39 +168,36 @@ const Tarjeta = ({ id, titulo, ayuda, children }) => (
   </div>
 )
 
-export default function BuilderPlan({ estrategias = [], estrategiaId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, deps = null, inicial = null }) {
+export default function BuilderPlan({ estrategias = [], estrategiaId = null, planId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, salida = null, deps = null, inicial = null }) {
   const tarjetas = useMemo(() => estrategias.filter(esDeTarjetas).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
   const diarias = useMemo(() => tarjetas.filter(s => !esSemanal(s)), [tarjetas])
   const deCodigo = useMemo(() => estrategias.filter(esDeCodigo).length, [estrategias])
-  // Las pestañas: los planes guardados («g<id>») y los nuevos sin guardar («n<k>»). La abierta se edita en a / estId / version; lo de
-  // las demás espera en `edic` (si una guardada no tiene nada ahí, se abre como se guardó).
+  // Las pestañas (§54): en `orden`, las claves abiertas: los planes guardados («g<id>») y los nuevos sin guardar («n<k>»); null: se están leyendo. La abierta se edita en a / estId / version;
+  // un plan nuevo al que se deja de mirar espera en `edic` (un guardado no: con cambios, antes de irse se pregunta).
   const [planes, setPlanes] = useState(inicial?.planes || null)
   const [falloPlanes, setFalloPlanes] = useState(null)
   const deFila = (r) => ({ a: ajustesDe(r.plan), estId: String(fotoDelPlan(r.plan)?.id ?? ''), version: 'guardada' })
   const borrador = () => ({ a: { ...AJUSTES_PLAN, ...(inicial?.ajustes || {}) }, estId: String((diarias.find(s => String(s.id) === String(estrategiaId)) || diarias[0])?.id ?? ''), version: 'actual' })
-  const base = baseNueva   // lo que tenía un plan nuevo al crearlo (para saber si tiene cambios al cerrarlo)
-  // §49: al entrar, el plan guardado más reciente de la estrategia con la que se entra (sin estrategia, el más reciente de todos); si no
-  // hay ninguno, UN plan nuevo con ella. null: todavía no se sabe (se están leyendo los planes).
-  const eligeInicio = (ps) => {
-    const deEsta = ps.filter(p => estrategiaId == null || String(fotoDelPlan(p.plan)?.id) === String(estrategiaId))
-    const r = [...deEsta].sort((x, y) => String(y.updated_at).localeCompare(String(x.updated_at)))[0]
-    if (r) return { clave: `g${r.id}`, ...deFila(r) }
-    return { clave: 'n1', ...borrador() }
-  }
+  const base = baseNueva   // lo que tenía un plan nuevo al crearlo (para saber si tiene cambios)
   const inicio = useMemo(() => {
-    const r = inicial?.pestana && (inicial.planes || []).find(p => `g${p.id}` === inicial.pestana)
+    const r = inicial?.pestana && (inicial.planes || []).find(p => claveDe(p.id) === inicial.pestana)
     if (r) return { clave: inicial.pestana, ...deFila(r) }
     if (inicial?.pestana?.startsWith('n')) return { clave: inicial.pestana, ...borrador() }
-    if (inicial?.planes) return eligeInicio(inicial.planes)
+    if (inicial?.planes) {
+      const e = eligeEntrada({ planes: inicial.planes, orden: inicial.orden || ordenInicial(null, inicial.planes), estrategiaId, planId, fotoDe: fotoDelPlan })
+      const x = e.clave && inicial.planes.find(p => claveDe(p.id) === e.clave)
+      if (x) return { clave: e.clave, ...deFila(x) }
+      return { clave: e.nuevo ? 'n1' : null, ...borrador() }
+    }
     return { clave: null, ...borrador() }
   }, [])
   const [nuevas, setNuevas] = useState(() => inicial?.nuevas || (inicio.clave?.startsWith('n') ? [{ clave: inicio.clave, nombre: 'Plan nuevo', base: base(inicio) }] : []))
-  const [cerrando, setCerrando] = useState(inicial?.cerrando || null)   // la pestaña nueva que pide «¿cerrar sin guardar?»
+  const [orden, setOrden] = useState(() => inicial?.orden || (inicial?.planes ? [...new Set([...ordenInicial(null, inicial.planes), ...nuevas.map(x => x.clave), ...(inicio.clave ? [inicio.clave] : [])])] : null))
   const [actual, setActual] = useState(inicio.clave)
   const [estId, setEstId] = useState(inicio.estId)
   const [a, setA] = useState(inicio.a)
   const [cualVersion, setCualVersion] = useState(inicio.version)   // en un plan guardado: 'guardada' (la foto del plan) o 'actual' (la estrategia de ahora)
-  const edic = useRef({}), cuentaNuevas = useRef(1)
+  const edic = useRef({}), cuentaNuevas = useRef(1), ultimasIds = useRef(null)
   const fila = actual?.startsWith('g') ? (planes || []).find(p => `g${p.id}` === actual) || null : null
   const fotoG = fila ? fotoDelPlan(fila.plan) : null
   const estrategiaActual = diarias.find(s => String(s.id) === estId) || null
@@ -204,9 +208,14 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
   const otroOcioso = otroForzado || !OCIOSOS_FIJOS.some(([k]) => k === a.ocioso)
   const setOtroOcioso = setOtroForzado
   const [cambio, setCambio] = useState(inicial?.cambio || null)   // { cambiada, borrada } del plan guardado abierto
-  const [pideNombre, setPideNombre] = useState(inicial?.pideNombre || null)   // null | 'nuevo' | 'comoNuevo'
+  const [pregunta, setPregunta] = useState(inicial?.pregunta || null)   // la ventana «Tienes cambios sin guardar…»: { tipo, … }, lo que se hará después (ejecuta)
+  const [tras, setTras] = useState(null)   // lo que toca hacer tras guardar o descartar, ya con el estado al día
+  const [ventana, setVentana] = useState(inicial?.ventana || null)   // la ventana del nombre: 'nuevo' (guardar un plan nuevo) o { duplica: clave }
   const [nombreNuevo, setNombreNuevo] = useState('')
-  const [borrando, setBorrando] = useState(!!inicial?.borrando)
+  const [borrando, setBorrando] = useState(inicial?.borrando || null)   // la clave del plan que pide «¿Borrar?»
+  const [avisoPlan, setAvisoPlan] = useState(inicial?.avisoPlan || null)   // el plan pedido desde una tesis ya no existe
+  const [falloPestanas, setFalloPestanas] = useState(false)
+  const [finales, setFinales] = useState(inicial?.finales || {})   // { id: € al final }, de los planes ya calculados: para «+ Añadir plan»
   const [guardando, setGuardando] = useState(false)
   const [falloGuardar, setFalloGuardar] = useState(null)
   const [simbolos, setSimbolos] = useState(inicial?.simbolos || ['AAPL', 'GLD', 'QQQ'])
@@ -287,18 +296,34 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
     return () => { v = false }
   }, [estado?.fila?.id])
 
-  // ── Los planes guardados ──
+  // ── Los planes guardados y las pestañas ──
+  const aplica = (e) => { setA(e.a); setEstId(e.estId); setCualVersion(e.version); setOtroForzado(false) }
+  // Leídos los planes y las pestañas guardadas (null: esta persona no tiene fila todavía), qué se abre al entrar.
+  const entra = (xs, guardadas) => {
+    const o = ordenInicial(guardadas, xs)
+    ultimasIds.current = guardadas == null ? null : JSON.stringify(guardadas.map(Number))
+    const e = eligeEntrada({ planes: xs, orden: o, estrategiaId, planId, fotoDe: fotoDelPlan })
+    setPlanes(xs)
+    if (e.noExiste) setAvisoPlan(AVISO_NO_EXISTE)
+    if (e.nuevo) { const b = borrador(); setNuevas([{ clave: 'n1', nombre: 'Plan nuevo', base: base(b) }]); setOrden([...o, 'n1']); aplica(b); setActual('n1'); return }
+    const r = e.clave && xs.find(p => claveDe(p.id) === e.clave)
+    setOrden(r ? conPestana(o, e.clave) : o)
+    if (r) { aplica(deFila(r)); setActual(e.clave) }
+  }
   useEffect(() => {
-    if (inicial?.planes || !ctx) return
-    listarPlanes(ctx).then(xs => { if (vivo.current) setPlanes(xs) }).catch(e => { if (vivo.current) { setPlanes([]); setFalloPlanes(e.message) } })
+    if (inicial?.planes) return
+    if (!ctx) { entra([], null); return }
+    Promise.all([listarPlanes(ctx), leerPestanas(ctx).catch(() => null)])
+      .then(([xs, g]) => { if (vivo.current) entra(xs, g) })
+      .catch(e => { if (vivo.current) { setFalloPlanes(e.message); entra([], null) } })
   }, [ctx])
-  // Leídos los planes (o sin base de datos), qué pestaña se abre al entrar (eligeInicio).
+  // Las pestañas abiertas y su orden se guardan en la base en cuanto cambian (solo las de planes guardados).
+  const idsAbiertos = orden && !inicial?.planes ? JSON.stringify(idsDe(orden)) : null
   useEffect(() => {
-    if (actual || (planes == null && ctx)) return
-    const e = eligeInicio(planes || [])
-    if (e.clave.startsWith('n')) setNuevas([{ clave: e.clave, nombre: 'Plan nuevo', base: base(e) }])
-    setA(e.a); setEstId(e.estId); setCualVersion(e.version); setActual(e.clave)
-  }, [planes, ctx])
+    if (idsAbiertos == null || !ctx || idsAbiertos === ultimasIds.current) return
+    ultimasIds.current = idsAbiertos
+    guardarPestanas(ctx, JSON.parse(idsAbiertos)).then(() => { if (vivo.current) setFalloPestanas(false) }).catch(() => { if (vivo.current) setFalloPestanas(true) })
+  }, [idsAbiertos])
   // ¿Ha cambiado la estrategia del plan guardado abierto desde que se guardó?
   useEffect(() => {
     if (inicial?.cambio) return
@@ -308,91 +333,159 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
     comparaEstrategia(fila.plan, estrategias).then(c => { if (v) setCambio(c) }).catch(() => {})
     return () => { v = false }
   }, [fila?.id, fila?.updated_at, estrategias])
-  const pestanas = [...(planes || []).map(r => ({ clave: `g${r.id}`, id: r.id, nombre: r.nombre })), ...nuevas]
-  const limpiaDialogos = () => { setPideNombre(null); setBorrando(false); setFalloGuardar(null); setNombreNuevo(''); setCerrando(null) }
-  // Abre otra pestaña: lo de la de ahora espera en edic; la otra, con lo suyo (o como se guardó).
-  const abre = (clave, guardaAhora = true) => {
-    if (guardaAhora && actual) edic.current[actual] = { a, estId, version: cualVersion }
-    const r = (planes || []).find(p => `g${p.id}` === clave)
-    const e = edic.current[clave] || (r ? deFila(r) : clave.startsWith('n') ? { a: { ...AJUSTES_PLAN }, estId: String(diarias[0]?.id ?? ''), version: 'actual' } : null)
+  const limpiaDialogos = () => { setVentana(null); setBorrando(null); setFalloGuardar(null); setNombreNuevo('') }
+  const nuevaActual = nuevas.find(x => x.clave === actual) || null
+  const hayCambios = !!fila && !!plan && jsonCanonico(paraHuellaPlan(plan)) !== jsonCanonico(paraHuellaPlan(fila.plan))
+  const sinGuardar = hayCambios || conCambios(nuevaActual, { a, estId })
+  const pestanas = (orden || []).map(c => {
+    const id = idDe(c)
+    if (id != null) { const r = (planes || []).find(p => Number(p.id) === id); return r ? { clave: c, nombre: r.nombre, guardado: true, sucia: c === actual && sinGuardar } : null }
+    const n = nuevas.find(x => x.clave === c)
+    return n ? { clave: c, nombre: n.nombre, guardado: false, sucia: c === actual ? sinGuardar : conCambios(n, edic.current[c]) } : null
+  }).filter(Boolean)
+  const nombreDe = (c) => pestanas.find(p => p.clave === c)?.nombre || ''
+  // Abre otra pestaña. lista: los planes, si acaban de cambiar. Un plan nuevo espera en edic con lo que tiene.
+  const abre = (clave, lista = planes) => {
+    if (actual?.startsWith('n') && actual !== clave) edic.current[actual] = { a, estId, version: cualVersion }
+    const r = (lista || []).find(p => claveDe(p.id) === clave), e = r ? deFila(r) : edic.current[clave]
     if (!e) return
-    setA(e.a); setEstId(e.estId); setCualVersion(e.version); setOtroForzado(false); setActual(clave); limpiaDialogos()
+    aplica(e); setActual(clave); limpiaDialogos()
   }
-  // Un plan nuevo SOLO con «+ Añadir plan» (§49): copia los ajustes de ahora; se llama «Plan nuevo», «Plan nuevo 2»… (el primer número libre).
-  const anadePlan = () => {
-    const k = ++cuentaNuevas.current, clave = `n${k}`
-    const e = { a: { ...a }, estId: String(estrategiaActual?.id ?? estId), version: 'actual' }
-    if (actual) edic.current[actual] = { a, estId, version: cualVersion }
+  // Un plan nuevo, con los ajustes de ahora (o sin ninguno abierto, los de siempre): «Plan nuevo», «Plan nuevo 2»… (el primer número libre). junto: la pestaña a cuyo lado se abre.
+  const creaNuevo = (desde = null, junto = null) => {
+    const clave = `n${++cuentaNuevas.current}`, e = desde || (actual ? { a: { ...a }, estId: String(estrategiaActual?.id ?? estId), version: 'actual' } : borrador())
+    if (actual?.startsWith('n')) edic.current[actual] = { a, estId, version: cualVersion }
     edic.current[clave] = e
     setNuevas(xs => [...xs, { clave, nombre: nombreNueva(xs), base: base(e) }])
-    abre(clave, false)
+    setOrden(o => junto ? trasDe(o || [], junto, clave) : [...(o || []), clave])
+    aplica(e); setActual(clave); limpiaDialogos()
   }
-  // La × de un plan nuevo: sin cambios desde que se creó, se cierra; con cambios, pide confirmación (cerrando). La última pestaña no se cierra.
-  const cierraNueva = (clave, confirmado = false) => {
-    const t = trasCerrar({ planes: planes || [], nuevas, actual }, clave)
-    if (!t) return
-    if (!confirmado && conCambios(nuevas.find(x => x.clave === clave), clave === actual ? { a, estId } : edic.current[clave])) { limpiaDialogos(); setCerrando(clave); return }
-    delete edic.current[clave]; setNuevas(t.nuevas); setCerrando(null)
-    if (t.abrir) abre(t.abrir, false)
+  // × : solo la quita de la vista (un plan nuevo se pierde). Sin pestañas, «Ningún plan abierto».
+  const cierra = (clave) => {
+    const o = orden || []
+    if (!o.includes(clave)) return
+    const v = clave === actual ? vecina(o, clave) : null
+    if (clave === actual) { if (v) abre(v); else { setActual(null); limpiaDialogos() } }
+    delete edic.current[clave]
+    setOrden(sinPestana(o, clave))
+    if (idDe(clave) == null) setNuevas(xs => xs.filter(x => x.clave !== clave))
   }
-  const hayCambios = !!fila && !!plan && jsonCanonico(paraHuellaPlan(plan)) !== jsonCanonico(paraHuellaPlan(fila.plan))
+  // Lo que se hace cuando ya no hay cambios por medio.
+  const ejecuta = (d) => {
+    if (d.tipo === 'abrir') abre(d.clave)
+    else if (d.tipo === 'anadir') { const c = claveDe(d.id); setOrden(o => conPestana(o || [], c)); abre(c) }
+    else if (d.tipo === 'crear') creaNuevo()
+    else if (d.tipo === 'cerrar') cierra(d.clave)
+    else if (d.tipo === 'duplicar') duplica(d.clave)
+    else if (d.tipo === 'paso1') onPaso1?.(estrategiaActual)
+    else if (d.tipo === 'paso2') onPaso2?.(estrategia?.id ?? null)
+    else if (d.tipo === 'volver') onVolver?.(d.donde)
+    else if (d.tipo === 'fuera') d.seguir?.()
+  }
+  useEffect(() => { if (tras) { setTras(null); ejecuta(tras) } }, [tras])
+  // Con cambios sin guardar, antes pregunta.
+  const pide = (d) => { if (sinGuardar) { limpiaDialogos(); setPregunta(d) } else ejecuta(d) }
   const puedeGuardar = !!ctx && !!plan && !errores.length && !guardando
-  const guarda = async (como) => {
-    if (!puedeGuardar) return
+  // Guarda la abierta. Devuelve true si ha ido bien. Un plan nuevo con el nombre de la ventana.
+  const guardaAbierta = async () => {
+    if (!puedeGuardar) return false
     setGuardando(true); setFalloGuardar(null)
     try {
-      if (como === 'cambios') {
+      if (fila) {
         const r = await cambiarPlan(ctx, fila.id, { nombre: fila.nombre, plan })
         setPlanes(xs => xs.map(x => x.id === r.id ? r : x)); setCualVersion('guardada')
-        edic.current[`g${r.id}`] = { a, estId, version: 'guardada' }
       } else {
-        const n = nombreLimpio(nombreNuevo)
-        if (!n) { setFalloGuardar('Escribe un nombre para el plan.'); setGuardando(false); return }
-        const r = await crearPlan(ctx, { nombre: n, plan }), g = `g${r.id}`
-        edic.current[g] = { a, estId, version: 'guardada' }
+        const r = await crearPlan(ctx, { nombre: nombreLimpio(nombreNuevo), plan }), g = claveDe(r.id)
         delete edic.current[actual]
-        if (!fila) setNuevas(xs => { const ys = xs.filter(x => x.clave !== actual); return ys })
-        setPlanes(xs => [...(xs || []), r]); setActual(g); setCualVersion('guardada')
+        setNuevas(xs => xs.filter(x => x.clave !== actual)); setPlanes(xs => [...(xs || []), r]); setOrden(o => cambiaClave(o || [], actual, g)); setActual(g); setCualVersion('guardada')
       }
-      limpiaDialogos()
+      setGuardando(false)
+      return true
+    } catch (e) { setFalloGuardar(e.message); setGuardando(false); return false }
+  }
+  // Vuelve a lo guardado (un plan nuevo, a como se creó).
+  const descartaCambios = () => {
+    setFalloGuardar(null)
+    if (fila) aplica(deFila(fila))
+    else if (nuevaActual) { const [x, y] = JSON.parse(nuevaActual.base); aplica({ a: x, estId: y, version: 'actual' }) }
+  }
+  // La ventana de los cambios sin guardar. «Salir sin guardar» de un plan nuevo lo cierra: no tiene adónde volver.
+  const responde = async (que) => {
+    const d = pregunta
+    if (que === 'cancelar') { setPregunta(null); setFalloGuardar(null); return }
+    const r = await respondeSalida(que, { guardar: guardaAbierta, descartar: () => { if (fila) descartaCambios(); else cierra(actual) }, seguir: () => setTras({ ...d }) })
+    if (r === 'fallo') setPregunta({ ...d, fallo: true }); else { setPregunta(null); setNombreNuevo('') }
+  }
+  // La página pregunta antes de salir del Builder; y el navegador, antes de cerrar o recargar.
+  useEffect(() => { if (salida) salida.current = (seguir) => { if (!sinGuardar) return false; limpiaDialogos(); setPregunta({ tipo: 'fuera', seguir }); return true } })
+  useEffect(() => () => { if (salida) salida.current = null }, [])
+  useEffect(() => {
+    if (!sinGuardar) return
+    const avisa = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', avisa)
+    return () => window.removeEventListener('beforeunload', avisa)
+  }, [sinGuardar])
+  // Duplicar: un plan nuevo, otro nuevo a su lado; uno guardado, pide el nombre y lo guarda como plan nuevo (el abierto, con sus cambios).
+  const duplica = (clave) => {
+    if (idDe(clave) == null) { const e = clave === actual ? { a, estId } : edic.current[clave]; if (e) creaNuevo({ a: { ...e.a }, estId: e.estId, version: 'actual' }, clave); return }
+    limpiaDialogos(); setNombreNuevo(`${nombreDe(clave)} (copia)`); setVentana({ duplica: clave })
+  }
+  const pideDuplicar = (clave) => { if (clave === actual) duplica(clave); else pide({ tipo: 'duplicar', clave }) }
+  const guardaVentana = async () => {
+    if (!ventana || !nombreLimpio(nombreNuevo) || guardando) return
+    if (ventana === 'nuevo') { if (await guardaAbierta()) limpiaDialogos(); return }
+    const src = ventana.duplica, r0 = (planes || []).find(p => claveDe(p.id) === src)
+    if (!ctx || !r0 || (src === actual && (!plan || errores.length))) return
+    setGuardando(true); setFalloGuardar(null)
+    try {
+      const r = await crearPlan(ctx, { nombre: nombreLimpio(nombreNuevo), plan: src === actual ? plan : r0.plan }), g = claveDe(r.id), lista = [...planes, r]
+      setPlanes(lista); setOrden(o => trasDe(o || [], src, g)); abre(g, lista)
     } catch (e) { setFalloGuardar(e.message) }
     setGuardando(false)
   }
   const borra = async () => {
-    if (!fila || !ctx || guardando) return
+    const clave = borrando, o = orden || []
+    if (!clave || !ctx || guardando) return
     setGuardando(true); setFalloGuardar(null)
     try {
-      await borrarPlan(ctx, fila.id)
-      delete edic.current[actual]
-      const quedan = (planes || []).filter(x => x.id !== fila.id)
-      setPlanes(quedan); limpiaDialogos()
-      const otra = quedan[0] ? `g${quedan[0].id}` : nuevas[0]?.clave
-      if (otra) abre(otra, false)
-      // Sin ningún plan, hace falta uno para trabajar: uno nuevo con los ajustes del borrado.
-      else { const k = `n${++cuentaNuevas.current}`, e = { a, estId: String(estrategiaActual?.id ?? estId), version: 'actual' }; edic.current[k] = e; setNuevas([{ clave: k, nombre: 'Plan nuevo', base: base(e) }]); abre(k, false) }
+      await borrarPlan(ctx, idDe(clave))
+      const quedan = (planes || []).filter(x => claveDe(x.id) !== clave), v = vecina(o, clave)
+      setPlanes(quedan); setOrden(sinPestana(o, clave))
+      if (clave === actual) { if (v) abre(v, quedan); else setActual(null) }
+      limpiaDialogos()
     } catch (e) { setFalloGuardar(e.message) }
     setGuardando(false)
   }
+  const pulsaCerrar = (clave) => { if (clave === actual && sinGuardar) pide({ tipo: 'cerrar', clave }); else cierra(clave) }
 
   const valoresLista = useMemo(() => simbolos.map(s => typeof s === 'string' ? { simbolo: s, nombre: '' } : s), [simbolos])
   const cifras = useMemo(() => { try { return calc.resultado ? cifrasPlan(calc.resultado.respuesta, calc.resultado.plan) : null } catch (_) { return null } }, [calc.resultado])
   const ajustesDelResultado = calc.resultado?.plan?.piezas?.[0] || null
+  // Lo que se enseña en «+ Añadir plan»: el final de los planes guardados ya calculados.
+  useEffect(() => { if (fila && cifras && !hayCambios && clave === JSON.stringify(calc.resultado?.plan)) setFinales(x => ({ ...x, [fila.id]: cifras.seis.final })) }, [cifras, fila?.id, hayCambios])
   const texto = () => textoParaClaudePlan({ ajustes: a, estrategia, plan, cifras, estado, resultadoPrueba: resPrueba, version, nombre: fila?.nombre || null })
 
   // ── Avisos (una línea; el detalle, tras «?») ──
   const avisoPrueba = estado && (
-    <div data-aviso="prueba" data-estado={estado.clave} style={{ color: estado.clave === 'pasa' ? VERDE : ROJO, fontWeight: estado.clave === 'pasa' ? 400 : 700, display: 'flex', alignItems: 'center', gap: 2 }}>
-      {estado.clave === 'pasa' ? '✓ ' : '✕ '}{AVISO_PRUEBA[estado.clave]}<Ayuda texto={ayudaPrueba(estado, resPrueba)} etiqueta="La prueba contra el azar"/>
+    <div data-aviso="prueba" data-estado={estado.clave} style={{ color: estado.clave === 'pasa' ? VERDE : estado.clave === 'noPasa' ? ROJO : AMARILLO, fontWeight: estado.clave === 'noPasa' ? 700 : 400, display: 'flex', alignItems: 'center', gap: 2 }}>
+      {AVISO_PRUEBA[estado.clave]}<span style={S.apagado}>&nbsp;·&nbsp;</span><button data-boton="ver-prueba" style={{ ...S.enlace, fontSize: 13 }} onClick={() => pide({ tipo: 'paso2' })}>{estado.clave === 'sinPrueba' ? 'Probarla ahora' : 'Ver la prueba'}</button><Ayuda texto={ayudaPrueba(estado, resPrueba)} etiqueta="La prueba contra el azar"/>
     </div>
   )
-  // §49: los dos avisos en UNA línea, uno al lado del otro (en el móvil, uno debajo del otro: .bp-avisos), con «Calculando…» a la derecha.
-  const avisos = (
+  // §54: una línea bajo las pestañas: los avisos (en el móvil, uno debajo del otro: .bp-avisos), «Calculando…» y, a la derecha, guardar y «Comparar planes».
+  const avisos = actual ? (
     <div data-avisos className="bp-avisos" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 24px', alignItems: 'center', marginBottom: 12 }}>
-      {estrategia && (avisoPrueba || <div data-aviso="prueba" data-estado="leyendo" style={S.secundario}>Leyendo las pruebas contra el azar de esta estrategia…</div>)}
+      {estrategia && (avisoPrueba || <div data-aviso="prueba" data-estado="leyendo" style={S.secundario}>Leyendo la prueba…</div>)}
       <div data-aviso="a-mano" style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>⚠ {AVISO_A_MANO}<Ayuda texto={AYUDA_PLAN.aMano} etiqueta={AVISO_A_MANO}/></div>
-      {calc.calculando && <div data-calculando style={{ color: AMARILLO, marginLeft: 'auto' }}>Calculando…</div>}
+      {nuevaActual && <div data-aviso="sin-guardar" style={{ color: AMARILLO }}>Sin guardar: se perderá al recargar</div>}
+      {calc.calculando && <div data-calculando style={{ color: AMARILLO }}>Calculando…</div>}
+      <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        {sinGuardar && <button data-boton="descartar" style={{ ...S.boton, padding: '6px 12px' }} disabled={guardando} onClick={descartaCambios}>Descartar cambios</button>}
+        {hayCambios && <button data-boton="guardar-cambios" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={`Guardado por última vez el ${fechaCorta(fila.updated_at)}`} onClick={guardaAbierta}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>}
+        {nuevaActual && <button data-boton="guardar" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={!ctx ? 'Sin conexión con la base de datos: no se pueden guardar planes' : undefined} onClick={() => { limpiaDialogos(); setVentana('nuevo') }}>Guardar este plan</button>}
+        <button data-boton="comparar" disabled title="Próximamente" style={{ ...S.boton, padding: '6px 12px', fontSize: 13, color: B.apagado, cursor: 'not-allowed' }}>Comparar planes</button>
+      </span>
     </div>
-  )
+  ) : null
   const errorCalculo = (!!errores.length || calc.error) && (
     <div data-estado-calculo style={{ marginBottom: 10 }}>
       {!!errores.length && <div data-errores-plan style={{ color: ROJO }}>✕ {errores.join(' ')}</div>}
@@ -400,54 +493,17 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
     </div>
   )
 
-  // ── Una fila arriba: pestañas de planes, «+ Añadir plan», guardar y «Comparar planes» ──
-  const campoNombre = pideNombre && (
-    <span data-pide-nombre={pideNombre} style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      <input type="text" aria-label="Nombre del plan" placeholder="Nombre del plan" maxLength={200} value={nombreNuevo} autoFocus onChange={e => setNombreNuevo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') guarda('nuevo'); if (e.key === 'Escape') limpiaDialogos() }} style={{ ...campo, width: 220, padding: '5px 8px' }}/>
-      <button data-boton="confirmar-nombre" style={{ ...(puedeGuardar && nombreLimpio(nombreNuevo) ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar || !nombreLimpio(nombreNuevo)} onClick={() => guarda('nuevo')}>{guardando ? 'Guardando…' : 'Guardar'}</button>
-      <button style={{ ...S.boton, padding: '6px 12px' }} onClick={limpiaDialogos}>Cancelar</button>
-    </span>
-  )
-  const nombreCerrando = nuevas.find(x => x.clave === cerrando)?.nombre
-  const barraGuardar = cerrando && nombreCerrando ? (
-    <span data-confirma-cerrar style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      <span style={{ color: AMARILLO }}>{`¿Cerrar «${nombreCerrando}» sin guardar? Se pierden sus cambios.`}</span>
-      <button data-boton="si-cerrar" style={{ ...S.boton, padding: '6px 12px' }} onClick={() => cierraNueva(cerrando, true)}>Sí, cerrar</button>
-      <button style={{ ...S.boton, padding: '6px 12px' }} onClick={limpiaDialogos}>Cancelar</button>
-    </span>
-  ) : borrando && fila ? (
-    <span data-confirma-borrar style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      <span style={{ color: ROJO }}>{`¿Borrar «${fila.nombre}»? No se puede deshacer.`}</span>
-      <button data-boton="si-borrar" style={{ ...S.boton, padding: '6px 12px', borderColor: '#8b3a42', background: '#3b1d22', color: ROJO }} disabled={guardando} onClick={borra}>{guardando ? 'Borrando…' : 'Sí, borrar'}</button>
-      <button style={{ ...S.boton, padding: '6px 12px' }} onClick={limpiaDialogos}>Cancelar</button>
-    </span>
-  ) : campoNombre || (fila ? (
-    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-      {/* §50: «Guardar cambios» solo con cambios (en verde); sin ellos no sale. «Duplicar»: el plan de ahora, con sus cambios, como plan nuevo. */}
-      {hayCambios && <button data-boton="guardar-cambios" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={`Guardado por última vez el ${fechaCorta(fila.updated_at)}`} onClick={() => guarda('cambios')}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>}
-      <button data-boton="guardar-como" style={{ ...S.boton, padding: '6px 12px' }} disabled={!puedeGuardar} title="Una copia de este plan, con sus cambios, como plan nuevo" onClick={() => { limpiaDialogos(); setNombreNuevo(`${fila.nombre} (copia)`); setPideNombre('comoNuevo') }}>Duplicar</button>
-      <button data-boton="borrar" style={{ ...S.boton, padding: '6px 12px', color: ROJO }} disabled={!ctx || guardando} onClick={() => { limpiaDialogos(); setBorrando(true) }}>Borrar</button>
-    </span>
-  ) : actual ? <button data-boton="guardar" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={!ctx ? 'Sin conexión con la base de datos: no se pueden guardar planes' : undefined} onClick={() => { limpiaDialogos(); setPideNombre('nuevo') }}>Guardar este plan</button> : null)
-  const pestanaEstilo = (on) => ({ ...S.boton, padding: '6px 12px', fontSize: 13, ...(on ? { background: B.cabecera, borderColor: B.siguienteBorde, color: B.titulo, fontWeight: 700 } : { background: 'transparent', color: B.secundario }) })
+  // ── La fila de pestañas (components/BuilderPestanas.js) ──
   const pestanasPlanes = (
     <div data-planes style={{ marginBottom: 10 }}>
-      <div role="tablist" aria-label="Tus planes" data-fila-planes style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-        {pestanas.map(p => (
-          <span key={p.clave} style={{ display: 'inline-flex', alignItems: 'stretch' }}>
-            <button role="tab" data-pestana={p.clave} aria-selected={p.clave === actual} onClick={() => p.clave !== actual && abre(p.clave)}
-              style={{ ...pestanaEstilo(p.clave === actual), ...(p.id == null && pestanas.length > 1 ? { borderTopRightRadius: 0, borderBottomRightRadius: 0 } : {}) }}>{p.id == null ? `${p.nombre} · sin guardar` : p.nombre}</button>
-            {p.id == null && pestanas.length > 1 && <button data-cerrar={p.clave} aria-label={`Cerrar ${p.nombre}`} title="Cerrar este plan sin guardar" onClick={() => cierraNueva(p.clave)}
-              style={{ ...pestanaEstilo(p.clave === actual), padding: '6px 8px', borderLeft: 'none', borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}>×</button>}
-          </span>
-        ))}
-        {!actual && <span style={S.apagado}>Leyendo tus planes…</span>}
-        <button data-boton="anadir-plan" style={{ ...S.enlace, fontSize: 13, margin: '0 6px' }} onClick={anadePlan} disabled={!actual} title="Un plan nuevo, sin guardar, con los ajustes de ahora">+ Añadir plan</button>
-        {barraGuardar}
-        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2 }}><button data-boton="comparar" disabled style={{ ...S.boton, padding: '6px 12px', fontSize: 13, color: B.apagado, cursor: 'not-allowed' }}>Comparar planes</button><Ayuda texto={AYUDA_COMPARAR} etiqueta="Comparar planes"/></span>
-      </div>
+      <BuilderPestanas pestanas={pestanas} actual={actual} planes={planes || []} abiertas={orden || []} finales={finales} ancho={inicial?.anchoPestanas ?? null} menuInicial={inicial?.menu ?? null} buscaInicial={inicial?.buscaMenu ?? ''}
+        onAbrir={c => pide({ tipo: 'abrir', clave: c })} onDuplicar={pideDuplicar} onBorrar={c => { limpiaDialogos(); setBorrando(c) }} onCerrar={pulsaCerrar} onCrear={() => pide({ tipo: 'crear' })}
+        onAnadir={id => { if (claveDe(id) !== actual) pide({ tipo: 'anadir', id }) }}/>
+      {orden == null && <div style={{ ...S.apagado, marginTop: 6 }}>Leyendo tus planes…</div>}
+      {avisoPlan && <div data-aviso="plan-no-existe" style={{ color: AMARILLO, marginTop: 6 }}>⚠ {avisoPlan}</div>}
+      {falloPestanas && <div data-fallo-pestanas style={{ color: AMARILLO, marginTop: 6 }}>⚠ No se han podido guardar tus pestañas: al recargar puede salir otro orden.</div>}
       {falloPlanes && <div data-fallo-planes style={{ color: ROJO, marginTop: 6 }}>✕ {falloPlanes}</div>}
-      {falloGuardar && <div data-fallo-guardar style={{ color: ROJO, marginTop: 6 }}>✕ {falloGuardar}</div>}
+      {falloGuardar && !pregunta && !ventana && !borrando && <div data-fallo-guardar style={{ color: ROJO, marginTop: 6 }}>✕ {falloGuardar}</div>}
       {fila && cambio?.cambiada && fotoG && String(fotoG.id) === estId && (
         <div data-aviso="cambiada" style={{ color: AMARILLO, marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>⚠ {AVISO_CAMBIADA}<Ayuda texto={AYUDA_CAMBIADA} etiqueta={AVISO_CAMBIADA}/></span>
@@ -585,13 +641,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
 
   return (
     <div ref={pagina} className="bp-pagina" style={{ ...S.pagina, '--bp-arriba': arriba != null ? `${arriba}px` : undefined }} data-pantalla="plan">
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-        <button style={{ ...S.enlace, color: B.secundario }} onClick={() => onVolver?.()}>← Builder · Mi trabajo</button>
-        <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Builder</span>
-      </div>
-      <BarraPasos actual={3} onPaso={(n) => { if (n === 1) onPaso1?.(estrategiaActual); else if (n === 2) onPaso2?.(estrategia?.id ?? null) }}/>
-      <div style={{ fontSize: 20, fontWeight: 700, color: B.titulo, marginTop: 8 }}>Convierte «{nombre}» en un plan</div>
-      <div style={{ ...S.secundario, marginTop: 4, marginBottom: 10 }}>Tu estrategia con tu dinero: aportaciones, dinero ocioso, comisiones e impuestos.</div>
+      <CabeceraPasos actual={3} estrategia={estrategia?.name || null} onVolver={(donde) => pide({ tipo: 'volver', donde })} hechos={{ 1: !!estrategia, 2: !!estado && estado.clave !== 'sinPrueba' }}
+        onPaso={(n) => { if (n === 1) pide({ tipo: 'paso1' }); else if (n === 2) pide({ tipo: 'paso2' }) }}/>
       {pestanasPlanes}
       {avisos}
       {errorCalculo}
@@ -601,16 +652,34 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, api
       <style>{`.bp-avisos { flex-direction: row } @media (max-width: 700px) { .bp-avisos { flex-direction: column; align-items: flex-start !important } }
 @media (min-width: 1000px) { .bp-pagina { box-sizing: border-box; height: calc(100vh - var(--bp-arriba, 56px)); flex: none !important }
   .bp-izq { position: sticky; top: 0; max-height: calc(100vh - var(--bp-arriba, 56px) - 40px); overflow-y: auto; padding-right: 4px } }`}</style>
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      {actual ? <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div data-columna="izquierda" className="bp-izq" style={{ flex: '1 1 340px', maxWidth: 520, minWidth: 0 }}>{bloques}{dinero}</div>
         <div data-columna="derecha" style={{ flex: '2 1 480px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {resultado}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
             <BotonCopiar obtenerTexto={texto} titulo="Copia en texto plano todos los ajustes, el plan y sus cifras"/>
-            <button data-boton="paso2" style={S.boton} onClick={() => onPaso2?.(estrategia?.id ?? null)}>Volver al paso 2</button>
+            <button data-boton="paso2" style={S.boton} onClick={() => pide({ tipo: 'paso2' })}>Volver al paso 2</button>
           </div>
         </div>
-      </div>
+      </div> : orden && <div data-sin-pestanas style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario, marginTop: 6 }}>Ningún plan abierto. Pulsa «+ Añadir plan».</div>}
+      {pregunta && (
+        <Pregunta id="sin-guardar" texto={`Tienes cambios sin guardar en «${nombreDe(actual)}».`} aviso={pregunta.fallo ? falloGuardar : null}
+          extra={!fila ? <input type="text" aria-label="Nombre del plan" placeholder="Nombre del plan" maxLength={200} value={nombreNuevo} onChange={e => setNombreNuevo(e.target.value)} style={{ ...campo, width: '100%', boxSizing: 'border-box', marginBottom: 16 }}/> : null}>
+          <button data-salida="guardar" disabled={!puedeGuardar || (!fila && !nombreLimpio(nombreNuevo))} onClick={() => responde('guardar')} style={puedeGuardar && (fila || nombreLimpio(nombreNuevo)) ? S.botonVerde : S.botonDesactivado}>{guardando ? 'Guardando…' : 'Guardar'}</button>
+          <button data-salida="salir" disabled={guardando} onClick={() => responde('salir')} style={S.boton}>Salir sin guardar</button>
+          <button data-salida="cancelar" disabled={guardando} onClick={() => responde('cancelar')} style={S.boton}>Cancelar</button>
+        </Pregunta>)}
+      {ventana && (
+        <Pregunta id="nombre-plan" texto={ventana === 'nuevo' ? 'Guardar este plan' : `Duplicar «${nombreDe(ventana.duplica)}»`} aviso={falloGuardar}
+          extra={<input type="text" autoFocus aria-label="Nombre del plan" placeholder="Nombre del plan" maxLength={200} value={nombreNuevo} onChange={e => setNombreNuevo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') guardaVentana(); if (e.key === 'Escape') limpiaDialogos() }} style={{ ...campo, width: '100%', boxSizing: 'border-box', marginBottom: 16 }}/>}>
+          <button data-boton="confirmar-nombre" disabled={guardando || !nombreLimpio(nombreNuevo)} onClick={guardaVentana} style={!guardando && nombreLimpio(nombreNuevo) ? S.botonVerde : S.botonDesactivado}>{guardando ? 'Guardando…' : 'Guardar'}</button>
+          <button onClick={limpiaDialogos} style={S.boton}>Cancelar</button>
+        </Pregunta>)}
+      {borrando && (
+        <Pregunta id="borrar-plan" texto={`¿Borrar «${nombreDe(borrando)}»? Se borra de la base y no se puede deshacer.`} detalle="Para quitarlo solo de la vista, usa la ×." aviso={falloGuardar}>
+          <button data-boton="si-borrar" disabled={guardando} onClick={borra} style={{ ...S.botonVerde, background: '#f85149', borderColor: '#f85149', color: '#fff' }}>{guardando ? 'Borrando…' : 'Sí, borrar'}</button>
+          <button onClick={limpiaDialogos} style={S.boton}>Cancelar</button>
+        </Pregunta>)}
     </div>
   )
 }

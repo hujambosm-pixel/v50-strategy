@@ -1,12 +1,13 @@
 // scripts/comprobaciones/planes-pantalla.js — la pantalla del paso 3 (docs/builder.md, §53–§55). Las corre comunes.sh. Termina en 0 si todo va bien.
 // 1 · Norma de cierre (§53), a mano con el motor: 10.000 € sin aportación en una acción que va de 100 a 114 en 10 años: ganancia 1.400 €, 19 % = 266 €, quedan 11.134 €.
-//     El CAGR de la fila, (11.134 / 10.000)^(1/años) − 1; el último punto de la línea, 11.134 €. Y contra la versión anterior (VIEJO): solo cambian los CAGR y el último punto.
+//     El CAGR de la fila, (11.134 / 10.000)^(1/años) − 1; el último punto de la línea, 11.134 €. Y contra la versión anterior (VIEJO), todo igual salvo, si cambiaran, los CAGR y el último punto.
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ
 if (!process.env.VIEJO) { console.error('Falta VIEJO: la carpeta con la copia de la versión anterior (la hace comunes.sh).'); process.exit(2) }
 const V = path.resolve(process.env.VIEJO)
 let fallos = 0
 const ok = (c, t) => { console.log(`${c ? 'OK  ' : 'MAL '} ${t}`); if (!c) fallos++ }
+const cuenta = (html, s) => html.split(s).length - 1
 const cerca = (a, b, tol = 1e-9) => Number.isFinite(a) && Math.abs(a - b) <= tol * Math.max(1, Math.abs(b))
 const dia = (f, n) => new Date(Date.parse(f + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10)
 const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id: 'inicial', pct: 8, tipo: 'porcentaje', motivo: 'stop' }],
@@ -42,7 +43,7 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   const FIN_ACTIVO = 10000 * 1.14 - 1400 * 0.19   // 11.134 €: compra a 100, vende a 114, 19 % sobre 1.400 € de ganancia
   ok(cerca(f(c, 'ACTIVO').final, FIN_ACTIVO, 1e-9), `Buy&Hold: final 11.134 € tras el 19 % sobre 1.400 € (obtenido ${f(c, 'ACTIVO').final})`)
   ok(cerca(f(c, 'ACTIVO').twr, Math.pow(FIN_ACTIVO / 10000, 1 / anios) - 1, 1e-9), `Buy&Hold: CAGR = (final neto / 10.000)^(1/años) − 1 = ${((Math.pow(FIN_ACTIVO / 10000, 1 / anios) - 1) * 100).toFixed(4)} %`)
-  ok(cerca(f(cV, 'ACTIVO').twr, Math.pow(1.14, 1 / anios) - 1, 1e-9) && f(cV, 'ACTIVO').twr > f(c, 'ACTIVO').twr, 'la versión anterior medía el Buy&Hold antes de la venta: (11.400 / 10.000)^(1/años) − 1')
+  ok(cerca(ev.referencias.find(x => x.id === 'ACTIVO').medidas.twr, Math.pow(1.14, 1 / anios) - 1, 1e-9) && ev.referencias.find(x => x.id === 'ACTIVO').medidas.twr > f(c, 'ACTIVO').twr, 'el TWR antes de la venta, (11.400 / 10.000)^(1/años) − 1, es mayor: la pantalla ya no lo enseña')
   ok(cerca(f(c, 'ACTIVO').tir, f(c, 'ACTIVO').twr, 1e-8), 'sin aportaciones, el CAGR del Buy&Hold = su TIR (la TIR ya era tras impuestos)')
   const FIN_PLAN = 10000 * 114 / 105 - (10000 / 105 * 9) * 0.19   // compra a 105, vende a 114: 857,14 € de ganancia, 162,86 € de impuestos
   ok(cerca(f(c, 'PLAN').final, FIN_PLAN, 1e-9), `el plan a mano: 10.694,29 € (obtenido ${f(c, 'PLAN').final})`)
@@ -74,6 +75,102 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   const yEt = Number((h.match(/data-etiqueta="Buy&amp;Hold TEST 11\.134 €" x="[^"]+" y="([0-9.]+)"/) || [])[1])
   ok(Math.abs(yDe(h, 'activo') + 4 - yEt) <= 32, 'gráfico: la línea de Buy&Hold acaba a la altura de su etiqueta (como mucho, lo que la separa de las otras)')
   ok(h.slice(h.indexOf('data-cifra="twr"')).includes(Pa.pct(c.seis.twr)), `la cifra «CAGR del plan», ${Pa.pct(c.seis.twr)}`)
+
+
+  // ── 2 · Las pestañas: las piezas puras (§54) ──
+  const T = require(R + '/lib/builder/pestanasPlan.js'), G = require(R + '/lib/builder/planesGuardados.js')
+  const filaPlan = (id, foto = 'x', dia = 10) => ({ id, nombre: id === 4 ? 'Un plan con un nombre larguísimo que no cabe de ninguna manera en la pestaña' : `Plan ${id}`, plan: { ...Pa.planDe(Pa.ajustesDe(p), { ...p.piezas[0].estrategia, id: foto }), nombre: `Plan ${id}` }, huella: 'h', created_at: `2026-10-${dia}T10:00:00Z`, updated_at: `2026-10-${dia}T10:00:00Z` })
+  const tres = [filaPlan(1), filaPlan(2, 'y', 12), filaPlan(3, 'x', 11)]
+  ok(T.ordenInicial(null, tres).join() === 'g1,g2,g3', 'sin fila en la base: todos los planes abiertos')
+  ok(T.ordenInicial([3, 99, 1, 3], tres).join() === 'g3,g1', 'con fila: su orden; un plan que ya no existe se ignora; sin repetidos')
+  ok(T.ordenInicial([], tres).length === 0, 'una fila vacía: ninguna pestaña')
+  ok(T.idsDe(['g3', 'n2', 'g1']).join() === '3,1', 'a la base solo van los guardados (un plan nuevo no se recuerda)')
+  ok(T.vecina(['g1', 'g2', 'g3'], 'g2') === 'g3' && T.vecina(['g1', 'g2', 'g3'], 'g3') === 'g2' && T.vecina(['g1'], 'g1') === null, 'al cerrar: la siguiente; si era la última, la anterior; si no queda, ninguna')
+  ok(T.trasDe(['g1', 'g2'], 'g1', 'n2').join() === 'g1,n2,g2' && T.cambiaClave(['g1', 'n2'], 'n2', 'g9').join() === 'g1,g9' && T.conPestana(['g1'], 'g1').length === 1 && T.conPestana(['g1'], 'g2').join() === 'g1,g2', 'duplicar va al lado; guardar cambia la clave en su sitio; añadir no repite')
+  const elige = (o) => T.eligeEntrada({ planes: tres, orden: ['g1', 'g3'], fotoDe: G.fotoDelPlan, ...o })
+  ok(elige({ estrategiaId: 'y' }).clave === 'g2', 'con estrategia: su plan más reciente, aunque no estuviera abierto')
+  ok(elige({ estrategiaId: 'zz' }).nuevo === true, 'con una estrategia sin planes: un plan nuevo')
+  ok(elige({}).clave === 'g3', 'sin estrategia: el más reciente de los abiertos')
+  ok(elige({ orden: [] }).clave === null && T.eligeEntrada({ planes: [], orden: [], fotoDe: G.fotoDelPlan }).nuevo === true, 'sin pestañas: ninguna; sin ningún plan: uno nuevo')
+  ok(elige({ planId: 2 }).clave === 'g2' && !elige({ planId: 2 }).noExiste, 'desde una tesis: ese plan, aunque no estuviera abierto')
+  ok(elige({ planId: 99 }).noExiste === true && elige({ planId: 99 }).clave === 'g3', 'desde una tesis, un plan que ya no existe: lo avisa y sigue')
+  // A mano: anchos de 100; hueco 6: cada una ocupa 106. Con 400 px caben las 3 (318). Con 300 (hueco 238 tras «+N» de 62): 2.
+  const an = { a: 100, b: 100, c: 100, d: 100 }
+  ok(T.repartePestanas(['a', 'b', 'c'], an, 400, 'a').ocultas.length === 0, 'caben todas: sin «+N»')
+  const r1 = T.repartePestanas(['a', 'b', 'c', 'd'], an, 300, 'a')
+  ok(r1.visibles.join() === 'a,b' && r1.ocultas.join() === 'c,d', 'no caben: 2 a la vista y «+2» (300 px)')
+  const r2 = T.repartePestanas(['a', 'b', 'c', 'd'], an, 300, 'd')
+  ok(r2.visibles.join() === 'a,d' && r2.ocultas.join() === 'b,c', 'la abierta se ve siempre, aunque estuviera entre las que no caben')
+  ok(T.repartePestanas(['a', 'b'], an, 50, 'b').visibles.join() === 'b', 'aunque solo quepa una: la abierta')
+  ok(T.anchoPestana('x'.repeat(200)) === T.ANCHO_NOMBRE_MAX + T.ANCHO_ICONOS, 'un nombre larguísimo no ensancha la pestaña más del tope')
+
+  // ── 3 · Leer y guardar las pestañas (con un fetch falso) ──
+  const pide = []
+  const ctxF = (respuesta) => ({ url: 'https://x', headers: { apikey: 'k' }, fetch: async (u, o = {}) => { pide.push({ u, o }); return respuesta } })
+  ok(await G.leerPestanas(ctxF({ ok: true, status: 200, json: async () => [{ planes: [7, 4] }] })) + '' === '7,4' && pide.pop().u === 'https://x/rest/v1/builder_pestanas?select=planes', 'leer: los ids de su fila')
+  ok(await G.leerPestanas(ctxF({ ok: true, status: 200, json: async () => [] })) === null, 'leer sin fila: null')
+  await G.guardarPestanas(ctxF({ ok: true, status: 201, json: async () => null }), [7, '4'])
+  let ll = pide.pop()
+  ok(ll.o.method === 'POST' && ll.u === 'https://x/rest/v1/builder_pestanas?on_conflict=user_id' && ll.o.body === '{"planes":[7,4]}' && ll.o.headers.Prefer === 'resolution=merge-duplicates,return=minimal', 'guardar: upsert solo con planes (el dueño lo pone la base)')
+  let fallo = null; try { await G.guardarPestanas(ctxF({ ok: false, status: 403, json: async () => ({ message: 'no' }) }), []) } catch (e) { fallo = e.message }
+  ok(/No se pudo guardar tus pestañas \(HTTP 403/.test(fallo || ''), 'si la base dice que no, da el error')
+
+  // ── 4 · La cabecera B y las pestañas, montadas ──
+  const PanelB = require(R + '/components/BuilderPanel.js'), Pest = require(R + '/components/BuilderPestanas.js')
+  const cab = renderToString(React.createElement(PanelB.CabeceraPasos, { actual: 3, estrategia: 'Mi <regla>', onVolver: () => {}, onPaso: () => {}, hechos: { 2: false } })).split('<!-- -->').join('')
+  ok(cab.includes('data-ruta="builder"') && cab.includes('data-ruta="mi-trabajo"') && cab.includes('Mi &lt;regla&gt;'), 'cabecera B: la ruta, con el nombre escapado')
+  ok(cab.includes('data-paso="1" data-hecho="1"') && !cab.includes('data-paso="2" data-hecho') && cab.includes('aria-current="step"') && cab.includes('✓'), 'cabecera B: ✓ en el paso hecho; el 2, sin prueba, no; el actual marcado')
+  const cabD = renderToString(React.createElement(PanelB.CabeceraPasos, { actual: 1, onPaso: () => {}, desactivados: { 2: 'Guárdala primero' } }))
+  ok(cabD.includes('title="Guárdala primero"') && /<span[^>]*data-paso="2"/.test(cabD) && /<button[^>]*data-paso="3"/.test(cabD), 'lo desactivado no se pulsa y dice el motivo en el tooltip; lo demás, sí')
+  const cabB = renderToString(React.createElement(PanelB.CabeceraPasos, { actual: 2, onPaso: () => {}, onVolver: () => {}, bloqueada: true }))
+  ok(!/<button[^>]*data-paso/.test(cabB) && /<button[^>]*data-ruta="builder"[^>]*disabled/.test(cabB), 'con una prueba en marcha, nada se pulsa')
+
+  const est2 = { id: 'y', name: 'Otra', definition: EMA, params: { ema: 3 } }
+  const plano = (o = {}) => renderToString(React.createElement(BP, { estrategias: [est, est2], deps: { ctx: { url: 'x', headers: {} }, calcula: async () => resp }, inicial: { simbolos: ['TEST'], pruebas: [], huella: 'h', huellas: { x: 'h', y: 'h' }, anchoPestanas: 1400, ...o } })).split('<!-- -->').join('')
+  let v = plano({ planes: tres, orden: [] })
+  ok(v.includes('data-sin-pestanas') && !v.includes('data-pestana=') && v.includes('data-boton="anadir-plan"') && !v.includes('data-columna="izquierda"'), '0 pestañas: «Ningún plan abierto» y «+ Añadir plan»')
+  ok(!v.includes('Convierte') && !v.includes('Tu estrategia con tu dinero') && v.includes('data-cabecera-b'), 'sin el título grande y con la cabecera B')
+  v = plano({ planes: [tres[0]], orden: ['g1'], pestana: 'g1' })
+  ok(cuenta(v, 'data-pestana=') === 1 && v.includes('data-duplicar="g1"') && v.includes('data-papelera="g1"') && v.includes('data-cerrar="g1"') && v.includes('stroke="#f85149"'), '1 pestaña: duplicar, papelera roja y ×')
+  ok(!v.includes('data-sucia') && !v.includes('data-boton="guardar-cambios"') && !v.includes('data-boton="descartar"'), 'sin cambios: ni ●, ni «Guardar cambios», ni «Descartar cambios»')
+  ok(/data-boton="comparar"[^>]*disabled|disabled[^>]*data-boton="comparar"/.test(v) && v.includes('title="Próximamente"'), '«Comparar planes», desactivado con «Próximamente»')
+  v = plano({ planes: tres, orden: ['g3', 'g1', 'g2'], pestana: 'g1' })
+  ok(v.indexOf('data-pestana="g3"') < v.indexOf('data-pestana="g1"') && v.indexOf('data-pestana="g1"') < v.indexOf('data-pestana="g2"') && !v.includes('data-boton="mas-pestanas"'), '3 pestañas: en el orden guardado y sin «+N»')
+  const muchas = Array.from({ length: 12 }, (_, i) => filaPlan(i + 1))
+  v = plano({ planes: muchas, orden: muchas.map(x => `g${x.id}`), pestana: 'g12', anchoPestanas: 900 })
+  const nVistas = cuenta(v, 'data-pestana=')
+  ok(nVistas < 12 && nVistas >= 1 && v.includes('data-pestana="g12"') && v.includes(`+${12 - nVistas} ▾`), `muchas (12): ${nVistas} a la vista, la abierta entre ellas, y «+${12 - nVistas} ▾»`)
+  v = plano({ planes: muchas, orden: ['g4', 'g1'], pestana: 'g4' })
+  ok(v.includes('title="Un plan con un nombre larguísimo que no cabe de ninguna manera en la pestaña"') && v.includes('text-overflow:ellipsis'), 'un nombre largo: recortado y entero en el tooltip')
+  v = renderToString(React.createElement(BP, { estrategias: [est, est2], deps: { ctx: { url: 'x', headers: {} }, calcula: async () => resp }, inicial: { simbolos: ['TEST'], pruebas: [], huella: 'h', huellas: { x: 'h', y: 'h' }, planes: [tres[0]], orden: ['g1', 'n2'], pestana: 'n2', nuevas: [{ clave: 'n2', nombre: 'Plan nuevo', base: 'otra' }] } })).split('<!-- -->').join('')
+  ok(v.includes('sin guardar: se perderá al recargar') && v.includes('data-sin-guardar-pestana') && v.includes('data-aviso="sin-guardar"') && !v.includes('data-papelera="n2"') && v.includes('data-cerrar="n2"') && v.includes('data-boton="guardar"'), 'un plan nuevo: lo dice su pestaña, sin papelera y con «Guardar este plan»')
+  ok(v.includes('data-sucia') && v.includes('data-boton="descartar"'), 'con cambios: ● amarillo y «Descartar cambios»')
+  v = plano({ planes: tres, orden: ['g1'], pestana: 'g1', pregunta: { tipo: 'abrir', clave: 'g2' } })
+  ok(v.includes('data-pregunta="sin-guardar"') && v.includes('data-salida="guardar"') && v.includes('Salir sin guardar') && v.includes('data-salida="cancelar"') && !v.includes('aria-label="Nombre del plan"'), 'la ventana: Guardar / Salir sin guardar / Cancelar')
+  v = plano({ planes: tres, orden: ['g1'], pestana: 'g1', borrando: 'g1' })
+  ok(v.includes('data-pregunta="borrar-plan"') && v.includes('¿Borrar «Plan 1»?') && v.includes('data-boton="si-borrar"'), 'la papelera avisa antes de borrar')
+  v = plano({ planes: tres, orden: ['g1'], pestana: 'g1', ventana: { duplica: 'g1' } })
+  ok(v.includes('data-pregunta="nombre-plan"') && v.includes('Duplicar «Plan 1»'), 'duplicar pide el nombre')
+  v = plano({ planes: tres, orden: ['g1'], pestana: 'g1', avisoPlan: 'Ese plan ya no existe: se ha borrado.' })
+  ok(v.includes('data-aviso="plan-no-existe"'), 'un plan que ya no existe: un aviso de una línea')
+
+  // Los avisos de la línea de debajo
+  const conEst = (estado) => plano({ planes: [tres[0]], orden: ['g1'], pestana: 'g1', pruebas: estado === 'sin' ? [] : [{ id: 1, estrategia_id: 'x', estrategia_huella: 'h', resultado: { veredicto: estado } }], resultadoPrueba: { veredicto: estado } })
+  v = conEst('sin')
+  ok(v.includes('Sin prueba') && v.includes('Probarla ahora') && v.includes('Acción elegida a mano'), 'sin prueba: «Sin prueba · Probarla ahora»')
+  v = conEst('noPasa')
+  ok(v.includes('✕ No pasa el azar') && v.includes('Ver la prueba'), 'no pasa: «✕ No pasa el azar · Ver la prueba»')
+
+  // El menú «+ Añadir plan»
+  const menuP = (o) => renderToString(React.createElement(Pest.default, { pestanas: [], planes: tres, abiertas: ['g1'], finales: { 1: 114340.91 }, ancho: 1000, menuInicial: 'anadir', ...o })).split('<!-- -->').join('')
+  v = menuP()
+  ok(v.indexOf('Crear nuevo plan') < v.indexOf('data-plan-menu="1"') && v.includes('Tienes al final 114.341 €') && cuenta(v, 'data-ya-abierto') === 1 && !v.includes('data-buscar="planes"'), 'el menú: arriba crear; debajo todos, con su final si está calculado y ✓ en los abiertos; 3 planes, sin buscador')
+  ok(!v.includes('background:transparent;border:1px solid') || v.includes(`background:${require(R + '/lib/builder/estilo.js').B.tarjeta}`), 'el desplegable, con fondo opaco')
+  v = menuP({ planes: muchas })
+  ok(v.includes('data-buscar="planes"'), 'con más de 6: buscador')
+  const acentos = [filaPlan(1), { ...filaPlan(2), nombre: 'Niño Ñu' }]
+  v = menuP({ planes: [...muchas, ...acentos.slice(1)], buscaInicial: 'NINO nu' })
+  ok(v.includes('Niño Ñu') && !v.includes('data-plan-menu="1"') && v.includes('data-limpiar-busqueda'), 'el buscador, sin distinguir mayúsculas ni acentos, y con ✕')
 
   console.log(fallos ? `planes-pantalla: ${fallos} fallos` : 'planes-pantalla: todas bien')
   process.exit(fallos ? 1 : 0)
