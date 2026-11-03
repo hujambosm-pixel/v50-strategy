@@ -128,31 +128,71 @@ const B_AMAR = () => '#f2cc60'
   llamadas.length = 0
 
   // ── Borrar: lo que se borra de verdad ──
-  // noBorra: las rutas que Storage no borra. Filas: cuántas dice la base que borra (null: las pedidas). enLista: lo que responde listar.
-  const simula = ({ noBorra = [], filas: nFilas = null, enLista = [], bucket = null, filasHttp = null } = {}) => {
+  // noBorra: las rutas que Storage no borra; de ellas, noExisten: las que ya no estaban. Firma: cómo responde la firma en lote (por defecto, firma las que siguen).
+  // Filas: cuántas dice la base que borra (null: las pedidas). enLista: lo que responde listar.
+  const SIN = 'Either the object does not exist or you do not have access to it'
+  const simula = ({ noBorra = [], noExisten = [], firma = null, filas: nFilas = null, enLista = [], bucket = null, filasHttp = null } = {}) => {
     const hechas = []
     return { hechas, ctx: { ...ctx, fetch: async (u, o = {}) => {
       hechas.push({ u, o })
+      if (u.includes('/storage/v1/object/sign/')) return firma ? responde(firma.status, firma.cuerpo) : responde(200, JSON.parse(o.body).paths.map(x => noExisten.includes(x) ? { path: x, signedURL: null, error: SIN } : { path: x, signedURL: `/f/${x}`, error: null }))
       if (u.includes('/storage/v1/object/')) return bucket ? responde(bucket.status, bucket.cuerpo) : responde(200, JSON.parse(o.body).prefixes.filter(x => !noBorra.includes(x)).map(name => ({ name, bucket_id: A.BUCKET })))
       if (o.method === 'DELETE') { if (filasHttp) return responde(filasHttp, { message: 'caída' }); const ids = /id=in\.\(([^)]*)\)/.exec(u)[1].split(','); return responde(200, ids.slice(0, nFilas ?? ids.length).map(id => ({ id: Number(id) }))) }
       return responde(200, enLista)
     } } }
   }
-  const fa = fila({ id: 3, nombre: 'Guía.pdf', ruta: 'ra' }), fb = fila({ id: 4, nombre: 'Hoja.xlsx', ruta: 'rb' }), fc = fila({ id: 5, nombre: 'c.png', ruta: 'rc' }), fd = fila({ id: 6, nombre: 'd.png', ruta: 'rd' })
+  const suya = (x) => `${U}/7/adjunto/${x}`
+  const ra = suya('ra'), rb = suya('rb'), rc = suya('rc'), rd = suya('rd')
+  const fa = fila({ id: 3, nombre: 'Guía.pdf', ruta: ra }), fb = fila({ id: 4, nombre: 'Hoja.xlsx', ruta: rb }), fc = fila({ id: 5, nombre: 'c.png', ruta: rc }), fd = fila({ id: 6, nombre: 'd.png', ruta: rd })
+  const filasBorradas = (hechas) => hechas.filter(x => x.o.method === 'DELETE' && x.u.includes('/rest/v1/')).map(x => /id=in\.\(([^)]*)\)/.exec(x.u)[1]).join(' ')
+  const firmas = (hechas) => hechas.filter(x => x.u.includes('/object/sign/')).length
   let si = simula()
   ok(await A.borrar(si.ctx, [fa, fb]) === 2 && si.hechas.length === 2 && si.hechas[1].u.endsWith('?id=in.(3,4)'), 'Storage borra todo: se borran las dos filas y devuelve 2')
-  si = simula({ noBorra: ['rb'] })
+  si = simula({ noBorra: [rb] })
   e = await lanza(() => A.borrar(si.ctx, [fa, fb]))
-  ok(e === 'No se pudo borrar el archivo «Hoja.xlsx».' && si.hechas.length === 2 && si.hechas[1].u.endsWith('?id=in.(3)'), 'Storage borra solo una: error con su nombre; se va la fila de la borrada y la otra se queda')
-  si = simula({ noBorra: ['ra', 'rb'] })
+  ok(e === 'No se pudo borrar el archivo «Hoja.xlsx».' && filasBorradas(si.hechas) === '3', 'Storage borra solo una y la otra sigue ahí: error con su nombre; se va la fila de la borrada y la otra se queda')
+  si = simula({ noBorra: [ra, rb] })
   e = await lanza(() => A.borrar(si.ctx, [fa, fb]))
-  ok(e === 'No se pudieron borrar 2 archivos: «Guía.pdf», «Hoja.xlsx».' && si.hechas.length === 1, 'Storage no borra nada (sin permiso): error y no se toca ninguna fila')
-  si = simula({ noBorra: ['ra', 'rb', 'rc', 'rd'] })
+  ok(e === 'No se pudieron borrar 2 archivos: «Guía.pdf», «Hoja.xlsx».' && !filasBorradas(si.hechas), 'Storage no borra nada y los archivos siguen ahí (sin permiso para borrar): error y no se toca ninguna fila')
+  si = simula({ noBorra: [ra], noExisten: [ra] })
+  ok(await A.borrar(si.ctx, [fa]) === 1 && filasBorradas(si.hechas) === '3' && firmas(si.hechas) === 1, 'el archivo ya no existía: se borra la fila, sin error, y cuenta como borrado')
+  ok(JSON.parse(si.hechas[1].o.body).paths.join() === ra && si.hechas[1].o.method === 'POST', 'la comprobación pide solo las rutas sin confirmar')
+  si = simula({ noBorra: [ra, rb], noExisten: [ra] })
+  e = await lanza(() => A.borrar(si.ctx, [fa, fb, fc]))
+  ok(e === 'No se pudo borrar el archivo «Hoja.xlsx».' && filasBorradas(si.hechas) === '3,5', 'una ya no estaba, otra sigue y otra se borra: error solo por la que sigue, y su fila se queda')
+  si = simula()
+  ok(await A.borrar(si.ctx, [fa]) === 1 && !firmas(si.hechas), 'si Storage lo confirma todo, no se comprueba nada más')
+  si = simula({ noBorra: [ra], firma: { status: 500, cuerpo: { message: 'caída' } } })
+  e = await lanza(() => A.borrar(si.ctx, [fa]))
+  ok(e === 'No se pudo borrar el archivo «Guía.pdf».' && !filasBorradas(si.hechas), 'la comprobación falla (HTTP 500): error y la fila se queda')
+  si = simula({ noBorra: [ra], firma: { status: 200, cuerpo: [{ path: ra, signedURL: null, error: 'caída interna' }] } })
+  e = await lanza(() => A.borrar(si.ctx, [fa]))
+  ok(e === 'No se pudo borrar el archivo «Guía.pdf».' && !filasBorradas(si.hechas), 'la comprobación da otro error: no cuenta como inexistente, la fila se queda')
+  for (const [cuerpo, que] of [[{ raro: true }, 'algo que no es una lista'], [[], 'una lista sin esa ruta']]) {
+    si = simula({ noBorra: [ra], firma: { status: 200, cuerpo } })
+    e = await lanza(() => A.borrar(si.ctx, [fa]))
+    ok(e === 'No se pudo borrar el archivo «Guía.pdf».' && !filasBorradas(si.hechas), `la comprobación responde ${que}: la fila se queda`)
+  }
+  const ajena = fila({ id: 9, nombre: 'De otro.pdf', ruta: 'otro-usuario/7/adjunto/x.pdf' })
+  si = simula({ noBorra: [ajena.ruta], noExisten: [ajena.ruta] })
+  e = await lanza(() => A.borrar(si.ctx, [ajena]))
+  ok(e === 'No se pudo borrar el archivo «De otro.pdf».' && !firmas(si.hechas) && !filasBorradas(si.hechas), 'una ruta de otro usuario (B contra lo de A): error, ni se comprueba ni se pide borrar su fila')
+  si = simula({ noBorra: [ra], noExisten: [ra] })
+  const sinSesion = { ...si.ctx, headers: { apikey: 'k', Authorization: 'Bearer anon' } }
+  e = await lanza(() => A.borrar(sinSesion, [fa]))
+  ok(e === 'No se pudo borrar el archivo «Guía.pdf».' && !firmas(si.hechas) && !filasBorradas(si.hechas), 'sin sesión: error y todo sigue igual')
+  si = simula({ noBorra: [ra], noExisten: [ra], filas: 0 })
+  e = await lanza(() => A.borrar(si.ctx, [fa]))
+  ok(e === 'No se pudo borrar la fila del archivo: se pedían 1 y se han borrado 0.', 'el archivo no existe pero la base no borra la fila: error')
+  si = simula({ noBorra: [ra], noExisten: [ra], enLista: [fa, fb] })
+  ok(await A.borrarTodoDeTesis(si.ctx, 7) === 2, 'borrar una tesis con una fila sin archivo: sale bien, y la tesis se puede borrar')
+  ok(A.SIN_ARCHIVO.test(SIN) && !A.SIN_ARCHIVO.test('caída interna'), 'se reconoce la respuesta de Storage de un archivo que no está')
+  si = simula({ noBorra: [ra, rb, rc, rd] })
   e = await lanza(() => A.borrar(si.ctx, [fa, fb, fc, fd]))
   ok(e === 'No se pudieron borrar 4 archivos: «Guía.pdf», «Hoja.xlsx», «c.png» y 1 más.', 'con muchos, el mensaje no se alarga')
   si = simula({ bucket: { status: 200, cuerpo: { raro: true } } })
   e = await lanza(() => A.borrar(si.ctx, [fa]))
-  ok(e === 'No se pudo borrar el archivo «Guía.pdf».' && si.hechas.length === 1, 'si Storage responde algo que no es una lista: cuenta como no borrado')
+  ok(e === 'No se pudo borrar el archivo «Guía.pdf».' && !filasBorradas(si.hechas), 'si Storage responde algo que no es una lista y el archivo sigue: cuenta como no borrado')
   si = simula({ filas: 2 })
   ok(await A.borrar(si.ctx, [fa, fb]) === 2, 'filas borradas 2 de 2: bien')
   si = simula({ filas: 0 })
@@ -164,7 +204,7 @@ const B_AMAR = () => '#f2cc60'
   si = simula({ filasHttp: 500 })
   e = await lanza(() => A.borrar(si.ctx, [fa]))
   ok(/^No se pudo borrar la fila del archivo \(HTTP 500/.test(e || ''), 'la base falla: error, como antes')
-  const mil = Array.from({ length: 1000 }, (_, k) => fila({ id: k + 1, nombre: `f${k}.pdf`, ruta: `r${k}` }))
+  const mil = Array.from({ length: 1000 }, (_, k) => fila({ id: k + 1, nombre: `f${k}.pdf`, ruta: suya(`r${k}`) }))
   const vueltas = (hechas) => hechas.filter(x => !x.o.method).length
   si = simula({ noBorra: mil.map(x => x.ruta), enLista: mil })
   e = await lanza(() => A.borrarTodoDeTesis(si.ctx, 7))
@@ -176,7 +216,7 @@ const B_AMAR = () => '#f2cc60'
   si = simula()
   const ctxPaginas = { ...si.ctx, fetch: async (u, o = {}) => (!o.method ? responde(200, cuantas++ === 0 ? mil : [fa]) : si.ctx.fetch(u, o)) }
   ok(await A.borrarTodoDeTesis(ctxPaginas, 7) === 1001 && cuantas === 2, 'con más de 1000 archivos que sí se borran: dos vueltas y termina')
-  si = simula({ noBorra: ['ra'], enLista: [fa, fb] })
+  si = simula({ noBorra: [ra], enLista: [fa, fb] })
   e = await lanza(() => A.borrarTodoDeTesis(si.ctx, 7))
   ok(e === 'No se pudo borrar el archivo «Guía.pdf».', 'borrar todo con uno que no se borra: lanza, y por eso la tesis no se borra')
   const fS = leer('scripts', 'comprobaciones', 'tesisSeguridad.js')

@@ -136,6 +136,11 @@ async function pruebaAnon() {
     ok(hecho.ok && Array.isArray(hecho.lista) && hecho.lista.length === 1 && hecho.lista[0].name === ruta, `la clave de servicio borra: la lista trae la ruta en «name» (${hecho.lista?.map(x => x.name).join() ?? 'sin lista'})`)
     const otraVez = await borraCon(ruta, hs)
     ok(otraVez.ok && Array.isArray(otraVez.lista) && !otraVez.lista.length, 'borrar lo que ya no existe: responde bien, con la lista vacía')
+    // Y lo que lib/tesisArchivos.js compara para saber si ya no estaba: la respuesta de la firma en lote.
+    await C0.prepara(); C0.registra(R)
+    const { SIN_ARCHIVO } = require(path.join(R, 'lib', 'tesisArchivos.js'))
+    const sinObjeto = await (await fetch(`${URL_S}/storage/v1/object/sign/${BUCKET}`, { method: 'POST', headers: { ...hs, 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresIn: 60, paths: [ruta] }) })).json()
+    ok(Array.isArray(sinObjeto) && sinObjeto[0]?.path === ruta && !sinObjeto[0]?.signedURL && SIN_ARCHIVO.test(sinObjeto[0]?.error || ''), `firmar lo que ya no existe: se reconoce (${sinObjeto[0]?.error})`)
     ok(!(await fetch(`${URL_S}/rest/v1/tesis_adjuntos`, { method: 'POST', headers: { ...anon, 'Content-Type': 'application/json' }, body: JSON.stringify({ tesis_id: 3, clase: 'adjunto', ruta: 'x', nombre: 'x', bytes: 1 }) })).ok, 'anon no crea filas')
   } finally {
     await fetch(`${URL_S}/storage/v1/object/${BUCKET}`, { method: 'DELETE', headers: { ...hs, 'Content-Type': 'application/json' }, body: JSON.stringify({ prefixes: [ruta, `${carpeta}/a.svg`, `${carpeta}/a.html`, `${carpeta}/g.txt`, `${carpeta}/anon.txt`] }) })
@@ -209,6 +214,11 @@ async function pruebaUsuarios() {
     // Lo propio de B sí funciona, y A borra lo suyo.
     await L.subir(b.ctx, { tesisId: tB.id, clase: 'adjunto', archivo: archivo('b.txt', 'text/plain', 'de B') })
     ok((await L.listar(b.ctx, tB.id)).length === 1, 'B sí sube a lo suyo')
+    // Una fila sin archivo: el archivo desaparece del bucket (con la clave de servicio) y su dueño puede borrar la fila.
+    const fB = (await L.listar(b.ctx, tB.id))[0]
+    await fetch(`${URL_S}/storage/v1/object/${BUCKET}`, { method: 'DELETE', headers: hs, body: JSON.stringify({ prefixes: [fB.ruta] }) })
+    const sinArchivo = await L.borrar(b.ctx, [fB]).catch(e => e.message)
+    ok(sinArchivo === 1 && (await L.listar(b.ctx, tB.id)).length === 0, `fila sin archivo: su dueño la borra, sin error (${sinArchivo})`)
     const borrados = await L.borrarTodoDeTesis(a.ctx, tA.id), borradoEn = Date.now()
     ok(borrados === 2, `A borra lo suyo: se borran 2${borrados === 2 ? '' : ` (devuelve ${borrados})`}`)
     // Lo que queda de verdad: la lista de A, las filas con la clave de servicio y los objetos con consulta (storage.objects no se lee por REST).
