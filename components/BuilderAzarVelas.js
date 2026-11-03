@@ -3,6 +3,7 @@
 //   v: lo que pinta la pestaña (lib/azarGraficos.js vistaPestana). inicial: 'estrategia' (solo tus operaciones) o la copia ('mejor', 'tipica', 'peor'). onCierra: × y Esc.
 import { useEffect, useRef, useState } from 'react'
 import { B, S } from '../lib/builder/estilo'
+import Ayuda from './BuilderAyuda'
 import { euros, numero } from '../lib/resultadoAzar'
 
 const AZUL = '#58a6ff', NARANJA = '#f0883e', ZONA = '#182431'   // Color sólido, apenas más claro que el fondo: con transparencia, las barras solapadas sumarían color al juntarse las velas.
@@ -38,6 +39,27 @@ export function marcasEstrategia(velas, ops, capas = TODAS) {
 // Los puntos de la copia, a su precio: { time, precio, compra }.
 export const puntosCopia = (velas, ops) => ops.flatMap(o => [{ time: velas[o.e].date, precio: o.entrada, compra: true }, { time: velas[o.x].date, precio: o.salida, compra: false }])
 
+// Las cifras del ejemplo del «?», de la vista abierta (en «Tu estrategia», la típica). Velas fuera como en la tasa de lib/azarReglas.js: la vela de compra cuenta como fuera, porque en ella se sorteó.
+export function cifrasEjemplo(v, cual) {
+  const ops = v.copias[cual || 'tipica'].ops, N1 = v.estrategia.libres, A = v.estrategia.operaciones, tasa = N1 ? A / N1 : 0
+  const N2 = v.i1 - v.i0 + 1 - ops.reduce((s, o) => s + o.x - o.e, 0)
+  return { tasa, N1, A, N2, B: Math.round(N2 * tasa), C: ops.length }
+}
+const entero = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+const parrafo = { display: 'block', marginTop: 8 }
+function AyudaCopias({ v, cual }) {
+  const c = cifrasEjemplo(v, cual), X = `${numero(c.tasa * 100, c.tasa < 0.01 ? 2 : 1)} %`
+  return <Ayuda etiqueta="Cómo nacen las copias" zIndice={2600} texto={<span data-ayuda-copias style={{ display: 'block' }}>
+    <span style={{ display: 'block', fontWeight: 700, color: B.titulo }}>¿Por qué la copia no hace las mismas operaciones que tu estrategia?</span>
+    <span style={parrafo}>Las copias no repiten tus operaciones: solo copian tu forma de VENDER.</span>
+    <span style={parrafo}>1. Cuándo compran: al azar, con tu misma frecuencia. Tú compras en el {X} de las velas en que estás fuera; la copia, en cada vela en que está fuera, compra con esa misma probabilidad (en la apertura siguiente).</span>
+    <span style={parrafo}>2. Cuándo venden: con tus mismas reglas de venta y tus mismos stops.</span>
+    <span style={parrafo}>Por eso la duración cambia (tu regla de venta, aplicada desde otro día de compra, se cumple antes o después) y el número de operaciones también.</span>
+    <span data-ejemplo-copias style={parrafo}>Ejemplo con esta prueba: tú estás fuera {entero(c.N1)} velas y haces {entero(c.A)} {c.A === 1 ? 'compra' : 'compras'} → {X}. La copia está fuera {entero(c.N2)} velas → {entero(c.N2)} × {X} ≈ {entero(c.B)} {c.B === 1 ? 'compra' : 'compras'}; le salieron {entero(c.C)}.</span>
+    <span style={parrafo}>Así la prueba contesta una sola pregunta: ¿tu momento de compra aporta algo? Todo lo demás es igual que en tu estrategia.</span>
+  </span>}/>
+}
+
 const FILAS = [['final', 'Final (10.000 € al empezar)', x => euros(x.final)], ['operaciones', 'Operaciones', x => x.operaciones], ['ganadoras', 'Ganadoras', x => x.ganadoras == null ? '—' : `${numero(x.ganadoras, 1, true)} %`], ['caida', 'Peor caída', x => `${numero(x.caida, 1, true)} %`], ['dentro', 'Tiempo dentro', x => `${numero(x.dentro, 1, true)} %`]]
 
 export default function BuilderAzarVelas({ v, simbolo, velasTexto = 'diarias', inicial = 'estrategia', onCierra }) {
@@ -49,7 +71,7 @@ export default function BuilderAzarVelas({ v, simbolo, velasTexto = 'diarias', i
   cualR.current = cual; capasR.current = capas; escalaR.current = escala
   const copia = cual ? v.copias[cual] : null
   const marcaCapa = (k) => { const x = { ...capas, [k]: !capas[k] }; setCapas(x); try { window.localStorage.setItem(CLAVE_CAPAS, JSON.stringify(x)) } catch (_) {} }
-  useEffect(() => { const f = (e) => { if (e.key === 'Escape') onCierra?.() }; document.addEventListener('keydown', f); return () => document.removeEventListener('keydown', f) }, [onCierra])
+  useEffect(() => { const f = (e) => { if (e.key === 'Escape' && !document.querySelector('[data-ayuda-ventana]')) onCierra?.() };   /* con el «?» abierto, Esc cierra solo el «?» */ document.addEventListener('keydown', f); return () => document.removeEventListener('keydown', f) }, [onCierra])
   useEffect(() => { redibuja.current?.() }, [cual])
   useEffect(() => { ponCapas.current?.() }, [capas])
   useEffect(() => { ponEscala.current?.() }, [escala])
@@ -98,7 +120,10 @@ export default function BuilderAzarVelas({ v, simbolo, velasTexto = 'diarias', i
   return (
     <div data-velas-azar role="dialog" aria-modal="true" aria-label={`Velas de ${simbolo}`} style={{ position: 'fixed', inset: 0, zIndex: 2500, background: '#010409', color: B.texto, fontFamily: B.letra, display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 20px', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-        <div data-titulo-velas style={{ fontSize: 17, fontWeight: 700, color: B.titulo }}>Tu estrategia{cual && <> frente a <span style={{ color: NARANJA }}>{NOMBRES_COPIA[cual][1]}</span></>}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <div data-titulo-velas style={{ fontSize: 17, fontWeight: 700, color: B.titulo }}>Tu estrategia{cual && <> frente a <span style={{ color: NARANJA }}>{NOMBRES_COPIA[cual][1]}</span></>}</div>
+          <AyudaCopias v={v} cual={cual}/>
+        </div>
         <span data-periodo-velas style={{ fontSize: 13, color: B.secundario }}>{simbolo} · {v.pestana.nombre} · velas {velasTexto}</span>
         <div role="group" aria-label="Qué ver" style={{ display: 'flex' }}>
           {[[null, 'Tu estrategia'], ...Object.entries(NOMBRES_COPIA).map(([k, [t]]) => [k, t])].map(([k, t]) => <button key={t} data-copia-velas={k || 'estrategia'} aria-pressed={cual === k} onClick={() => setCual(k)} style={{ padding: '6px 12px', border: `1px solid ${B.borde}`, background: cual === k ? '#1f2937' : 'transparent', color: cual === k ? B.titulo : B.secundario, fontFamily: B.letra, fontSize: 13, fontWeight: cual === k ? 700 : 400, cursor: 'pointer' }}>{t}</button>)}

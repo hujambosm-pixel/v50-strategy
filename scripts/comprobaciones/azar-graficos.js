@@ -223,6 +223,37 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   D.pulsa(q(m, 'data-ver-velas', 'estrategia')); await D.espera(20)
   ok(q(m, 'data-titulo-velas').textContent === 'Tu estrategia' && !m.raiz.textContent.includes('La copia compra') && q(m, 'data-tabla-velas').todos(n => n.nodeName === 'TH').length === 2, 'desde tu estrategia: solo tus operaciones')
   m.quita(); await D.espera(5)
+  // ── 5 · El «?» de las velas: cómo nacen las copias (§67) ──
+  const wC = G.vistaPestana(prueba, precios, g.pestanas.completo, 'completo'), eT = Ve.cifrasEjemplo(wC, 'tipica')
+  ok(eT.C === 103 && eT.A === 123 && eT.N1 === 909 && eT.N2 === 780 && eT.B === 106 && Math.abs(eT.N2 * eT.tasa - eT.C) < 5, `típica de EMA20, 2016–2025: ${eT.N1} velas fuera, ${eT.A} compras; la copia ${eT.N2} velas, ≈ ${eT.B}, salieron ${eT.C}`)
+  for (const per of guardado.periodos) {
+    const w = G.vistaPestana(prueba, precios, g.pestanas[per.desde], per.desde)
+    ok(cerca(Ve.cifrasEjemplo(w, 'tipica').tasa, per.tasa, 1e-12), `${per.desde}: la frecuencia del ejemplo es la tasa guardada (${per.tasa.toFixed(4)})`)
+    for (const k of ['mejor', 'tipica', 'peor']) {
+      const dentro = new Uint8Array(w.i1 + 1); for (const o of w.copias[k].ops) for (let j = o.e + 1; j <= o.x; j++) dentro[j] = 1
+      let fuera = 0; for (let j = w.i0; j <= w.i1; j++) if (!dentro[j]) fuera++
+      ok(Ve.cifrasEjemplo(w, k).N2 === fuera && Ve.cifrasEjemplo(w, k).C === w.copias[k].operaciones, `${per.desde} · ${k}: velas fuera contadas una a una, ${fuera}`)
+    }
+  }
+  ok(renderToString(h(require(R + '/components/BuilderAyuda.js').default, { texto: 'x', abiertoInicial: true })).includes('z-index:1000'), 'los demás «?» siguen con su zIndex de siempre')
+  HTMLElement.prototype.cloneNode = HTMLElement.prototype.cloneNode || function () { const c = document.createElement('span'); c.remove = () => c.parentNode?.removeChild(c); return c }   // lo que usa el «?» al medirse; el DOM falso no mide
+  document.querySelector = (s) => s === '[data-ayuda-ventana]' ? document.body.conAtributo('data-ayuda-ventana')[0] || null : null
+  const tecla = (key) => { for (const f of [...(document.oyentes.keydown || [])]) f({ key }) }
+  m = await monta(); D.pulsa(q(m, 'data-ver-velas-arriba')); await D.espera(20)
+  const botonQ = () => m.raiz.busca(n => n.getAttribute('aria-label') === 'Ayuda: Cómo nacen las copias'), ventanaQ = () => document.body.conAtributo('data-ayuda-ventana')[0] || null
+  const miles = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  ok(!!botonQ() && botonQ().parentNode.parentNode.contains(q(m, 'data-titulo-velas')) && q(m, 'data-titulo-velas').textContent === 'Tu estrategia', 'el «?», junto al título, sin cambiar el título')
+  for (const [k, c] of [['estrategia', 'tipica'], ['mejor', 'mejor'], ['tipica', 'tipica'], ['peor', 'peor']]) {
+    D.pulsa(q(m, 'data-copia-velas', k)); await D.espera(10)
+    D.pulsa(botonQ()); await D.espera(10)
+    const e = Ve.cifrasEjemplo(wC, c), X = '13,5 %', t = ventanaQ()?.textContent || ''
+    ok(t === `¿Por qué la copia no hace las mismas operaciones que tu estrategia?Las copias no repiten tus operaciones: solo copian tu forma de VENDER.1. Cuándo compran: al azar, con tu misma frecuencia. Tú compras en el ${X} de las velas en que estás fuera; la copia, en cada vela en que está fuera, compra con esa misma probabilidad (en la apertura siguiente).2. Cuándo venden: con tus mismas reglas de venta y tus mismos stops.Por eso la duración cambia (tu regla de venta, aplicada desde otro día de compra, se cumple antes o después) y el número de operaciones también.Ejemplo con esta prueba: tú estás fuera ${miles(e.N1)} velas y haces ${e.A} compras → ${X}. La copia está fuera ${miles(e.N2)} velas → ${miles(e.N2)} × ${X} ≈ ${e.B} compras; le salieron ${e.C}.Así la prueba contesta una sola pregunta: ¿tu momento de compra aporta algo? Todo lo demás es igual que en tu estrategia.`, `vista ${k}: el texto entero, con ${miles(e.N2)} velas, ≈ ${e.B} y ${e.C}`)
+    ok(D.propsDe(ventanaQ()).style.zIndex > D.propsDe(q(m, 'data-velas-azar')).style.zIndex, `vista ${k}: la ventana del «?», por encima de la pantalla de velas`)
+    tecla('Escape'); await D.espera(10)
+    ok(!ventanaQ() && !!q(m, 'data-velas-azar'), `vista ${k}: Esc cierra el «?» y las velas siguen abiertas`)
+  }
+  tecla('Escape'); await D.espera(10)
+  ok(!q(m, 'data-velas-azar'), 'sin el «?» abierto, Esc cierra las velas'); m.quita(); await D.espera(5)
   const fuenteV = require('fs').readFileSync(path.join(R, 'components/BuilderAzarVelas.js'), 'utf8')
   ok(fuenteV.includes("e.key === 'Escape'") && fuenteV.includes("import('lightweight-charts')"), 'Esc cierra; lightweight-charts, como el resto de la app')
 

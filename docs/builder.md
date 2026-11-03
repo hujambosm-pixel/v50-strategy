@@ -2271,3 +2271,12 @@ Decidido por Sergi el 03/11/2026. Ninguna cifra cambia. La prueba es la del paso
 - En la segunda línea del paso 3 y en la cabecera de los pasos 1 y 2, «Tesis: <título> ›» pasa a «💡 <título> ›», y «Tesis (N) ▾» a «💡 Tesis (N) ▾». Tooltip: «Abrir la tesis». Se comporta igual, con la misma guardia. La lista de varias tesis y la celda de «Mi trabajo» no cambian.
 - Como el tooltip ya no lleva el título, un título muy largo cortado con «…» (más de 280 px) no se puede leer entero desde el enlace.
 - Comprobado: `tesis-enlaces.js`, montado, con 0, 1 y varias tesis en los tres pasos. El resto del encargo (la línea de «Relacionado» y el contador), en `docs/tesis.md`.
+
+## 67. Paso 2 · velas: el «?» de cómo nacen las copias
+
+`components/BuilderAzarVelas.js`, `components/BuilderAyuda.js`, `lib/azarGraficos.js` y `lib/azarReglas.js`. Sin cambios en la base. Ninguna cifra cambia.
+- **Un «?» junto al título** de las velas a pantalla completa explica por qué la copia no hace las mismas operaciones: solo copia la forma de vender; compra al azar con tu misma frecuencia.
+- **El ejemplo sale de la prueba y la vista abiertas** (`cifrasEjemplo`); en «Tu estrategia», de la típica. `operacionesDelPeriodo` ya calculaba las velas fuera (`libres`, con las que se saca la tasa) y ahora las devuelve; `vistaPestana` las pasa a la pantalla. Una operación empezada antes del periodo también ocupa velas: por eso no se cuentan aparte, y X es la tasa guardada de la prueba. Las velas fuera de la copia se cuentan igual: la vela de compra cuenta como fuera, porque en ella se sorteó.
+- **EMA20, típica, 2016–2025**: 909 velas fuera y 123 compras → 13,5 %; la copia, 780 velas → ≈ 106 compras; le salieron 103. B sale de la tasa sin redondear (105,54): con el 13,5 % de la pantalla, la cuenta da 105,3.
+- **Dos arreglos para que el «?» sirva en esta pantalla**: `Ayuda` admite `zIndice` (la ventana iba con 1000 y las velas con 2500: quedaba debajo; los demás «?» siguen con 1000), y con el «?» abierto, Esc cierra solo el «?», no las velas.
+- Comprobado: `azar-graficos.js` (`comunes.sh`), montado en las cuatro vistas: el texto entero, las cifras, las velas fuera contadas una a una, la tasa guardada de los dos periodos y Esc. En un navegador con una página temporal no subida: el «?» por encima del gráfico y Esc.
