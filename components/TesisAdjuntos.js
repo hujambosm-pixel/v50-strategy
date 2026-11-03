@@ -9,6 +9,7 @@ import { ACEPTA_ARCHIVOS, AVISO_SIN_GUARDAR, AYUDA_ADJUNTOS, AYUDA_GUARDAR_PDF, 
 const ROJO = '#f85149', VERDE = '#3fb950', AZUL = '#79c0ff', AMARILLO = '#f2cc60'
 const Icono = ({ children, size = 16, color = 'currentColor' }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
 export const IconoClip = ({ size = 13 }) => <Icono size={size}><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></Icono>
+export const IconoEnlace = ({ size = 13 }) => <Icono size={size}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></Icono>
 const IconoDescargar = () => <Icono><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></Icono>
 const IconoPapelera = () => <Icono color={ROJO}><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></Icono>
 

@@ -131,7 +131,7 @@ export const extensionesTesis = (imagen = {}) => [
   Placeholder.configure({ placeholder: PISTA }),
 ]
 
-const CSS = `.ts-editor { display: flex; flex-direction: column; width: 100%; box-sizing: border-box; height: calc(100vh - 424px); min-height: 400px; resize: vertical; overflow: hidden; border: 1px solid ${B.borde}; border-radius: ${B.radioBoton}px; background: ${HOJA.fondo} }
+const CSS = `.ts-editor { display: flex; flex-direction: column; width: 100%; box-sizing: border-box; height: calc(100vh - 380px); min-height: 400px; resize: vertical; overflow: hidden; border: 1px solid ${B.borde}; border-radius: ${B.radioBoton}px; background: ${HOJA.fondo} }
 .ts-barra { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 6px 8px; background: ${B.cabecera}; border-bottom: 1px solid ${B.borde} }
 .ts-boton { display: inline-flex; align-items: center; justify-content: center; gap: 1px; min-width: 30px; height: 30px; padding: 0 5px; box-sizing: border-box; border: 1px solid transparent; border-radius: 6px; background: transparent; color: ${B.texto}; font-family: ${B.letra}; font-size: 13px; cursor: pointer }
 .ts-boton:hover:not(:disabled) { background: ${B.borde} }

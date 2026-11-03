@@ -73,19 +73,19 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
       if (!cab) { ok(false, `${t}: sin cabecera`); m.quita(); continue }
       const tx = cab.textContent
       if (n === 0) ok(!tx.includes('Tesis'), `${t}, 0 tesis: nada`)
-      if (n === 1) { ok(tx.includes('Tesis: Primera ›'), `${t}, 1 tesis: «Tesis: Primera ›»`); D.pulsa(enlace(m, una)); ok(abiertas.join() === '1', `${t}, 1 tesis: pulsar abre`) }
-      if (n === 2) { ok(tx.includes('Tesis (2) ▾'), `${t}, varias: «Tesis (2) ▾»`); D.pulsa(varias(m)); await D.espera(5); D.pulsa(enlace(m, 2)); await D.espera(5); ok(abiertas.join() === '2', `${t}, varias: elegir abre`) }
+      if (n === 1) { ok(tx.includes('💡 Primera ›') && !tx.includes('Tesis:'), `${t}, 1 tesis: «💡 Primera ›»`); ok(enlace(m, una).getAttribute('title') === 'Abrir la tesis', `${t}, 1 tesis: tooltip`); D.pulsa(enlace(m, una)); ok(abiertas.join() === '1', `${t}, 1 tesis: pulsar abre`) }
+      if (n === 2) { ok(tx.includes('💡 Tesis (2) ▾'), `${t}, varias: «💡 Tesis (2) ▾»`); ok(varias(m).getAttribute('title') === 'Abrir la tesis', `${t}, varias: tooltip`); D.pulsa(varias(m)); await D.espera(5); D.pulsa(enlace(m, 2)); await D.espera(5); ok(abiertas.join() === '2', `${t}, varias: elegir abre`) }
       m.quita(); await D.espera(5)
     }
   }
 
   // ── Paso 3: según el plan de la pestaña activa ──
   const avisos = (x) => x.raiz.busca(n => n.getAttribute('data-avisos') != null)?.textContent || ''
-  for (const [planId, esperado] of [[10, null], [11, 'Tesis: Primera ›'], [12, 'Tesis (2) ▾']]) {
+  for (const [planId, esperado] of [[10, null], [11, '💡 Primera ›'], [12, '💡 Tesis (2) ▾']]) {
     b = base(); m = D.monta(h(BP, props({ abrir: { planId, n: 1 }, onAbrirTesis: () => {} })), RDC); await D.espera(LARGO)
     ok(esperado ? avisos(m).includes(esperado) : !avisos(m).includes('Tesis'), `paso 3, plan ${planId}: ${esperado || 'sin enlace'}`)
     if (planId === 11) {
-      const antes = avisos(m); ok(antes.indexOf('Tesis: Primera') > antes.indexOf('Probarla ahora') && antes.includes('Probarla ahora'), 'va junto a «Sin prueba · Probarla ahora»')
+      const antes = avisos(m); ok(antes.indexOf('💡 Primera') > antes.indexOf('Probarla ahora') && antes.includes('Probarla ahora'), 'va junto a «Sin prueba · Probarla ahora»')
     }
     m.quita(); await D.espera(5)
   }
@@ -133,11 +133,51 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   at = 0; b = base(); m = montaTP(null, () => at++); await D.espera(LARGO)
   ok(actual(m) === '3' && at === 0 && !m.raiz.busca(n => n.getAttribute('data-fallo') != null), 'sin pedir ninguna: la más reciente, como siempre'); m.quita(); await D.espera(5)
 
-  // ── «Relacionado» arriba: antes del editor y compacto ──
+  // ── «Relacionado» en la línea de estado, a la derecha ──
   const t1 = TESIS[0], html = renderToString(h(TP, { estrategias: ests, onAbrirEstrategia: () => {}, onAbrirPlan: () => {}, deps: { ctx: null, Editor: Sustituto }, inicial: { tesis: TESIS, planes: PLANES, abierta: 1, borrador: { titulo: t1.titulo, texto: 'hola', estado: 'idea', relacionados: t1.relacionados } } }))
   const pos = (s) => html.indexOf(s)
-  ok(pos('data-fechas') < pos('data-relacionado') && pos('data-relacionado') < pos('data-texto'), 'el orden: título y fechas, «Relacionado», editor')
+  ok(pos('data-fechas') < pos('data-relacionado') && pos('data-revisada') < pos('data-relacionado') && pos('data-relacionado') < pos('data-texto'), 'el orden: título, estado y revisión, «Relacionado», editor')
+  ok(/data-revisada[^>]*>[^<]*<\/button><div data-relacionado="true" style="position:relative;margin-left:auto;min-width:0;max-width:100%"><div style="[^"]*flex-wrap:wrap[^"]*justify-content:flex-end/.test(html), 'en la MISMA línea, pegado a la derecha; si no cabe, baja alineado a la derecha')
   ok(pos('data-ficha="estrategia-e1"') < pos('data-anadir') && pos('data-anadir') < pos('data-texto'), 'las fichas y «+ Añadir estrategia o plan» al final de la línea')
+
+  const panelCon = (rel) => renderToString(h(TP, { estrategias: ests, onAbrirEstrategia: () => {}, onAbrirPlan: () => {}, deps: { ctx: null, Editor: Sustituto }, inicial: { tesis: [{ ...t1, relacionados: rel }], planes: PLANES, abierta: 1, borrador: { titulo: t1.titulo, texto: 'hola', estado: 'idea', relacionados: rel }, anadiendo: true } }))
+  for (const [rel, nombre] of [[[], '0 fichas'], [[{ tipo: 'estrategia', id: 'e1' }], '1 ficha'], [[{ tipo: 'estrategia', id: 'e1' }, { tipo: 'estrategia', id: 'e2' }, { tipo: 'plan', id: '10' }, { tipo: 'plan', id: '11' }], 'varias fichas']]) {
+    const x = panelCon(rel); ok((x.match(/data-ficha=/g) || []).length === rel.length && x.indexOf('data-revisada') < x.indexOf('data-relacionado') && x.indexOf('data-anadir') < x.indexOf('data-texto') && x.includes('position:absolute;top:100%;right:0'), `${nombre}: mismas piezas y la lista de elegir, anclada a la derecha`)
+  }
+  const fuente = (f) => require('fs').readFileSync(path.join(R, 'components', f), 'utf8')
+  ok(fuente('TesisEditor.js').includes('height: calc(100vh - 380px)') && fuente('TesisPanel.js').includes("height: 'calc(100vh - 380px)'") && !fuente('TesisEditor.js').includes('424px'), 'el editor gana el alto de la línea que ya no está')
+
+  // ── El contador de enlaces de la lista ──
+  const CR = (rel, e = ests, p = PLANES) => T.cuentaRelacionados(rel, e, p)
+  for (const [rel, n, pista] of [
+    [[], 0, ''], [null, 0, ''], [[{ tipo: 'plan', id: 10 }], 1, '1 plan relacionado'], [[{ tipo: 'estrategia', id: 'e1' }], 1, '1 estrategia relacionada'],
+    [[{ tipo: 'estrategia', id: 'e1' }, { tipo: 'estrategia', id: 'e2' }], 2, '2 estrategias relacionadas'], [[{ tipo: 'plan', id: 10 }, { tipo: 'plan', id: 11 }], 2, '2 planes relacionados'],
+    [[{ tipo: 'estrategia', id: 'e1' }, { tipo: 'plan', id: 10 }], 2, '1 estrategia y 1 plan relacionados'], [[{ tipo: 'estrategia', id: 'e1' }, { tipo: 'estrategia', id: 'e2' }, { tipo: 'plan', id: 10 }], 3, '2 estrategias y 1 plan relacionados'],
+    [[{ tipo: 'estrategia', id: 'borrada' }, { tipo: 'plan', id: 9999 }, { tipo: 'otro', id: 'e1' }, null], 0, ''], [[{ tipo: 'estrategia', id: 'borrada' }, { tipo: 'plan', id: 10 }], 1, '1 plan relacionado']]) {
+    const c = CR(rel); ok(c.total === n && c.pista === pista, `${JSON.stringify(rel)}: ${n}, «${pista}» (${c.total}, «${c.pista}»)`)
+  }
+  const tesisL = [tesis(1, 'Sin', []), tesis(2, 'Una', [{ tipo: 'plan', id: '10' }]), tesis(3, 'Varias', [{ tipo: 'estrategia', id: 'e1' }, { tipo: 'estrategia', id: 'e2' }, { tipo: 'plan', id: '10' }]), tesis(4, 'Borrado', [{ tipo: 'plan', id: '9999' }])]
+  const conta = (x, id) => x.raiz.busca(n => n.getAttribute('data-item') === String(id))?.todos(n => n.getAttribute('data-enlaces') != null)[0] || null
+  const clipYEnlace = renderToString(h(TP, { estrategias: ests, deps: { ctx: null, Editor: Sustituto }, inicial: { tesis: tesisL, planes: PLANES, resumen: { bytes: 0, porTesis: { 2: { adjuntos: 1, imagenes: 0, bytes: 1 } } } } }))
+  ok(clipYEnlace.indexOf('data-clip="1"') > 0 && clipYEnlace.indexOf('data-clip="1"') < clipYEnlace.indexOf('data-enlaces="1"'), 'junto al clip, detrás')
+  const estiloDe = (a) => (clipYEnlace.slice(clipYEnlace.indexOf(a)).match(/style="([^"]*)"/) || [])[1]
+  ok(estiloDe('data-clip="1"') === estiloDe('data-enlaces="1"'), 'mismo tamaño y color que el clip')
+  b = base(tesisL); m = D.monta(h(TP, { estrategias: ests, deps: { ctx: ctxTP(), Editor: Sustituto }, inicial: { tesis: tesisL, planes: PLANES, abierta: 3, borrador: { titulo: 'Varias', texto: '', estado: 'idea', relacionados: tesisL[2].relacionados }, resumen: { bytes: 0, porTesis: {} }, archivos: [] } }), RDC); await D.espera(LARGO)
+  ok(!conta(m, 1) && conta(m, 2).getAttribute('data-enlaces') === '1' && conta(m, 2).getAttribute('title') === '1 plan relacionado', 'sin enlaces, nada; con 1, «1 plan relacionado»')
+  ok(conta(m, 3).getAttribute('data-enlaces') === '3' && conta(m, 3).getAttribute('title') === '2 estrategias y 1 plan relacionados', 'con varios, «2 estrategias y 1 plan relacionados»')
+  ok(!conta(m, 4), 'un enlace a algo borrado no cuenta')
+  const escriturasL = b.escrituras
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-ficha') === 'plan-10').todos(n => (n.getAttribute('aria-label') || '').startsWith('Quitar'))[0]); await D.espera(5)
+  ok(conta(m, 3).getAttribute('data-enlaces') === '2' && conta(m, 3).getAttribute('title') === '2 estrategias relacionadas', 'al quitar un enlace baja sin recargar')
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-anadir') != null)); await D.espera(5)
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-elegir') != null).todos(n => n.nodeName === 'BUTTON' && n.textContent === PLANES[1].nombre)[0]); await D.espera(5)
+  ok(conta(m, 3).getAttribute('data-enlaces') === '3' && conta(m, 3).getAttribute('title') === '2 estrategias y 1 plan relacionados', 'al añadir un enlace sube sin recargar')
+  ok(conta(m, 2).getAttribute('data-enlaces') === '1' && b.escrituras === escriturasL, 'las otras no cambian y el contador no escribe en la base')
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-descartar') != null)); await D.espera(LARGO)
+  ok(conta(m, 3).getAttribute('data-enlaces') === '3' && m.raiz.conAtributo('data-ficha', 'plan-10').length === 1, 'descartar: vuelve a lo guardado')
+  m.quita(); await D.espera(5)
+  const conNueva = renderToString(h(TP, { estrategias: ests, deps: { ctx: null, Editor: Sustituto }, inicial: { tesis: tesisL, planes: PLANES, nueva: true, borrador: { titulo: 'Nueva tesis', texto: '', estado: 'idea', relacionados: [{ tipo: 'estrategia', id: 'e1' }] } } }))
+  ok(conNueva.indexOf('data-enlaces="1"') > conNueva.indexOf('data-item="nueva"') && conNueva.indexOf('data-enlaces="1"') < conNueva.indexOf('data-item="4"'), 'la nueva sin guardar también lo enseña')
 
   console.log(fallos ? `${fallos} FALLOS` : 'tesis-enlaces: todo bien')
   process.exit(fallos ? 1 : 0)

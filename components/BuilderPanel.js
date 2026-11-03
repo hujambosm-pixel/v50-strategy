@@ -121,7 +121,7 @@ export function BarraPasos({ actual = 1, onPaso = null, desactivados = {} }) {
 // círculos pequeños: ✓ en los hechos (hechos: { n: true/false }; por defecto, los anteriores al actual), el actual en verde. Se pulsan como la barra: desactivados (string: el motivo, en el tooltip) no.
 // bloqueada: mientras corre algo, nada se pulsa. §56: cada círculo con su nombre al lado (hecho: ✓ de borde verde y texto apagado; actual: círculo verde relleno con su número y texto en negrita blanco;
 // pendiente: número y texto apagados). En una ventana estrecha (< 900 px) el texto se oculta y queda el círculo con el nombre en el tooltip.
-// enlace: lo que va a la derecha de la ruta («Tesis: …», components/TesisEnlace.js).
+// enlace: lo que va a la derecha de la ruta («💡 …», components/TesisEnlace.js).
 export function CabeceraPasos({ actual = 1, onPaso = null, desactivados = {}, hechos = {}, estrategia = null, onVolver = null, bloqueada = false, enlace = null }) {
   const miga = { ...S.enlace, color: B.secundario, fontSize: 13 }, sep = <span aria-hidden="true" style={{ color: B.apagado }}>›</span>
   return (
@@ -253,7 +253,7 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   const alVolver = (cierra) => (donde) => { cierra(); recarga(); if (donde === 'miTrabajo') setIrMiTrabajo(Date.now()) }
   const abreAzar = (estrategiaId) => setAzar({ estrategiaId, n: Date.now() })
   const abrePlan = (estrategiaId) => setPlan({ estrategiaId, n: Date.now() })
-  // «Tesis: …» de una estrategia o un plan (docs/tesis.md): solo enlaces directos, leídos de las tesis del usuario.
+  // «💡 …» de una estrategia o un plan (docs/tesis.md): solo enlaces directos, leídos de las tesis del usuario.
   // guardia (opcional): quien lo pinta pregunta antes si tiene cambios sin guardar; guardia(seguir).
   const enlaceTesis = (tipo, id, guardia = null) => <TesisEnlace lista={tesisDe(datos.tesis, tipo, id)} onAbrir={t => guardia ? guardia(() => onAbrirTesis?.(t)) : onAbrirTesis?.(t)}/>
   // §60: la papelera de la prueba de cada fila.

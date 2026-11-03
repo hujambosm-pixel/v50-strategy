@@ -194,6 +194,16 @@ texto con visor a pantalla completa, más un botón para leerlos al lado del tex
 - **Pulsar** abre la pestaña Tesis con esa tesis (`abrirTesis` de la página, que pasa por `salirDeTesis`): con cambios sin guardar en un plan, sale la ventana de siempre. **El paso 1 no tiene esa guardia, hoy tampoco para los otros caminos**: el Builder sigue montado y oculto mientras se está en Tesis, así que lo escrito sigue ahí al volver. Si la tesis ya no existe al abrirla, lo dice y abre la más reciente.
 - Comprobado: `scripts/comprobaciones/tesis-enlaces.js` (en `comunes.sh`), con estado y efectos: 0, 1 y varias tesis en los tres pasos y en «Mi trabajo»; tesis borrada; plan sin guardar; la guardia con «Cancelar» y «Salir sin guardar»; mirar no escribe en la base.
 
+## «Relacionado» a la derecha y contador en la lista
+
+`components/TesisPanel.js`, `TesisAdjuntos.js` (`IconoEnlace`), `TesisEditor.js`, `TesisEnlace.js` y `lib/tesis.js` (`cuentaRelacionados`). Sin cambios en la base. Ninguna cifra cambia. Cambia lo escrito en «Relacionado en los dos sentidos» sobre dónde va y cómo se llama el enlace.
+- **«Relacionado» va en la línea de estado, fechas y «✓ Marcar como revisada hoy»**, pegado al borde derecho. Si no cabe (muchas fichas o ventana estrecha) baja entero a su propia línea, también a la derecha. Es el salto normal de la fila: no mide nada ni depende del ancho de la ventana. La lista de elegir se abre anclada a la derecha.
+- **El editor recupera los 44 px** que perdió cuando «Relacionado» tenía línea propia: `calc(100vh - 380px)`. Es un alto fijo: cuando «Relacionado» baja a su línea, el editor no encoge y la página crece esa línea.
+- **Contador en la lista**: icono de enlace y número, detrás del clip, con su mismo estilo; tooltip «1 plan relacionado» / «2 estrategias y 1 plan relacionados». Solo sale si hay alguno. Cuenta los enlaces que existen: los mismos que «Relacionado» no marca «(borrado)». Si la lista de planes no se puede leer, sus enlaces no cuentan, igual que allí salen como borrados.
+- **En la tesis abierta cuenta lo que hay en pantalla**, también sin guardar: sube y baja al añadir o quitar, y vuelve a lo guardado con «Descartar cambios». La nueva sin guardar también lo enseña.
+- **Enlace del Builder**: «💡 <título> ›» o «💡 Tesis (N) ▾», tooltip «Abrir la tesis». Mismo comportamiento. La celda de «Mi trabajo» no cambia.
+- Comprobado: `tesis-enlaces.js` (`comunes.sh`), con estado y efectos: 0, 1 y varias fichas, 0, 1 y varios en el contador, enlaces borrados, añadir, quitar y descartar. El aspecto, en un navegador con una página temporal no subida, a 1920, 1500, 1100 y 700 px de ancho.
+
 ## Comprobaciones
 
 `scripts/comprobaciones/tesisArchivos.js` (en `comunes.sh`): `lib/tesisArchivos.js` con un fetch falso, sus piezas puras y el SQL guardado.

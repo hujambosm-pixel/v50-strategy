@@ -2264,3 +2264,10 @@ Decidido por Sergi el 03/11/2026. Ninguna cifra cambia. La prueba es la del paso
 - **La etiqueta del gráfico**: «La típica (mediana) 44.332 €» cuando las dos acaban en el mismo importe redondeado, que con 1.000 copias es siempre (la típica es la copia 500 y el percentil 50 también). Si no coincidieran, salen las dos. La línea gris de la mediana sigue dibujada.
 - **El periodo entero al abrir, también en ventana estrecha**: `minBarSpacing` de 0,5 (lo normal en lightweight-charts) a 0,1. Antes, por debajo de unos 1.300 píxeles no cabía y en 1.024 arrancaba en 2019.
 - Comprobado: `azar-graficos.js` (`comunes.sh`), con un lightweight-charts de mentira que apunta lo que se le pide: cada vista, cada filtro apagado y encendido, recordar, datos guardados rotos, Log / Normal y la tabla con las cifras de EMA20. Las velas de verdad, en un navegador con una página temporal no subida.
+
+## 66. El enlace a la tesis, con 💡
+
+`components/TesisEnlace.js`. Sin cambios en la base. Ninguna cifra cambia.
+- En la segunda línea del paso 3 y en la cabecera de los pasos 1 y 2, «Tesis: <título> ›» pasa a «💡 <título> ›», y «Tesis (N) ▾» a «💡 Tesis (N) ▾». Tooltip: «Abrir la tesis». Se comporta igual, con la misma guardia. La lista de varias tesis y la celda de «Mi trabajo» no cambian.
+- Como el tooltip ya no lleva el título, un título muy largo cortado con «…» (más de 280 px) no se puede leer entero desde el enlace.
+- Comprobado: `tesis-enlaces.js`, montado, con 0, 1 y varias tesis en los tres pasos. El resto del encargo (la línea de «Relacionado» y el contador), en `docs/tesis.md`.
