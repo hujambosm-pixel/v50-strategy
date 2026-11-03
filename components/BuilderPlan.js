@@ -46,7 +46,7 @@ import { esDeCodigo } from '../lib/builder/codigo'
 import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
 import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, AVISO_PRUEBA, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
-  ayudaCaida, ayudaPrueba, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo,
+  ayudaCaida, ayudaPrueba, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS } from '../lib/builder/planPantalla'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0', AZUL = '#58a6ff', GRIS_FRANJA = '#3a4656'
@@ -72,10 +72,12 @@ const Etiqueta = ({ texto, ayuda }) => <div style={etiqueta}>{texto}{ayuda && <A
 // número se pasa al momento (a los ajustes va siempre un número; vacío, ''); al salir del campo se reescribe con coma (textoCampo).
 // minimo: el menor que se admite (por defecto 0); lo demás no se pasa y, al salir, vuelve el valor de antes.
 // §51: todo punto se ve como coma ya al teclear; se cambia en el propio campo y se deja el cursor donde estaba (React no lo reescribe si ya coincide).
-function CampoNumero({ valor, onCambia, etiqueta: nombre, ancho, minimo = 0 }) {
-  const [txt, setTxt] = useState(() => textoCampo(valor))
-  useEffect(() => { setTxt(t => numeroEs(t) === (valor === '' ? null : Number(valor)) ? t : textoCampo(valor)) }, [valor])
-  return <input type="text" inputMode="decimal" aria-label={nombre} value={txt} style={{ ...campo, width: ancho }} onBlur={() => setTxt(textoCampo(valor))}
+// §56: enEuros: fuera del campo se ve con punto de miles (10.000); al entrar en él, sin puntos, y se teclea como siempre (un punto tecleado sigue siendo coma). El valor que va a los ajustes es el mismo número.
+function CampoNumero({ valor, onCambia, etiqueta: nombre, ancho, minimo = 0, enEuros = false }) {
+  const [txt, setTxt] = useState(() => enEuros ? textoEuros(valor) : textoCampo(valor))
+  const dentro = useRef(false)
+  useEffect(() => { setTxt(t => enEuros && !dentro.current ? textoEuros(valor) : numeroEs(t) === (valor === '' ? null : Number(valor)) ? t : textoCampo(valor)) }, [valor])
+  return <input type="text" inputMode="decimal" aria-label={nombre} value={txt} style={{ ...campo, width: ancho }} onFocus={() => { dentro.current = true; if (enEuros) setTxt(textoCampo(valor)) }} onBlur={() => { dentro.current = false; setTxt(enEuros ? textoEuros(valor) : textoCampo(valor)) }}
     onChange={e => { const el = e.target, t = conComa(el.value), n = numeroEs(t); if (t !== el.value) { const cur = el.selectionStart; el.value = t; el.setSelectionRange(cur, cur) } setTxt(t); if (!t.trim()) onCambia(''); else if (n != null && n >= minimo) onCambia(n) }}/>
 }
 
@@ -560,8 +562,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           </div>}
         </div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <div><Etiqueta texto="Dinero inicial" ayuda={AYUDA_PLAN.capital}/><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero etiqueta="Dinero inicial" valor={a.capital} onCambia={v => cambia('capital', v)} ancho={120}/> €</span></div>
-          <div><Etiqueta texto="Aportación mensual" ayuda={AYUDA_PLAN.aportacion}/><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero etiqueta="Aportación mensual" valor={a.aportacion} onCambia={v => cambia('aportacion', v)} ancho={100}/> €</span></div>
+          <div><Etiqueta texto="Dinero inicial" ayuda={AYUDA_PLAN.capital}/><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero enEuros etiqueta="Dinero inicial" valor={a.capital} onCambia={v => cambia('capital', v)} ancho={120}/> €</span></div>
+          <div><Etiqueta texto="Aportación mensual" ayuda={AYUDA_PLAN.aportacion}/><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero enEuros etiqueta="Aportación mensual" valor={a.aportacion} onCambia={v => cambia('aportacion', v)} ancho={100}/> €</span></div>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <Segmentos etiquetaGrupo="Cómo es la aportación" valor={a.sube ? 'sube' : 'fija'} onCambia={v => setA(x => ({ ...x, sube: v === 'sube', subePct: v === 'sube' && !(Number(x.subePct) > 0) ? SUBIDA_DEFECTO : x.subePct }))} opciones={[['fija', 'Fija'], ['sube', 'Sube cada año']]}/>
@@ -587,8 +589,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
             {(a.comisionTipo || 'pct') !== 'fija' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero etiqueta="Comisión en %" valor={a.comision} onCambia={v => cambia('comision', v)} ancho={80}/> %</span>}
-            {a.comisionTipo === 'pctMin' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>con mínimo de <CampoNumero etiqueta="Mínimo en euros" valor={a.comisionMin} onCambia={v => cambia('comisionMin', v)} ancho={70}/> €</span>}
-            {a.comisionTipo === 'fija' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero etiqueta="Euros por operación" valor={a.comisionFija} onCambia={v => cambia('comisionFija', v)} ancho={70}/> € por operación</span>}
+            {a.comisionTipo === 'pctMin' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>con mínimo de <CampoNumero enEuros etiqueta="Mínimo en euros" valor={a.comisionMin} onCambia={v => cambia('comisionMin', v)} ancho={70}/> €</span>}
+            {a.comisionTipo === 'fija' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero enEuros etiqueta="Euros por operación" valor={a.comisionFija} onCambia={v => cambia('comisionFija', v)} ancho={70}/> € por operación</span>}
           </div>
         </div>
       </div>

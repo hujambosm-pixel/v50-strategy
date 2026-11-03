@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/comprobaciones/comunes.sh — las comprobaciones comunes de cada commit (docs/builder.md, §22): guardián, build, batería
 # V9.949 (52 + 44) byte a byte, CARTERA_1–3 y exploraciones idénticas, huellas de LOTE_1–3 / CARTERA_1–3 y de las pruebas del
-# editor; las pruebas sintéticas del motor (sinteticas.js, V9.1079); la huella del azar re-simulado (azar-reglas.js, §43); la prueba contra el azar del paso 2 (prueba-azar.js, §44); la pieza «estrategia» de los planes (planes-estrategia.js, §47); la pantalla del paso 3 (planes-pantalla.js, §53–§55); y la pantalla «Tesis» (tesis.js y tesisArchivos.js, docs/tesis.md). Compara el árbol de trabajo con una copia de la versión anterior (por defecto HEAD) hecha con git archive.
+# editor; las pruebas sintéticas del motor (sinteticas.js, V9.1079); la huella del azar re-simulado (azar-reglas.js, §43); la prueba contra el azar del paso 2 (prueba-azar.js, §44); la pieza «estrategia» de los planes (planes-estrategia.js, §47); la pantalla del paso 3 (planes-pantalla.js, §53–§55, y planes-montaje.js, §56, con estado y efectos sobre un DOM mínimo); y la pantalla «Tesis» (tesis.js y tesisArchivos.js, docs/tesis.md). Compara el árbol de trabajo con una copia de la versión anterior (por defecto HEAD) hecha con git archive.
 # Uso, desde cualquier sitio:   bash scripts/comprobaciones/comunes.sh [referencia de git]      (unos 15 minutos)
 # Necesita: npm install; una copia en backups/ (npm run backup); las fotos de precios en scripts/comprobaciones/datos/ (o en la
 # carpeta de COMPROBACIONES_DATOS); y, para las huellas del editor, «supabase login» (solo lectura). Termina en 0 si todo va bien.
@@ -38,6 +38,8 @@ paso planes-estrategia node "$DIR/planes-estrategia.js" < /dev/null
 tail -1 "$SAL/planes-estrategia.txt"
 paso planes-pantalla node "$DIR/planes-pantalla.js" < /dev/null
 tail -1 "$SAL/planes-pantalla.txt"
+paso planes-montaje node "$DIR/planes-montaje.js" < /dev/null
+tail -1 "$SAL/planes-montaje.txt"
 paso tesis node "$DIR/tesis.js" < /dev/null
 tail -1 "$SAL/tesis.txt"
 paso tesisArchivos node "$DIR/tesisArchivos.js" < /dev/null

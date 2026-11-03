@@ -28,6 +28,7 @@ import ConLimpiar from './LimpiarBusqueda'
 import ProteccionPanel from './ProteccionPanel'
 
 export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convertirla en plan']
+export const PASOS_CORTOS = ['Crear', 'Probar contra el azar', 'Convertirla en plan']   // §56: el nombre al lado de cada círculo de la cabecera B
 export const SUBTITULOS_PASOS = ['Cuándo compro, cuándo vendo y cuánto arriesgo', '¿Gana por algo más que suerte?', 'Dinero real, aportaciones e impuestos']
 // La firma de lo leído de la base (lotes y pruebas: id y huella / fecha): si no cambia, no se recalcula «Mi trabajo».
 export const firmaDatos = (lotes, pruebas) => JSON.stringify([(lotes || []).map(l => [l.id, l.hash_lote]), (pruebas || []).map(p => [p.id, p.creado])])
@@ -70,7 +71,8 @@ export function BarraPasos({ actual = 1, onPaso = null, desactivados = {} }) {
 
 // §54: la CABECERA B de los pasos 1, 2 y 3: a la izquierda, la ruta «Builder › Mi trabajo › <estrategia>» (onVolver(): «Builder»; onVolver('miTrabajo'): «Mi trabajo»); a la derecha, los pasos como
 // círculos pequeños: ✓ en los hechos (hechos: { n: true/false }; por defecto, los anteriores al actual), el actual en verde. Se pulsan como la barra: desactivados (string: el motivo, en el tooltip) no.
-// bloqueada: mientras corre algo, nada se pulsa.
+// bloqueada: mientras corre algo, nada se pulsa. §56: cada círculo con su nombre al lado (hecho: ✓ de borde verde y texto apagado; actual: círculo verde relleno con su número y texto en negrita blanco;
+// pendiente: número y texto apagados). En una ventana estrecha (< 900 px) el texto se oculta y queda el círculo con el nombre en el tooltip.
 export function CabeceraPasos({ actual = 1, onPaso = null, desactivados = {}, hechos = {}, estrategia = null, onVolver = null, bloqueada = false }) {
   const miga = { ...S.enlace, color: B.secundario, fontSize: 13 }, sep = <span aria-hidden="true" style={{ color: B.apagado }}>›</span>
   return (
@@ -80,14 +82,18 @@ export function CabeceraPasos({ actual = 1, onPaso = null, desactivados = {}, he
         <button data-ruta="mi-trabajo" style={miga} disabled={bloqueada || !onVolver} onClick={() => onVolver?.('miTrabajo')}>Mi trabajo</button>
         {estrategia && <>{sep}<span data-ruta="estrategia" title={estrategia} style={{ color: B.titulo, fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{estrategia}</span></>}
       </nav>
+      <style>{`@media (max-width: 900px) { .bp-nombre-paso { display: none } }`}</style>
       <div aria-label="Pasos del Builder" style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
         {PASOS.map((p, k) => {
           const n = k + 1, on = n === actual, hecho = hechos[n] ?? n < actual, pulsable = !!onPaso && !on && !desactivados[n] && !bloqueada, Caja = pulsable ? 'button' : 'span'
           return (<span key={p} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            {k > 0 && <span aria-hidden="true" style={{ width: 12, height: 1, background: B.borde }}/>}
+            {k > 0 && <span aria-hidden="true" style={{ width: 24, height: 1, background: B.borde }}/>}
             <Caja data-paso={n} data-hecho={hecho && !on ? '1' : undefined} aria-current={on ? 'step' : undefined} aria-label={`Paso ${n}: ${p}`} onClick={pulsable ? () => onPaso(n) : undefined} title={desactivados[n] || (pulsable ? `Ir al paso ${n}: ${p}` : `Paso ${n}: ${p}`)}
-              style={{ width: 24, height: 24, padding: 0, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: B.letra, fontSize: 12, fontWeight: 700, cursor: pulsable ? 'pointer' : 'default',
-                background: on ? B.verde : 'transparent', color: on ? B.sobreVerde : hecho ? '#7ee2a0' : desactivados[n] ? B.apagado : B.secundario, border: on ? 'none' : `1px solid ${hecho ? B.pasoBorde : pulsable ? B.siguienteBorde : B.borde}` }}>{hecho && !on ? '✓' : n}</Caja>
+              style={{ padding: 0, background: 'transparent', border: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: B.letra, cursor: pulsable ? 'pointer' : 'default' }}>
+              <span data-circulo style={{ width: 24, height: 24, flex: 'none', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700,
+                background: on ? B.verde : 'transparent', color: on ? B.sobreVerde : hecho ? '#7ee2a0' : desactivados[n] ? B.apagado : B.secundario, border: on ? 'none' : `1px solid ${hecho ? B.pasoBorde : pulsable ? B.siguienteBorde : B.borde}` }}>{hecho && !on ? '✓' : n}</span>
+              <span className="bp-nombre-paso" data-nombre-paso style={{ fontSize: 13, whiteSpace: 'nowrap', fontWeight: on ? 700 : 400, color: on ? B.titulo : B.apagado }}>{PASOS_CORTOS[k]}</span>
+            </Caja>
           </span>)
         })}
       </div>

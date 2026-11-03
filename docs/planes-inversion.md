@@ -325,6 +325,7 @@ vendrá con el «Modo de asignación» de `lib/mcAsignacion.js`). Se amplía el 
 - **Contador de órdenes** (docs/builder.md §52): `costes.ordenes` cuenta todas las compras y ventas de símbolos (no LIQUIDEZ), con o sin costes, y la venta final (una por símbolo
   con posición el último día). Corrige la línea anterior: ya no se queda en 0 sin costes y la pantalla ya no enseña «—». Ningún importe cambia.
 - **Norma de cierre** (docs/builder.md §53): en la pantalla, el CAGR de todas las filas es `twrNeto` y el último punto de cada línea, `valorNeto`. El motor no cambia.
+- **Campos de euros con punto de miles** (docs/builder.md §56): solo cómo se ven; el plan guardado y su huella no cambian. Las cifras de referencia de abajo, comprobadas iguales.
 
 ### Cifras de referencia de los planes guardados (03/11/2026)
 
