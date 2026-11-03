@@ -6,7 +6,7 @@
 // aquí) y «Relacionado» (estrategias de tarjetas y planes guardados).
 // Props: estrategias (las filas de `strategies`), onAbrirEstrategia (abre una en el paso 1 del Builder), salida (un ref: la página
 // pregunta por él antes de cambiar de pestaña; devuelve true si hay cambios y se ha abierto la pregunta). deps ({ ctx, Editor }) e inicial
-// ({ tesis, planes, abierta, borrador, nueva, pregunta, falloPregunta, fallo, borrando, filtro, busca, enTexto, anadiendo, archivos, resumen, urls, subidas, avisosAdjuntos, arrastrando, visor, borrandoAdjunto, lado, ancho, listaAbierta, ladoElegido }): para las pruebas de montaje.
+// ({ tesis, planes, abierta, borrador, nueva, pregunta, falloPregunta, fallo, borrando, filtro, busca, enTexto, anadiendo, archivos, resumen, urls, subidas, avisosAdjuntos, arrastrando, visor, borrandoAdjunto, lado, ancho, listaElegida, ladoElegido }): para las pruebas de montaje.
 // Los adjuntos (components/TesisAdjuntos.js) se guardan al subirlos: no pasan por «Guardar» ni por «cambios sin guardar».
 import { useState, useEffect, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
@@ -17,7 +17,7 @@ import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
 import { trozosResaltados } from '../lib/builder/buscar'
 import { AYUDA_RELACIONADO, AYUDA_TESIS, COLORES_RESALTE, ESTADOS_TESIS, HOJA, TITULO_NUEVA, borrarTesis, buscaTesis, cambiarTesis, crearTesis, cuentasTesis, estadoTesis, fechaCorta, fechaHora,
   fichaDe, guardaBuscarEnTexto, haceTexto, igualesTesis, imagenesSobrantes, leeBuscarEnTexto, lineaCoincidencia, listarNombresPlanes, listarTesis, marcarRevisada, ordenTesis, problemaDe, respondeSalida } from '../lib/tesis'
-import { ANCHO_MIN_LADO, AVISO_SIN_GUARDAR, avisoBorrarTesis, avisoDe, borrar, borrarTodoDeTesis, colorEspacio, descargar, espacioUsado, filasDeTodas, guardaAlLado, leeAlLado, listar, porcentajeEspacio, resumenArchivos, subir, tamanoLegible, urlsFirmadas } from '../lib/tesisArchivos'
+import { ANCHO_MIN_LADO, AVISO_SIN_GUARDAR, avisoBorrarTesis, avisoDe, borrar, borrarTodoDeTesis, colorEspacio, descargar, espacioUsado, filasDeTodas, listaPlegadaDe, listar, olvidaAlLadoViejo, porcentajeEspacio, resumenArchivos, subir, tamanoLegible, urlsFirmadas } from '../lib/tesisArchivos'
 import { BotonLado, BotonLista, IconoClip, PanelLado, Visor, ZonaAdjuntos } from './TesisAdjuntos'
 
 const NUEVA = Object.freeze({ titulo: TITULO_NUEVA, texto: '', estado: 'idea', relacionados: [] })
@@ -75,9 +75,9 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   const [arrastrando, setArrastrando] = useState(!!inicial?.arrastrando)
   const [visor, setVisor] = useState(inicial?.visor || null)   // { clase, id }: la lista que recorre y el archivo abierto
   const [borrandoA, setBorrandoA] = useState(inicial?.borrandoAdjunto || null)   // la fila que se va a borrar
-  const [ladoQuiere, setLadoQuiere] = useState(!!inicial?.lado)   // «Ver al lado del texto», recordado en este navegador
+  const [ladoQuiere, setLadoQuiere] = useState(!!inicial?.lado)   // «Ver al lado del texto»: cerrado al entrar y al cambiar de tesis
   const [ancho, setAncho] = useState(inicial?.ancho ?? 0)   // el de la ventana: con menos de ANCHO_MIN_LADO, sin botón y a pantalla completa
-  const [listaAbierta, setListaAbierta] = useState(!!inicial?.listaAbierta)   // con el panel de al lado, la lista de tesis desplegada
+  const [listaElegida, setListaElegida] = useState(inicial?.listaElegida ?? null)   // con el panel de al lado, lo pulsado con ≡ ('abierta' o 'plegada'); null: lo de por defecto
   const [ladoElegido, setLadoElegido] = useState(inicial?.ladoElegido ?? null)
   const firmadasEn = useRef(0)   // cuándo se firmaron las URL: cambiarlas recarga el PDF que se está leyendo, así que solo se renuevan si llevan casi una hora
   const Editor = deps?.Editor || EditorTesis
@@ -104,7 +104,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   const urlsAhora = useRef(urls)
   urlsAhora.current = urls
   useEffect(() => {
-    if (inicial?.lado == null) setLadoQuiere(leeAlLado())
+    olvidaAlLadoViejo()
     if (inicial?.ancho != null) return
     const mide = () => setAncho(window.innerWidth)
     mide()
@@ -155,8 +155,8 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
 
   // Con cambios sin guardar, pregunta antes de seguir (una nueva sin tocar se deja sin preguntar).
   const conGuardia = (accion) => { if (conCambios) setPregunta({ accion }); else accion() }
-  const abre = (t) => { setHoja(n => n + 1); setNueva(false); setAbierta(t.id); setBorr(borradorDe(t)); setBorrando(false); setAnadiendo(false); setFallo(null) }
-  const creaNueva = () => { setHoja(n => n + 1); setNueva(true); setAbierta(null); setBorr({ ...NUEVA }); setBorrando(false); setAnadiendo(false); setFallo(null); setFoco(n => n + 1) }
+  const abre = (t) => { if (t.id !== abierta) ponLado(false); setHoja(n => n + 1); setNueva(false); setAbierta(t.id); setBorr(borradorDe(t)); setBorrando(false); setAnadiendo(false); setFallo(null) }
+  const creaNueva = () => { ponLado(false); setHoja(n => n + 1); setNueva(true); setAbierta(null); setBorr({ ...NUEVA }); setBorrando(false); setAnadiendo(false); setFallo(null); setFoco(n => n + 1) }
   const cambia = (k, v) => setBorr(b => ({ ...b, [k]: v }))
   const pon = (r) => setTesis(xs => [r, ...(xs || []).filter(x => x.id !== r.id)])
   // Borra (archivo y fila) las imágenes de esa tesis que no están en estos textos. Sin aviso si falla: quedan para la siguiente vez que se guarde o se descarte.
@@ -203,7 +203,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   }
   const abreVisor = (f) => { setVisor({ clase: f.clase, id: f.id }); renuevaUrls() }
   const elige = (f) => { setLadoElegido(f.id); renuevaUrls() }
-  const ponLado = (v) => { setLadoQuiere(v); guardaAlLado(v); setListaAbierta(false); if (v) renuevaUrls() }
+  const ponLado = (v) => { setLadoQuiere(v); setListaElegida(null); if (v) renuevaUrls() }
   // Pulsar dos veces una imagen del texto: el visor, recorriendo las imágenes de la tesis.
   const abreImagen = async (ruta) => {
     const f = archivos.find(x => x.ruta === ruta) || (await leeArchivos()).find(x => x.ruta === ruta)
@@ -258,7 +258,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   const cabeLado = ancho >= ANCHO_MIN_LADO
   const lado = ladoQuiere && cabeLado && !!borr   // el panel de al lado, abierto
   const elegida = adjuntos.find(f => f.id === ladoElegido) || adjuntos[0] || null
-  const plegada = lado && !listaAbierta         // la lista de tesis, en una columna estrecha
+  const plegada = lado && listaPlegadaDe(ancho, listaElegida)         // la lista de tesis, en una columna estrecha
 
   return (
     <div data-tesis className="ts-pagina" style={{ ...S.pagina, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -280,12 +280,12 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
         {/* ── Izquierda: buscador, filtros y lista ── */}
         {plegada ? (
           <div data-lista-plegada style={{ ...S.tarjeta, position: 'sticky', top: 0, width: 44, boxSizing: 'border-box', padding: '6px 0', display: 'flex', justifyContent: 'center' }}>
-            <BotonLista pista="Mostrar la lista de tesis" onClick={() => setListaAbierta(true)}/>
+            <BotonLista pista="Mostrar la lista de tesis" onClick={() => setListaElegida('abierta')}/>
           </div>
         ) : (
         <div data-lista className="ts-lista" style={{ ...S.tarjeta, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {lado && <BotonLista pista="Plegar la lista de tesis" onClick={() => setListaAbierta(false)}/>}
+            {lado && <BotonLista pista="Plegar la lista de tesis" onClick={() => setListaElegida('plegada')}/>}
             <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
               <input ref={cajaBusca} aria-label="Buscar" value={busca} onChange={e => setBusca(e.target.value)} placeholder={enTexto ? 'Buscar en títulos y textos…' : 'Buscar en los títulos…'} style={{ ...campo, width: '100%', paddingRight: 30 }}/>
               {!!busca && <button data-borrar-busca aria-label="Borrar la búsqueda" title="Borrar la búsqueda" onClick={() => { setBusca(''); cajaBusca.current?.focus() }}
