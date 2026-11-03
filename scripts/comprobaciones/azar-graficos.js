@@ -141,7 +141,7 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   Mod._load = function (pet, ...r) {
     if (pet !== 'lightweight-charts') return cargaReal.call(this, pet, ...r)
     const serie = (o) => ({ opciones: { ...o }, setData() {}, setMarkers(x) { this.marcas = x }, applyOptions(x) { Object.assign(this.opciones, x) }, priceToCoordinate: () => 50 })
-    return { CrosshairMode: { Normal: 0 }, PriceScaleMode: { Normal: 0, Logarithmic: 1 }, createChart: () => ({
+    return { CrosshairMode: { Normal: 0 }, PriceScaleMode: { Normal: 0, Logarithmic: 1 }, createChart: (_, o) => (LW.opciones = o, {
       addHistogramSeries: (o) => (LW.series.zona = serie(o)), addCandlestickSeries: (o) => { LW.proveedor = o.autoscaleInfoProvider; return (LW.series.velas = serie(o)) }, subscribeCrosshairMove() {}, remove() {},
       priceScale: (id) => ({ applyOptions(x) { if (id === 'right') { LW.mode = x.mode; LW.margenes = x.scaleMargins } } }),
       timeScale: () => ({ fitContent() {}, subscribeVisibleLogicalRangeChange() {}, timeToCoordinate: () => 100, width: () => 1000 }) }) }
@@ -166,6 +166,7 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   const wE = G.vistaPestana(prueba, precios, g.pestanas['2021-01-01'], '2021-01-01'), todasMarcas = wE.estrategia.ops.length * 2, deCopia = (k) => wE.copias[k].ops.length * 2
   ok(capasVe() === 'tuCompra,tuVenta,tuDentro' && circulos() === 0 && nTH() === 2 && LW.series.velas.marcas.length === todasMarcas, `vista «Tu estrategia»: 3 capas, sin círculos, una columna, ${todasMarcas} marcas`)
   ok(LW.mode === 1 && LW.margenes.top > 0 && q(m, 'data-escala-velas', 'log').getAttribute('aria-pressed') === 'true', 'por defecto, escala logarítmica')
+  ok(LW.opciones.timeScale.minBarSpacing * G.vistaPestana(prueba, precios, g.pestanas.completo, 'completo').fechas.length < 400, 'el periodo completo cabe en una ventana estrecha (menos de 400 píxeles)')
   for (const [k, t] of [['mejor', 'Tu estrategia frente a la mejor copia'], ['tipica', 'Tu estrategia frente a la copia típica'], ['peor', 'Tu estrategia frente a la peor copia']]) {
     D.pulsa(q(m, 'data-copia-velas', k)); await D.espera(10)
     ok(q(m, 'data-titulo-velas').textContent === t && capasVe() === 'tuCompra,tuVenta,tuDentro,copiaCompra,copiaVenta' && nTH() === 3 && circulos() === deCopia(k) && LW.series.velas.marcas.length === todasMarcas, `vista ${k}: «${t}», 5 capas, dos columnas, sus ${deCopia(k)} círculos y tus marcas`)

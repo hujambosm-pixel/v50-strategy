@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import { euros, numero } from '../lib/resultadoAzar'
 
-const AZUL = '#58a6ff', NARANJA = '#f0883e', ZONA = 'rgba(88,166,255,0.025)'
+const AZUL = '#58a6ff', NARANJA = '#f0883e', ZONA = '#182431'   // Color sólido, apenas más claro que el fondo: con transparencia, las barras solapadas sumarían color al juntarse las velas.
 export const NOMBRES_COPIA = { mejor: ['La mejor copia', 'la mejor copia'], tipica: ['La típica', 'la copia típica'], peor: ['La peor copia', 'la peor copia'] }
 const NS = 'http://www.w3.org/2000/svg'
 // Las capas que la leyenda enciende y apaga: [clave, texto, símbolo, color, si es de la copia]. Se recuerdan en el navegador.
@@ -57,7 +57,7 @@ export default function BuilderAzarVelas({ v, simbolo, velasTexto = 'diarias', i
     let vivo = true, ch = null, ro = null
     import('lightweight-charts').then(({ createChart, CrosshairMode, PriceScaleMode }) => {
       if (!vivo || !caja.current) return
-      ch = createChart(caja.current, { autoSize: true, layout: { background: { color: B.tarjeta }, textColor: B.secundario, attributionLogo: false }, grid: { vertLines: { color: '#1b2430' }, horzLines: { color: '#1b2430' } }, crosshair: { mode: CrosshairMode.Normal }, rightPriceScale: { borderColor: B.borde }, timeScale: { borderColor: B.borde } })
+      ch = createChart(caja.current, { autoSize: true, layout: { background: { color: B.tarjeta }, textColor: B.secundario, attributionLogo: false }, grid: { vertLines: { color: '#1b2430' }, horzLines: { color: '#1b2430' } }, crosshair: { mode: CrosshairMode.Normal }, rightPriceScale: { borderColor: B.borde }, timeScale: { borderColor: B.borde, minBarSpacing: 0.1 } })   // Sin minBarSpacing (0,5 por defecto), en una ventana estrecha no cabe todo el periodo.
       grafico.current = ch
       const zona = ch.addHistogramSeries({ priceScaleId: 'zona', priceLineVisible: false, lastValueVisible: false, base: 0 })
       ch.priceScale('zona').applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false })
