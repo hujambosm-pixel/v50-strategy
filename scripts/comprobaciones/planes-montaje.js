@@ -143,12 +143,11 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   const Az = require(R + '/lib/pruebaAzar.js')
   const eC = { id: 'c1', name: 'Código con acentó', definition: null, code_js: 'x', description: 'Una regla escrita a mano', params: {} }
   const lista = [est('e4', 'Copia editor 23'), est('e7', 'Línea bajista'), est('e6', 'SuperTrend 10/3'), est('e9', 'Sin planes'), eC]
-  const h7 = await Az.huellaEstrategia(lista[1]), h6 = await Az.huellaEstrategia(lista[2])
   const conPlan = (id, nombre, e) => fila(id, nombre, e, '2026-11-01T10:00:00Z')
   const planes4 = [conPlan(4, 'Copia / gold', lista[0]), conPlan(7, 'Línea / oro', lista[1]), conPlan(8, 'Línea / liquidez', lista[1])]
-  const pruebasAz = [{ id: 1, creada_en: '2026-10-30T10:00:00Z', estrategia_id: 'e7', estrategia_nombre: 'Línea bajista', estrategia_huella: h7, valor: 'AAPL', velas: 'diarias', res: { id: 1, veredicto: 'noPasa', texto: 'x' } },
-    { id: 2, creada_en: '2026-10-29T10:00:00Z', estrategia_id: 'e6', estrategia_nombre: 'SuperTrend 10/3', estrategia_huella: h6, valor: 'NVDA', velas: 'diarias', res: { id: 2, veredicto: 'pasa', texto: 'x' } },
-    { id: 3, creada_en: '2026-10-28T10:00:00Z', estrategia_id: 'e4', estrategia_nombre: 'Copia editor 23', estrategia_huella: 'otra-regla-de-antes', valor: 'AAPL', velas: 'diarias', res: { id: 3, veredicto: 'pasa', texto: 'x' } }]
+  const pruebasAz = [{ id: 1, creada_en: '2026-10-30T10:00:00Z', estrategia_id: 'e7', estrategia_nombre: 'Línea bajista', estrategia_foto: Az.fotoDe(lista[1]), valor: 'AAPL', velas: 'diarias', res: { id: 1, veredicto: 'noPasa', texto: 'x' } },
+    { id: 2, creada_en: '2026-10-29T10:00:00Z', estrategia_id: 'e6', estrategia_nombre: 'SuperTrend 10/3', estrategia_foto: Az.fotoDe(lista[2]), valor: 'NVDA', velas: 'diarias', res: { id: 2, veredicto: 'pasa', texto: 'x' } },
+    { id: 3, creada_en: '2026-10-28T10:00:00Z', estrategia_id: 'e4', estrategia_nombre: 'Copia editor 23', estrategia_foto: Az.fotoDe({ ...lista[0], params: { ema: 99 } }), valor: 'AAPL', velas: 'diarias', res: { id: 3, veredicto: 'pasa', texto: 'x' } }]
   const escrituras = []
   let borraBien = true
   const baseMT = () => { const J = (x, status = 200) => ({ ok: true, status, json: async () => x, text: async () => JSON.stringify(x) })

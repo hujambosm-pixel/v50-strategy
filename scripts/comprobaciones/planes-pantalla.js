@@ -196,7 +196,7 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   ok(v.includes('data-aviso="plan-no-existe"'), 'un plan que ya no existe: un aviso de una línea')
 
   // Los avisos de la línea de debajo
-  const conEst = (estado) => plano({ planes: [tres[0]], orden: ['g1'], pestana: 'g1', pruebas: estado === 'sin' ? [] : [{ id: 1, estrategia_id: 'x', estrategia_huella: 'h', resultado: { veredicto: estado } }], resultadoPrueba: { veredicto: estado } })
+  const conEst = (estado) => plano({ planes: [tres[0]], orden: ['g1'], pestana: 'g1', pruebas: estado === 'sin' ? [] : [{ id: 1, estrategia_id: 'x', estrategia_foto: est, resultado: { veredicto: estado } }], resultadoPrueba: { veredicto: estado } })
   v = conEst('sin')
   ok(v.includes('Sin prueba') && v.includes('Probarla ahora') && v.includes('Acción elegida a mano'), 'sin prueba: «Sin prueba · Probarla ahora»')
   v = conEst('noPasa')

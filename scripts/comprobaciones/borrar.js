@@ -17,8 +17,7 @@ const AVISO = 'puedes estar quedándote con una que pasó por suerte'
   const BP = require(R + '/components/BuilderPanel.js').default, BPlan = require(R + '/components/BuilderPlan.js').default, Pa = require(R + '/lib/builder/planPantalla.js'), Pl = require(R + '/lib/planes/plan.js'), PA = require(R + '/lib/pruebaAzar.js')
   const est = (id, name) => ({ id, name, definition: EMA, params: { ema: 2 } })
   const ests = [est('e1', 'Con prueba y plan'), est('e2', 'Sin nada')]
-  const hue = await PA.huellaEstrategia(ests[0])
-  const prueba = (id, e = 'e1') => ({ id, creada_en: '2026-10-30T10:00:00Z', estrategia_id: e, estrategia_nombre: 'Con prueba y plan', estrategia_huella: hue, valor: 'AAPL', velas: 'diarias', res: { id: 1, creado_en: '2026-10-30T10:00:00Z', veredicto: 'noPasa', texto: 'No pasa' } })
+  const prueba = (id, e = 'e1') => ({ id, creada_en: '2026-10-30T10:00:00Z', estrategia_id: e, estrategia_nombre: 'Con prueba y plan', estrategia_foto: PA.fotoDe(ests[0]), valor: 'AAPL', velas: 'diarias', res: { id: 1, creado_en: '2026-10-30T10:00:00Z', veredicto: 'noPasa', texto: 'No pasa' } })
   const planFila = (id, nombre, e) => ({ id, nombre, huella: 'h', created_at: '2026-10-01T10:00:00Z', updated_at: '2026-10-02T10:00:00Z', plan: Pa.planDe({ ...Pa.AJUSTES_PLAN, ocioso: 'GLD' }, e, nombre) })
   const J = (x, status = 200) => ({ ok: true, status, json: async () => x, text: async () => JSON.stringify(x) })
   const base = (o = {}) => {

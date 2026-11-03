@@ -8,7 +8,7 @@
 //   onVolver: a «Mi trabajo»; onPaso1(fila): abre la estrategia en el paso 1; onPaso3(id): el paso 3 con ella (§48: desde la barra y
 //   desde «Paso 3 · Convertirla en plan» del resultado, siempre activo).
 //   deps (opcional, para las pruebas): { ctx } en lugar de la sesión de Supabase. inicial (opcional, para las pruebas de montaje):
-//   { simbolos, precios, pruebas, huella, curso, valor, velas, viendo } ya leídos o en curso (viendo: { fila, resultado }, la pantalla
+//   { simbolos, precios, pruebas, curso, valor, velas, viendo } ya leídos o en curso (viendo: { fila, resultado }, la pantalla
 //   del resultado abierta).
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { B, S } from '../lib/builder/estilo'
@@ -19,7 +19,7 @@ import { Papelera } from './VentanaPregunta'
 import { VentanaBorrarPrueba } from './BorrarPrueba'
 import BuscadorValor from './BuscadorValor'
 import { REGLA_AZAR_REGLAS } from '../lib/azarReglas'
-import { PERIODOS_AZAR, comprobarPrecios, confirmarPrueba, ejecutarPrueba, esDeTarjetas, fotoDe, guardarResultado, huellaEstrategia, leerResultado, listarPruebas, tickersDe, borrarPrueba } from '../lib/pruebaAzar'
+import { PERIODOS_AZAR, comprobarPrecios, confirmarPrueba, ejecutarPrueba, esDeTarjetas, fotoDe, guardarResultado, leerResultado, listarPruebas, reglaDeFoto, tickersDe, borrarPrueba } from '../lib/pruebaAzar'
 import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0'
@@ -57,7 +57,6 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
   const [precios, setPrecios] = useState(inicial?.precios || {})
   const [fallo, setFallo] = useState(null)
   const [pruebas, setPruebas] = useState(inicial?.pruebas || null)
-  const [huella, setHuella] = useState(inicial?.huella || null)
   const [curso, setCurso] = useState(inicial?.curso || null)   // { fila, etapa, hecho, total, resultado?, error? }
   const [viendo, setViendo] = useState(inicial?.viendo || null)   // §46: { fila, resultado }, la pantalla «Resultado de la prueba» abierta
   const [borrandoP, setBorrandoP] = useState(inicial?.borrandoP || null)   // §60: la prueba que pide «¿Borrar esta prueba?»
@@ -93,7 +92,7 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
     try { const xs = await listarPruebas(ctx, estId); if (vivo.current) setPruebas(xs) } catch (e) { if (vivo.current) setPruebas(p => p || []) }
   }, [ctx, estId])
   useEffect(() => { if (!inicial?.pruebas) recargaPruebas() }, [estId])
-  useEffect(() => { if (!estrategia || inicial?.huella) return; let v = true; huellaEstrategia(estrategia).then(h => { if (v) setHuella(h) }); return () => { v = false } }, [estrategia])
+  const regla = useMemo(() => estrategia ? reglaDeFoto(fotoDe(estrategia)) : null, [estrategia])   // §64: una prueba vale mientras no cambie la regla; el nombre y la descripción no cuentan
   const compro = useMemo(() => {
     if (!estrategia || faltanPorLeer.length) return null
     try { return comprobarPrecios(fotoDe(estrategia), precios, valor, velas) } catch (e) { return { ok: false, error: e.message, faltan: [], operaciones: [], ceros: [] } }
@@ -142,7 +141,7 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
       <div style={{ ...S.cuerpo, display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div>
           <div style={etiqueta}>Estrategia</div>
-          {tarjetas.length ? <select aria-label="Estrategia" value={estId} disabled={enMarcha} onChange={e => { const s = tarjetas.find(x => String(x.id) === e.target.value); setEstId(e.target.value); setCurso(null); setPruebas(null); setHuella(null); if (s) setVelas(fotoDe(s).params.intervalo === 'semanal' ? 'semanales' : 'diarias') }} style={{ ...campo, maxWidth: '100%' }}>
+          {tarjetas.length ? <select aria-label="Estrategia" value={estId} disabled={enMarcha} onChange={e => { const s = tarjetas.find(x => String(x.id) === e.target.value); setEstId(e.target.value); setCurso(null); setPruebas(null); if (s) setVelas(fotoDe(s).params.intervalo === 'semanal' ? 'semanales' : 'diarias') }} style={{ ...campo, maxWidth: '100%' }}>
             {tarjetas.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
           </select> : <div style={S.secundario}>No tienes estrategias de tarjetas. Crea una en el paso 1.</div>}
           {estrategia && <div style={{ ...S.apagado, marginTop: 6 }}>Se prueba tal como está guardada. Si luego la cambias, será «{estrategia.name} · versión 2» y necesitará su propia prueba.</div>}
@@ -242,7 +241,7 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
             const corriendo = enMarcha && curso?.fila?.id === p.id
             return (
               <tr key={p.id} data-prueba-azar={p.id}>
-                <td style={{ ...celda, whiteSpace: 'nowrap' }}>{fechaHora(p.creada_en)}{huella && p.estrategia_huella !== huella && <div data-cambiada style={{ color: AMARILLO, fontSize: 12, whiteSpace: 'normal' }}>La estrategia ha cambiado desde esta prueba.</div>}</td>
+                <td style={{ ...celda, whiteSpace: 'nowrap' }}>{fechaHora(p.creada_en)}{regla && reglaDeFoto(p.estrategia_foto) !== regla && <div data-cambiada style={{ color: AMARILLO, fontSize: 12, whiteSpace: 'normal' }}>La estrategia ha cambiado desde esta prueba.</div>}</td>
                 <td style={celda}>{p.valor}</td>
                 <td style={celda}>{p.velas}</td>
                 <td style={celda}>{p.resultado ? <><span style={S.chip(CHIP_VEREDICTO[p.resultado.veredicto])}>{p.resultado.texto}</span> <button style={{ ...S.enlace, fontSize: 13, marginLeft: 6 }} onClick={() => verResultado(p)}>Ver</button></>

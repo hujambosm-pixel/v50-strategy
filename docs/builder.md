@@ -2239,6 +2239,15 @@ Decidido por Sergi el 03/11/2026. Ninguna cifra cambia. La prueba es la del paso
 - **«Versión 2» vuelve a cumplirse.** `enPrueba` sale de las pruebas del paso 2 de esa estrategia, con `listarPruebas`. Si se cambia la regla de una estrategia con prueba: `POST` de «<nombre> · versión 2», sin prueba, y la original no se toca. Si se cambia el nombre o la descripción: `PUT` sobre la misma.
 - **Qué prueba cuenta**: la que probó ESTA regla con sus valores (`paraHuella`, sin nombre ni descripción). Una prueba de una regla anterior no cuenta: esa estrategia ya sale «Sin probar» y se guarda sobre la misma. Es el mismo criterio que tenían los lotes.
 - **Si no se pueden leer sus pruebas**, una línea avisa de que cambiar la regla se guardará sobre esta misma.
-- **Lo que no cambia y conviene saber**: la huella de la foto (`fotoDe`) incluye el nombre, así que al renombrar una estrategia con prueba, «Mi trabajo» y el paso 3 pasan a decir «Sin probar», aunque la prueba siga y la regla sea la misma. No es de este encargo.
+- **Arreglado en §64**: la huella de la foto (`fotoDe`) incluye el nombre, así que al renombrar una estrategia con prueba, «Mi trabajo» y el paso 3 pasan a decir «Sin probar», aunque la prueba siga y la regla sea la misma. No es de este encargo.
 - **La guardia del paso 1**: ir a una tesis con cambios sin guardar abre la ventana «Guardar / Salir sin guardar / Cancelar», como en el paso 3. «Guardar» aplica la regla de versiones (y la ventana lo avisa si va a crear una); «Salir sin guardar» vuelve a lo guardado. **Solo en ese enlace**: salir del paso 1 por el menú o el logo sigue como estaba, sin preguntar.
 - Comprobado: `scripts/comprobaciones/version-paso2.js` (en `comunes.sh`), montado con estado y efectos.
+
+## 64. Una prueba vale mientras no cambie la regla
+
+`lib/pruebaAzar.js` (`reglaDeFoto`), `lib/builder/planPantalla.js` (`reglaDe`, `estadoPrueba`, `estadosPrueba`), `lib/builder/planesGuardados.js`, `lib/builder/misListas.js`, `lib/builder/versiones.js`, `components/BuilderPlan.js` y `components/BuilderAzar.js`. Sin cambios en la base. Ninguna cifra cambia.
+- **El fallo**: «Mi trabajo» y el paso 3 comparaban la huella de la foto, que incluye el nombre y la descripción. Al renombrar una estrategia con prueba salía «Sin probar».
+- **Ahora** comparan SOLO la regla (`paraHuella`, sin nombre ni descripción), la misma cuenta que decide si se crea «· versión 2». También la nota «La estrategia ha cambiado desde esta prueba» del paso 2.
+- **No cambia nada guardado**: ni la foto ni `estrategia_huella` de las pruebas, que se siguen guardando y copiando igual. `listarPruebasUsuario` pide además la foto, de donde sale la regla.
+- **Lo que no se ha tocado**: el aviso del paso 3 «La estrategia ha cambiado desde que guardaste este plan» (`comparaEstrategia`) compara la copia del plan con la estrategia, con su huella. Al renombrar una estrategia, ese aviso sigue saliendo. El encargo habla de las pruebas.
+- Comprobado: `version-paso2.js`, a mano y montado: renombrada sigue con su prueba en «Mi trabajo» y en el paso 3; con otra regla, «Sin probar» y «· versión 2». La prueba de EMA20, igual por md5.

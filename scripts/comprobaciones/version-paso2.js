@@ -98,6 +98,45 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA', stops: [{ id:
   D.pulsa(q(m, 'data-enlace-tesis', 7)); await D.espera(10); D.pulsa(q(m, 'data-salida', 'guardar')); await D.espera(LARGO)
   ok(m.abiertas.length === 0 && q(m, 'data-pregunta', 'sin-guardar')?.textContent.includes('falla la base'), 'si «Guardar» falla: lo dice, sigue la ventana y no se va'); m.quita(); await D.espera(5)
 
+  // ── 3b · §64: renombrar no quita la prueba; cambiar la regla, sí ──
+  const Pa = require(R + '/lib/builder/planPantalla.js'), PA = require(R + '/lib/pruebaAzar.js'), Ml = require(R + '/lib/builder/misListas.js'), Lt = require(R + '/lib/lotesLab.js')
+  const fotoOriginal = PA.fotoDe(fila), huellaOriginal = await PA.huellaEstrategia(fila)
+  const conResultado = (veredicto) => ({ ...prueba({ estrategia_foto: fotoOriginal, estrategia_huella: huellaOriginal }), res: { id: 1, veredicto, texto: veredicto === 'pasa' ? 'Pasa' : 'No pasa' }, resultado: { id: 1, veredicto, texto: veredicto === 'pasa' ? 'Pasa' : 'No pasa' } })
+  const renombrada = { ...fila, name: 'Nombre nuevo', description: 'otra', definition: { ...fila.definition, nombre: 'Nombre nuevo', descripcion: 'otra' } }
+  const otraRegla = { ...fila, params: { ema: 50, intervalo: 'diario' } }
+  ok(await PA.huellaEstrategia(renombrada) !== huellaOriginal, 'al renombrar cambia la huella de ahora (por eso no sirve para decidir)')
+  ok(PA.reglaDeFoto(PA.fotoDe(renombrada)) === PA.reglaDeFoto(fotoOriginal), 'pero no su regla')
+  ok(PA.reglaDeFoto(PA.fotoDe(otraRegla)) !== PA.reglaDeFoto(fotoOriginal), 'y cambiar un valor sí cambia la regla')
+  const filaMT = async (s, v) => (await Ml.construyeMisEstrategias({ estrategias: [s], planes: [], pruebasAzar: [conResultado(v)] }))[0]
+  for (const [v, clave] of [['noPasa', 'noPasa'], ['pasa', 'pasa']]) {
+    ok((await filaMT(fila, v)).azar.clave === clave, `Mi trabajo, sin tocarla: ${clave}`)
+    ok((await filaMT(renombrada, v)).azar.clave === clave && !!(await filaMT(renombrada, v)).azar.fila, `Mi trabajo, renombrada: sigue en ${clave}, con su prueba`)
+    ok((await filaMT(otraRegla, v)).azar.clave === 'sinPrueba', 'Mi trabajo, con otra regla: «Sin probar»')
+  }
+  ok(Pa.estadoPrueba([conResultado('pasa')], Pa.reglaDe(renombrada)).clave === 'pasa' && Pa.estadoPrueba([conResultado('pasa')], Pa.reglaDe(otraRegla)).clave === 'sinPrueba', 'paso 3: la misma cuenta')
+  ok(Pa.estadoPrueba([{ ...conResultado('pasa'), estrategia_foto: null }], Pa.reglaDe(fila)).clave === 'sinPrueba' && Pa.estadoPrueba(null, Pa.reglaDe(fila)) === null, 'una fila sin foto no cuenta; sin leer, nada')
+  ok(Pa.estadosPrueba([renombrada, { ...otraRegla, id: 'e2' }], [conResultado('noPasa')]).e1 === 'noPasa', 'el desplegable del paso 3, por regla')
+  ok(JSON.stringify(fotoOriginal) === JSON.stringify(PA.fotoDe(fila)) && conResultado('pasa').estrategia_huella === huellaOriginal, 'la foto y la huella de la prueba no se tocan')
+  // Montado: «Mi trabajo» y el paso 3, con la estrategia renombrada y la prueba en la base simulada.
+  const celdaAzar = (x, id) => x.raiz.busca(n => n.getAttribute('data-fila-estrategia') === id)?.busca(n => n.getAttribute('data-azar') != null)
+  const planesVacios = (f0) => async (u, o) => String(u).includes('planes_inversion') ? J([]) : f0(u, o)
+  for (const [t, s, azar, aviso] of [['renombrada', renombrada, 'noPasa', '✕ No pasa el azar'], ['con otra regla', otraRegla, 'sinPrueba', 'Sin prueba']]) {
+    b = base([conResultado('noPasa')]); globalThis.fetch = planesVacios(globalThis.fetch)
+    m = D.monta(h(BP, { estrategias: [s], visible: true, apiFetch: async () => ({ ok: false, status: 500, json: async () => ({}) }), abrir: null }), RDC); await D.espera(LARGO)
+    ok(celdaAzar(m, 'e1')?.getAttribute('data-azar') === azar, `Mi trabajo montado, ${t}: ${celdaAzar(m, 'e1')?.textContent}`); m.quita(); await D.espera(5)
+    b = base([conResultado('noPasa')]); globalThis.fetch = planesVacios(globalThis.fetch)
+    m = D.monta(h(BP, { estrategias: [s], visible: true, apiFetch: async () => ({ ok: false, status: 500, json: async () => ({}) }), vistaInicial: { plan: { estrategiaId: 'e1' } } }), RDC); await D.espera(LARGO)
+    const av = q(m, 'data-aviso', 'prueba')
+    ok(av?.textContent.includes(aviso), `paso 3 montado, ${t}: ${av?.textContent}`); m.quita(); await D.espera(5)
+  }
+  // Y renombrada, una regla nueva sigue creando la versión 2.
+  b = base([conResultado('noPasa')]); api = servidor(); m = D.monta(h(Ed.default, { fila: renombrada, estrategias: [renombrada], apiFetch: api, estadoInicial: est({ def: renombrada.definition, nombre: 'Nombre nuevo', descripcion: 'otra', valores: { ema: 50, intervalo: 'diario' } }), onGuardada: () => {} }), RDC); await D.espera(LARGO)
+  D.pulsa(q(m, 'data-boton', 'guardar-valores')); await D.espera(LARGO)
+  ok(api.llamadas[0]?.metodo === 'POST' && api.llamadas[0].cuerpo.name === 'Nombre nuevo · versión 2', `renombrada y con otra regla: ${api.llamadas[0]?.cuerpo.name}`); m.quita(); await D.espera(5)
+  // Sin cambiar nada de la prueba de EMA20: su foto da su regla, igual que su estrategia.
+  const ema = JSON.parse(require('fs').readFileSync(path.join(__dirname, 'prueba-ema20/prueba.json'), 'utf8'))
+  ok(!!PA.reglaDeFoto(ema.estrategia_foto) && await Lt.huella(ema.estrategia_foto) === ema.estrategia_huella, 'EMA20: su huella congelada sigue siendo la de su foto')
+
   // ── 4 · La guía ──
   const { GUIA } = require(R + '/lib/builder/ayuda.js'), texto = JSON.stringify(GUIA)
   for (const x of ['laboratorio', 'Laboratorio', 'lote', 'Nasdaq', 'sesgos', 'QQQ', 'P5–P95', 'No llega', 'misma duración', '500 copias']) ok(!texto.includes(x), `la guía no habla de «${x}»`)

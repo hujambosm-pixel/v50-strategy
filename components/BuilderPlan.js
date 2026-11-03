@@ -20,9 +20,9 @@
 //   estrategias: las filas de `strategies`; estrategiaId: la abierta. cargaSimbolos: los símbolos de la caché de precios (BuilderPanel).
 //   onVolver: a «Mi trabajo»; onPaso1(fila): la estrategia en el paso 1; onPaso2(id): el paso 2 con ella.
 //   deps (opcional, para las pruebas): { ctx, calcula(plan) } en lugar de la sesión y de /api/plan. inicial (opcional, para las pruebas
-//   de montaje): { ajustes, resultado ({ respuesta, plan }), error, calculando, pruebas, huella, resultadoPrueba, simbolos, planes
-//   (las filas guardadas), pestana (la abierta: «g<id>» o «n1»), cambio ({ cambiada, borrada }), pideNombre, borrando, huellas ({ id: huella }
-//   de cada estrategia, para su etiqueta), nuevas ([{ clave, nombre, base }]), cerrando (la clave de la pestaña que pide confirmación) }.
+//   de montaje): { ajustes, resultado ({ respuesta, plan }), error, calculando, pruebas, resultadoPrueba, simbolos, planes
+//   (las filas guardadas), pestana (la abierta: «g<id>» o «n1»), cambio ({ cambiada, borrada }), pideNombre, borrando,
+//   nuevas ([{ clave, nombre, base }]), cerrando (la clave de la pestaña que pide confirmación) }.
 //   pruebas: las de todas las estrategias (con estrategia_id).
 // §54: la cabecera B (CabeceraPasos) y las PESTAÑAS DE PLANES (components/BuilderPestanas.js, lib/builder/pestanasPlan.js): una por plan abierto, con su orden guardado en la base
 // (builder_pestanas); con cambios sin guardar, cualquier salida pregunta (la misma ventana que en Tesis). Esto deja atrás lo de «una pestaña por plan guardado» de la parte 2 y la «×» de §49.
@@ -36,7 +36,7 @@ import Ayuda from './BuilderAyuda'
 import BuscadorValor from './BuscadorValor'
 import BotonCopiar from './BotonCopiar'
 import { marcasLog, separaEtiquetas } from '../lib/builder/escalaGrafico'
-import { esDeTarjetas, huellaEstrategia, leerResultado } from '../lib/pruebaAzar'
+import { esDeTarjetas, leerResultado } from '../lib/pruebaAzar'
 import { validaPlan, paraHuellaPlan } from '../lib/planes/plan'
 import { jsonCanonico } from '../lib/lotesLab'
 import { AVISO_BORRADA, ETIQUETA_BORRADA, AVISO_CAMBIADA, AYUDA_CAMBIADA, borrarPlan, cambiarPlan, comparaEstrategia, crearPlan, fotoDelPlan, guardarPestanas, leerPestanas, listarPlanes, listarPruebasUsuario, nombreLimpio } from '../lib/builder/planesGuardados'
@@ -46,7 +46,7 @@ import { esDeCodigo } from '../lib/builder/codigo'
 import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
 import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, AVISO_PRUEBA, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
-  ayudaCaida, ayudaPrueba, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
+  ayudaCaida, ayudaPrueba, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS } from '../lib/builder/planPantalla'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0', AZUL = '#58a6ff', GRIS_FRANJA = '#3a4656'
@@ -228,7 +228,6 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const [simbolos, setSimbolos] = useState(inicial?.simbolos || ['AAPL', 'GLD', 'QQQ'])
   const [calc, setCalc] = useState({ calculando: !!inicial?.calculando, resultado: inicial?.resultado || null, error: inicial?.error || null })
   const [todasPruebas, setTodasPruebas] = useState(inicial?.pruebas || null)
-  const [huella, setHuella] = useState(inicial?.huella || null)
   // §57: las líneas marcadas del gráfico, recordadas en este navegador (si no se puede leer o escribir, las de por defecto).
   const [lineasVisibles, setLineasVisibles] = useState(inicial?.lineas || LINEAS_DEFECTO)
   useEffect(() => { if (inicial?.lineas) return; try { const g = JSON.parse(window.localStorage.getItem(CLAVE_LINEAS)); if (g && typeof g === 'object') setLineasVisibles({ ...LINEAS_DEFECTO, ...g }) } catch (_) {} }, [])
@@ -281,25 +280,17 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   }, [clave])
   useEffect(() => () => calculador.current?.cancela(), [])
 
-  // Los símbolos de la caché (para la acción y el ocioso) y la prueba del paso 2 de la estrategia (con su huella de ahora).
+  // Los símbolos de la caché (para la acción y el ocioso) y la prueba del paso 2 de la estrategia (con su regla de ahora).
   useEffect(() => { if (!inicial?.simbolos && cargaSimbolos) cargaSimbolos().then(xs => { if (vivo.current && xs?.length) setSimbolos(xs) }).catch(() => {}) }, [])
-  // §49: las pruebas de TODAS las estrategias (una lectura) y la huella de ahora de cada una: la etiqueta del desplegable y el aviso.
+  // §49: las pruebas de TODAS las estrategias (una lectura) y la regla de ahora de cada una: la etiqueta del desplegable y el aviso.
   useEffect(() => {
     if (inicial?.pruebas || !ctx) return
     listarPruebasUsuario(ctx).then(xs => { if (vivo.current) setTodasPruebas(xs) }).catch(() => { if (vivo.current) setTodasPruebas([]) })
   }, [ctx])
-  const [huellas, setHuellas] = useState(inicial?.huellas || null)
-  useEffect(() => {
-    if (inicial?.huellas) return
-    let v = true
-    Promise.all(tarjetas.map(t => huellaEstrategia(t).then(h => [t.id, h]))).then(xs => { if (v) setHuellas(Object.fromEntries(xs)) }).catch(() => {})
-    return () => { v = false }
-  }, [tarjetas])
-  const estadosLista = useMemo(() => estadosPrueba(tarjetas, todasPruebas, huellas), [tarjetas, todasPruebas, huellas])
+  const estadosLista = useMemo(() => estadosPrueba(tarjetas, todasPruebas), [tarjetas, todasPruebas])
   const pruebas = useMemo(() => todasPruebas && todasPruebas.filter(p => String(p.estrategia_id) === String(estrategia?.id ?? estId)), [todasPruebas, estrategia, estId])
   useEffect(() => { setResPrueba(inicial?.resultadoPrueba || null) }, [estId])
-  useEffect(() => { if (!estrategia || inicial?.huella) return; let v = true; setHuella(null); huellaEstrategia(estrategia).then(h => { if (v) setHuella(h) }); return () => { v = false } }, [estrategia])
-  const estado = useMemo(() => estadoPrueba(pruebas, huella), [pruebas, huella])
+  const estado = useMemo(() => estadoPrueba(pruebas, estrategia ? reglaDe(estrategia) : null), [pruebas, estrategia])
   useEffect(() => {
     if (inicial?.resultadoPrueba || !ctx || !estado?.fila) return
     let v = true
