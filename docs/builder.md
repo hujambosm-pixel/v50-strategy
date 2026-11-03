@@ -2251,3 +2251,16 @@ Decidido por Sergi el 03/11/2026. Ninguna cifra cambia. La prueba es la del paso
 - **No cambia nada guardado**: ni la foto ni `estrategia_huella` de las pruebas, que se siguen guardando y copiando igual. `listarPruebasUsuario` pide además la foto, de donde sale la regla.
 - **Lo que no se ha tocado**: el aviso del paso 3 «La estrategia ha cambiado desde que guardaste este plan» (`comparaEstrategia`) compara la copia del plan con la estrategia, con su huella. Al renombrar una estrategia, ese aviso sigue saliendo. El encargo habla de las pruebas.
 - Comprobado: `version-paso2.js`, a mano y montado: renombrada sigue con su prueba en «Mi trabajo» y en el paso 3; con otra regla, «Sin probar» y «· versión 2». La prueba de EMA20, igual por md5.
+
+## 65. Paso 2 · velas más visibles y con filtros
+
+`components/BuilderAzarVelas.js` y `components/BuilderAzarResultado.js`. Sin cambios en la base. Ninguna cifra cambia. Corrige lo dicho en §62 sobre dónde está «Ver en velas» y sobre el selector.
+- **Acceso**: botón «Ver en velas» con icono arriba a la derecha del gráfico (abre «Tu estrategia») y un icono pequeño, con ese mismo texto al pasar por encima, al final de las filas de tu estrategia y de las tres copias del panel. La leyenda de debajo del gráfico queda solo con nombres y colores.
+- **Cuatro vistas** en el selector: «Tu estrategia» (tus marcas, tu zona y una columna en la tabla) y cada copia (además, sus ● y ○ y dos columnas). El título cambia con la vista.
+- **La leyenda de arriba filtra**: cada elemento enciende o apaga su capa; apagado, atenuado y tachado. Se mantiene al cambiar de vista y se recuerda en el navegador (`builder_azar_velas_capas`, con try/catch). En «Tu estrategia» no salen los de la copia.
+- **La zona «dentro»**, de 0,09 a 0,025 de opacidad. Con muchas velas en pantalla las barras del histograma se solapan y su color se suma: por eso tapaba más de lo que dice su opacidad.
+- **Escala**: logarítmica por defecto, con «Log / Normal» junto a «Rueda: zoom · arrastrar: moverse». No se recuerda: cada vez que se abre, Log. El −25 salía de los márgenes que lightweight-charts añade por debajo; en Normal, `rangoNormal` da el rango de las velas con un 8 % de aire, sin márgenes y sin bajar de 0.
+- **La tabla** ocupa todo el ancho, con el mismo alto.
+- **La etiqueta del gráfico**: «La típica (mediana) 44.332 €» cuando las dos acaban en el mismo importe redondeado, que con 1.000 copias es siempre (la típica es la copia 500 y el percentil 50 también). Si no coincidieran, salen las dos. La línea gris de la mediana sigue dibujada.
+- **Sin arreglar, no es de este encargo**: en una ventana estrecha (menos de unos 1.300 píxeles en el periodo completo) lightweight-charts no puede juntar más las velas y al abrir no se ve el principio: en 1.024 píxeles arranca en 2019. El título sigue diciendo 2016–2025 y se llega arrastrando.
+- Comprobado: `azar-graficos.js` (`comunes.sh`), con un lightweight-charts de mentira que apunta lo que se le pide: cada vista, cada filtro apagado y encendido, recordar, datos guardados rotos, Log / Normal y la tabla con las cifras de EMA20. Las velas de verdad, en un navegador con una página temporal no subida.

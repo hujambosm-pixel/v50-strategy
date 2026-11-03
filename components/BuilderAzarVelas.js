@@ -1,13 +1,26 @@
-// components/BuilderAzarVelas.js — «Ver en velas» del resultado del paso 2: las velas del valor en ese periodo, a pantalla completa (boceto «Pulsar una copia → velas a pantalla completa»; docs/builder.md, §62).
-// lightweight-charts, como el resto de la app. Tus compras ▲ y ventas ▼ azules y la zona sombreada mientras estás dentro; las compras ● y ventas ○ naranjas de la copia elegida. Debajo, la tabla lado a lado.
+// components/BuilderAzarVelas.js — «Ver en velas» del resultado del paso 2: las velas del valor en ese periodo, a pantalla completa (boceto «Pulsar una copia → velas a pantalla completa»; docs/builder.md, §62 y §65).
+// lightweight-charts, como el resto de la app. Cuatro vistas: tu estrategia (tus compras ▲ y ventas ▼ azules y la zona sombreada mientras estás dentro) o una copia (además, sus compras ● y ventas ○ naranjas). La leyenda enciende y apaga cada capa. Debajo, la tabla.
 //   v: lo que pinta la pestaña (lib/azarGraficos.js vistaPestana). inicial: 'estrategia' (solo tus operaciones) o la copia ('mejor', 'tipica', 'peor'). onCierra: × y Esc.
 import { useEffect, useRef, useState } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import { euros, numero } from '../lib/resultadoAzar'
 
-const AZUL = '#58a6ff', NARANJA = '#f0883e', ZONA = 'rgba(88,166,255,0.09)'
-export const NOMBRES_COPIA = { mejor: ['La mejor', 'la mejor copia'], tipica: ['La típica', 'la copia típica'], peor: ['La peor', 'la peor copia'] }
+const AZUL = '#58a6ff', NARANJA = '#f0883e', ZONA = 'rgba(88,166,255,0.025)'
+export const NOMBRES_COPIA = { mejor: ['La mejor copia', 'la mejor copia'], tipica: ['La típica', 'la copia típica'], peor: ['La peor copia', 'la peor copia'] }
 const NS = 'http://www.w3.org/2000/svg'
+// Las capas que la leyenda enciende y apaga: [clave, texto, símbolo, color, si es de la copia]. Se recuerdan en el navegador.
+export const CAPAS_VELAS = [['tuCompra', 'Tu estrategia compra', '▲', AZUL, false], ['tuVenta', 'Tu estrategia vende', '▼', AZUL, false], ['tuDentro', 'Tu estrategia dentro', null, AZUL, false], ['copiaCompra', 'La copia compra', '●', NARANJA, true], ['copiaVenta', 'La copia vende', '○', NARANJA, true]]
+const TODAS = Object.fromEntries(CAPAS_VELAS.map(([k]) => [k, true]))
+const CLAVE_CAPAS = 'builder_azar_velas_capas'
+const leeCapas = () => { try { const g = JSON.parse(window.localStorage.getItem(CLAVE_CAPAS)); if (g && typeof g === 'object') return { ...TODAS, ...g } } catch (_) {} return TODAS }
+// El icono de velas de «Ver en velas».
+export const IconoVelas = ({ tamano = 14 }) => <svg width={tamano} height={tamano} viewBox="0 0 16 16" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}><path d="M4.5 1v3M4.5 11v4M11.5 2v2M11.5 9v3" stroke="currentColor" strokeWidth="1.5" fill="none"/><rect x="2.5" y="4" width="4" height="7" rx="0.5" fill="currentColor"/><rect x="9.5" y="4" width="4" height="5" rx="0.5" fill="currentColor"/></svg>
+// La escala normal: el rango de las velas con un poco de aire, sin bajar nunca de 0 (por eso sin márgenes: son ellos los que lo llevaban a −25).
+export function rangoNormal(r) {
+  if (!r?.priceRange) return r
+  const { minValue: a, maxValue: b } = r.priceRange, aire = (b - a) * 0.08
+  return { priceRange: { minValue: Math.max(0, a - aire), maxValue: b + aire }, margins: { above: 0, below: 0 } }
+}
 // Los días dentro de una operación: para la zona sombreada, una entrada por vela de i0 a i1 (la zona de dentro, con color; la de fuera, transparente).
 export function zonaDentro(velas, i0, i1, ops) {
   const dentro = new Uint8Array(i1 + 1)
@@ -17,9 +30,9 @@ export function zonaDentro(velas, i0, i1, ops) {
   return out
 }
 // Las marcas de tu estrategia: ▲ debajo de la vela al comprar y ▼ encima al vender. Sin vender dentro del periodo, se cierra al último día (la norma de cierre).
-export function marcasEstrategia(velas, ops) {
+export function marcasEstrategia(velas, ops, capas = TODAS) {
   const out = []
-  for (const o of ops) { out.push({ time: velas[o.e].date, position: 'belowBar', color: AZUL, shape: 'arrowUp', text: '' }); out.push({ time: velas[o.x].date, position: 'aboveBar', color: AZUL, shape: 'arrowDown', text: '' }) }
+  for (const o of ops) { if (capas.tuCompra) out.push({ time: velas[o.e].date, position: 'belowBar', color: AZUL, shape: 'arrowUp', text: '' }); if (capas.tuVenta) out.push({ time: velas[o.x].date, position: 'aboveBar', color: AZUL, shape: 'arrowDown', text: '' }) }
   return out.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0))
 }
 // Los puntos de la copia, a su precio: { time, precio, compra }.
@@ -30,29 +43,34 @@ const FILAS = [['final', 'Final (10.000 € al empezar)', x => euros(x.final)], 
 export default function BuilderAzarVelas({ v, simbolo, velasTexto = 'diarias', inicial = 'estrategia', onCierra }) {
   const [cual, setCual] = useState(inicial === 'estrategia' ? null : inicial)   // null: solo tu estrategia
   const [fallo, setFallo] = useState(null)
-  const caja = useRef(null), capa = useRef(null), grafico = useRef(null), redibuja = useRef(null), cualR = useRef(cual)
-  cualR.current = cual
+  const [capas, setCapas] = useState(leeCapas)
+  const [escala, setEscala] = useState('log')
+  const caja = useRef(null), capa = useRef(null), grafico = useRef(null), redibuja = useRef(null), ponCapas = useRef(null), ponEscala = useRef(null), cualR = useRef(cual), capasR = useRef(capas), escalaR = useRef(escala)
+  cualR.current = cual; capasR.current = capas; escalaR.current = escala
   const copia = cual ? v.copias[cual] : null
+  const marcaCapa = (k) => { const x = { ...capas, [k]: !capas[k] }; setCapas(x); try { window.localStorage.setItem(CLAVE_CAPAS, JSON.stringify(x)) } catch (_) {} }
   useEffect(() => { const f = (e) => { if (e.key === 'Escape') onCierra?.() }; document.addEventListener('keydown', f); return () => document.removeEventListener('keydown', f) }, [onCierra])
   useEffect(() => { redibuja.current?.() }, [cual])
+  useEffect(() => { ponCapas.current?.() }, [capas])
+  useEffect(() => { ponEscala.current?.() }, [escala])
   useEffect(() => {
     let vivo = true, ch = null, ro = null
-    import('lightweight-charts').then(({ createChart, CrosshairMode }) => {
+    import('lightweight-charts').then(({ createChart, CrosshairMode, PriceScaleMode }) => {
       if (!vivo || !caja.current) return
       ch = createChart(caja.current, { autoSize: true, layout: { background: { color: B.tarjeta }, textColor: B.secundario, attributionLogo: false }, grid: { vertLines: { color: '#1b2430' }, horzLines: { color: '#1b2430' } }, crosshair: { mode: CrosshairMode.Normal }, rightPriceScale: { borderColor: B.borde }, timeScale: { borderColor: B.borde } })
       grafico.current = ch
       const zona = ch.addHistogramSeries({ priceScaleId: 'zona', priceLineVisible: false, lastValueVisible: false, base: 0 })
       ch.priceScale('zona').applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false })
       zona.setData(zonaDentro(v.velas, v.i0, v.i1, v.estrategia.ops))
-      const velas = ch.addCandlestickSeries({ priceLineVisible: false, lastValueVisible: false, upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' })
+      const velas = ch.addCandlestickSeries({ priceLineVisible: false, lastValueVisible: false, upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350', autoscaleInfoProvider: (base) => escalaR.current === 'normal' ? rangoNormal(base()) : base() })
       velas.setData(v.velas.slice(v.i0, v.i1 + 1).map(b => ({ time: b.date, open: b.open, high: b.high, low: b.low, close: b.close })))
-      velas.setMarkers(marcasEstrategia(v.velas, v.estrategia.ops))
       // ● y ○ de la copia: una capa SVG encima, porque lightweight-charts no tiene marcas huecas. Se recoloca al moverse o hacer zoom.
       const dibuja = () => {
         const svg = capa.current; if (!svg) return
         while (svg.firstChild) svg.removeChild(svg.firstChild)
         const k = cualR.current; if (!k) return
         for (const p of puntosCopia(v.velas, v.copias[k].ops)) {
+          if (!capasR.current[p.compra ? 'copiaCompra' : 'copiaVenta']) continue
           const x = ch.timeScale().timeToCoordinate(p.time), y = velas.priceToCoordinate(p.precio)
           if (x == null || y == null || x < 0 || x > ch.timeScale().width()) continue   // fuera de las velas, no sobre el eje de precios
           const c = document.createElementNS(NS, 'circle')
@@ -67,10 +85,14 @@ export default function BuilderAzarVelas({ v, simbolo, velasTexto = 'diarias', i
       ch.subscribeCrosshairMove(tarde)   // al arrastrar en vertical cambia la escala de precios sin mover el tiempo
       ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(tarde) : null
       ro?.observe(caja.current)
+      ponCapas.current = () => { velas.setMarkers(marcasEstrategia(v.velas, v.estrategia.ops, capasR.current)); zona.applyOptions({ visible: capasR.current.tuDentro }); dibuja() }
+      // La escala recoloca las velas en el siguiente pintado: los círculos, después.
+      ponEscala.current = () => { const log = escalaR.current === 'log'; ch.priceScale('right').applyOptions({ mode: log ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal, autoScale: true, scaleMargins: log ? { top: 0.05, bottom: 0.05 } : { top: 0, bottom: 0 } }); requestAnimationFrame(tarde) }
+      ponCapas.current(); ponEscala.current()
       ch.timeScale().fitContent()
       tarde()
     }).catch(e => { if (vivo) setFallo(e.message) })
-    return () => { vivo = false; ro?.disconnect(); redibuja.current = null; try { ch?.remove() } catch (_) {} grafico.current = null }
+    return () => { vivo = false; ro?.disconnect(); redibuja.current = null; ponCapas.current = null; ponEscala.current = null; try { ch?.remove() } catch (_) {} grafico.current = null }
   }, [v])
 
   return (
@@ -78,23 +100,24 @@ export default function BuilderAzarVelas({ v, simbolo, velasTexto = 'diarias', i
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <div data-titulo-velas style={{ fontSize: 17, fontWeight: 700, color: B.titulo }}>Tu estrategia{cual && <> frente a <span style={{ color: NARANJA }}>{NOMBRES_COPIA[cual][1]}</span></>}</div>
         <span data-periodo-velas style={{ fontSize: 13, color: B.secundario }}>{simbolo} · {v.pestana.nombre} · velas {velasTexto}</span>
-        <div role="group" aria-label="Qué copia comparar" style={{ display: 'flex' }}>
-          {Object.entries(NOMBRES_COPIA).map(([k, [t]]) => <button key={k} data-copia-velas={k} aria-pressed={cual === k} onClick={() => setCual(k)} style={{ padding: '6px 12px', border: `1px solid ${B.borde}`, background: cual === k ? '#1f2937' : 'transparent', color: cual === k ? B.titulo : B.secundario, fontFamily: B.letra, fontSize: 13, fontWeight: cual === k ? 700 : 400, cursor: 'pointer' }}>{t}</button>)}
+        <div role="group" aria-label="Qué ver" style={{ display: 'flex' }}>
+          {[[null, 'Tu estrategia'], ...Object.entries(NOMBRES_COPIA).map(([k, [t]]) => [k, t])].map(([k, t]) => <button key={t} data-copia-velas={k || 'estrategia'} aria-pressed={cual === k} onClick={() => setCual(k)} style={{ padding: '6px 12px', border: `1px solid ${B.borde}`, background: cual === k ? '#1f2937' : 'transparent', color: cual === k ? B.titulo : B.secundario, fontFamily: B.letra, fontSize: 13, fontWeight: cual === k ? 700 : 400, cursor: 'pointer' }}>{t}</button>)}
         </div>
         <span style={{ marginLeft: 'auto', fontSize: 12, color: B.secundario }}>Rueda: zoom · arrastrar: moverse</span>
+        <div role="group" aria-label="Escala del precio" style={{ display: 'flex' }}>
+          {[['log', 'Log'], ['normal', 'Normal']].map(([k, t]) => <button key={k} data-escala-velas={k} aria-pressed={escala === k} onClick={() => setEscala(k)} style={{ padding: '3px 8px', border: `1px solid ${B.borde}`, background: escala === k ? '#1f2937' : 'transparent', color: escala === k ? B.titulo : B.secundario, fontFamily: B.letra, fontSize: 12, fontWeight: escala === k ? 700 : 400, cursor: 'pointer' }}>{t}</button>)}
+        </div>
         <button data-cerrar-velas aria-label="Cerrar" title="Cerrar (Esc)" onClick={onCierra} style={{ ...S.boton, width: 36, height: 36, padding: 0, fontSize: 20, lineHeight: 1 }}>×</button>
       </div>
       <div data-leyenda-velas style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 18px', fontSize: 12.5 }}>
-        <span><span style={{ color: AZUL }}>▲</span> Tu estrategia compra</span><span><span style={{ color: AZUL }}>▼</span> Tu estrategia vende</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 14, height: 10, background: 'rgba(88,166,255,0.18)' }}/>Tu estrategia dentro</span>
-        {cual && <><span><span style={{ color: NARANJA }}>●</span> La copia compra</span><span><span style={{ color: NARANJA }}>○</span> La copia vende</span></>}
+        {CAPAS_VELAS.filter(c => cual || !c[4]).map(([k, t, simbolo, color]) => <button key={k} data-capa-velas={k} aria-pressed={!!capas[k]} title={capas[k] ? 'Pulsa para ocultarlo' : 'Pulsa para mostrarlo'} onClick={() => marcaCapa(k)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: 0, border: 0, background: 'transparent', color: B.texto, fontFamily: B.letra, fontSize: 12.5, cursor: 'pointer', opacity: capas[k] ? 1 : 0.45, textDecoration: capas[k] ? 'none' : 'line-through' }}>{simbolo ? <span style={{ color }}>{simbolo}</span> : <span style={{ width: 14, height: 10, background: 'rgba(88,166,255,0.12)' }}/>}{t}</button>)}
       </div>
       <div style={{ flex: 1, minHeight: 200, position: 'relative', border: `1px solid ${B.borde}`, borderRadius: B.radioTarjeta, overflow: 'hidden' }}>
         <div ref={caja} data-grafico-velas style={{ position: 'absolute', inset: 0 }}/>
         <svg ref={capa} data-capa-copia aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3 }}/>
         {fallo && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ff8b8b' }}>✕ No se pudo dibujar: {fallo}</div>}
       </div>
-      <table data-tabla-velas style={{ borderCollapse: 'collapse', fontSize: 13, background: B.tarjeta, border: `1px solid ${B.borde}`, maxWidth: 760, width: '100%' }}>
+      <table data-tabla-velas style={{ borderCollapse: 'collapse', fontSize: 13, background: B.tarjeta, border: `1px solid ${B.borde}`, width: '100%' }}>
         <thead><tr>{['', 'Tu estrategia', ...(copia ? [NOMBRES_COPIA[cual][1].replace(/^la /, 'La ')] : [])].map((t, k) => <th key={k} style={{ padding: '5px 12px', fontWeight: 400, fontSize: 12, color: B.secundario, textAlign: 'left' }}>{t}</th>)}</tr></thead>
         <tbody>{FILAS.map(([k, t, f]) => <tr key={k} data-fila-velas={k} style={{ borderTop: `1px solid ${B.borde}` }}>
           <td style={{ padding: '5px 12px', color: B.secundario }}>{k === 'dentro' ? `Tiempo dentro de ${simbolo}` : t}</td>

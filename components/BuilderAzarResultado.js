@@ -13,14 +13,14 @@ import { textoParaClaude } from '../lib/pruebaAzar'
 import { AYUDA_ABANICO, AYUDA_COPIAS, AYUDA_GRAFICO_AZAR, ayudaFiabilidad, ayudaVeredicto, euros, textosResultado, numero, pctTexto } from '../lib/resultadoAzar'
 import { calculaGraficos, guardarGraficos, leerGraficos, mismosPrecios, pestanasDe, vistaPestana } from '../lib/azarGraficos'
 import { marcasLog, separaEtiquetas } from '../lib/builder/escalaGrafico'
-import BuilderAzarVelas from './BuilderAzarVelas'
+import BuilderAzarVelas, { IconoVelas } from './BuilderAzarVelas'
 
 const R = REGLA_AZAR_REGLAS
 const AZUL = '#58a6ff', VERDE = '#3fb950', ROJO = '#ff7b72', AMARILLO = '#f2cc60', NARANJA = '#f0883e', CLARO = '#c9d1d9', GRIS = '#6e7681'
 const fecha = (d) => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '—'
 const VEREDICTO = { pasa: ['✓ Pasa', VERDE, 'rgba(63,185,80,0.15)'], noPasa: ['✕ No pasa', ROJO, 'rgba(248,81,73,0.15)'], sinVeredicto: ['Sin veredicto', CLARO, 'rgba(139,148,158,0.18)'] }
 export const LINEAS_COPIAS = [['mejor', 'La mejor copia', VERDE], ['tipica', 'La típica', CLARO], ['peor', 'La peor copia', NARANJA]]
-const ALTO_MINIMO = 340
+const ALTO_MINIMO = 340, ICONO_FILA = 22
 
 // El alto libre hasta abajo de lo que se ve (el contenedor que hace scroll o la ventana), sin hueco debajo; un mínimo si la ventana es baja.
 function altoHastaAbajo(el, abajo) {
@@ -45,9 +45,11 @@ function GraficoAzar({ v, alto }) {
   const y = (e) => ARR + (1 - (L(Math.max(e, lo)) - L(lo)) / (L(hi) - L(lo))) * (alto - ARR - ABA)
   const puntos = (xs, s) => s.map((e, k) => `${x(xs ? xs[k] : k).toFixed(1)},${y(e).toFixed(1)}`).join(' ')
   const zona = (a, b) => `${puntos(xsA, a)} ${[...b].reverse().map((e, k) => `${x(xsA[b.length - 1 - k]).toFixed(1)},${y(e).toFixed(1)}`).join(' ')}`
+  // La típica es la copia que acaba en la mediana: una sola etiqueta (§65). Si no acabaran en lo mismo, las dos.
+  const tipicaMediana = euros(v.copias.tipica.final) === euros(finalA('p50'))
   const etq = separaEtiquetas([
-    ...lineas.map(l => ({ k: l.k, t: `${l.t} ${euros(l.s.final)}`, color: l.color, y: y(l.s.final), fuerte: l.k === 'estrategia' })),
-    { k: 'p95', t: `Percentil 95 ${euros(finalA('p95'))}`, color: B.secundario, y: y(finalA('p95')) }, { k: 'p50', t: `Mediana ${euros(finalA('p50'))}`, color: B.secundario, y: y(finalA('p50')) }, { k: 'p5', t: `Percentil 5 ${euros(finalA('p5'))}`, color: B.secundario, y: y(finalA('p5')) },
+    ...lineas.map(l => ({ k: l.k, t: `${l.k === 'tipica' && tipicaMediana ? 'La típica (mediana)' : l.t} ${euros(l.s.final)}`, color: l.color, y: y(l.s.final), fuerte: l.k === 'estrategia' })),
+    { k: 'p95', t: `Percentil 95 ${euros(finalA('p95'))}`, color: B.secundario, y: y(finalA('p95')) }, ...(tipicaMediana ? [] : [{ k: 'p50', t: `Mediana ${euros(finalA('p50'))}`, color: B.secundario, y: y(finalA('p50')) }]), { k: 'p5', t: `Percentil 5 ${euros(finalA('p5'))}`, color: B.secundario, y: y(finalA('p5')) },
   ], ARR + 8, alto - ABA)
   const anios = []; v.fechas.forEach((f, i) => { if (!i || f.slice(0, 4) !== v.fechas[i - 1].slice(0, 4)) anios.push([i, f.slice(0, 4)]) })
   const resumen = `Cómo creció el dinero en ${v.pestana.nombre}, con 10.000 € al empezar: tu estrategia termina en ${euros(v.estrategia.final)}; la mejor copia, en ${euros(v.copias.mejor.final)}; la típica, en ${euros(v.copias.tipica.final)}; la peor, en ${euros(v.copias.peor.final)}. El 95 % de las copias termina por debajo de ${euros(finalA('p95'))}.`
@@ -65,7 +67,7 @@ function GraficoAzar({ v, alto }) {
     </div>
   )
 }
-const Fila = ({ k, t, v, color, fuerte }) => <div data-cifra={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '5px 0', borderBottom: `1px solid ${B.borde}` }}><span style={{ color: B.secundario }}>{t}</span><span style={{ color: color || B.texto, fontWeight: fuerte ? 700 : 400, whiteSpace: 'nowrap' }}>{v}</span></div>
+const Fila = ({ k, t, v, color, fuerte, fin = null }) => <div data-cifra={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, fontSize: 13, padding: '5px 0', borderBottom: `1px solid ${B.borde}` }}><span style={{ color: B.secundario }}>{t}</span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ color: color || B.texto, fontWeight: fuerte ? 700 : 400, whiteSpace: 'nowrap' }}>{v}</span>{fin}</span></div>
 
 export default function BuilderAzarResultado({ prueba, resultado, onVolver = null, onPaso1, onPaso3 = null, onBorrar = null, obtenerPrecios = null, ctx = null, version = null, graficosInicial = null, preciosInicial = null, pestanaInicial = 'completo', velasInicial = null }) {
   const t = textosResultado(resultado), [txtV, colorV, fondoV] = VEREDICTO[resultado.veredicto] || VEREDICTO.sinVeredicto
@@ -114,7 +116,8 @@ export default function BuilderAzarResultado({ prueba, resultado, onVolver = nul
   const completo = clave === 'completo', percentil = completo ? (graficos?.pestanas?.completo?.percentil ?? null) : per?.percentil
   const pestana = pestanas.find(x => x.clave === clave)
   const marca = (p) => p.gana ? '✓' : '✕', colorMarca = (p) => p.gana ? VERDE : ROJO
-  const verVelas = (cual) => <button data-ver-velas={cual} onClick={() => setVelasDe(cual)} style={{ ...S.enlace, fontSize: 12 }}>Ver en velas</button>
+  const iconoVelas = (cual, nombre) => listo ? <button data-ver-velas={cual} aria-label={`Ver en velas: ${nombre}`} title="Ver en velas" onClick={() => setVelasDe(cual)} style={{ width: ICONO_FILA, height: 20, padding: 0, background: 'transparent', border: 0, color: B.enlace, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><IconoVelas/></button> : null
+  const huecoIcono = listo ? <span style={{ width: ICONO_FILA }}/> : null   // Para que las cifras sin icono sigan en la misma columna.
 
   return (
     <div data-pantalla="resultado-azar" data-caso={t.caso}>
@@ -146,14 +149,15 @@ export default function BuilderAzarResultado({ prueba, resultado, onVolver = nul
           <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: 6, flexWrap: 'wrap' }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: B.titulo }}>Cómo creció el dinero, frente al azar</div><Ayuda texto={AYUDA_GRAFICO_AZAR} etiqueta="Cómo creció el dinero"/>
             <span style={{ marginLeft: 'auto', fontSize: 12, color: B.secundario }}>10.000 € al empezar · escala logarítmica</span>
+            {listo && <button data-ver-velas-arriba onClick={() => setVelasDe('estrategia')} style={{ ...S.boton, marginLeft: 10, padding: '4px 10px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}><IconoVelas/>Ver en velas</button>}
           </div>
           <div ref={caja} data-caja-grafico>
             {listo ? <GraficoAzar v={vista} alto={alto}/>
               : <div data-sin-grafico style={{ height: alto, display: 'flex', alignItems: 'center', justifyContent: 'center', color: fallo || vista?.error ? ROJO : B.secundario, textAlign: 'center' }}>{fallo || vista?.error ? `✕ No se pudo preparar el gráfico: ${fallo || vista.error}` : 'Preparando el gráfico…'}</div>}
           </div>
           <div ref={leyenda} data-leyenda-azar style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 18px', alignItems: 'center', marginTop: 8, fontSize: 12.5, color: B.texto }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 20, borderTop: `3px solid ${AZUL}` }}/><b>Tu estrategia</b>{listo && <> · {verVelas('estrategia')}</>}</span>
-            {LINEAS_COPIAS.map(([k, n, c]) => <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 20, borderTop: `2px solid ${c}` }}/>{n}{listo && <> · {verVelas(k)}</>}</span>)}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 20, borderTop: `3px solid ${AZUL}` }}/><b>Tu estrategia</b></span>
+            {LINEAS_COPIAS.map(([k, n, c]) => <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 20, borderTop: `2px solid ${c}` }}/>{n}</span>)}
             <Ayuda texto={AYUDA_COPIAS} etiqueta="Las copias"/>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: B.secundario }}><span style={{ width: 20, height: 10, background: 'rgba(139,148,158,0.25)', marginRight: 4 }}/>El azar: 5 líneas (percentiles 5, 25, 50, 75 y 95)<Ayuda texto={AYUDA_ABANICO} etiqueta="El azar"/></span>
           </div>
@@ -167,10 +171,10 @@ export default function BuilderAzarResultado({ prueba, resultado, onVolver = nul
           <div data-gana-a style={{ fontSize: 30, fontWeight: 700, color: B.titulo, lineHeight: 1.1 }}>{percentil == null ? '—' : `${pctTexto(percentil)} %`}</div>
           <div data-nota-gana style={{ fontSize: 12.5, color: B.secundario }}>de las copias{completo ? ' · solo informativo, no cuenta para el veredicto' : ` · ${pestana.nombre}`}</div>
           <div style={{ height: 6 }}/>
-          <Fila k="final-estrategia" t="Tu estrategia" v={listo ? euros(vista.estrategia.final) : '—'} color={AZUL} fuerte/>
-          {LINEAS_COPIAS.map(([k, n, c]) => <Fila key={k} k={`final-${k}`} t={n} v={listo ? euros(vista.copias[k].final) : '—'} color={c}/>)}
-          <Fila k="operaciones" t="Operaciones de tu estrategia" v={listo ? vista.estrategia.operaciones : per ? per.operaciones : '—'}/>
-          <div data-cifra="fiabilidad" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, fontSize: 13, padding: '5px 0' }}><span style={{ color: B.secundario, display: 'inline-flex', alignItems: 'center', gap: 2 }}>Fiabilidad<Ayuda texto={ayudaFiabilidad(resultado)} etiqueta="Fiabilidad"/></span><span style={{ color: t.fiable ? VERDE : ROJO, fontWeight: 700 }}>{t.fiable ? 'Fiable ✓' : 'No fiable ✕'}</span></div>
+          <Fila k="final-estrategia" t="Tu estrategia" v={listo ? euros(vista.estrategia.final) : '—'} color={AZUL} fuerte fin={iconoVelas('estrategia', 'Tu estrategia')}/>
+          {LINEAS_COPIAS.map(([k, n, c]) => <Fila key={k} k={`final-${k}`} t={n} v={listo ? euros(vista.copias[k].final) : '—'} color={c} fin={iconoVelas(k, n)}/>)}
+          <Fila k="operaciones" t="Operaciones de tu estrategia" v={listo ? vista.estrategia.operaciones : per ? per.operaciones : '—'} fin={huecoIcono}/>
+          <div data-cifra="fiabilidad" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, fontSize: 13, padding: '5px 0' }}><span style={{ color: B.secundario, display: 'inline-flex', alignItems: 'center', gap: 2 }}>Fiabilidad<Ayuda texto={ayudaFiabilidad(resultado)} etiqueta="Fiabilidad"/></span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ color: t.fiable ? VERDE : ROJO, fontWeight: 700 }}>{t.fiable ? 'Fiable ✓' : 'No fiable ✕'}</span>{huecoIcono}</span></div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
             <button data-boton="paso3" style={{ ...(resultado.veredicto === 'pasa' ? S.botonVerde : S.boton), padding: '6px 10px', fontSize: 13 }} onClick={() => onPaso3?.()}>Paso 3 · Convertirla en plan</button>
             <button data-boton="paso1" style={{ ...S.boton, padding: '6px 10px', fontSize: 13 }} onClick={() => onPaso1?.()}>Volver al paso 1</button>

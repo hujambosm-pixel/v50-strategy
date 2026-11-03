@@ -86,7 +86,9 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   ok(q(m, 'data-linea', 'estrategia').getAttribute('stroke-width') == '3' || D.propsDe(q(m, 'data-linea', 'estrategia')).strokeWidth === 3, 'tu estrategia, la gruesa')
   const etq = () => m.raiz.conAtributo('data-etiqueta').map(n => Number(n.getAttribute('y') ?? D.propsDe(n).y)).sort((a, b) => a - b)
   const sinMontar = () => etq().every((y, k, xs) => !k || y - xs[k - 1] >= 15.99)
-  ok(sinMontar() && etq().length === 7, `las etiquetas, sin montarse (${etq().length})`)
+  ok(sinMontar() && etq().length === 6, `las etiquetas, sin montarse (${etq().length})`)
+  const unaTipica = () => { const w = m.raiz.conAtributo('data-etiqueta').map(n => n.textContent); return w.filter(x => x.startsWith('La típica (mediana) ')).length === 1 && !w.some(x => x.startsWith('Mediana ')) }
+  ok(unaTipica() && q(m, 'data-etiqueta', 'tipica').textContent === 'La típica (mediana) 44.332 €', `típica y mediana, en una sola etiqueta: ${q(m, 'data-etiqueta', 'tipica').textContent}`)
   const celda = (k) => q(m, 'data-cifra', k).textContent
   ok(celda('periodo-2016-01-01').includes('✓ ganó al 99,2 %') && celda('periodo-2021-01-01').includes('✕ ganó al 11,3 %'), 'el veredicto: las dos filas')
   ok(q(m, 'data-nota-gana').textContent.includes('solo informativo, no cuenta para el veredicto') && q(m, 'data-gana-a').textContent === `${RA.pctTexto(g.pestanas.completo.percentil)} %`, `completa: ganó al ${q(m, 'data-gana-a').textContent}, solo informativo`)
@@ -96,7 +98,7 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
     D.pulsa(q(m, 'data-pestana-azar', k)); await D.espera(10)
     ok(q(m, 'data-gana-a').textContent === pct && !q(m, 'data-nota-gana').textContent.includes('solo informativo'), `${k}: ganó al ${pct}, sin «solo informativo»`)
     ok(celda('periodo-2016-01-01').includes('99,2 %') && celda('periodo-2021-01-01').includes('11,3 %'), `${k}: las dos filas siguen a la vista`)
-    ok(lineas(m) === '5+estrategia,mejor,peor,tipica' && sinMontar(), `${k}: sus líneas, con las etiquetas sin montarse`)
+    ok(lineas(m) === '5+estrategia,mejor,peor,tipica' && sinMontar() && unaTipica(), `${k}: sus líneas, con las etiquetas sin montarse y una sola de la típica`)
     ok(celda('operaciones').includes(String(guardado.periodos.find(p => p.desde === k).operaciones)), `${k}: sus operaciones`)
   }
   m.quita(); await D.espera(5)
@@ -131,8 +133,78 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   ok(mE.length === 4 && mE.filter(x => x.shape === 'arrowUp').map(x => x.time).join() === '2020-01-02,2020-01-06' && mE.filter(x => x.shape === 'arrowDown').map(x => x.time).join() === '2020-01-04,2020-01-06' && mE.every(x => x.color === '#58a6ff') && mE.every((x, k) => !k || mE[k - 1].time <= x.time), 'tus ▲ y ▼ azules, en orden de fecha')
   const pC = Ve.puntosCopia(vs, ops)
   ok(pC.length === 4 && pC[0].compra && pC[0].precio === 100 && !pC[1].compra && pC[1].precio === 110, 'los ● y ○ de la copia, a su precio')
+  ok(Ve.marcasEstrategia(vs, ops, { tuCompra: false, tuVenta: true }).every(x => x.shape === 'arrowDown') && Ve.marcasEstrategia(vs, ops, { tuCompra: true, tuVenta: false }).every(x => x.shape === 'arrowUp') && !Ve.marcasEstrategia(vs, ops, {}).length, 'las capas apagan tus ▲ y tus ▼ por separado')
+  const rN = Ve.rangoNormal({ priceRange: { minValue: 5, maxValue: 300 }, margins: { above: 20, below: 20 } })
+  ok(rN.priceRange.minValue === 0 && rN.priceRange.maxValue > 300 && rN.margins.below === 0 && Ve.rangoNormal({ priceRange: { minValue: 100, maxValue: 200 } }).priceRange.minValue === 92 && Ve.rangoNormal(null) === null, 'la escala normal no baja de 0')
+  // Un lightweight-charts de mentira, que apunta lo que le piden: el de verdad necesita un navegador.
+  const Mod = require('module'), cargaReal = Mod._load, LW = { series: {}, mode: null, margenes: null, proveedor: null }
+  Mod._load = function (pet, ...r) {
+    if (pet !== 'lightweight-charts') return cargaReal.call(this, pet, ...r)
+    const serie = (o) => ({ opciones: { ...o }, setData() {}, setMarkers(x) { this.marcas = x }, applyOptions(x) { Object.assign(this.opciones, x) }, priceToCoordinate: () => 50 })
+    return { CrosshairMode: { Normal: 0 }, PriceScaleMode: { Normal: 0, Logarithmic: 1 }, createChart: () => ({
+      addHistogramSeries: (o) => (LW.series.zona = serie(o)), addCandlestickSeries: (o) => { LW.proveedor = o.autoscaleInfoProvider; return (LW.series.velas = serie(o)) }, subscribeCrosshairMove() {}, remove() {},
+      priceScale: (id) => ({ applyOptions(x) { if (id === 'right') { LW.mode = x.mode; LW.margenes = x.scaleMargins } } }),
+      timeScale: () => ({ fitContent() {}, subscribeVisibleLogicalRangeChange() {}, timeToCoordinate: () => 100, width: () => 1000 }) }) }
+  }
+  m = await monta()
+  // Regla de oro: la tabla de las velas, con la pestaña completa.
+  D.pulsa(q(m, 'data-ver-velas', 'tipica')); await D.espera(20)
+  for (const [k, x] of [['final', ['55.706 €', '44.332 €']], ['operaciones', ['123', '103']], ['ganadoras', ['42,3 %', '52,4 %']], ['caida', ['29,1 %', '27,6 %']], ['dentro', ['68,7 %', '73,1 %']]]) ok(q(m, 'data-fila-velas', k).textContent.endsWith(x.join('')), `regla de oro, ${k}: tú ${x[0]}, típica ${x[1]}`)
+  D.pulsa(q(m, 'data-cerrar-velas')); await D.espera(10); m.quita(); await D.espera(5)
   m = await monta({ pestanaInicial: '2021-01-01' })
-  ok(m.raiz.conAtributo('data-ver-velas').map(n => n.getAttribute('data-ver-velas')).join() === 'estrategia,mejor,tipica,peor', '«Ver en velas» en tu estrategia y en cada copia')
+  ok(m.raiz.conAtributo('data-ver-velas').map(n => n.getAttribute('data-ver-velas')).join() === 'estrategia,mejor,tipica,peor', 'el icono de velas en tu estrategia y en cada copia, en el panel')
+  ok(m.raiz.conAtributo('data-ver-velas').every(n => D.propsDe(n).title === 'Ver en velas'), 'cada icono, con su «Ver en velas» al pasar por encima')
+  ok(q(m, 'data-ver-velas-arriba').textContent === 'Ver en velas', 'el botón «Ver en velas» arriba del gráfico')
+  ok(!q(m, 'data-leyenda-azar').textContent.includes('Ver en velas'), 'la leyenda de abajo, solo con los nombres')
+  ok(q(m, 'data-cifra', 'final-tipica').textContent.startsWith('La típica') && /\d €$/.test(q(m, 'data-cifra', 'final-tipica').textContent), 'el icono no cambia el texto de la fila')
+  D.pulsa(q(m, 'data-ver-velas-arriba')); await D.espera(20)
+  ok(q(m, 'data-titulo-velas').textContent === 'Tu estrategia' && q(m, 'data-copia-velas', 'estrategia').getAttribute('aria-pressed') === 'true', 'el botón de arriba abre «Tu estrategia»')
+  ok(m.raiz.conAtributo('data-copia-velas').map(n => n.textContent).join(' · ') === 'Tu estrategia · La mejor copia · La típica · La peor copia', 'el selector, con las cuatro vistas')
+  const capasVe = () => m.raiz.conAtributo('data-capa-velas').map(n => n.getAttribute('data-capa-velas')).join()
+  const circulos = () => q(m, 'data-capa-copia').todos(n => n.nodeName.toLowerCase() === 'circle').length
+  const nTH = () => q(m, 'data-tabla-velas').todos(n => n.nodeName === 'TH').length
+  const wE = G.vistaPestana(prueba, precios, g.pestanas['2021-01-01'], '2021-01-01'), todasMarcas = wE.estrategia.ops.length * 2, deCopia = (k) => wE.copias[k].ops.length * 2
+  ok(capasVe() === 'tuCompra,tuVenta,tuDentro' && circulos() === 0 && nTH() === 2 && LW.series.velas.marcas.length === todasMarcas, `vista «Tu estrategia»: 3 capas, sin círculos, una columna, ${todasMarcas} marcas`)
+  ok(LW.mode === 1 && LW.margenes.top > 0 && q(m, 'data-escala-velas', 'log').getAttribute('aria-pressed') === 'true', 'por defecto, escala logarítmica')
+  for (const [k, t] of [['mejor', 'Tu estrategia frente a la mejor copia'], ['tipica', 'Tu estrategia frente a la copia típica'], ['peor', 'Tu estrategia frente a la peor copia']]) {
+    D.pulsa(q(m, 'data-copia-velas', k)); await D.espera(10)
+    ok(q(m, 'data-titulo-velas').textContent === t && capasVe() === 'tuCompra,tuVenta,tuDentro,copiaCompra,copiaVenta' && nTH() === 3 && circulos() === deCopia(k) && LW.series.velas.marcas.length === todasMarcas, `vista ${k}: «${t}», 5 capas, dos columnas, sus ${deCopia(k)} círculos y tus marcas`)
+  }
+  // Cada filtro, apagado y encendido.
+  const cuenta = () => [LW.series.velas.marcas.filter(x => x.shape === 'arrowUp').length, LW.series.velas.marcas.filter(x => x.shape === 'arrowDown').length, LW.series.zona.opciones.visible, q(m, 'data-capa-copia').todos(n => n.nodeName.toLowerCase() === 'circle' && n.getAttribute('fill') === '#f0883e').length, q(m, 'data-capa-copia').todos(n => n.nodeName.toLowerCase() === 'circle' && n.getAttribute('fill') !== '#f0883e').length]
+  const N = wE.estrategia.ops.length, Nc = wE.copias.peor.ops.length
+  ok(cuenta().join() === [N, N, true, Nc, Nc].join(), `todo encendido: ${cuenta().join()}`)
+  for (const [k, apagado] of [['tuCompra', [0, N, true, Nc, Nc]], ['tuVenta', [N, 0, true, Nc, Nc]], ['tuDentro', [N, N, false, Nc, Nc]], ['copiaCompra', [N, N, true, 0, Nc]], ['copiaVenta', [N, N, true, Nc, 0]]]) {
+    D.pulsa(q(m, 'data-capa-velas', k)); await D.espera(10)
+    const p = D.propsDe(q(m, 'data-capa-velas', k)).style
+    ok(cuenta().join() === apagado.join() && q(m, 'data-capa-velas', k).getAttribute('aria-pressed') === 'false' && p.textDecoration === 'line-through' && p.opacity < 1, `${k} apagada: ${cuenta().join()}, atenuada y tachada`)
+    ok(JSON.parse(window.localStorage.getItem('builder_azar_velas_capas'))[k] === false, `${k}: recordada en el navegador`)
+    D.pulsa(q(m, 'data-capa-velas', k)); await D.espera(10)
+    ok(cuenta().join() === [N, N, true, Nc, Nc].join() && D.propsDe(q(m, 'data-capa-velas', k)).style.textDecoration === 'none', `${k} encendida otra vez`)
+  }
+  // Se mantiene al cambiar de vista y al volver a abrir; en «Tu estrategia» no salen las de la copia.
+  D.pulsa(q(m, 'data-capa-velas', 'tuVenta')); D.pulsa(q(m, 'data-capa-velas', 'tuVenta')); await D.espera(5)
+  D.pulsa(q(m, 'data-capa-velas', 'copiaVenta')); await D.espera(5); D.pulsa(q(m, 'data-copia-velas', 'mejor')); await D.espera(10)
+  ok(q(m, 'data-capa-velas', 'copiaVenta').getAttribute('aria-pressed') === 'false' && circulos() === wE.copias.mejor.ops.length, 'lo apagado sigue apagado al cambiar de copia')
+  D.pulsa(q(m, 'data-cerrar-velas')); await D.espera(10); D.pulsa(q(m, 'data-ver-velas', 'peor')); await D.espera(20)
+  ok(q(m, 'data-capa-velas', 'copiaVenta').getAttribute('aria-pressed') === 'false', 'y al volver a abrir')
+  D.pulsa(q(m, 'data-capa-velas', 'copiaVenta')); await D.espera(5)
+  // Log / Normal.
+  D.pulsa(q(m, 'data-escala-velas', 'normal')); await D.espera(10)
+  const base = () => ({ priceRange: { minValue: 20, maxValue: 280 }, margins: { above: 30, below: 30 } })
+  ok(LW.mode === 0 && LW.margenes.top === 0 && LW.margenes.bottom === 0 && LW.proveedor(base).priceRange.minValue === 0 && LW.proveedor(base).margins.below === 0 && circulos() === deCopia('peor'), 'Normal: escala normal y el eje no baja de 0')
+  D.pulsa(q(m, 'data-escala-velas', 'log')); await D.espera(10)
+  ok(LW.mode === 1 && LW.proveedor(base).margins.below === 30 && circulos() === deCopia('peor'), 'Log: otra vez logarítmica, con sus círculos')
+  D.pulsa(q(m, 'data-cerrar-velas')); await D.espera(10); m.quita(); await D.espera(5)
+  // Lo guardado roto, o un navegador que no deja guardar: no molesta.
+  window.localStorage.setItem('builder_azar_velas_capas', 'esto no es json'); m = await monta({ velasInicial: 'tipica' })
+  ok(q(m, 'data-capa-velas', 'copiaVenta').getAttribute('aria-pressed') === 'true', 'si lo guardado está roto: todo encendido')
+  const set = window.localStorage.setItem; window.localStorage.setItem = () => { throw new Error('lleno') }
+  D.pulsa(q(m, 'data-capa-velas', 'tuDentro')); await D.espera(10)
+  ok(q(m, 'data-capa-velas', 'tuDentro').getAttribute('aria-pressed') === 'false', 'si no se puede guardar: el filtro funciona igual')
+  window.localStorage.setItem = set; window.localStorage.removeItem('builder_azar_velas_capas'); m.quita(); await D.espera(5)
+  Mod._load = cargaReal
+  m = await monta({ pestanaInicial: '2021-01-01' })
   D.pulsa(q(m, 'data-ver-velas', 'tipica')); await D.espera(20)
   const fila5 = (k) => q(m, 'data-fila-velas', k).textContent
   ok(q(m, 'data-titulo-velas').textContent === 'Tu estrategia frente a la copia típica' && q(m, 'data-periodo-velas').textContent === 'AAPL · 2021–2025 · velas diarias', 'el título, el símbolo y el periodo')
@@ -154,7 +226,9 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   ok(fuenteV.includes("e.key === 'Escape'") && fuenteV.includes("import('lightweight-charts')"), 'Esc cierra; lightweight-charts, como el resto de la app')
 
   const html = renderToString(h(Res, { prueba, resultado: guardado, graficosInicial: g, preciosInicial: precios }))
-  ok(html.includes('data-pantalla="resultado-azar"') && html.includes('data-abanico="p95"'), 'renderToString, sin error')
+  ok(html.includes('data-pantalla="resultado-azar"') && html.includes('data-abanico="p95"') && html.includes('data-ver-velas-arriba'), 'renderToString, sin error')
+  const htmlV = (cual) => renderToString(h(Ve.default, { v: G.vistaPestana(prueba, precios, g.pestanas.completo, 'completo'), simbolo: 'AAPL', inicial: cual }))
+  ok(['estrategia', 'mejor', 'tipica', 'peor'].every(c => htmlV(c).includes('data-tabla-velas')) && !htmlV('estrategia').includes('copiaCompra') && htmlV('peor').includes('copiaCompra'), 'renderToString de las cuatro vistas, sin error')
 
   console.log(fallos ? `azar-graficos: ${fallos} fallos` : `azar-graficos: todas bien · ${(bytes / 1024).toFixed(0)} KB por prueba`)
   process.exit(fallos ? 1 : 0)
