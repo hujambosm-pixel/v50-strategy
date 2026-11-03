@@ -29,8 +29,7 @@ editor tipo Word. Es una pantalla **aislada**: no toca el motor, el Builder ni n
   alto (mínimo 400 px), con su propia barra vertical y se estira desde la esquina.
 - «Relacionado»: fichas «Estrategia · nombre» / «Plan · nombre» con × para quitar; «(borrado)» en gris si ya no existe. «+ Añadir
   estrategia o plan»: las estrategias de tarjetas y los planes guardados.
-- **«Abrir» solo en las estrategias** (paso 1 del Builder, con `abrirEnBuilder`). El Builder no sabe abrir un plan guardado concreto
-  desde fuera, y añadirlo era tocar el Builder: los planes enlazados se ven, pero sin «Abrir».
+- **«Abrir»**: una estrategia, en el paso 1 del Builder (`abrirEnBuilder`); un plan (03/11/2026, `abrirPlanEnBuilder`), en el paso 3 con ese plan como pestaña activa, añadiéndola si no estaba. Si el plan ya se ha borrado se ve «(borrado)», sin «Abrir»; si se borró después de entrar en Tesis, el paso 3 lo avisa en una línea (docs/builder.md, §55).
 - Menos de 1000 px de ancho: una sola columna.
 
 ## Salir sin guardar

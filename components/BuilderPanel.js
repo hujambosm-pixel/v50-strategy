@@ -110,7 +110,7 @@ export const filaCopia = (s) => esDeCodigo(s) ? filaCopiaCodigo(s) : ({ id: null
 // Las estrategias se abren aquí, en el paso 1: las de tarjetas en el editor por tarjetas y las de código (V9.1048) en el apartado
 // «Código de la estrategia». onAbrirEstrategia(s, 'editor') las abre en el Editor clásico (la pestaña «Editor»). onBacktestValor:
 // el enlace «Backtest de un valor» (la pestaña donde se ejecutan y se ven en el gráfico). abrir ({ fila, n }): la página pide
-// abrir una estrategia (al pulsar su nombre en «Backtest de un valor»); cada n nuevo la abre. V9.1058: buscarInicial y
+// abrir una estrategia (al pulsar su nombre en «Backtest de un valor»); cada n nuevo la abre. §55: { planId, n }, un plan en el paso 3. V9.1058: buscarInicial y
 // buscarCopiaInicial (para las pruebas de montaje): lo escrito en los buscadores de «Mi trabajo» y de «Desde una de mis estrategias».
 // V9.1060: copiaInicial (el id elegido para copiar) y copiaAbiertaInicial (la lista del buscador abierta), también para el montaje.
 export default function BuilderPanel({ estrategias = [], salida = null, onAbrirEstrategia, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '', buscarCopiaInicial = '', copiaInicial = '', copiaAbiertaInicial = false }) {
@@ -200,7 +200,10 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   // V9.1071: las velas, por el mismo camino que «Backtest de un valor» (pages/api/velas.js: la caché más lo último de Yahoo).
   // Devuelve { velas, semanaAbierta, origen }.
   const cargaVelas = useCallback(async (sym) => { const r = await apiFetch(`/api/velas?simbolo=${encodeURIComponent(sym)}`); if (!r.ok) throw new Error(`HTTP ${r.status}`); return await r.json() }, [apiFetch])
-  useEffect(() => { if (abrir?.fila) { setPrueba(null); setAzar(null); setPlan(null); setGuia(false); setEditor({ fila: abrir.fila, n: abrir.n }) } }, [abrir?.n])
+  useEffect(() => {
+    if (abrir?.fila) { setPrueba(null); setAzar(null); setPlan(null); setGuia(false); setEditor({ fila: abrir.fila, n: abrir.n }) }
+    else if (abrir?.planId != null) { setPrueba(null); setAzar(null); setEditor(null); setGuia(false); setPlan({ planId: abrir.planId, n: abrir.n }) }   // §55: desde una tesis
+  }, [abrir?.n])
   // §54: «Mi trabajo» de la cabecera B: a «Mi trabajo», ya en su sitio de la página.
   const [irMiTrabajo, setIrMiTrabajo] = useState(0)
   const seccionMiTrabajo = useRef(null)

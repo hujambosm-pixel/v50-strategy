@@ -4,7 +4,7 @@
 // A la izquierda, el buscador, los filtros por estado y la lista (por revisada_en, la más reciente arriba); a la derecha, la tesis
 // abierta: título, estado, fechas, el editor de texto (V9.1093, components/TesisEditor.js: TipTap, en un trozo aparte que solo se carga
 // aquí) y «Relacionado» (estrategias de tarjetas y planes guardados).
-// Props: estrategias (las filas de `strategies`), onAbrirEstrategia (abre una en el paso 1 del Builder), salida (un ref: la página
+// Props: estrategias (las filas de `strategies`), onAbrirEstrategia (abre una en el paso 1 del Builder), onAbrirPlan (abre un plan por su id en el paso 3), salida (un ref: la página
 // pregunta por él antes de cambiar de pestaña; devuelve true si hay cambios y se ha abierto la pregunta). deps ({ ctx, Editor }) e inicial
 // ({ tesis, planes, abierta, borrador, nueva, pregunta, falloPregunta, fallo, borrando, filtro, busca, enTexto, anadiendo, archivos, resumen, urls, subidas, avisosAdjuntos, arrastrando, visor, borrandoAdjunto, lado, ancho, listaElegida, ladoElegido }): para las pruebas de montaje.
 // Los adjuntos (components/TesisAdjuntos.js) se guardan al subirlos: no pasan por «Guardar» ni por «cambios sin guardar».
@@ -35,7 +35,7 @@ const HojaLineas = () => (
 // Un texto en trozos ([{ t, marca }]), con lo buscado resaltado. React lo escapa: nada se interpreta como HTML.
 const Resaltado = ({ trozos }) => trozos.map((x, k) => x.marca ? <mark key={k} data-marca style={{ background: COLORES_RESALTE[0].color, color: B.titulo, borderRadius: 2 }}>{x.t}</mark> : <span key={k}>{x.t}</span>)
 
-export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida = null, deps = null, inicial = null }) {
+export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbrirPlan, salida = null, deps = null, inicial = null }) {
   // El ctx en cada llamada: ctxConSesion() pone el token vigente y renueva la sesión ante 401 (nada congelado al montar).
   const ctx = () => deps?.ctx || (hayConfigSupabase() ? ctxConSesion() : null)
   const [tesis, setTesis] = useState(inicial?.tesis || null)
@@ -362,6 +362,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
                       ? <span data-borrado style={{ color: B.apagado }}>{f.etiqueta} · (borrado)</span>
                       : <span>{f.etiqueta} · {f.nombre}</span>}
                     {!f.borrado && f.tipo === 'estrategia' && onAbrirEstrategia && <button data-abrir onClick={() => conGuardia(() => onAbrirEstrategia(f.fila))} style={{ ...S.enlace, fontSize: 13 }}>Abrir</button>}
+                    {!f.borrado && f.tipo === 'plan' && onAbrirPlan && <button data-abrir data-abrir-plan={f.id} onClick={() => conGuardia(() => onAbrirPlan(f.id))} style={{ ...S.enlace, fontSize: 13 }}>Abrir</button>}
                     <button aria-label={`Quitar ${f.etiqueta.toLowerCase()}`} onClick={() => quita(k)} style={{ ...S.enlace, color: B.apagado, fontSize: 16, padding: '0 4px' }}>×</button>
                   </span>))}
                 <button data-anadir onClick={() => setAnadiendo(a => !a)} style={{ ...S.boton, padding: '5px 12px', fontSize: 13 }}>+ Añadir estrategia o plan</button>

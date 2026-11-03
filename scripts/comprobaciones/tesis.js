@@ -99,6 +99,11 @@ const cuenta = (html, s) => html.split(s).length - 1
   ok(h.includes(`>Creada ${T.fechaCorta(tres[0].created_at)}<`) && h.includes(`>Revisada ${T.fechaCorta(tres[0].revisada_en)}<`) && h.includes('✓ Marcar como revisada hoy'), 'fechas de creada y revisada, y «Marcar como revisada hoy»')
   ok(/data-texto[^>]*data-sustituto/.test(h) && h.includes('Entrar si NVDA supera máximos.') && !h.includes('<textarea'), 'el texto va en el editor (aquí, su sustituto), con su texto, y ya no hay cuadro de texto plano')
   ok(h.includes('Estrategia · Cruce EMA20') && h.includes('Plan · Mi plan QQQ') && h.includes('data-borrado') && h.includes('Estrategia · (borrado)') && cuenta(h, 'data-abrir') === 1, 'Relacionado: estrategia con «Abrir», plan sin él y la borrada como «(borrado)» con su ×')
+  {
+    const rel = [{ tipo: 'plan', id: '3' }, { tipo: 'plan', id: '404' }]
+    const hp = monta({ tesis: [fila({ id: 9, relacionados: rel })], abierta: 9, borrador: { titulo: 'x', texto: '', estado: 'idea', relacionados: rel } }, { onAbrirPlan: () => {} })
+    ok(cuenta(hp, 'data-abrir-plan') === 1 && hp.includes('data-abrir-plan="3"') && hp.includes('Plan · (borrado)'), '«Abrir» en el plan que existe; el borrado, «(borrado)» y sin «Abrir»')
+  }
   ok(cuenta(h, 'aria-label="Quitar') === 3, 'cada ficha con su ×')
   h = monta({ ...abre1, filtro: 'marcha' })
   ok(cuenta(h, 'data-item="') === 1 && h.includes('data-item="2"') && /data-filtro="marcha" aria-pressed="true"/.test(h), 'filtro «En marcha»: solo la del oro')
@@ -303,6 +308,7 @@ const cuenta = (html, s) => html.split(s).length - 1
   h = monta({ tesis: [creada], abierta: 3, borrador: { ...borrador3, titulo: ' ' }, pregunta: true })
   ok(h.includes('data-aviso-pregunta') && h.includes('Ponle un título.') && /data-salida="guardar" disabled=""/.test(h) && !/data-salida="salir" disabled=""/.test(h), 'sin título no se puede guardar: dice por qué y deja salir sin guardar')
   ok(!/confirm\(/.test(fuentePanel) && fuentePanel.includes(`window.addEventListener('beforeunload', avisa)`), 'ni un confirm() del navegador; al cerrar o recargar sigue avisando el navegador')
+  ok(fuentePanel.includes('conGuardia(() => onAbrirPlan(f.id))'), '«Abrir» de un plan también pregunta si hay cambios')
   ok(fuentePanel.includes('data-nueva onClick={() => conGuardia(creaNueva)}') && fuentePanel.includes('conGuardia(() => abre(t))') && fuentePanel.includes('conGuardia(() => onAbrirEstrategia(f.fila))') && fuentePanel.includes('salida.current = (seguir)'), 'pregunta en la pantalla: otra tesis, «+ Nueva tesis» y «Abrir»')
   ok(leer('pages', 'index.js').includes(`e.target.tagName==='SELECT'||e.target.isContentEditable) return`), 'escribir en el editor no abre el buscador de símbolos')
   // Las salidas desde fuera de la pantalla: pages/index.js es demasiado grande para montarlo aquí, así que se mira su código (y se probó con clics en el navegador).
@@ -310,7 +316,7 @@ const cuenta = (html, s) => html.split(s).length - 1
   ok(fuenteIndex.includes(`if(sidePanel==='tesis'&&tesisSalida.current?.(seguir)) return; if(sidePanel==='builder'&&builderSalida.current?.(seguir)) return; seguir()`), 'salirDeTesis: en Tesis o en el Builder y con cambios pregunta y sigue al responder; si no, sigue sin más')
   ok(fuenteIndex.includes(`else salirDeTesis(()=>setSidePanel(item.id))`) && fuenteIndex.includes(`className="header-logo" onClick={()=>salirDeTesis(()=>{`) && fuenteIndex.includes(`onClick={()=>salirDeTesis(handleLogout)}`), 'también preguntan el menú, el logo y «Cerrar sesión»')
   const llamadasPanel = fuenteIndex.split('\n').map((x, k) => [x, k + 1]).filter(([x]) => /setSidePanel\(/.test(x)).length
-  ok(llamadasPanel === 15, `los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
+  ok(llamadasPanel === 16, `los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
 
   // El buscador.
   const tres2 = [
