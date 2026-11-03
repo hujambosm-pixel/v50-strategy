@@ -1,19 +1,15 @@
 // components/BuilderPanel.js — la pestaña «Builder» (docs/builder.md): tanda 1 con el aspecto del boceto (tanda 1b). La barra de
-// los tres pasos (indicativa), el bloque «¿Desde dónde empiezas?» (V9.1042: en blanco, desde una plantilla o desde una de mis
-// estrategias) y «Mi trabajo» en dos pestañas, «Mis estrategias» y «Mis pruebas» (lib/builder/misListas.js), con el estilo de
-// lib/builder/estilo.js (solo el Builder; el resto de la app no cambia). §58: «Mi trabajo» compacto: sin el bloque «¿Desde dónde empiezas?» (arriba a la derecha, «En blanco» y «Desde una plantilla»; duplicar, el icono de cada fila), una línea por estrategia y el buscador arriba de la lista. No crea nada por su cuenta: abre el editor por tarjetas
+// los tres pasos (indicativa) y «Mi trabajo», la lista de mis estrategias (lib/builder/misListas.js), con el estilo de
+// lib/builder/estilo.js (solo el Builder; el resto de la app no cambia). §58: «Mi trabajo» compacto: arriba a la derecha, «En blanco» y «Desde una plantilla»; duplicar, el icono de cada fila; una línea por estrategia y el buscador arriba de la lista. No crea nada por su cuenta: abre el editor por tarjetas
 // (V9.1043, components/BuilderEditor.js, el paso 1) con una COPIA nueva (de la plantilla o de la estrategia elegida), que se guarda
 // al pulsar «Guardar y pasar al paso 2»; una estrategia de código se abre en su apartado «Código de la estrategia» (V9.1048). El paso 2
-// («Probarla contra el azar») es otra pantalla del propio Builder: components/BuilderAzar.js (§45–§46; la de los lotes,
-// components/BuilderPrueba.js, se abre desde las pruebas de «Mi trabajo»). Se edita pulsando el nombre.
+// («Probarla contra el azar») es otra pantalla del propio Builder: components/BuilderAzar.js (§45–§46). §59: un solo sistema de pruebas; las antiguas de lotes se retiraron. Se edita pulsando el nombre.
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { PLANTILLAS, VACIA } from '../lib/builder/plantillas'
-import { AYUDA_MI_TRABAJO, construyeMisEstrategias, construyeMisPruebas, filtraEstrategias, FILTROS_ESTRATEGIAS, CHIP, CHIP_AZAR } from '../lib/builder/misListas'
-import { listarPruebas } from '../lib/registroLab'
+import { AYUDA_MI_TRABAJO, construyeMisEstrategias, filtraEstrategias, FILTROS_ESTRATEGIAS, CHIP_AZAR } from '../lib/builder/misListas'
 import { ctxConSesion, getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
 import { listarPlanes, listarPruebasUsuario } from '../lib/builder/planesGuardados'
 import { B, S } from '../lib/builder/estilo'
-import BuilderPrueba from './BuilderPrueba'
 import BuilderAzar from './BuilderAzar'
 import BuilderPlan from './BuilderPlan'
 import BuilderEditor from './BuilderEditor'
@@ -33,8 +29,8 @@ import { Papelera, Pregunta, ROJO_PAPELERA } from './VentanaPregunta'
 export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convertirla en plan']
 export const PASOS_CORTOS = ['Crear', 'Probar contra el azar', 'Convertirla en plan']   // §56: el nombre al lado de cada círculo de la cabecera B
 export const SUBTITULOS_PASOS = ['Cuándo compro, cuándo vendo y cuánto arriesgo', '¿Gana por algo más que suerte?', 'Dinero real, aportaciones e impuestos']
-// La firma de lo leído de la base (lotes y pruebas: id y huella / fecha): si no cambia, no se recalcula «Mi trabajo».
-export const firmaDatos = (lotes, pruebas, planes, pruebasAzar, tesis) => JSON.stringify([(lotes || []).map(l => [l.id, l.hash_lote]), (pruebas || []).map(p => [p.id, p.creado]), (planes || []).map(p => [p.id, p.updated_at]), pruebasAzar && pruebasAzar.map(p => [p.id, p.resultado?.id ?? null]), (tesis || []).map(t => [t.id, t.updated_at])])
+// La firma de lo leído de la base (id y fecha o resultado): si no cambia, no se recalcula «Mi trabajo».
+export const firmaDatos = (planes, pruebasAzar, tesis) => JSON.stringify([(planes || []).map(p => [p.id, p.updated_at]), pruebasAzar && pruebasAzar.map(p => [p.id, p.resultado?.id ?? null]), (tesis || []).map(t => [t.id, t.updated_at])])
 const campoSel = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px' }
 const celda = { padding: '10px 12px', borderBottom: `1px solid ${B.borde}`, verticalAlign: 'top', textAlign: 'left' }
 const cabecera = { ...celda, color: B.secundario, fontWeight: 600, fontSize: 12, position: 'sticky', top: 0, background: B.cabecera }
@@ -46,7 +42,6 @@ const iconoFila = { background: 'transparent', border: 'none', cursor: 'pointer'
 export const menuFijo = { zIndex: 40, padding: 6, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, boxShadow: '0 8px 24px rgba(0,0,0,0.45)', opacity: 1 }
 export const opcionMenu = { ...S.enlace, display: 'block', width: '100%', padding: '5px 6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
 
-const Chip = ({ clave }) => { const [tipo, txt] = CHIP[clave] || CHIP.sinVeredicto; return <span style={S.chip(tipo)}>{txt}</span> }
 // §58: un desplegable (fondo opaco) que se cierra al pulsar fuera o con Esc. boton(abierto, alterna, ref) lo pinta quien lo usa.
 export function useDesplegable() {
   const [abierto, setAbierto] = useState(false)
@@ -158,31 +153,28 @@ export function CabeceraPasos({ actual = 1, onPaso = null, desactivados = {}, he
 // (V9.1048) se copia entera, con su código: se abre en el apartado «Código de la estrategia».
 export const filaCopia = (s) => esDeCodigo(s) ? filaCopiaCodigo(s) : ({ id: null, name: `${s.name} (copia)`, description: s.description || '', definition: copia(s.definition), params: params(s.params), copiaDe: s.name })
 
-// estrategias: las de la página (strategies). datosIniciales (opcional, para las pruebas): { lotes, pruebas } en lugar de leerlos;
-// listasIniciales (opcional, para las pruebas de montaje): { estrategias, pruebas } ya calculadas; pestanaInicial y filtroInicial.
+// estrategias: las de la página (strategies). datosIniciales (opcional, para las pruebas): { planes, pruebasAzar, tesis } en lugar de leerlos;
+// listasIniciales (opcional, para las pruebas de montaje): { estrategias } ya calculadas; filtroInicial.
 // visible: si la pestaña se ve. Cada vez que pasa a verse (al entrar o al volver del editor) se vuelve a leer la base, sin
 // enseñar «Cargando» y sin recalcular si no ha cambiado nada (firmaDatos). Las estrategias llegan de la página.
 // apiFetch y version: para el paso 1 (guardar) y el paso 2. onGuardada: la página recarga sus estrategias. vistaInicial (opcional,
-// para las pruebas): la de BuilderPrueba ({ estrategiaId } | { loteId }), la guía ({ guia: true }), el editor ({ editor: fila }) o la
+// para las pruebas): la guía ({ guia: true }), el editor ({ editor: fila }) o la
 // prueba contra el azar de §45 ({ azar: { estrategiaId } }, components/BuilderAzar.js: se abre desde la barra de pasos) o el paso 3
 // de §48 ({ plan: { estrategiaId } }, components/BuilderPlan.js: desde la barra de pasos y desde el resultado del paso 2).
 // Las estrategias se abren aquí, en el paso 1: las de tarjetas en el editor por tarjetas y las de código (V9.1048) en el apartado
 // «Código de la estrategia». onAbrirEstrategia(s, 'editor') las abre en el Editor clásico (la pestaña «Editor»). onBacktestValor:
 // el enlace «Backtest de un valor» (la pestaña donde se ejecutan y se ven en el gráfico). abrir ({ fila, n }): la página pide
 // abrir una estrategia (al pulsar su nombre en «Backtest de un valor»); cada n nuevo la abre. §55: { planId, n }, un plan en el paso 3. V9.1058: buscarInicial (para las pruebas de montaje): lo escrito en el buscador de «Mi trabajo».
-export default function BuilderPanel({ estrategias = [], salida = null, onAbrirEstrategia, onAbrirTesis = null, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '' }) {
-  // §58: planes y pruebasAzar (null: no se han podido leer; entonces la fila dice «—» y «Qué toca ahora» sale de las pruebas de lotes, como antes).
-  const [datos, setDatos] = useState(() => datosIniciales || { lotes: [], pruebas: [], planes: [], pruebasAzar: null, cargando: !datosIniciales, error: null })
+export default function BuilderPanel({ estrategias = [], salida = null, onAbrirEstrategia, onAbrirTesis = null, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '' }) {
+  // §58: planes y pruebasAzar (null: no se han podido leer; entonces la fila dice «—»).
+  const [datos, setDatos] = useState(() => datosIniciales || { planes: [], pruebasAzar: null, tesis: [], cargando: !datosIniciales, error: null })
   const [filasE, setFilasE] = useState(listasIniciales?.estrategias || null)
-  const [filasP, setFilasP] = useState(listasIniciales?.pruebas || null)
-  const [pestana, setPestana] = useState(pestanaInicial)
   const [filtro, setFiltro] = useState(filtroInicial)
   const [buscar, setBuscar] = useState(buscarInicial)   // V9.1058: el buscador de «Mi trabajo» (por nombre y por la frase de la regla; V9.1063: resaltado)
   const [borrando, setBorrando] = useState(null)   // §58: la fila de la estrategia que pide «¿Eliminar?»
   const [borrandoYa, setBorrandoYa] = useState(false)
   const [falloBorrar, setFalloBorrar] = useState(null)
   const [borradas, setBorradas] = useState([])   // lo recién borrado, hasta que la página recargue sus estrategias
-  const [prueba, setPrueba] = useState(vistaInicial && !vistaInicial.guia && !vistaInicial.editor && !vistaInicial.azar && !vistaInicial.plan ? { ...vistaInicial, n: 0 } : null)   // la pantalla del paso 2, si está abierta
   const [azar, setAzar] = useState(vistaInicial?.azar ? { ...vistaInicial.azar, n: 0 } : null)   // §45: «Probarla contra el azar» (azar re-simulado), si está abierta
   const [plan, setPlan] = useState(vistaInicial?.plan ? { ...vistaInicial.plan, n: 0 } : null)   // §48: «Convertirla en plan» (paso 3), si está abierta
   const [editor, setEditor] = useState(vistaInicial?.editor ? { fila: vistaInicial.editor, n: 0 } : null)   // el paso 1 (editor por tarjetas), si está abierto
@@ -191,16 +183,13 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   const firma = useRef(null)
   const recarga = useCallback(async () => {
     if (datosIniciales) return
-    if (!hayConfigSupabase()) { setDatos({ lotes: [], pruebas: [], planes: [], pruebasAzar: null, cargando: false, error: 'Sin conexión con la base de datos: solo se ven las estrategias.' }); return }
+    if (!hayConfigSupabase()) { setDatos({ planes: [], pruebasAzar: null, tesis: [], cargando: false, error: 'Sin conexión con la base de datos: solo se ven las estrategias.' }); return }
     try {
-      const r = await fetch(`${getSupaUrl()}/rest/v1/editor_lotes?select=id,creado,version_app,nombre,lote,hash_lote,huellas&order=creado.desc,id.desc&limit=200`, { headers: getSupaH() })
-      const lotes = r.ok ? await r.json() : []
-      const pruebas = await listarPruebas({ url: getSupaUrl(), headers: getSupaH() }, { limite: 500, soloResumen: false, filtro: '&config->>prueba=in.(editorLote,editorLab,editorCalibracion,planLote)' })
       const ctx = ctxConSesion(), [planes, pruebasAzar, tesis] = await Promise.all([listarPlanes(ctx).catch(() => []), listarPruebasUsuario(ctx).catch(() => null), listarEnlacesTesis(ctx).catch(() => [])])
-      const error = r.ok ? null : `No se pudieron leer las pruebas (HTTP ${r.status}).`, f = firmaDatos(lotes, pruebas, planes, pruebasAzar, tesis)
-      if (f === firma.current && !error) return   // nada nuevo: no se toca
+      const f = firmaDatos(planes, pruebasAzar, tesis)
+      if (f === firma.current) return   // nada nuevo: no se toca
       firma.current = f
-      setDatos({ lotes, pruebas, planes, pruebasAzar, tesis, cargando: false, error })
+      setDatos({ planes, pruebasAzar, tesis, cargando: false, error: null })
     } catch (e) { setDatos(d => ({ ...d, cargando: false, error: e.message })) }
   }, [datosIniciales])
   useEffect(() => { if (visible !== false) recarga() }, [visible, recarga])
@@ -212,21 +201,19 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
     if (visible === false) return
     if (yaVisto.current) { setBuscar(''); setEntrada(n => n + 1) }
     yaVisto.current = true
-    if (!editor && !prueba && !guia) { setPestana('estrategias'); const h = setTimeout(() => casillaMiTrabajo.current?.focus({ preventScroll: true }), 0); return () => clearTimeout(h) }
+    if (!editor && !guia) { const h = setTimeout(() => casillaMiTrabajo.current?.focus({ preventScroll: true }), 0); return () => clearTimeout(h) }
   }, [visible])
   useEffect(() => {
     if (listasIniciales) return
     let vivo = true
-    construyeMisEstrategias({ estrategias, lotes: datos.lotes, pruebas: datos.pruebas, planes: datos.planes, pruebasAzar: datos.pruebasAzar }).then(f => { if (vivo) setFilasE(f) }).catch(() => { if (vivo) setFilasE([]) })
-    try { setFilasP(construyeMisPruebas({ lotes: datos.lotes, pruebas: datos.pruebas })) } catch (_) { setFilasP([]) }
+    construyeMisEstrategias({ estrategias, planes: datos.planes, pruebasAzar: datos.pruebasAzar }).then(f => { if (vivo) setFilasE(f) }).catch(() => { if (vivo) setFilasE([]) })
     return () => { vivo = false }
-  }, [estrategias, datos.lotes, datos.pruebas, datos.planes, datos.pruebasAzar, listasIniciales])
+  }, [estrategias, datos.planes, datos.pruebasAzar, listasIniciales])
   const estrategiasEf = useMemo(() => [...estrategias.map(s => guardadas.find(g => String(g.id) === String(s.id)) || s), ...guardadas.filter(g => !estrategias.some(s => String(s.id) === String(g.id)))], [estrategias, guardadas])
   // Las plantillas disponibles (la desactivada no sale).
   const disponibles = PLANTILLAS.filter(p => !p.desactivada && p.definicion)
-  // V9.1058: lo escrito en el buscador filtra las dos pestañas: las estrategias por nombre y por la frase de la regla; las pruebas por
-  // nombre y por las estrategias que incluyen.
-  const buscadasE = filasE && filasE.filter(f => !borradas.includes(String(f.estrategia.id)) && coincide(buscar, f.nombre, f.subtitulo)), buscadasP = filasP && filasP.filter(f => coincide(buscar, f.nombre, ...(f.estrategias || [])))
+  // V9.1058: lo escrito en el buscador filtra por nombre y por la frase de la regla.
+  const buscadasE = filasE && filasE.filter(f => !borradas.includes(String(f.estrategia.id)) && coincide(buscar, f.nombre, f.subtitulo))
   const visiblesE = filtraEstrategias(buscadasE, filtro)
   const cuantas = Object.fromEntries(FILTROS_ESTRATEGIAS.map(([k]) => [k, filtraEstrategias(buscadasE, k).length]))
   const cuenta = (b, t) => !t ? null : b.length === t.length ? t.length : `${b.length} de ${t.length}`
@@ -236,9 +223,7 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
     if (a.tipo === 'editor') abreEditor(f.estrategia)
     else if (a.tipo === 'plan') abrePlan(a.estrategiaId)
     else if (a.tipo === 'azar') abreAzar(a.estrategiaId)
-    else if (a.tipo === 'prueba') setPrueba({ ...(a.loteId != null ? { loteId: a.loteId } : { estrategiaId: a.estrategiaId }), n: Date.now() })
   }
-  const abrePrueba = (id) => setPrueba({ loteId: id, n: Date.now() })
   const abreEditor = (fila) => setEditor({ fila, n: Date.now() })
   // «Señales en el gráfico» (V9.1050): los valores con precios guardados y sus velas diarias (la caché de la app, solo lectura).
   // V9.1058: con su nombre (de la lista de seguimiento o del universo), para buscarlos también por nombre; sin nombres, solo el ticker.
@@ -255,8 +240,8 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   // Devuelve { velas, semanaAbierta, origen }.
   const cargaVelas = useCallback(async (sym) => { const r = await apiFetch(`/api/velas?simbolo=${encodeURIComponent(sym)}`); if (!r.ok) throw new Error(`HTTP ${r.status}`); return await r.json() }, [apiFetch])
   useEffect(() => {
-    if (abrir?.fila) { setPrueba(null); setAzar(null); setPlan(null); setGuia(false); setEditor({ fila: abrir.fila, n: abrir.n }) }
-    else if (abrir?.planId != null) { setPrueba(null); setAzar(null); setEditor(null); setGuia(false); setPlan({ planId: abrir.planId, n: abrir.n }) }   // §55: desde una tesis
+    if (abrir?.fila) { setAzar(null); setPlan(null); setGuia(false); setEditor({ fila: abrir.fila, n: abrir.n }) }
+    else if (abrir?.planId != null) { setAzar(null); setEditor(null); setGuia(false); setPlan({ planId: abrir.planId, n: abrir.n }) }   // §55: desde una tesis
   }, [abrir?.n])
   // §54: «Mi trabajo» de la cabecera B: a «Mi trabajo», ya en su sitio de la página.
   const [irMiTrabajo, setIrMiTrabajo] = useState(0)
@@ -280,7 +265,7 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
     setBorrandoYa(false)
   }
   // Guardada en el paso 1: la página recarga sus estrategias y se pasa al paso 2 con ella (la versión nueva, si se creó). §46: a la
-  // pantalla nueva del paso 2 (BuilderAzar), no a la de los lotes.
+  // pantalla del paso 2 (BuilderAzar).
   // V9.1054: «Guardar estos valores en la estrategia» (info.quedarse) sigue en el paso 1 con la estrategia guardada (la versión nueva,
   // si se creó); así las casillas vuelven a enseñar los valores guardados. V9.1073: «Guardar en la estrategia», en la barra de arriba,
   // sigue en la pestaña donde se estaba (info.pestana).
@@ -299,19 +284,12 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   }
   if (editor && esDeCodigo(editor.fila)) return <ProteccionPanel nombre="Estrategia de código"><BuilderCodigo key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
     onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardarCodigo}/></ProteccionPanel>
-  if (editor) return <ProteccionPanel nombre="Editor por tarjetas"><BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} lotes={datos.lotes} apiFetch={apiFetch}
+  if (editor) return <ProteccionPanel nombre="Editor por tarjetas"><BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
     onVolver={alVolver(() => setEditor(null))} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} onPaso2={f => { setEditor(null); abreAzar(f.id) }} onPaso3={f => { setEditor(null); abrePlan(f.id) }} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'} entradaBuilder={entrada} enlaceTesis={enlaceTesis}/></ProteccionPanel>
   if (azar) return <ProteccionPanel nombre="Probarla contra el azar"><BuilderAzar key={azar.n} estrategias={estrategiasEf} estrategiaId={azar.estrategiaId} version={version}
     cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} onVolver={alVolver(() => setAzar(null))} onPaso1={f => { setAzar(null); if (f) abreEditor(f); else recarga() }} onPaso3={id => { setAzar(null); abrePlan(id) }} enlaceTesis={enlaceTesis}/></ProteccionPanel>
   if (plan) return <ProteccionPanel nombre="Convertirla en plan"><BuilderPlan key={plan.n} estrategias={estrategiasEf} estrategiaId={plan.estrategiaId} planId={plan.planId ?? null} salida={salida} apiFetch={apiFetch} version={version}
     cargaSimbolos={cargaSimbolosCache} onVolver={alVolver(() => setPlan(null))} onPaso1={f => { setPlan(null); if (f) abreEditor(f); else recarga() }} onPaso2={id => { setPlan(null); abreAzar(id) }} enlaceTesis={enlaceTesis}/></ProteccionPanel>
-  if (prueba) return <ProteccionPanel nombre="Probarla contra el azar"><BuilderPrueba key={prueba.n} estrategias={estrategiasEf} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
-    onVolver={alVolver(() => setPrueba(null))} onNuevaPrueba={() => setPrueba({ n: Date.now() })} onCambio={recarga}/></ProteccionPanel>
-  const pestanaBtn = (k, t, n) => (
-    <button key={k} role="tab" aria-selected={pestana === k} onClick={() => setPestana(k)}
-      style={{ ...S.boton, borderRadius: `${B.radioBoton}px ${B.radioBoton}px 0 0`, borderBottom: 'none', fontWeight: pestana === k ? 700 : 400,
-        ...(pestana === k ? { background: B.tarjeta, color: B.titulo } : { background: 'transparent', color: B.secundario }) }}>{t}{n != null ? ` (${n})` : ''}</button>
-  )
   return (
     <div style={S.pagina}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -333,17 +311,13 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
         </span>
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
-        <div role="tablist" aria-label="Mi trabajo" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {pestanaBtn('estrategias', 'Mis estrategias', cuenta(buscadasE, filasE))}
-          {pestanaBtn('pruebas', 'Mis pruebas', cuenta(buscadasP, filasP))}
-        </div>
+        <span data-titulo-lista style={{ ...S.secundario, fontWeight: 700, color: B.titulo, marginBottom: 6 }}>Mis estrategias{cuenta(buscadasE, filasE) != null ? ` (${cuenta(buscadasE, filasE)})` : ''}</span>
         <ConLimpiar valor={buscar} onLimpia={() => setBuscar('')} bloque estilo={{ marginLeft: 'auto', marginBottom: 6, flex: '0 1 300px', minWidth: 160 }}>
           <input ref={casillaMiTrabajo} type="text" role="searchbox" aria-label="Buscar en Mi trabajo" placeholder="Buscar por nombre o por la regla…" value={buscar} onChange={e => setBuscar(e.target.value)} data-buscar="mi-trabajo"
             style={{ ...campoSel, fontSize: 13, fontWeight: 400, padding: '5px 8px', minWidth: 0 }}/></ConLimpiar>
       </div>
       <div style={{ ...S.tarjeta, borderTopLeftRadius: 0 }}>
         {datos.error && <div style={{ color: '#f2cc60', padding: '10px 16px' }}>{datos.error}</div>}
-        {pestana === 'estrategias' ? (<>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '12px 12px 4px', flexWrap: 'wrap' }} role="group" aria-label="Qué estrategias enseñar">
             {FILTROS_ESTRATEGIAS.map(([k, t]) => <button key={k} onClick={() => setFiltro(k)} aria-pressed={filtro === k}
               style={{ ...S.boton, padding: '6px 12px', fontSize: 13, ...(filtro === k ? { background: B.cabecera, borderColor: B.siguienteBorde, color: B.titulo, fontWeight: 700 } : { background: 'transparent', color: B.secundario }) }}>{filasE ? `${t} (${cuantas[k]})` : t}</button>)}
@@ -376,34 +350,6 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
             </table>
           </div>
           <div style={{ ...S.apagado, padding: '10px 12px' }}>Las estrategias de código no entran en el paso 2: no se pueden probar contra el azar aquí, en el Builder. Para probarla aquí, rehazla en tarjetas.</div>
-        </>) : (<>
-          <div style={{ overflowX: 'auto', maxHeight: 560, overflowY: 'auto' }}>
-            <table style={{ borderCollapse: 'collapse', width: '100%' }} data-tabla="pruebas">
-              <thead><tr>{['Prueba', 'Estrategias que incluye', 'Valores y periodos', 'Verificación de sesgos', 'Veredicto'].map(h => <th key={h} style={{ ...cabecera, verticalAlign: 'middle' }}>{h}</th>)}</tr></thead>
-              <tbody>
-                {(buscadasP || []).map(f => (
-                  <tr key={f.clave}>
-                    <td style={celda}>{f.planes ? <span style={{ color: B.titulo, fontWeight: 600 }}><Resaltado texto={f.nombre} consulta={buscar}/></span>
-                      : <button style={{ ...S.enlace, color: B.titulo, fontWeight: 600 }} onClick={() => abrePrueba(f.id)} title="Abrir los resultados de esta prueba"><Resaltado texto={f.nombre} consulta={buscar}/></button>}</td>
-                    <td style={{ ...celda, maxWidth: 260 }}>{f.planes ? <span style={S.apagado}>{f.nota}</span> : <>{f.estrategias.length}: <Resaltado texto={f.estrategias.join(' · ')} consulta={buscar}/></>}</td>
-                    <td style={celda}>{f.valores}<div style={S.apagado}>{f.periodos}</div></td>
-                    <td style={celda}>{f.sesgos.texto}</td>
-                    <td style={{ ...celda, maxWidth: 380 }}>{f.veredictos.map(v => (
-                      <div key={v.id} data-veredicto-prueba={v.id} style={{ marginBottom: 6 }}>
-                        {f.veredictos.length > 1 && <strong style={{ color: B.titulo, marginRight: 6 }}>{v.nombre}:</strong>}<Chip clave={v.chip}/>
-                        <div style={{ ...S.apagado, marginTop: 3 }}>{v.linea}</div>
-                      </div>
-                    ))}</td>
-                  </tr>
-                ))}
-                {filasP && !filasP.length && <tr><td colSpan={5} style={{ ...celda, color: B.secundario }}>Todavía no hay pruebas. Abre una estrategia y pulsa «Probarla contra el azar».</td></tr>}
-                {filasP && filasP.length > 0 && !buscadasP.length && <tr><td colSpan={5} style={{ ...celda, color: B.secundario }}>Ninguna prueba con «{buscar.trim()}».</td></tr>}
-                {!filasP && <tr><td colSpan={5} style={{ ...celda, color: B.secundario }}>Cargando…</td></tr>}
-              </tbody>
-            </table>
-          </div>
-          <div style={{ ...S.apagado, padding: '10px 12px' }}>La verificación de sesgos en marcha no aparece aquí: corre en el navegador y solo se guarda al terminar (mientras corre, se ve en la pantalla de su prueba).</div>
-        </>)}
       </div>
       {borrando && (
         <Pregunta id="borrar-estrategia" texto={`¿Eliminar esta estrategia? «${borrando.estrategia.name}»`} detalle={borrando.planes?.length ? `La usan ${borrando.planes.length === 1 ? '1 plan' : `${borrando.planes.length} planes`}: seguirán con la versión guardada en cada plan.` : null} aviso={falloBorrar}>

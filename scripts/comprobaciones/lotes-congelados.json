@@ -1,0 +1,485 @@
+[
+ {
+  "nombre": "PRUEBA_EDITOR_1",
+  "hash_lote": "a2cdfd8594ed446eb9ae579245794f1aee2d5a2512b0da54404b3ab5e002bb48",
+  "lote": {
+   "comun": {
+    "nSim": 500,
+    "desde": "2016-01-04",
+    "hasta": "2025-12-31",
+    "symbols": [
+     "NVDA",
+     "AMD",
+     "AVGO",
+     "MSFT",
+     "AAPL",
+     "META",
+     "AMZN",
+     "GOOGL"
+    ],
+    "modoAsig": "concentrado",
+    "intervalo": "diario",
+    "sizeRules": {
+     "rsWindow": 63,
+     "prioridad": "fuerza_relativa",
+     "criterioUso": "desempate",
+     "maxPosiciones": 4
+    },
+    "capitalIni": 10000,
+    "comisiones": null
+   },
+   "nombre": "PRUEBA_EDITOR_1",
+   "formato": 1,
+   "variantes": [
+    {
+     "id": "Pruebaed1",
+     "valores": {
+      "ema": 20
+     },
+     "definicion": {
+      "tipo": "editor",
+      "motor": 1,
+      "stops": [
+       {
+        "id": "inicial",
+        "pct": 8,
+        "tipo": "porcentaje",
+        "motivo": "stop"
+       }
+      ],
+      "nombre": "Prueba editor EMA20",
+      "entrada": {
+       "orden": {
+        "tipo": "apertura"
+       },
+       "senal": {
+        "c": "cruza",
+        "de": {
+         "c": "precioVsMedia",
+         "p": {
+          "lado": "encima",
+          "tipo": "EMA",
+          "periodo": "$ema"
+         }
+        }
+       }
+      },
+      "formato": 1,
+      "salidas": [
+       {
+        "si": {
+         "c": "cruza",
+         "de": {
+          "c": "precioVsMedia",
+          "p": {
+           "lado": "debajo",
+           "tipo": "EMA",
+           "periodo": "$ema"
+          }
+         }
+        },
+        "tipo": "condicion",
+        "motivo": "cruce_bajista",
+        "precio": "apertura"
+       }
+      ],
+      "parametros": {
+       "lista": [
+        {
+         "max": 400,
+         "min": 2,
+         "paso": 1,
+         "tipo": "entero",
+         "nombre": "ema",
+         "defecto": 20,
+         "ventana": true,
+         "descripcion": "Periodo de la EMA"
+        }
+       ],
+       "version": 1,
+       "restricciones": []
+      }
+     }
+    },
+    {
+     "id": "Copiaedi2",
+     "valores": {
+      "ema": 20
+     },
+     "definicion": {
+      "tipo": "editor",
+      "motor": 1,
+      "stops": [
+       {
+        "id": "trailing",
+        "si": {
+         "c": "precioVsMedia",
+         "p": {
+          "lado": "debajo",
+          "tipo": "EMA",
+          "periodo": "$ema"
+         }
+        },
+        "tipo": "trailing",
+        "nivel": {
+         "campo": "low",
+         "velas": 1
+        },
+        "motivo": "stop",
+        "historial": "siSube",
+        "fechaHistorial": "anterior"
+       }
+      ],
+      "nombre": "Copia editor 23",
+      "entrada": {
+       "orden": {
+        "tipo": "stop",
+        "nivel": {
+         "campo": "high",
+         "velas": 1
+        },
+        "ajuste": "soloBaja"
+       },
+       "senal": {
+        "c": "NO",
+        "de": {
+         "c": "precioVsMedia",
+         "p": {
+          "lado": "debajo",
+          "tipo": "EMA",
+          "periodo": "$ema"
+         }
+        }
+       },
+       "cancelar": {
+        "c": "precioVsMedia",
+        "p": {
+         "lado": "debajo",
+         "tipo": "EMA",
+         "periodo": "$ema"
+        }
+       },
+       "revisaSalidasEnLaVelaDeEntrada": false
+      },
+      "formato": 1,
+      "salidas": [],
+      "parametros": {
+       "alias": {
+        "ema": [
+         "emaPeriod"
+        ]
+       },
+       "lista": [
+        {
+         "max": 200,
+         "min": 2,
+         "paso": 1,
+         "tipo": "entero",
+         "nombre": "ema",
+         "defecto": 20,
+         "ventana": true,
+         "sugerido": {
+          "max": 50,
+          "min": 5,
+          "paso": 1
+         },
+         "descripcion": "Periodo de la EMA de la ruptura"
+        }
+       ],
+       "version": 1
+      }
+     }
+    }
+   ],
+   "descripcion": ""
+  }
+ },
+ {
+  "nombre": "RETROCESOS_1",
+  "hash_lote": "23c5006ca9ea4f066d5c3b12d62c1070e2358fa0d46d70778ed13ab4ac5b576f",
+  "lote": {
+   "comun": {
+    "nSim": 500,
+    "modoAsig": "concentrado",
+    "periodos": [
+     {
+      "desde": "2016-01-01",
+      "hasta": "2020-12-31"
+     },
+     {
+      "desde": "2021-01-01",
+      "hasta": "2025-12-31"
+     }
+    ],
+    "universo": {
+     "n": 30,
+     "tipo": "ndx",
+     "regla": "momentum"
+    },
+    "intervalo": "diario",
+    "sizeRules": {
+     "rsWindow": 63,
+     "prioridad": "fuerza_relativa",
+     "criterioUso": "desempate",
+     "maxPosiciones": 4
+    },
+    "capitalIni": 10000,
+    "comisiones": null
+   },
+   "nombre": "RETROCESOS_1",
+   "formato": 1,
+   "variantes": [
+    {
+     "id": "V1",
+     "nombre": "RSI2 < 10",
+     "valores": {
+      "nivelRSI": 10
+     },
+     "definicion": {
+      "tipo": "editor",
+      "motor": 1,
+      "stops": [],
+      "nombre": "Retroceso líderes RSI2",
+      "entrada": {
+       "orden": {
+        "tipo": "apertura"
+       },
+       "senal": {
+        "c": "Y",
+        "de": [
+         {
+          "c": "precioVsMedia",
+          "p": {
+           "lado": "encima",
+           "tipo": "SMA",
+           "periodo": 200
+          }
+         },
+         {
+          "c": "rsiNivel",
+          "p": {
+           "lado": "debajo",
+           "umbral": "$nivelRSI",
+           "periodo": 2
+          }
+         }
+        ]
+       }
+      },
+      "formato": 1,
+      "salidas": [
+       {
+        "si": {
+         "c": "precioVsMedia",
+         "p": {
+          "lado": "encima",
+          "tipo": "SMA",
+          "periodo": 5
+         }
+        },
+        "tipo": "condicion",
+        "motivo": "rebote",
+        "precio": "apertura"
+       }
+      ],
+      "parametros": {
+       "lista": [
+        {
+         "max": 50,
+         "min": 1,
+         "paso": 1,
+         "tipo": "entero",
+         "nombre": "nivelRSI",
+         "defecto": 10,
+         "descripcion": "Nivel del RSI de 2 días para entrar"
+        }
+       ],
+       "version": 1,
+       "restricciones": []
+      }
+     }
+    },
+    {
+     "id": "V2",
+     "nombre": "RSI2 < 5",
+     "valores": {
+      "nivelRSI": 5
+     },
+     "definicion": {
+      "tipo": "editor",
+      "motor": 1,
+      "stops": [],
+      "nombre": "Retroceso líderes RSI2",
+      "entrada": {
+       "orden": {
+        "tipo": "apertura"
+       },
+       "senal": {
+        "c": "Y",
+        "de": [
+         {
+          "c": "precioVsMedia",
+          "p": {
+           "lado": "encima",
+           "tipo": "SMA",
+           "periodo": 200
+          }
+         },
+         {
+          "c": "rsiNivel",
+          "p": {
+           "lado": "debajo",
+           "umbral": "$nivelRSI",
+           "periodo": 2
+          }
+         }
+        ]
+       }
+      },
+      "formato": 1,
+      "salidas": [
+       {
+        "si": {
+         "c": "precioVsMedia",
+         "p": {
+          "lado": "encima",
+          "tipo": "SMA",
+          "periodo": 5
+         }
+        },
+        "tipo": "condicion",
+        "motivo": "rebote",
+        "precio": "apertura"
+       }
+      ],
+      "parametros": {
+       "lista": [
+        {
+         "max": 50,
+         "min": 1,
+         "paso": 1,
+         "tipo": "entero",
+         "nombre": "nivelRSI",
+         "defecto": 10,
+         "descripcion": "Nivel del RSI de 2 días para entrar"
+        }
+       ],
+       "version": 1,
+       "restricciones": []
+      }
+     }
+    }
+   ],
+   "descripcion": ""
+  }
+ },
+ {
+  "nombre": "PRUEBA_BUILDER_1 · 2026-10-22",
+  "hash_lote": "0d6726ec123aa4d33b375befd63c6d938650d49750694571eed35908e2e14fd0",
+  "lote": {
+   "comun": {
+    "nSim": 500,
+    "modoAsig": "concentrado",
+    "periodos": [
+     {
+      "desde": "2016-01-01",
+      "hasta": "2020-12-31"
+     },
+     {
+      "desde": "2021-01-01",
+      "hasta": "2025-12-31"
+     }
+    ],
+    "universo": {
+     "n": 30,
+     "tipo": "ndx",
+     "regla": "momentum"
+    },
+    "intervalo": "diario",
+    "sizeRules": {
+     "rsWindow": 63,
+     "prioridad": "fuerza_relativa",
+     "criterioUso": "desempate",
+     "maxPosiciones": 4
+    },
+    "capitalIni": 10000,
+    "comisiones": null
+   },
+   "nombre": "PRUEBA_BUILDER_1 · 2026-10-22",
+   "formato": 1,
+   "variantes": [
+    {
+     "id": "V1",
+     "nombre": "PRUEBA_BUILDER_1",
+     "valores": {
+      "nivelRSI": 15
+     },
+     "definicion": {
+      "tipo": "editor",
+      "motor": 1,
+      "stops": [],
+      "nombre": "PRUEBA_BUILDER_1",
+      "entrada": {
+       "orden": {
+        "tipo": "apertura"
+       },
+       "senal": {
+        "c": "Y",
+        "de": [
+         {
+          "c": "precioVsMedia",
+          "p": {
+           "lado": "encima",
+           "tipo": "SMA",
+           "periodo": 200
+          }
+         },
+         {
+          "c": "rsiNivel",
+          "p": {
+           "lado": "debajo",
+           "umbral": "$nivelRSI",
+           "periodo": 2
+          }
+         }
+        ]
+       }
+      },
+      "formato": 1,
+      "salidas": [
+       {
+        "si": {
+         "c": "precioVsMedia",
+         "p": {
+          "lado": "encima",
+          "tipo": "SMA",
+          "periodo": 5
+         }
+        },
+        "tipo": "condicion",
+        "motivo": "rebote",
+        "precio": "apertura"
+       }
+      ],
+      "parametros": {
+       "lista": [
+        {
+         "max": 50,
+         "min": 1,
+         "paso": 1,
+         "tipo": "entero",
+         "nombre": "nivelRSI",
+         "defecto": 10,
+         "descripcion": "Nivel del RSI de 2 días para entrar"
+        }
+       ],
+       "version": 1,
+       "restricciones": []
+      }
+     }
+    }
+   ],
+   "descripcion": ""
+  }
+ }
+]

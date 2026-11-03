@@ -232,18 +232,20 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   m = await portada()
   D.pulsa(filaDe(m, 'e7').busca(n => n.getAttribute('data-duplicar-estrategia') != null)); await D.espera(LARGO)
   ok(m.raiz.conAtributo('data-ruta', 'estrategia')[0]?.textContent === 'Línea bajista (copia)' && !escrituras.length, 'el icono abre esa copia en el paso 1, sin guardar nada todavía'); m.quita(); await D.espera(5)
-  // Las de código, en su filtro; y Mis pruebas sigue
+  // Las de código, en su filtro; §59: «Mis pruebas» ya no está
   m = await portada()
   D.pulsa(m.raiz.conAtributo('aria-pressed').find(n => n.textContent.startsWith('De código'))); await D.espera(5)
   ok(nFilas() === 1 && filaDe(m, 'c1').textContent.includes('No se prueba aquí') && !!filaDe(m, 'c1').busca(n => n.getAttribute('data-duplicar-estrategia') === 'c1') && !!filaDe(m, 'c1').busca(n => n.getAttribute('data-borrar-estrategia') === 'c1'), 'una de código: su línea, sin prueba aquí, con los dos iconos')
-  D.pulsa(m.raiz.busca(n => n.getAttribute('role') === 'tab' && n.textContent.startsWith('Mis pruebas'))); await D.espera(5)
-  ok(hayQ(m, 'data-tabla', 'pruebas') && hayQ(m, 'data-buscar', 'mi-trabajo'), 'la pestaña «Mis pruebas» sigue, con el buscador')
+  ok(!hayQ(m, 'data-tabla', 'pruebas') && !m.raiz.busca(n => n.getAttribute('role') === 'tab' && n.textContent.startsWith('Mis pruebas')) && hayQ(m, 'data-buscar', 'mi-trabajo') && m.raiz.conAtributo('data-titulo-lista')[0]?.textContent.startsWith('Mis estrategias'), 'sin la pestaña «Mis pruebas», con el buscador')
   m.quita(); await D.espera(5)
   ok(!escrituras.length, `mirar y navegar por «Mi trabajo» no escribe nada en estrategias ni en planes (${escrituras.join() || 'ninguna'})`)
   // Sin poder leer las pruebas del paso 2: la fila dice «—» y sigue «Qué toca ahora» de antes.
   const Ml = require(R + '/lib/builder/misListas.js')
-  const sinLeer = await Ml.construyeMisEstrategias({ estrategias: [lista[3]], lotes: [], pruebas: [], planes: [], pruebasAzar: null })
-  ok(sinLeer[0].azar === null && sinLeer[0].toca.texto === 'Probarla contra el azar' && sinLeer[0].toca.accion.tipo === 'prueba', 'sin las pruebas del paso 2: «—» y la acción de siempre')
+  const sinLeer = await Ml.construyeMisEstrategias({ estrategias: [lista[3]], planes: [], pruebasAzar: null })
+  ok(sinLeer[0].azar === null && sinLeer[0].toca.texto === 'Probarla contra el azar' && sinLeer[0].toca.accion.tipo === 'azar', 'sin las pruebas del paso 2: «—» y lleva al paso 2')
+  for (const x of ['components/BuilderPrueba.js', 'components/BuilderCurvas.js', 'lib/builder/pruebaGuiada.js', 'lib/builder/curvasPrueba.js', 'lib/builder/miTrabajo.js']) ok(!require('fs').existsSync(path.join(R, x)), `${x}, retirado`)
+  const fuenteP = require('fs').readFileSync(path.join(R, 'components/BuilderPanel.js'), 'utf8')
+  ok(!fuenteP.includes('editor_lotes') && !fuenteP.includes('lab_pruebas'), 'el Builder ya no lee lotes de la base')
 
   console.log(fallos ? `planes-montaje: ${fallos} fallos` : 'planes-montaje: todas bien')
   process.exit(fallos ? 1 : 0)

@@ -35,7 +35,7 @@ import { Pregunta } from './VentanaPregunta'
 import Ayuda from './BuilderAyuda'
 import BuscadorValor from './BuscadorValor'
 import BotonCopiar from './BotonCopiar'
-import { marcasLog, separaEtiquetas } from './BuilderCurvas'
+import { marcasLog, separaEtiquetas } from '../lib/builder/escalaGrafico'
 import { esDeTarjetas, huellaEstrategia, leerResultado } from '../lib/pruebaAzar'
 import { validaPlan, paraHuellaPlan } from '../lib/planes/plan'
 import { jsonCanonico } from '../lib/lotesLab'
@@ -81,7 +81,7 @@ function CampoNumero({ valor, onCambia, etiqueta: nombre, ancho, minimo = 0, enE
     onChange={e => { const el = e.target, t = conComa(el.value), n = numeroEs(t); if (t !== el.value) { const cur = el.selectionStart; el.value = t; el.setSelectionRange(cur, cur) } setTxt(t); if (!t.trim()) onCambia(''); else if (n != null && n >= minimo) onCambia(n) }}/>
 }
 
-// El ancho real del gráfico (como components/BuilderCurvas.js): 1 unidad = 1 píxel, las letras miden siempre 12 px. Sin navegador, 760.
+// El ancho real del gráfico: 1 unidad = 1 píxel, las letras miden siempre 12 px. Sin navegador, 760.
 function useAncho(defecto = 760) {
   const ref = useRef(null)
   const [w, setW] = useState(defecto)

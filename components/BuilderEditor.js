@@ -13,14 +13,14 @@
 // V9.1073: arriba, en la fila del título y en las tres pestañas, la barra del estado («Sin cambios» o «Probando cambios sin guardar»,
 // con la lista corta: lib/builder/barraCambios.js), «Volver a los guardados» (deshace las tarjetas Y las casillas) y «Guardar en la
 // estrategia» (guardaValores: las tarjetas con las casillas; se sigue en la misma pestaña).
-//   fila: la estrategia de partida ({ id?, name, description, definition, params, copiaDe? }). lotes: las filas de editor_lotes.
+//   fila: la estrategia de partida ({ id?, name, description, definition, params, copiaDe? }).
 //   onEditorClasico(fila): abre lo que se está editando en el Editor clásico.
 //   Para las pruebas de montaje: estadoInicial (lo editado: { def, valores, nombre, descripcion }), enPruebaInicial (los nombres
 //   de las pruebas donde está; si no, se buscan por la huella) y buscarInicial.
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import { CabeceraPasos } from './BuilderPanel'
-import { CONDICIONES_EDITOR, validaDefinicion, valoresDe, esquemaDe, huellaDefinicion, paraHuella } from '../lib/editor/definicion'
+import { CONDICIONES_EDITOR, validaDefinicion, valoresDe, esquemaDe, paraHuella } from '../lib/editor/definicion'
 import { jsonCanonico } from '../lib/lotesLab'
 import { GRUPOS, buscaCatalogo, nombreCond, explicacionCond, filaNueva, soloDelValor, avisoSoloValor, ayudaFila, AYUDA_NO, AYUDA_CRUZA, leeCompra, escribeCompra, leeFiltro, escribeFiltro, cambiaIndice, INDICES, nombreQuien,
   leeVenta, escribeVenta, leeProteccion, AYUDA_QUIEN, opcionesQuien, leeOrden, ponModoOrden, ponAjuste, ponVelasOrden, CANCELAR_DEFECTO, ponCancelar, vigilaDesdeLaCompra, ponVigilancia, AJUSTES, fraseCompra, TIPOS_STOP, CAMPOS_STOP_TARJETA, numeroStop, anadeStopDef, cambiaTipoStopDef, quitaStopDef, ponNumeroStop, ponSalida, DEFECTO_PROTECCION,
@@ -199,7 +199,7 @@ function Tarjeta({ titulo, color, derecha, children, datos, soltar = null }) {
   )
 }
 
-export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, enlaceTesis = null, onVolver, onGuardada, onEditorClasico, onPaso2 = null, onPaso3 = null, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null, abiertosInicial = null, ayudaInicial = null, anadiendoInicial = null, arrastreInicial = null, cargaSimbolos = null, cargaVelas = null, comisiones = null, pestanaInicial = 'tarjetas', panelInicial = null, senalesInicial = null, dibujoInicial = null, cambiosInicial = null, entradaBuilder = 0, sueltosInicial = null }) {
+export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlaceTesis = null, onVolver, onGuardada, onEditorClasico, onPaso2 = null, onPaso3 = null, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null, abiertosInicial = null, ayudaInicial = null, anadiendoInicial = null, arrastreInicial = null, cargaSimbolos = null, cargaVelas = null, comisiones = null, pestanaInicial = 'tarjetas', panelInicial = null, senalesInicial = null, dibujoInicial = null, cambiosInicial = null, entradaBuilder = 0, sueltosInicial = null }) {
   const [est, setEst] = useState(() => estadoInicial || estadoDe(fila))
   const orig = useRef(null); if (!orig.current) orig.current = estadoDe(fila)
   const { def, valores } = est
@@ -253,18 +253,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   const [guia, setGuia] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState(null)
-  const [enPrueba, setEnPrueba] = useState(enPruebaInicial || [])   // las pruebas congeladas donde está la estrategia de partida
-
-  // ¿En qué pruebas está la estrategia de partida? (por la huella de su definición con sus valores, como «Mi trabajo»)
-  useEffect(() => {
-    let vivo = true
-    if (enPruebaInicial) return
-    if (!fila?.id) { setEnPrueba([]); return }
-    huellaDefinicion(orig.current.def, orig.current.valores).then(h => {
-      if (vivo) setEnPrueba(lotes.filter(l => l?.lote?.tipo !== 'planes' && (l.huellas?.variantes || []).some(v => v.huella === h)).map(l => l.nombre))
-    }).catch(() => {})
-    return () => { vivo = false }
-  }, [fila?.id, lotes])
+  const enPrueba = enPruebaInicial || []   // §59: las pruebas congeladas donde está la estrategia de partida (eran las de lotes, ya retiradas: hoy, ninguna)
 
   const filtro = leeFiltro(def), compra = leeCompra(def), venta = leeVenta(def), prot = leeProteccion(def)
   const modoC = compra.modo || modoCompraUI, modoV = venta.modo || modoVentaUI
