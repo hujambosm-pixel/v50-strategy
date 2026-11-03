@@ -128,6 +128,14 @@ async function pruebaAnon() {
     await fetch(`${URL_S}/storage/v1/object/${BUCKET}`, { method: 'DELETE', headers: { ...anon, 'Content-Type': 'application/json' }, body: JSON.stringify({ prefixes: [ruta] }) })
     ok((await fetch(obj(ruta), { headers: hs })).ok, 'anon no borra: el archivo sigue ahí')
     ok((await fetch(`${URL_S}/rest/v1/tesis_adjuntos?select=id`, { headers: anon })).status === 401, 'anon no lee la tabla')
+    // Lo que lib/tesisArchivos.js compara: al borrar, Storage devuelve la lista de lo borrado con su ruta en «name»; lo que no borra, no sale.
+    const borraCon = async (r, cab) => { const x = await fetch(`${URL_S}/storage/v1/object/${BUCKET}`, { method: 'DELETE', headers: { ...cab, 'Content-Type': 'application/json' }, body: JSON.stringify({ prefixes: [r] }) }); return { ok: x.ok, lista: x.ok ? await x.json() : null } }
+    const deAnon = await borraCon(ruta, anon)
+    ok(!deAnon.ok || (Array.isArray(deAnon.lista) && !deAnon.lista.length), `anon intenta borrar: en la lista de borrados no sale nada (${JSON.stringify(deAnon.lista)})`)
+    const hecho = await borraCon(ruta, hs)
+    ok(hecho.ok && Array.isArray(hecho.lista) && hecho.lista.length === 1 && hecho.lista[0].name === ruta, `la clave de servicio borra: la lista trae la ruta en «name» (${hecho.lista?.map(x => x.name).join() ?? 'sin lista'})`)
+    const otraVez = await borraCon(ruta, hs)
+    ok(otraVez.ok && Array.isArray(otraVez.lista) && !otraVez.lista.length, 'borrar lo que ya no existe: responde bien, con la lista vacía')
     ok(!(await fetch(`${URL_S}/rest/v1/tesis_adjuntos`, { method: 'POST', headers: { ...anon, 'Content-Type': 'application/json' }, body: JSON.stringify({ tesis_id: 3, clase: 'adjunto', ruta: 'x', nombre: 'x', bytes: 1 }) })).ok, 'anon no crea filas')
   } finally {
     await fetch(`${URL_S}/storage/v1/object/${BUCKET}`, { method: 'DELETE', headers: { ...hs, 'Content-Type': 'application/json' }, body: JSON.stringify({ prefixes: [ruta, `${carpeta}/a.svg`, `${carpeta}/a.html`, `${carpeta}/g.txt`, `${carpeta}/anon.txt`] }) })
@@ -154,6 +162,7 @@ async function pruebaUsuarios() {
     return { id, ctx: { url: URL_S, headers: { apikey: ANON, Authorization: `Bearer ${(await s.json()).access_token}` }, fetch } }
   }
   const fallaCon = async (fn) => { try { await fn(); return false } catch (_) { return true } }
+  const fallaConMensaje = async (fn) => { try { await fn(); return null } catch (e) { return e.message } }
   let a, b
   try {
     a = await crea('a'); b = await crea('b')
@@ -184,9 +193,10 @@ async function pruebaUsuarios() {
     const filaCon = (o) => fetch(`${URL_S}/rest/v1/tesis_adjuntos`, { method: 'POST', headers: { ...b.ctx.headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ clase: 'adjunto', nombre: 'x', bytes: 1, ...o }) })
     ok(!(await filaCon({ tesis_id: tA.id, ruta: `${b.id}/${tA.id}/adjunto/x.txt` })).ok, 'B no crea una fila apuntando a la tesis de A')
     ok(!(await filaCon({ tesis_id: tB.id, ruta: `${a.id}/${tA.id}/adjunto/x.txt` })).ok, 'B no crea una fila con una ruta de A')
-    await L.borrar(b.ctx, [fA, iA])
-    await L.borrarTodoDeTesis(b.ctx, tA.id)
-    ok((await L.listar(a.ctx, tA.id)).length === 2 && await (await fetch(firmada)).text() === 'secreto de A', 'B intenta borrar lo de A y no pasa nada: filas y archivos siguen ahí')
+    const errorDeB = await fallaConMensaje(() => L.borrar(b.ctx, [fA, iA]))
+    ok(/^No se pudieron borrar 2 archivos: «Guía ñ\.txt», «c\.png»\.$/.test(errorDeB || ''), `B intenta borrar lo de A: da error (${errorDeB ?? 'sin error'})`)
+    ok(await L.borrarTodoDeTesis(b.ctx, tA.id) === 0, 'B intenta borrar toda la tesis de A: no ve nada, así que no hay nada que borrar (0)')
+    ok((await L.listar(a.ctx, tA.id)).length === 2 && await (await fetch(firmada)).text() === 'secreto de A', 'y todo sigue como estaba: filas y archivos de A siguen ahí')
 
     // anon contra A.
     const anon = { url: URL_S, headers: { apikey: ANON, Authorization: `Bearer ${ANON}` }, fetch }

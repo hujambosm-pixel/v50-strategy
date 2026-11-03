@@ -159,9 +159,11 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   const creaNueva = () => { ponLado(false); setHoja(n => n + 1); setNueva(true); setAbierta(null); setBorr({ ...NUEVA }); setBorrando(false); setAnadiendo(false); setFallo(null); setFoco(n => n + 1) }
   const cambia = (k, v) => setBorr(b => ({ ...b, [k]: v }))
   const pon = (r) => setTesis(xs => [r, ...(xs || []).filter(x => x.id !== r.id)])
-  // Borra (archivo y fila) las imágenes de esa tesis que no están en estos textos. Sin aviso si falla: quedan para la siguiente vez que se guarde o se descarte.
+  // Borra (archivo y fila) las imágenes de esa tesis que no están en estos textos. Si no se puede leer la lista, sin aviso; si no se puede borrar, avisa. Quedan para la siguiente vez que se guarde o se descarte.
   const limpiaImagenes = async (id, ...textos) => {
-    try { const c = ctx(), filas = await listar(c, id); await borrar(c, imagenesSobrantes(filas, ...textos.map(t => t()))) } catch (_) {}
+    let sobran = []
+    try { sobran = imagenesSobrantes(await listar(ctx(), id), ...textos.map(t => t())) } catch (_) {}
+    try { await borrar(ctx(), sobran) } catch (e) { setAvisosA([`⚠ ${e.message}`]) }
     leeArchivos(); leeResumen()
   }
   // ── Adjuntos ──

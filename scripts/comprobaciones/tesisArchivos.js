@@ -66,9 +66,9 @@ const B_AMAR = () => '#f2cc60'
   const ctx = { url: 'https://x', headers: { apikey: 'k', Authorization: `Bearer ${jwt({ sub: U })}`, 'Content-Type': 'application/json' }, fetch: async (u, o = {}) => {
     llamadas.push({ u, o })
     if (u.includes('/storage/v1/object/sign/')) return responde(200, o.body.includes('paths') ? JSON.parse(o.body).paths.map(p => p === 'no' ? { path: p, error: 'x', signedURL: null } : { path: p, error: null, signedURL: `/object/sign/tesis-archivos/${p}?token=t` }) : { signedURL: '/object/sign/tesis-archivos/r?token=t' })
-    if (u.includes('/storage/v1/object/')) return bucketFalla ? responde(500, { message: 'caída' }) : responde(200, o.method === 'DELETE' ? [] : { Key: 'k' })
+    if (u.includes('/storage/v1/object/')) return bucketFalla ? responde(500, { message: 'caída' }) : responde(200, o.method === 'DELETE' ? JSON.parse(o.body).prefixes.map(name => ({ name })) : { Key: 'k' })
     if (o.method === 'POST') return filaFalla ? responde(403, { message: 'row-level security' }) : responde(201, [fila()])
-    if (o.method === 'DELETE') return responde(204, null)
+    if (o.method === 'DELETE') return responde(200, /id=in\.\(([^)]*)\)/.exec(u)[1].split(',').map(id => ({ id: Number(id) })))
     return responde(200, u.includes('offset=') ? [] : [fila(), fila({ id: 4, clase: 'imagen', ruta: `${U}/7/imagen/b.png` })])
   } }
   const archivo = { name: 'Guía de 24 páginas.PDF', type: 'application/x-raro', size: 9 }
@@ -116,9 +116,9 @@ const B_AMAR = () => '#f2cc60'
   let abierta = null
   await A.descargar(ctx, { ruta: 'r', nombre: 'Guía ñ & co.pdf' }, (u) => { abierta = u }); llamadas.pop()
   ok(abierta === 'https://x/storage/v1/object/sign/tesis-archivos/r?token=t&download=Gu%C3%ADa%20%C3%B1%20%26%20co.pdf', 'descargar: con el nombre ORIGINAL')
-  ok(await A.borrar(ctx, [fila(), fila({ id: 4, ruta: 'otra' })]) === 2, 'borrar devuelve cuántos')
+  ok(await A.borrar(ctx, [fila(), fila({ id: 4, ruta: 'otra' })]) === 2, 'borrar devuelve cuántos se han borrado')
   const [bb, bf] = llamadas.splice(0)
-  ok(bb.u === 'https://x/storage/v1/object/tesis-archivos' && bb.o.method === 'DELETE' && JSON.parse(bb.o.body).prefixes.join() === `${U}/7/adjunto/a.pdf,otra` && bf.u.endsWith('tesis_adjuntos?id=in.(3,4)') && bf.o.method === 'DELETE', 'borrar: primero el archivo y luego la fila')
+  ok(bb.u === 'https://x/storage/v1/object/tesis-archivos' && bb.o.method === 'DELETE' && JSON.parse(bb.o.body).prefixes.join() === `${U}/7/adjunto/a.pdf,otra` && bf.u.endsWith('tesis_adjuntos?id=in.(3,4)') && bf.o.method === 'DELETE' && bf.o.headers.Prefer === 'return=representation', 'borrar: primero el archivo y luego la fila, pidiendo que la base diga lo borrado')
   bucketFalla = true
   e = await lanza(() => A.borrar(ctx, [fila()]))
   bucketFalla = false
@@ -126,6 +126,62 @@ const B_AMAR = () => '#f2cc60'
   ok(await A.borrar(ctx, []) === 0 && !llamadas.length, 'borrar nada: sin llamadas')
   ok(await A.borrarTodoDeTesis(ctx, 7) === 2 && llamadas.length === 3 && llamadas[0].u.includes('tesis_id=eq.7'), 'borrar todo lo de una tesis')
   llamadas.length = 0
+
+  // ── Borrar: lo que se borra de verdad ──
+  // noBorra: las rutas que Storage no borra. Filas: cuántas dice la base que borra (null: las pedidas). enLista: lo que responde listar.
+  const simula = ({ noBorra = [], filas: nFilas = null, enLista = [], bucket = null, filasHttp = null } = {}) => {
+    const hechas = []
+    return { hechas, ctx: { ...ctx, fetch: async (u, o = {}) => {
+      hechas.push({ u, o })
+      if (u.includes('/storage/v1/object/')) return bucket ? responde(bucket.status, bucket.cuerpo) : responde(200, JSON.parse(o.body).prefixes.filter(x => !noBorra.includes(x)).map(name => ({ name, bucket_id: A.BUCKET })))
+      if (o.method === 'DELETE') { if (filasHttp) return responde(filasHttp, { message: 'caída' }); const ids = /id=in\.\(([^)]*)\)/.exec(u)[1].split(','); return responde(200, ids.slice(0, nFilas ?? ids.length).map(id => ({ id: Number(id) }))) }
+      return responde(200, enLista)
+    } } }
+  }
+  const fa = fila({ id: 3, nombre: 'Guía.pdf', ruta: 'ra' }), fb = fila({ id: 4, nombre: 'Hoja.xlsx', ruta: 'rb' }), fc = fila({ id: 5, nombre: 'c.png', ruta: 'rc' }), fd = fila({ id: 6, nombre: 'd.png', ruta: 'rd' })
+  let si = simula()
+  ok(await A.borrar(si.ctx, [fa, fb]) === 2 && si.hechas.length === 2 && si.hechas[1].u.endsWith('?id=in.(3,4)'), 'Storage borra todo: se borran las dos filas y devuelve 2')
+  si = simula({ noBorra: ['rb'] })
+  e = await lanza(() => A.borrar(si.ctx, [fa, fb]))
+  ok(e === 'No se pudo borrar el archivo «Hoja.xlsx».' && si.hechas.length === 2 && si.hechas[1].u.endsWith('?id=in.(3)'), 'Storage borra solo una: error con su nombre; se va la fila de la borrada y la otra se queda')
+  si = simula({ noBorra: ['ra', 'rb'] })
+  e = await lanza(() => A.borrar(si.ctx, [fa, fb]))
+  ok(e === 'No se pudieron borrar 2 archivos: «Guía.pdf», «Hoja.xlsx».' && si.hechas.length === 1, 'Storage no borra nada (sin permiso): error y no se toca ninguna fila')
+  si = simula({ noBorra: ['ra', 'rb', 'rc', 'rd'] })
+  e = await lanza(() => A.borrar(si.ctx, [fa, fb, fc, fd]))
+  ok(e === 'No se pudieron borrar 4 archivos: «Guía.pdf», «Hoja.xlsx», «c.png» y 1 más.', 'con muchos, el mensaje no se alarga')
+  si = simula({ bucket: { status: 200, cuerpo: { raro: true } } })
+  e = await lanza(() => A.borrar(si.ctx, [fa]))
+  ok(e === 'No se pudo borrar el archivo «Guía.pdf».' && si.hechas.length === 1, 'si Storage responde algo que no es una lista: cuenta como no borrado')
+  si = simula({ filas: 2 })
+  ok(await A.borrar(si.ctx, [fa, fb]) === 2, 'filas borradas 2 de 2: bien')
+  si = simula({ filas: 0 })
+  e = await lanza(() => A.borrar(si.ctx, [fa, fb]))
+  ok(e === 'No se pudo borrar la fila del archivo: se pedían 2 y se han borrado 0.', 'filas borradas 0 de 2: error')
+  si = simula({ filas: 1 })
+  e = await lanza(() => A.borrar(si.ctx, [fa, fb]))
+  ok(e === 'No se pudo borrar la fila del archivo: se pedían 2 y se han borrado 1.', 'filas borradas 1 de 2: error')
+  si = simula({ filasHttp: 500 })
+  e = await lanza(() => A.borrar(si.ctx, [fa]))
+  ok(/^No se pudo borrar la fila del archivo \(HTTP 500/.test(e || ''), 'la base falla: error, como antes')
+  const mil = Array.from({ length: 1000 }, (_, k) => fila({ id: k + 1, nombre: `f${k}.pdf`, ruta: `r${k}` }))
+  const vueltas = (hechas) => hechas.filter(x => !x.o.method).length
+  si = simula({ noBorra: mil.map(x => x.ruta), enLista: mil })
+  e = await lanza(() => A.borrarTodoDeTesis(si.ctx, 7))
+  ok(/^No se pudieron borrar 1000 archivos: .* y 997 más\.$/.test(e || '') && vueltas(si.hechas) === 1, 'bucle cortado: 1000 archivos que Storage no borra, error a la primera vuelta')
+  si = simula({ filas: 0, enLista: mil })
+  e = await lanza(() => A.borrarTodoDeTesis(si.ctx, 7))
+  ok(/se pedían 1000 y se han borrado 0/.test(e || '') && vueltas(si.hechas) === 1, 'bucle cortado: 1000 filas que no se borran, error a la primera vuelta')
+  let cuantas = 0
+  si = simula()
+  const ctxPaginas = { ...si.ctx, fetch: async (u, o = {}) => (!o.method ? responde(200, cuantas++ === 0 ? mil : [fa]) : si.ctx.fetch(u, o)) }
+  ok(await A.borrarTodoDeTesis(ctxPaginas, 7) === 1001 && cuantas === 2, 'con más de 1000 archivos que sí se borran: dos vueltas y termina')
+  si = simula({ noBorra: ['ra'], enLista: [fa, fb] })
+  e = await lanza(() => A.borrarTodoDeTesis(si.ctx, 7))
+  ok(e === 'No se pudo borrar el archivo «Guía.pdf».', 'borrar todo con uno que no se borra: lanza, y por eso la tesis no se borra')
+  const fS = leer('scripts', 'comprobaciones', 'tesisSeguridad.js')
+  ok(fS.includes('const errorDeB = await fallaConMensaje(() => L.borrar(b.ctx, [fA, iA]))'), 'la prueba de seguridad espera error cuando B intenta borrar lo de A')
+  ok(leer('components', 'TesisPanel.js').includes('try { await borrar(ctx(), sobran) } catch (e) { setAvisosA([`⚠ ${e.message}`]) }'), 'una imagen sin usar que no se borra: avisa, al guardar y al descartar')
 
   // ── Piezas de la zona Adjuntos y del visor ──
   ok(A.etiquetaTipo('a.PDF').texto === 'PDF' && A.etiquetaTipo('a.pdf').color === '#d1242f' && A.etiquetaTipo('a.docx').texto === 'DOCX' && A.etiquetaTipo('a.docx').color === '#1f6feb' && A.etiquetaTipo('a.xlsx').color === '#1a7f37' && A.etiquetaTipo('a.csv').texto === 'CSV' && A.etiquetaTipo('a.csv').color === '#57606a', 'etiquetas: PDF rojo, DOCX azul, XLSX verde, el resto su extensión en gris')

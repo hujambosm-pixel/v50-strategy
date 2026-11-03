@@ -112,7 +112,7 @@ texto con visor a pantalla completa, más un botón para leerlos al lado del tex
   primer trozo de la ruta es su `auth.uid()`. Sin UPDATE: un archivo cambiado es un archivo nuevo. El bucket no tiene carpeta pública: todo se lee con URL firmadas.
 - **`lib/tesisArchivos.js`**: `subir` (si la fila falla, borra lo subido; con `alProgreso`, por XMLHttpRequest, porque fetch no da el progreso), `listar`,
   `espacioUsado`, `urlFirmada` y `urlsFirmadas` (en lote), `descargar` (con el nombre original: el «download» de la URL firmada), `borrar` (primero el
-  archivo, luego la fila) y `borrarTodoDeTesis`. Puras: `tamanoLegible`, `visorDe`, `tipoDe`, `cabe`, `avisoDe`.
+  archivo, luego la fila; comprueba lo borrado de verdad, ver «Borrar comprueba lo que se borra») y `borrarTodoDeTesis`. Puras: `tamanoLegible`, `visorDe`, `tipoDe`, `cabe`, `avisoDe`.
 - **El tipo sale de la extensión**, no de lo que diga el navegador (en Windows, un csv puede llegar como Excel y un docx, vacío).
 - **El límite de 1 GB lo cuenta la pantalla** (`espacioUsado` + `cabe`), no la base: protege de llenar el espacio sin querer, no de alguien que
   use la API a mano con su propia cuenta. El de 50 MB sí lo imponen el bucket y la tabla.
@@ -180,10 +180,9 @@ texto con visor a pantalla completa, más un botón para leerlos al lado del tex
 - **Caché tras borrar (SOSPECHA, sin confirmar)**: la primera vez que se lanzó el modo `usuarios` falló la comprobación que juntaba borrar, lista vacía y URL vieja. La sospecha es que la URL ya pedida se sigue
   sirviendo un rato desde la caché de Storage (los archivos se suben con `max-age=3600`). Si se confirma, quien ya tenga una URL firmada podría seguir viendo un archivo borrado un rato, como mucho hasta que caduque o
   expire la caché. Las comprobaciones separadas de arriba son las que lo tienen que decidir: si el archivo ya no se puede firmar y la URL vieja sigue sirviendo, es la caché.
-- **PENDIENTE: `borrar` no comprueba lo borrado** (auditoría del 03/11/2026). Devuelve cuántos archivos le pidieron, no cuántos se han borrado. Sin permiso, el bucket responde bien con una lista vacía
-  y el borrado de filas responde bien con 0 filas, sin error (la propia prueba lo enseña: B llama a `borrar` con lo de A, no da error y no borra nada). Por eso, si el bucket no borrara pero la fila sí, quedaría un archivo
-  huérfano sin aviso; y `borrarTodoDeTesis` no terminaría con 1000 archivos o más si las filas no se borraran. No hay indicios de que esté pasando: las políticas dejan al dueño borrar lo suyo y ese día no había huérfanos
-  (1 archivo, 1 fila). Arreglo previsto, aparte: comparar lo borrado con lo pedido y, si falta algo, dar error y conservar la fila.
+- **Borrar comprueba lo que se borra** (03/11/2026). Sin permiso, el bucket responde bien con una lista vacía y el borrado de filas responde bien con 0 filas. Por eso `borrar` compara la lista que devuelve Storage (`name` de cada objeto; el modo `anon` de la prueba comprueba esa forma contra el bucket de verdad) con las rutas pedidas: la que falte da error («No se pudo borrar el archivo «X».») y **su fila se queda**, para que el archivo no quede huérfano; los que sí se han borrado pierden su fila. El borrado de filas va con `Prefer: return=representation` y, si la base borra menos de las pedidas, error. Devuelve cuántos se han borrado de verdad. `borrarTodoDeTesis` no puede quedarse en bucle: `borrar` lanza a la primera, y una vuelta que no borre nada también da error.
+- **Dónde se ve el error**: un adjunto suelto, en los avisos de Adjuntos (o en el panel de al lado, si está abierto); una imagen sin usar al guardar o descartar, en esos mismos avisos, y la tesis se guarda o se descarta igual; al borrar una tesis, arriba de la pantalla, y la tesis NO se borra (los archivos que sí se pudieron borrar ya no están).
+- **Límite conocido: una fila sin archivo no se puede borrar desde la app.** Si un archivo ya no existe en el bucket pero sigue su fila (por ejemplo, el bucket lo borró y falló la conexión antes de borrar la fila), Storage devuelve la lista vacía, igual que sin permiso, y `borrar` da error en cada intento, con lo que tampoco se puede borrar su tesis. Con lo que responde Storage no se distingue un caso del otro. El 03/11/2026 no había ninguna fila así (2 filas, 2 archivos). Si pasara, hay que borrar esa fila a mano.
 
 ## Comprobaciones
 
