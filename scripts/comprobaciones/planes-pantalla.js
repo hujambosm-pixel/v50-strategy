@@ -101,7 +101,7 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   const pintaB = (o = {}) => renderToString(React.createElement(BP, { estrategias: [est], estrategiaId: 'x', deps: { ctx: null, calcula: async () => null }, inicial: { planes: [], simbolos: ['TEST'], pruebas: [], huella: 'h', huellas: { x: 'h' }, ajustes: { activo: 'TEST', ocioso: 'OCI' }, resultado: { respuesta: conResp(p2, datosMano(fs2)), plan: p2 }, ...o } })).split('<!-- -->').join('')
   let hB = pintaB()
   ok(hB.includes('data-tabla="anios"') && hB.includes('data-anio="2021"') && hB.includes('data-anio="2022"') && hB.indexOf('data-tarjeta="grafico"') < hB.indexOf('data-tarjeta="anios"') && hB.indexOf('data-tarjeta="anios"') < hB.indexOf('data-tarjeta="alternativas"'), 'la tabla «Año a año», justo bajo el gráfico')
-  ok(hB.slice(hB.indexOf('data-cifra="ocioso"')).includes(`${Pa.pct(5 / 12, 1)} del tiempo`), `la tarjeta «En el ocioso»: ${Pa.pct(5 / 12, 1)} del tiempo`)
+  ok(hB.slice(hB.indexOf('data-cifra="ocioso"')).includes(`${Pa.pct(5 / 12, 1)}<span style="font-size:13px;font-weight:400;color:#9fb0c3"> del tiempo`), `la tarjeta «En el ocioso»: ${Pa.pct(5 / 12, 1)} del tiempo`)
   const tCostes = hB.slice(hB.indexOf('data-cifra="costes"'), hB.indexOf('</div></div>', hB.indexOf('data-cifra="costes"')))
   ok(tCostes.includes('white-space:nowrap') && tCostes.includes(' · <span data-comisiones') && !tCostes.includes('flex-direction:column'), '«Impuestos y comisiones», en una línea')
   ok(/height="39[0-9]|height="40[0-9]/.test(hB) , 'el gráfico, 1,5 veces más alto (375 px + la franja)')

@@ -1,49 +1,98 @@
 // components/BuilderPanel.js — la pestaña «Builder» (docs/builder.md): tanda 1 con el aspecto del boceto (tanda 1b). La barra de
 // los tres pasos (indicativa), el bloque «¿Desde dónde empiezas?» (V9.1042: en blanco, desde una plantilla o desde una de mis
 // estrategias) y «Mi trabajo» en dos pestañas, «Mis estrategias» y «Mis pruebas» (lib/builder/misListas.js), con el estilo de
-// lib/builder/estilo.js (solo el Builder; el resto de la app no cambia). No crea nada por su cuenta: abre el editor por tarjetas
+// lib/builder/estilo.js (solo el Builder; el resto de la app no cambia). §58: «Mi trabajo» compacto: sin el bloque «¿Desde dónde empiezas?» (arriba a la derecha, «En blanco» y «Desde una plantilla»; duplicar, el icono de cada fila), una línea por estrategia y el buscador arriba de la lista. No crea nada por su cuenta: abre el editor por tarjetas
 // (V9.1043, components/BuilderEditor.js, el paso 1) con una COPIA nueva (de la plantilla o de la estrategia elegida), que se guarda
 // al pulsar «Guardar y pasar al paso 2»; una estrategia de código se abre en su apartado «Código de la estrategia» (V9.1048). El paso 2
 // («Probarla contra el azar») es otra pantalla del propio Builder: components/BuilderAzar.js (§45–§46; la de los lotes,
-// components/BuilderPrueba.js, se abre desde las pruebas de «Mi trabajo»). En las filas no hay
-// «Editar» ni «Copiar»: se edita pulsando el nombre y se copia desde el inicio.
+// components/BuilderPrueba.js, se abre desde las pruebas de «Mi trabajo»). Se edita pulsando el nombre.
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { PLANTILLAS, VACIA } from '../lib/builder/plantillas'
-import { construyeMisEstrategias, construyeMisPruebas, filtraEstrategias, FILTROS_ESTRATEGIAS, CHIP } from '../lib/builder/misListas'
-import { esDefinicionEditor } from '../lib/editor/fuente'
+import { AYUDA_MI_TRABAJO, construyeMisEstrategias, construyeMisPruebas, filtraEstrategias, FILTROS_ESTRATEGIAS, CHIP, CHIP_AZAR } from '../lib/builder/misListas'
 import { listarPruebas } from '../lib/registroLab'
-import { getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
+import { ctxConSesion, getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
+import { listarPlanes, listarPruebasUsuario } from '../lib/builder/planesGuardados'
 import { B, S } from '../lib/builder/estilo'
 import BuilderPrueba from './BuilderPrueba'
 import BuilderAzar from './BuilderAzar'
 import BuilderPlan from './BuilderPlan'
-import BuilderEditor, { ReglaPorBloques } from './BuilderEditor'
+import BuilderEditor from './BuilderEditor'
 import BuilderCodigo from './BuilderCodigo'
 import { esDeCodigo, filaCopiaCodigo } from '../lib/builder/codigo'
 import BuilderGuia from './BuilderGuia'
 import { coincide, conNombres } from '../lib/builder/buscar'
 import Resaltado from './Resaltado'
-import BuscadorEstrategia from './BuscadorEstrategia'
 import ConLimpiar from './LimpiarBusqueda'
 import ProteccionPanel from './ProteccionPanel'
+import Ayuda from './BuilderAyuda'
+import { IconoDuplicar } from './BuilderPestanas'
+import { Papelera, Pregunta, ROJO_PAPELERA } from './VentanaPregunta'
 
 export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convertirla en plan']
 export const PASOS_CORTOS = ['Crear', 'Probar contra el azar', 'Convertirla en plan']   // §56: el nombre al lado de cada círculo de la cabecera B
 export const SUBTITULOS_PASOS = ['Cuándo compro, cuándo vendo y cuánto arriesgo', '¿Gana por algo más que suerte?', 'Dinero real, aportaciones e impuestos']
 // La firma de lo leído de la base (lotes y pruebas: id y huella / fecha): si no cambia, no se recalcula «Mi trabajo».
-export const firmaDatos = (lotes, pruebas) => JSON.stringify([(lotes || []).map(l => [l.id, l.hash_lote]), (pruebas || []).map(p => [p.id, p.creado])])
-export const QUE_ES = 'Una estrategia es una regla de compra y venta. Una prueba es la comprobación contra el azar de una o varias estrategias.'
+export const firmaDatos = (lotes, pruebas, planes, pruebasAzar) => JSON.stringify([(lotes || []).map(l => [l.id, l.hash_lote]), (pruebas || []).map(p => [p.id, p.creado]), (planes || []).map(p => [p.id, p.updated_at]), pruebasAzar && pruebasAzar.map(p => [p.id, p.resultado?.id ?? null])])
 const campoSel = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px' }
 const celda = { padding: '10px 12px', borderBottom: `1px solid ${B.borde}`, verticalAlign: 'top', textAlign: 'left' }
 const cabecera = { ...celda, color: B.secundario, fontWeight: 600, fontSize: 12, position: 'sticky', top: 0, background: B.cabecera }
 const params = (p) => { try { return typeof p === 'string' ? JSON.parse(p || '{}') : (p || {}) } catch (_) { return {} } }
 const copia = (x) => JSON.parse(JSON.stringify(x))
+const fila = { ...celda, padding: '6px 12px', verticalAlign: 'middle', whiteSpace: 'nowrap', fontSize: 13 }
+const botonPeque = { padding: '4px 12px', fontSize: 13 }
+const iconoFila = { background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 3px', display: 'inline-flex', alignItems: 'center', color: B.secundario }
+const menuFijo = { zIndex: 40, padding: 6, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, boxShadow: '0 8px 24px rgba(0,0,0,0.45)', opacity: 1 }
+const opcionMenu = { ...S.enlace, display: 'block', width: '100%', padding: '5px 6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
 
-// Una frase con las partes clave entre ** en negrita blanca.
-function Frase({ texto }) {
-  return <>{String(texto || '').split('**').map((t, k) => k % 2 ? <strong key={k} style={{ color: B.titulo }}>{t}</strong> : <span key={k}>{t}</span>)}</>
-}
 const Chip = ({ clave }) => { const [tipo, txt] = CHIP[clave] || CHIP.sinVeredicto; return <span style={S.chip(tipo)}>{txt}</span> }
+// §58: un desplegable (fondo opaco) que se cierra al pulsar fuera o con Esc. boton(abierto, alterna, ref) lo pinta quien lo usa.
+function useDesplegable() {
+  const [abierto, setAbierto] = useState(false)
+  const caja = useRef(null)
+  useEffect(() => {
+    if (!abierto) return
+    const fuera = (e) => { if (caja.current && !caja.current.contains(e.target)) setAbierto(false) }
+    const esc = (e) => { if (e.key === 'Escape') setAbierto(false) }
+    document.addEventListener('mousedown', fuera); document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', fuera); document.removeEventListener('keydown', esc) }
+  }, [abierto])
+  return { abierto, setAbierto, caja }
+}
+// «Desde una plantilla»: su regla, en el tooltip de cada una.
+function MenuPlantillas({ plantillas, onElige }) {
+  const { abierto, setAbierto, caja } = useDesplegable()
+  return (
+    <span ref={caja} style={{ position: 'relative' }}>
+      <button data-boton="desde-plantilla" aria-expanded={abierto} style={{ ...S.boton, ...botonPeque }} onClick={() => setAbierto(x => !x)}>Desde una plantilla ▾</button>
+      {abierto && <div data-menu="plantillas" style={{ ...menuFijo, position: 'absolute', top: '100%', right: 0, marginTop: 4, width: 320, maxWidth: '86vw', maxHeight: 340, overflowY: 'auto' }}>
+        {plantillas.map(p => <button key={p.id} data-plantilla={p.id} title={String(p.regla || '').replace(/\*\*/g, '')} style={opcionMenu} onClick={() => { setAbierto(false); onElige(p) }}>{p.titulo}</button>)}
+      </div>}
+    </span>
+  )
+}
+// La columna «Prueba contra el azar»: el resultado corto, cuándo y en qué valor (solo en el tooltip si no cabe) y «Ver».
+function CeldaAzar({ f, onVer }) {
+  if (!f.azar) return <span style={{ color: B.apagado }}>{f.origen === 'código' ? 'No se prueba aquí' : '—'}</span>
+  const [tipo, txt] = CHIP_AZAR[f.azar.clave]
+  return <span data-azar={f.azar.clave} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={S.chip(tipo)}>{txt}</span>{f.azar.detalle && <span style={S.apagado}>{f.azar.detalle}</span>}{f.azar.hay && <button data-ver-prueba style={{ ...S.enlace, fontSize: 12 }} onClick={onVer}>Ver</button>}</span>
+}
+// La columna «Planes»: cuántos, los nombres en el tooltip y «Abrir» (si hay varios, un desplegable). En una tabla con barra de desplazamiento: el desplegable va fijo a la ventana, para que no se corte.
+function CeldaPlanes({ planes, onAbrir }) {
+  const { abierto, setAbierto, caja } = useDesplegable()
+  const [donde, setDonde] = useState(null)
+  if (!planes.length) return <span data-planes-n="0" style={{ color: B.apagado }}>0</span>
+  const nombres = planes.map(p => p.nombre).join(' · ')
+  return (
+    <span ref={caja} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      <span data-planes-n={planes.length} title={nombres} style={{ cursor: 'default', textDecoration: 'underline dotted' }}>{planes.length}</span>
+      {planes.length === 1 ? <button data-abrir-plan-fila={planes[0].id} title={`Abrir «${planes[0].nombre}» en el paso 3`} style={{ ...S.enlace, fontSize: 13 }} onClick={() => onAbrir(planes[0].id)}>Abrir</button>
+        : <button data-abrir-planes aria-expanded={abierto} style={{ ...S.enlace, fontSize: 13 }} onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setDonde({ top: r.bottom + 4, left: r.left }); setAbierto(x => !x) }}>Abrir ▾</button>}
+      {abierto && <div data-menu="planes" style={{ ...menuFijo, position: 'fixed', ...(donde || {}), width: 260, maxWidth: '86vw' }}>
+        {planes.map(p => <button key={p.id} data-abrir-plan-fila={p.id} title={p.nombre} style={opcionMenu} onClick={() => { setAbierto(false); onAbrir(p.id) }}>{p.nombre}</button>)}
+      </div>}
+    </span>
+  )
+}
 
 // La barra de los tres pasos; `actual` resaltado. §45: con onPaso(n), los pasos que no son el actual se pulsan (§48: también el 3);
 // desactivados (string: el motivo, en el título) no se pulsan.
@@ -116,19 +165,19 @@ export const filaCopia = (s) => esDeCodigo(s) ? filaCopiaCodigo(s) : ({ id: null
 // Las estrategias se abren aquí, en el paso 1: las de tarjetas en el editor por tarjetas y las de código (V9.1048) en el apartado
 // «Código de la estrategia». onAbrirEstrategia(s, 'editor') las abre en el Editor clásico (la pestaña «Editor»). onBacktestValor:
 // el enlace «Backtest de un valor» (la pestaña donde se ejecutan y se ven en el gráfico). abrir ({ fila, n }): la página pide
-// abrir una estrategia (al pulsar su nombre en «Backtest de un valor»); cada n nuevo la abre. §55: { planId, n }, un plan en el paso 3. V9.1058: buscarInicial y
-// buscarCopiaInicial (para las pruebas de montaje): lo escrito en los buscadores de «Mi trabajo» y de «Desde una de mis estrategias».
-// V9.1060: copiaInicial (el id elegido para copiar) y copiaAbiertaInicial (la lista del buscador abierta), también para el montaje.
-export default function BuilderPanel({ estrategias = [], salida = null, onAbrirEstrategia, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '', buscarCopiaInicial = '', copiaInicial = '', copiaAbiertaInicial = false }) {
-  const [datos, setDatos] = useState(() => datosIniciales || { lotes: [], pruebas: [], cargando: !datosIniciales, error: null })
+// abrir una estrategia (al pulsar su nombre en «Backtest de un valor»); cada n nuevo la abre. §55: { planId, n }, un plan en el paso 3. V9.1058: buscarInicial (para las pruebas de montaje): lo escrito en el buscador de «Mi trabajo».
+export default function BuilderPanel({ estrategias = [], salida = null, onAbrirEstrategia, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '' }) {
+  // §58: planes y pruebasAzar (null: no se han podido leer; entonces la fila dice «—» y «Qué toca ahora» sale de las pruebas de lotes, como antes).
+  const [datos, setDatos] = useState(() => datosIniciales || { lotes: [], pruebas: [], planes: [], pruebasAzar: null, cargando: !datosIniciales, error: null })
   const [filasE, setFilasE] = useState(listasIniciales?.estrategias || null)
   const [filasP, setFilasP] = useState(listasIniciales?.pruebas || null)
   const [pestana, setPestana] = useState(pestanaInicial)
   const [filtro, setFiltro] = useState(filtroInicial)
-  const [aCopiar, setACopiar] = useState(copiaInicial)
   const [buscar, setBuscar] = useState(buscarInicial)   // V9.1058: el buscador de «Mi trabajo» (por nombre y por la frase de la regla; V9.1063: resaltado)
-  const [buscarCopia, setBuscarCopia] = useState(buscarCopiaInicial)   // y el de «Desde una de mis estrategias» (por nombre)
-  const [plantillaId, setPlantillaId] = useState(null)
+  const [borrando, setBorrando] = useState(null)   // §58: la fila de la estrategia que pide «¿Eliminar?»
+  const [borrandoYa, setBorrandoYa] = useState(false)
+  const [falloBorrar, setFalloBorrar] = useState(null)
+  const [borradas, setBorradas] = useState([])   // lo recién borrado, hasta que la página recargue sus estrategias
   const [prueba, setPrueba] = useState(vistaInicial && !vistaInicial.guia && !vistaInicial.editor && !vistaInicial.azar && !vistaInicial.plan ? { ...vistaInicial, n: 0 } : null)   // la pantalla del paso 2, si está abierta
   const [azar, setAzar] = useState(vistaInicial?.azar ? { ...vistaInicial.azar, n: 0 } : null)   // §45: «Probarla contra el azar» (azar re-simulado), si está abierta
   const [plan, setPlan] = useState(vistaInicial?.plan ? { ...vistaInicial.plan, n: 0 } : null)   // §48: «Convertirla en plan» (paso 3), si está abierta
@@ -138,15 +187,16 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   const firma = useRef(null)
   const recarga = useCallback(async () => {
     if (datosIniciales) return
-    if (!hayConfigSupabase()) { setDatos({ lotes: [], pruebas: [], cargando: false, error: 'Sin conexión con la base de datos: solo se ven las estrategias.' }); return }
+    if (!hayConfigSupabase()) { setDatos({ lotes: [], pruebas: [], planes: [], pruebasAzar: null, cargando: false, error: 'Sin conexión con la base de datos: solo se ven las estrategias.' }); return }
     try {
       const r = await fetch(`${getSupaUrl()}/rest/v1/editor_lotes?select=id,creado,version_app,nombre,lote,hash_lote,huellas&order=creado.desc,id.desc&limit=200`, { headers: getSupaH() })
       const lotes = r.ok ? await r.json() : []
       const pruebas = await listarPruebas({ url: getSupaUrl(), headers: getSupaH() }, { limite: 500, soloResumen: false, filtro: '&config->>prueba=in.(editorLote,editorLab,editorCalibracion,planLote)' })
-      const error = r.ok ? null : `No se pudieron leer las pruebas (HTTP ${r.status}).`, f = firmaDatos(lotes, pruebas)
+      const ctx = ctxConSesion(), [planes, pruebasAzar] = await Promise.all([listarPlanes(ctx).catch(() => []), listarPruebasUsuario(ctx).catch(() => null)])
+      const error = r.ok ? null : `No se pudieron leer las pruebas (HTTP ${r.status}).`, f = firmaDatos(lotes, pruebas, planes, pruebasAzar)
       if (f === firma.current && !error) return   // nada nuevo: no se toca
       firma.current = f
-      setDatos({ lotes, pruebas, cargando: false, error })
+      setDatos({ lotes, pruebas, planes, pruebasAzar, cargando: false, error })
     } catch (e) { setDatos(d => ({ ...d, cargando: false, error: e.message })) }
   }, [datosIniciales])
   useEffect(() => { if (visible !== false) recarga() }, [visible, recarga])
@@ -156,30 +206,23 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   const [entrada, setEntrada] = useState(0)
   useEffect(() => {
     if (visible === false) return
-    if (yaVisto.current) { setBuscar(''); setBuscarCopia(''); setACopiar(''); setEntrada(n => n + 1) }
+    if (yaVisto.current) { setBuscar(''); setEntrada(n => n + 1) }
     yaVisto.current = true
     if (!editor && !prueba && !guia) { setPestana('estrategias'); const h = setTimeout(() => casillaMiTrabajo.current?.focus({ preventScroll: true }), 0); return () => clearTimeout(h) }
   }, [visible])
   useEffect(() => {
     if (listasIniciales) return
     let vivo = true
-    construyeMisEstrategias({ estrategias, lotes: datos.lotes, pruebas: datos.pruebas }).then(f => { if (vivo) setFilasE(f) }).catch(() => { if (vivo) setFilasE([]) })
+    construyeMisEstrategias({ estrategias, lotes: datos.lotes, pruebas: datos.pruebas, planes: datos.planes, pruebasAzar: datos.pruebasAzar }).then(f => { if (vivo) setFilasE(f) }).catch(() => { if (vivo) setFilasE([]) })
     try { setFilasP(construyeMisPruebas({ lotes: datos.lotes, pruebas: datos.pruebas })) } catch (_) { setFilasP([]) }
     return () => { vivo = false }
-  }, [estrategias, datos.lotes, datos.pruebas, listasIniciales])
+  }, [estrategias, datos.lotes, datos.pruebas, datos.planes, datos.pruebasAzar, listasIniciales])
   const estrategiasEf = useMemo(() => [...estrategias.map(s => guardadas.find(g => String(g.id) === String(s.id)) || s), ...guardadas.filter(g => !estrategias.some(s => String(s.id) === String(g.id)))], [estrategias, guardadas])
-  const delEditor = useMemo(() => estrategias.filter(s => esDefinicionEditor(s.definition)).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
-  const deCodigo = useMemo(() => estrategias.filter(s => !esDefinicionEditor(s.definition) && s.code_js), [estrategias])   // en su orden, como en «Mis estrategias»
-  // V9.1060: un solo buscador. La elegida es la que se pulsó en la lista mientras su nombre siga escrito en la casilla; hasta
-  // entonces (o si se escribe otra cosa), «Copiar y editar» está desactivado.
-  const gruposCopia = [['De tarjetas', delEditor], ['De código', deCodigo]].filter(([, xs]) => xs.length).map(([titulo, estrategias]) => ({ titulo, estrategias }))
-  const elegidaCopia = [...delEditor, ...deCodigo].find(s => String(s.id) === String(aCopiar) && s.name === buscarCopia) || null
-  const sinCopia = !elegidaCopia && buscarCopia.trim() && ![...delEditor, ...deCodigo].some(s => coincide(buscarCopia, s.name))
-  // Las plantillas disponibles (la desactivada no sale) y la elegida en el desplegable.
-  const disponibles = PLANTILLAS.filter(p => !p.desactivada && p.definicion), plantilla = disponibles.find(p => p.id === plantillaId) || disponibles[0] || null
+  // Las plantillas disponibles (la desactivada no sale).
+  const disponibles = PLANTILLAS.filter(p => !p.desactivada && p.definicion)
   // V9.1058: lo escrito en el buscador filtra las dos pestañas: las estrategias por nombre y por la frase de la regla; las pruebas por
   // nombre y por las estrategias que incluyen.
-  const buscadasE = filasE && filasE.filter(f => coincide(buscar, f.nombre, f.subtitulo)), buscadasP = filasP && filasP.filter(f => coincide(buscar, f.nombre, ...(f.estrategias || [])))
+  const buscadasE = filasE && filasE.filter(f => !borradas.includes(String(f.estrategia.id)) && coincide(buscar, f.nombre, f.subtitulo)), buscadasP = filasP && filasP.filter(f => coincide(buscar, f.nombre, ...(f.estrategias || [])))
   const visiblesE = filtraEstrategias(buscadasE, filtro)
   const cuantas = Object.fromEntries(FILTROS_ESTRATEGIAS.map(([k]) => [k, filtraEstrategias(buscadasE, k).length]))
   const cuenta = (b, t) => !t ? null : b.length === t.length ? t.length : `${b.length} de ${t.length}`
@@ -188,6 +231,7 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
     if (!a) return
     if (a.tipo === 'editor') abreEditor(f.estrategia)
     else if (a.tipo === 'plan') abrePlan(a.estrategiaId)
+    else if (a.tipo === 'azar') abreAzar(a.estrategiaId)
     else if (a.tipo === 'prueba') setPrueba({ ...(a.loteId != null ? { loteId: a.loteId } : { estrategiaId: a.estrategiaId }), n: Date.now() })
   }
   const abrePrueba = (id) => setPrueba({ loteId: id, n: Date.now() })
@@ -217,6 +261,18 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   const alVolver = (cierra) => (donde) => { cierra(); recarga(); if (donde === 'miTrabajo') setIrMiTrabajo(Date.now()) }
   const abreAzar = (estrategiaId) => setAzar({ estrategiaId, n: Date.now() })
   const abrePlan = (estrategiaId) => setPlan({ estrategiaId, n: Date.now() })
+  // §58: la papelera de cada fila, con el aviso de siempre (el «¿Eliminar esta estrategia?» de la página). Si la base no la borra, lo dice y no se quita.
+  const borraEstrategia = async () => {
+    const id = borrando.estrategia.id
+    setBorrandoYa(true); setFalloBorrar(null)
+    try {
+      const r = await fetch(`${getSupaUrl()}/rest/v1/strategies?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: { ...getSupaH(), Prefer: 'return=representation' } })
+      const j = r.ok ? await r.json() : null
+      if (!r.ok || !j?.length) throw new Error(r.ok ? 'No se pudo borrar: ya no existe.' : `No se pudo borrar (HTTP ${r.status}).`)
+      setBorradas(b => [...b, String(id)]); setGuardadas(g => g.filter(x => String(x.id) !== String(id))); setBorrando(null); onGuardada?.(null)
+    } catch (e) { setFalloBorrar(e.message) }
+    setBorrandoYa(false)
+  }
   // Guardada en el paso 1: la página recarga sus estrategias y se pasa al paso 2 con ella (la versión nueva, si se creó). §46: a la
   // pantalla nueva del paso 2 (BuilderAzar), no a la de los lotes.
   // V9.1054: «Guardar estos valores en la estrategia» (info.quedarse) sigue en el paso 1 con la estrategia guardada (la versión nueva,
@@ -250,15 +306,6 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
       style={{ ...S.boton, borderRadius: `${B.radioBoton}px ${B.radioBoton}px 0 0`, borderBottom: 'none', fontWeight: pestana === k ? 700 : 400,
         ...(pestana === k ? { background: B.tarjeta, color: B.titulo } : { background: 'transparent', color: B.secundario }) }}>{t}{n != null ? ` (${n})` : ''}</button>
   )
-  // V9.1060: el buscador de «Mi trabajo», en la cabecera de la primera columna de cada tabla (a la derecha de su título).
-  const conBuscador = (h) => (
-    <span style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-      <span>{h}</span>
-      <ConLimpiar valor={buscar} onLimpia={() => setBuscar('')} bloque estilo={{ flex: '1 1 200px', maxWidth: 300, minWidth: 0 }}>
-        <input ref={casillaMiTrabajo} type="text" role="searchbox" aria-label="Buscar en Mi trabajo" placeholder="Buscar por nombre o por la regla…" value={buscar} onChange={e => setBuscar(e.target.value)} data-buscar="mi-trabajo"
-          style={{ ...campoSel, fontSize: 13, fontWeight: 400, padding: '4px 8px', minWidth: 0 }}/></ConLimpiar>
-    </span>
-  )
   return (
     <div style={S.pagina}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -271,45 +318,22 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
       </div>
       <BarraPasos actual={1} onPaso={n => n === 2 ? abreAzar(null) : n === 3 && abrePlan(null)}/>
 
-      <div style={{ ...S.tituloSeccion, marginTop: 8 }}>¿Desde dónde empiezas?</div>
-      <div style={S.subtituloSeccion}>Las tres opciones abren el paso 1 con una estrategia nueva. Se guarda al pulsar «Guardar y pasar al paso 2».</div>
-      <div data-bloque="empezar" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, alignItems: 'stretch' }}>
-        <div data-tarjeta="blanco" style={{ ...S.tarjeta, display: 'flex', flexDirection: 'column' }}>
-          <div style={S.cabeceraTarjeta}>En blanco</div>
-          <div style={{ ...S.cuerpo, flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={S.secundario}>Abre el editor vacío y escribe tu regla de compra y venta desde cero.</div>
-            <div style={{ marginTop: 'auto' }}><button style={S.botonVerde} onClick={() => abreEditor({ id: null, name: '', definition: VACIA(), params: {} })}>Empezar en blanco</button></div>
-          </div>
-        </div>
-        <div data-tarjeta="plantilla" style={{ ...S.tarjeta, display: 'flex', flexDirection: 'column' }}>
-          <div style={S.cabeceraTarjeta}>Desde una plantilla</div>
-          <div style={{ ...S.cuerpo, flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <select aria-label="Elige la plantilla" value={plantilla?.id || ''} onChange={e => setPlantillaId(e.target.value)} style={campoSel}>
-              {disponibles.map(p => <option key={p.id} value={p.id}>{p.titulo}</option>)}
-            </select>
-            {plantilla && <div data-regla-plantilla style={{ fontSize: 13, color: B.texto }}><Frase texto={plantilla.regla}/></div>}
-            <div style={{ marginTop: 'auto' }}><button style={S.boton} onClick={() => plantilla && abreEditor({ id: null, name: plantilla.definicion().nombre, definition: plantilla.definicion(), params: { ...plantilla.valores } })}>Usar esta plantilla</button></div>
-          </div>
-        </div>
-        {/* V9.1060: sin «overflow: hidden», para que la lista del buscador no se corte en el borde de la tarjeta. */}
-        <div data-tarjeta="copia" style={{ ...S.tarjeta, overflow: 'visible', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ ...S.cabeceraTarjeta, borderRadius: `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0` }}>Desde una de mis estrategias</div>
-          <div style={{ ...S.cuerpo, flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {delEditor.length || deCodigo.length ? (<>
-              <BuscadorEstrategia grupos={gruposCopia} texto={buscarCopia} onTexto={setBuscarCopia} elegida={aCopiar || null} onElige={s => setACopiar(String(s.id))} abiertoInicial={copiaAbiertaInicial}/>
-              {sinCopia && <div data-sin-copia style={S.secundario}>Ninguna estrategia con «{buscarCopia.trim()}».</div>}
-              <div style={S.secundario}>Se abre una copia nueva. La original no cambia, ni sus pruebas.{elegidaCopia && !esDefinicionEditor(elegidaCopia.definition) ? ' Es de código: en la copia se cambian sus parámetros; el código se copia tal cual.' : ''}</div>
-              <div style={{ marginTop: 'auto' }}><button style={elegidaCopia ? S.boton : S.botonDesactivado} disabled={!elegidaCopia} onClick={() => elegidaCopia && abreEditor(filaCopia(elegidaCopia))}>Copiar y editar</button></div>
-            </>) : <div style={S.secundario}>Todavía no tienes estrategias. Empieza en blanco o desde una plantilla.</div>}
-          </div>
-        </div>
+      <div ref={seccionMiTrabajo} data-cabecera-mi-trabajo style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '16px 0 10px' }}>
+        <span style={{ ...S.tituloSeccion, margin: 0, display: 'inline-flex', alignItems: 'center', gap: 2 }}>Mi trabajo<Ayuda texto={AYUDA_MI_TRABAJO.queEs} etiqueta="Mi trabajo"/></span>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ ...S.secundario, fontSize: 13 }}>Nueva estrategia:</span>
+          <button data-boton="en-blanco" style={{ ...S.botonVerde, ...botonPeque }} onClick={() => abreEditor({ id: null, name: '', definition: VACIA(), params: {} })}>En blanco</button>
+          <MenuPlantillas plantillas={disponibles} onElige={p => abreEditor({ id: null, name: p.definicion().nombre, definition: p.definicion(), params: { ...p.valores } })}/>
+        </span>
       </div>
-
-      <div ref={seccionMiTrabajo} style={S.tituloSeccion}>Mi trabajo</div>
-      <div style={{ ...S.subtituloSeccion }} data-que-es>{QUE_ES}</div>
-      <div role="tablist" aria-label="Mi trabajo" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        {pestanaBtn('estrategias', 'Mis estrategias', cuenta(buscadasE, filasE))}
-        {pestanaBtn('pruebas', 'Mis pruebas', cuenta(buscadasP, filasP))}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+        <div role="tablist" aria-label="Mi trabajo" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {pestanaBtn('estrategias', 'Mis estrategias', cuenta(buscadasE, filasE))}
+          {pestanaBtn('pruebas', 'Mis pruebas', cuenta(buscadasP, filasP))}
+        </div>
+        <ConLimpiar valor={buscar} onLimpia={() => setBuscar('')} bloque estilo={{ marginLeft: 'auto', marginBottom: 6, flex: '0 1 300px', minWidth: 160 }}>
+          <input ref={casillaMiTrabajo} type="text" role="searchbox" aria-label="Buscar en Mi trabajo" placeholder="Buscar por nombre o por la regla…" value={buscar} onChange={e => setBuscar(e.target.value)} data-buscar="mi-trabajo"
+            style={{ ...campoSel, fontSize: 13, fontWeight: 400, padding: '5px 8px', minWidth: 0 }}/></ConLimpiar>
       </div>
       <div style={{ ...S.tarjeta, borderTopLeftRadius: 0 }}>
         {datos.error && <div style={{ color: '#f2cc60', padding: '10px 16px' }}>{datos.error}</div>}
@@ -317,29 +341,30 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '12px 12px 4px', flexWrap: 'wrap' }} role="group" aria-label="Qué estrategias enseñar">
             {FILTROS_ESTRATEGIAS.map(([k, t]) => <button key={k} onClick={() => setFiltro(k)} aria-pressed={filtro === k}
               style={{ ...S.boton, padding: '6px 12px', fontSize: 13, ...(filtro === k ? { background: B.cabecera, borderColor: B.siguienteBorde, color: B.titulo, fontWeight: 700 } : { background: 'transparent', color: B.secundario }) }}>{filasE ? `${t} (${cuantas[k]})` : t}</button>)}
-            <span style={{ ...S.apagado, marginLeft: 8 }}>Pulsa el nombre de una estrategia para abrirla.</span>
+            <Ayuda texto={AYUDA_MI_TRABAJO.fila} etiqueta="Cada fila"/>
           </div>
           <div style={{ overflowX: 'auto', maxHeight: 560, overflowY: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }} data-tabla="estrategias">
-              <thead><tr>{['Estrategia', 'Versión', 'Última prueba', 'Cómo le fue', 'Qué toca ahora'].map((h, k) => <th key={h} style={{ ...cabecera, verticalAlign: 'middle' }}>{k ? h : conBuscador(h)}</th>)}</tr></thead>
+              <thead><tr>{[['Estrategia'], ['Versión'], ['Prueba contra el azar', AYUDA_MI_TRABAJO.azar], ['Planes', AYUDA_MI_TRABAJO.planes], ['Qué toca ahora'], ['']].map(([h, a]) => <th key={h} style={{ ...cabecera, verticalAlign: 'middle', padding: '7px 12px', whiteSpace: 'nowrap' }}>{a ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{h}<Ayuda texto={a} etiqueta={h}/></span> : h}</th>)}</tr></thead>
               <tbody>
                 {visiblesE.map(f => (
-                  <tr key={f.clave}>
-                    <td style={{ ...celda, maxWidth: 520, minWidth: 260 }}>
-                      <button style={{ ...S.enlace, color: B.titulo, fontWeight: 600 }} onClick={() => abreEditor(f.estrategia)}
-                        title={f.origen === 'editor' ? 'Abrir en el editor por tarjetas' : 'Abrir: sus parámetros y su código'}><Resaltado texto={f.nombre} consulta={buscar}/></button>
-                      {f.partes ? <div data-regla-fila style={{ marginTop: 4 }}><ReglaPorBloques partes={f.partes} tamano={12}/></div>
-                        : f.subtitulo && <div data-regla-fila style={{ ...S.apagado, whiteSpace: 'normal', marginTop: 2 }}><Resaltado texto={f.subtitulo} consulta={buscar}/></div>}
-                      {f.desactivada && <div style={S.apagado}>Desactivada</div>}
+                  <tr key={f.clave} data-fila-estrategia={f.estrategia.id}>
+                    <td style={{ ...fila, maxWidth: 340 }}>
+                      <button data-nombre style={{ ...S.enlace, color: B.titulo, fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }} onClick={() => abreEditor(f.estrategia)}
+                        title={f.subtitulo || (f.origen === 'editor' ? 'Abrir en el editor por tarjetas' : 'Abrir: sus parámetros y su código')}><Resaltado texto={f.nombre} consulta={buscar}/>{f.desactivada && <span style={{ ...S.apagado, fontWeight: 400 }}> · desactivada</span>}</button>
                     </td>
-                    <td style={{ ...celda, whiteSpace: 'nowrap', color: B.secundario }}>{f.version}</td>
-                    <td style={celda}>{f.ultimaPrueba ? <button style={S.enlace} onClick={() => abrePrueba(f.ultimaPrueba.id)} title="Abrir los resultados de esta prueba">{f.ultimaPrueba.nombre}</button> : <span style={{ color: B.secundario }}>ninguna</span>}</td>
-                    <td style={{ ...celda, maxWidth: 360 }}><Chip clave={f.chip}/>{f.linea && <div style={{ ...S.apagado, marginTop: 4 }}>{f.linea}</div>}</td>
-                    <td style={celda}>{f.toca?.accion ? <button style={{ ...S.enlace, fontWeight: 700 }} onClick={() => accion(f)}>{f.toca.texto}</button> : <span style={{ color: B.apagado }}>{f.toca?.texto || '—'}</span>}{f.toca?.nota && <div style={S.apagado}>{f.toca.nota}</div>}</td>
+                    <td style={{ ...fila, color: B.secundario }}>{f.version}</td>
+                    <td style={fila}><CeldaAzar f={f} onVer={() => abreAzar(f.estrategia.id)}/></td>
+                    <td style={fila}><CeldaPlanes planes={f.planes || []} onAbrir={id => setPlan({ planId: id, n: Date.now() })}/></td>
+                    <td style={fila}>{f.toca?.accion ? <button data-toca style={{ ...S.enlace, fontSize: 13, fontWeight: 700 }} title={f.toca.nota} onClick={() => accion(f)}>{f.toca.texto}</button> : <span title={f.toca?.nota} style={{ color: B.apagado }}>{f.toca?.texto || '—'}</span>}</td>
+                    <td style={{ ...fila, width: 56 }}>
+                      <button data-duplicar-estrategia={f.estrategia.id} aria-label={`Duplicar ${f.nombre}`} title="Duplicar: se abre una copia nueva, la original no cambia" style={iconoFila} onClick={() => abreEditor(filaCopia(f.estrategia))}><IconoDuplicar/></button>
+                      <button data-borrar-estrategia={f.estrategia.id} aria-label={`Borrar ${f.nombre}`} title="Borrar esta estrategia" style={iconoFila} onClick={() => { setFalloBorrar(null); setBorrando(f) }}><Papelera tamano={15}/></button>
+                    </td>
                   </tr>
                 ))}
-                {filasE && !visiblesE.length && <tr><td colSpan={5} style={{ ...celda, color: B.secundario }}>{!filasE.length ? 'Todavía no hay estrategias. Empieza en blanco o desde una plantilla.' : buscar.trim() ? `Nada con «${buscar.trim()}»${filtraEstrategias(filasE, filtro).length ? ' con este filtro' : ''}.` : 'Nada con este filtro.'}</td></tr>}
-                {!filasE && <tr><td colSpan={5} style={{ ...celda, color: B.secundario }}>Cargando…</td></tr>}
+                {filasE && !visiblesE.length && <tr><td colSpan={6} style={{ ...celda, color: B.secundario }}>{!filasE.length ? 'Todavía no hay estrategias. Empieza en blanco o desde una plantilla.' : buscar.trim() ? `Nada con «${buscar.trim()}»${filtraEstrategias(filasE, filtro).length ? ' con este filtro' : ''}.` : 'Nada con este filtro.'}</td></tr>}
+                {!filasE && <tr><td colSpan={6} style={{ ...celda, color: B.secundario }}>Cargando…</td></tr>}
               </tbody>
             </table>
           </div>
@@ -347,7 +372,7 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
         </>) : (<>
           <div style={{ overflowX: 'auto', maxHeight: 560, overflowY: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }} data-tabla="pruebas">
-              <thead><tr>{['Prueba', 'Estrategias que incluye', 'Valores y periodos', 'Verificación de sesgos', 'Veredicto'].map((h, k) => <th key={h} style={{ ...cabecera, verticalAlign: 'middle' }}>{k ? h : conBuscador(h)}</th>)}</tr></thead>
+              <thead><tr>{['Prueba', 'Estrategias que incluye', 'Valores y periodos', 'Verificación de sesgos', 'Veredicto'].map(h => <th key={h} style={{ ...cabecera, verticalAlign: 'middle' }}>{h}</th>)}</tr></thead>
               <tbody>
                 {(buscadasP || []).map(f => (
                   <tr key={f.clave}>
@@ -373,6 +398,11 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
           <div style={{ ...S.apagado, padding: '10px 12px' }}>La verificación de sesgos en marcha no aparece aquí: corre en el navegador y solo se guarda al terminar (mientras corre, se ve en la pantalla de su prueba).</div>
         </>)}
       </div>
+      {borrando && (
+        <Pregunta id="borrar-estrategia" texto={`¿Eliminar esta estrategia? «${borrando.estrategia.name}»`} detalle={borrando.planes?.length ? `La usan ${borrando.planes.length === 1 ? '1 plan' : `${borrando.planes.length} planes`}: seguirán con la versión guardada en cada plan.` : null} aviso={falloBorrar}>
+          <button data-boton="si-borrar-estrategia" disabled={borrandoYa} onClick={borraEstrategia} style={{ ...S.botonVerde, background: ROJO_PAPELERA, borderColor: ROJO_PAPELERA, color: '#fff' }}>{borrandoYa ? 'Borrando…' : 'Sí, borrar'}</button>
+          <button disabled={borrandoYa} onClick={() => setBorrando(null)} style={S.boton}>Cancelar</button>
+        </Pregunta>)}
     </div>
   )
 }

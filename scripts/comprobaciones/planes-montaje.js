@@ -139,6 +139,112 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   marca(m, 'qqq'); await D.espera(5)
   ok(lineas(m).includes('qqq'), 'y se puede marcar igual'); m.quita(); await D.espera(5); window.localStorage = lsBueno
 
+  // ── 4 · «Mi trabajo» compacto (§58) ──
+  const Az = require(R + '/lib/pruebaAzar.js')
+  const eC = { id: 'c1', name: 'Código con acentó', definition: null, code_js: 'x', description: 'Una regla escrita a mano', params: {} }
+  const lista = [est('e4', 'Copia editor 23'), est('e7', 'Línea bajista'), est('e6', 'SuperTrend 10/3'), est('e9', 'Sin planes'), eC]
+  const h7 = await Az.huellaEstrategia(lista[1]), h6 = await Az.huellaEstrategia(lista[2])
+  const conPlan = (id, nombre, e) => fila(id, nombre, e, '2026-11-01T10:00:00Z')
+  const planes4 = [conPlan(4, 'Copia / gold', lista[0]), conPlan(7, 'Línea / oro', lista[1]), conPlan(8, 'Línea / liquidez', lista[1])]
+  const pruebasAz = [{ id: 1, creada_en: '2026-10-30T10:00:00Z', estrategia_id: 'e7', estrategia_nombre: 'Línea bajista', estrategia_huella: h7, valor: 'AAPL', velas: 'diarias', res: { id: 1, veredicto: 'noPasa', texto: 'x' } },
+    { id: 2, creada_en: '2026-10-29T10:00:00Z', estrategia_id: 'e6', estrategia_nombre: 'SuperTrend 10/3', estrategia_huella: h6, valor: 'NVDA', velas: 'diarias', res: { id: 2, veredicto: 'pasa', texto: 'x' } },
+    { id: 3, creada_en: '2026-10-28T10:00:00Z', estrategia_id: 'e4', estrategia_nombre: 'Copia editor 23', estrategia_huella: 'otra-regla-de-antes', valor: 'AAPL', velas: 'diarias', res: { id: 3, veredicto: 'pasa', texto: 'x' } }]
+  const escrituras = []
+  let borraBien = true
+  const baseMT = () => { const J = (x, status = 200) => ({ ok: true, status, json: async () => x, text: async () => JSON.stringify(x) })
+    globalThis.fetch = async (u, o = {}) => { const s = String(u), mt = o.method || 'GET'
+      if (mt !== 'GET' && !s.includes('builder_pestanas')) escrituras.push(`${mt} ${s.replace('https://falso.invalid/rest/v1/', '')}`)
+      if (s.includes('builder_pestanas')) return J(mt === 'POST' ? null : [{ planes: [4, 7, 8] }], mt === 'POST' ? 201 : 200)
+      if (s.includes('planes_inversion')) return J(planes4)
+      if (s.includes('pruebas_azar')) return J(pruebasAz)
+      if (mt === 'DELETE') return borraBien ? J([{ id: 'e9' }]) : { ok: false, status: 403, json: async () => ({}) }
+      return J([]) } }
+  const hayQ = (x, k, v) => !!x.raiz.busca(n => n.getAttribute(k) != null && (v == null || n.getAttribute(k) === String(v)))
+  const filaDe = (x, id) => x.raiz.busca(n => n.getAttribute('data-fila-estrategia') === id)
+  const portada = async () => { const x = D.monta(h(BP, { estrategias: lista, visible: true, apiFetch: api, abrir: null }), RDC); await D.espera(LARGO); return x }
+  baseMT(); m = await portada()
+  const filtros = () => m.raiz.conAtributo('aria-pressed').map(n => n.textContent).join(' | ')
+  ok(!hayQ(m, 'data-tarjeta', 'copia') && !hayQ(m, 'data-bloque', 'empezar') && !m.raiz.textContent.includes('Desde una de mis estrategias') && !m.raiz.textContent.includes('¿Desde dónde empiezas?'), 'sin «Desde una de mis estrategias» ni el bloque de arriba')
+  ok(hayQ(m, 'data-boton', 'en-blanco') && hayQ(m, 'data-boton', 'desde-plantilla'), '«En blanco» y «Desde una plantilla», arriba a la derecha')
+  ok(filtros() === 'De tarjetas (4) | De código (1)', `filtros: ${filtros()}`)
+  ok(!hayQ(m, 'data-regla-fila') && m.raiz.conAtributo('data-nombre').every(n => n.getAttribute('title')?.length > 5 && n.style.whiteSpace === 'nowrap'), 'una línea por estrategia: la regla, en el tooltip del nombre')
+  const cabeceras = m.raiz.busca(n => n.getAttribute('data-tabla') === 'estrategias').todos(n => n.nodeName === 'TH').map(n => n.textContent.replace('?', '').trim()).join(' · ')
+  ok(cabeceras.startsWith('Estrategia · Versión · Prueba contra el azar · Planes · Qué toca ahora'), `columnas: ${cabeceras}`)
+  // Sin prueba, no pasa, pasa, y una prueba de una regla anterior (otra huella): esa no cuenta.
+  const az = (id) => filaDe(m, id).busca(n => n.getAttribute('data-azar') != null)
+  ok(az('e9').getAttribute('data-azar') === 'sinPrueba' && az('e9').textContent === 'Sin probar' && !filaDe(m, 'e9').busca(n => n.getAttribute('data-ver-prueba') != null), 'sin prueba: «Sin probar», sin «Ver»')
+  ok(az('e7').textContent === 'No pasa30/10 · AAPLVer', `no pasa: «${az('e7').textContent}»`)
+  ok(az('e6').textContent === 'Pasa29/10 · NVDAVer', `pasa: «${az('e6').textContent}»`)
+  ok(az('e4').getAttribute('data-azar') === 'sinPrueba', 'una prueba de la regla de antes no cuenta: «Sin probar»')
+  const toca = (id) => filaDe(m, id).busca(n => n.getAttribute('data-toca') != null)?.textContent
+  ok(toca('e9') === 'Probarla contra el azar' && toca('e4') === 'Probarla contra el azar' && toca('e7') === 'Convertirla en plan' && toca('e6') === 'Convertirla en plan', '«Qué toca ahora»: sin prueba, probarla; con ella, convertirla en plan')
+  const nPl = (id) => filaDe(m, id).busca(n => n.getAttribute('data-planes-n') != null)
+  ok(nPl('e9').getAttribute('data-planes-n') === '0' && nPl('e4').getAttribute('data-planes-n') === '1' && nPl('e7').getAttribute('data-planes-n') === '2' && nPl('e7').getAttribute('title') === 'Línea / oro · Línea / liquidez', 'planes: cuántos, con los nombres en el tooltip')
+  ok(filaDe(m, 'e4').busca(n => n.getAttribute('data-borrar-estrategia') != null).busca(n => n.getAttribute('stroke') === '#f85149') != null && !!filaDe(m, 'e4').busca(n => n.getAttribute('data-duplicar-estrategia') != null).busca(n => n.nodeName === 'svg'), 'iconos: duplicar y papelera ROJA')
+  // El buscador
+  const casillaB = () => m.raiz.busca(n => n.getAttribute('data-buscar') === 'mi-trabajo'), nFilas = () => m.raiz.conAtributo('data-fila-estrategia').length
+  D.escribe(casillaB(), 'LINEA'); await D.espera(5)
+  ok(nFilas() === 1 && !!filaDe(m, 'e7'), 'buscar «LINEA» encuentra «Línea bajista»: sin mayúsculas ni acentos')
+  ok(hayQ(m, 'data-limpiar-busqueda'), 'con ✕ al escribir')
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-limpiar-busqueda') != null)); await D.espera(5)
+  ok(nFilas() === 4 && casillaB().value === '', 'la ✕ limpia')
+  // La plantilla: desplegable opaco
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-boton') === 'desde-plantilla')); await D.espera(5)
+  const menuPl = m.raiz.busca(n => n.getAttribute('data-menu') === 'plantillas')
+  ok(!!menuPl && menuPl.style.background === '#161f29' && menuPl.conAtributo('data-plantilla').length > 0, 'el desplegable de plantillas, con fondo opaco')
+  // La papelera: cancelar no borra; si falla, lo dice y sigue; sí, borra solo esa
+  const pulsaAtr = (k, v) => D.pulsa(m.raiz.busca(n => n.getAttribute(k) === v))
+  pulsaAtr('data-borrar-estrategia', 'e9'); await D.espera(5)
+  let vent = m.raiz.busca(n => n.getAttribute('data-pregunta') === 'borrar-estrategia')
+  ok(!!vent && vent.textContent.includes('¿Eliminar esta estrategia? «Sin planes»') && !escrituras.length, 'la papelera pregunta antes, con el aviso de siempre')
+  D.pulsa(vent.busca(n => n.nodeName === 'BUTTON' && n.textContent === 'Cancelar')); await D.espera(5)
+  ok(!hayQ(m, 'data-pregunta', 'borrar-estrategia') && !escrituras.length && nFilas() === 4, 'cancelar: no se borra nada')
+  pulsaAtr('data-borrar-estrategia', 'e7'); await D.espera(5)
+  ok(m.raiz.busca(n => n.getAttribute('data-pregunta') === 'borrar-estrategia').textContent.includes('La usan 2 planes'), 'si la usan planes, lo dice')
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-pregunta') === 'borrar-estrategia').busca(n => n.nodeName === 'BUTTON' && n.textContent === 'Cancelar')); await D.espera(5)
+  borraBien = false; pulsaAtr('data-borrar-estrategia', 'e9'); await D.espera(5); pulsaAtr('data-boton', 'si-borrar-estrategia'); await D.espera(20)
+  vent = m.raiz.busca(n => n.getAttribute('data-pregunta') === 'borrar-estrategia')
+  ok(!!vent && vent.busca(n => n.getAttribute('data-aviso-pregunta') != null)?.textContent.includes('HTTP 403') && nFilas() === 4, 'si la base no deja borrar: lo dice y la fila sigue')
+  borraBien = true; escrituras.length = 0; pulsaAtr('data-boton', 'si-borrar-estrategia'); await D.espera(20)
+  ok(escrituras.length === 1 && escrituras[0] === 'DELETE strategies?id=eq.e9' && !filaDe(m, 'e9') && nFilas() === 3, `borra solo esa: ${escrituras.join()}`); escrituras.length = 0
+  // Abrir un plan
+  D.pulsa(filaDe(m, 'e4').busca(n => n.getAttribute('data-abrir-plan-fila') === '4')); await D.espera(LARGO)
+  ok(vista(m).activa === 'g4' && hayQ(m, 'data-pantalla', 'plan'), 'con un plan: «Abrir» lleva al paso 3 con ese plan activo'); m.quita(); await D.espera(5)
+  m = await portada()
+  D.pulsa(filaDe(m, 'e7').busca(n => n.getAttribute('data-abrir-planes') != null && (n.getBoundingClientRect = () => ({ bottom: 100, left: 50 }), true))); await D.espera(5)
+  const menuP = m.raiz.busca(n => n.getAttribute('data-menu') === 'planes')
+  ok(!!menuP && menuP.conAtributo('data-abrir-plan-fila').length === 2 && menuP.style.background === '#161f29' && menuP.style.position === 'fixed', 'con varios: un desplegable opaco con los nombres')
+  D.pulsa(menuP.busca(n => n.getAttribute('data-abrir-plan-fila') === '8')); await D.espera(LARGO)
+  ok(vista(m).activa === 'g8', 'y abre el elegido, aunque no sea el primero'); m.quita(); await D.espera(5)
+  // «Qué toca ahora» y «Ver» llevan al paso 2; el nombre y duplicar, al paso 1 (la copia, sin id)
+  m = await portada()
+  D.pulsa(filaDe(m, 'e9').busca(n => n.getAttribute('data-toca') != null)); await D.espera(LARGO)
+  ok(m.raiz.busca(n => n.getAttribute('aria-current') === 'step')?.getAttribute('data-paso') === '2', '«Probarla contra el azar» lleva al paso 2'); m.quita(); await D.espera(5)
+  m = await portada()
+  D.pulsa(filaDe(m, 'e6').busca(n => n.getAttribute('data-ver-prueba') != null)); await D.espera(LARGO)
+  ok(m.raiz.busca(n => n.getAttribute('aria-current') === 'step')?.getAttribute('data-paso') === '2', '«Ver» lleva al paso 2'); m.quita(); await D.espera(5)
+  m = await portada()
+  D.pulsa(filaDe(m, 'e7').busca(n => n.getAttribute('data-toca') != null)); await D.espera(LARGO)
+  ok(vista(m).activa === 'g7' || vista(m).activa === 'g8', '«Convertirla en plan» con planes: abre el suyo'); m.quita(); await D.espera(5)
+  const PB = require(R + '/components/BuilderPanel.js')
+  const cop = PB.filaCopia(lista[1]), copC = PB.filaCopia(eC)
+  ok(cop.id === null && cop.name === 'Línea bajista (copia)' && JSON.stringify(cop.definition) === JSON.stringify(lista[1].definition) && copC.id === null && copC.name === 'Código con acentó (copia)' && copC.code_js === 'x', 'duplicar: una copia sin id, «… (copia)», también de una de código; la original no se toca')
+  m = await portada()
+  D.pulsa(filaDe(m, 'e7').busca(n => n.getAttribute('data-duplicar-estrategia') != null)); await D.espera(LARGO)
+  ok(m.raiz.conAtributo('data-ruta', 'estrategia')[0]?.textContent === 'Línea bajista (copia)' && !escrituras.length, 'el icono abre esa copia en el paso 1, sin guardar nada todavía'); m.quita(); await D.espera(5)
+  // Las de código, en su filtro; y Mis pruebas sigue
+  m = await portada()
+  D.pulsa(m.raiz.conAtributo('aria-pressed').find(n => n.textContent.startsWith('De código'))); await D.espera(5)
+  ok(nFilas() === 1 && filaDe(m, 'c1').textContent.includes('No se prueba aquí') && !!filaDe(m, 'c1').busca(n => n.getAttribute('data-duplicar-estrategia') === 'c1') && !!filaDe(m, 'c1').busca(n => n.getAttribute('data-borrar-estrategia') === 'c1'), 'una de código: su línea, sin prueba aquí, con los dos iconos')
+  D.pulsa(m.raiz.busca(n => n.getAttribute('role') === 'tab' && n.textContent.startsWith('Mis pruebas'))); await D.espera(5)
+  ok(hayQ(m, 'data-tabla', 'pruebas') && hayQ(m, 'data-buscar', 'mi-trabajo'), 'la pestaña «Mis pruebas» sigue, con el buscador')
+  m.quita(); await D.espera(5)
+  ok(!escrituras.length, `mirar y navegar por «Mi trabajo» no escribe nada en estrategias ni en planes (${escrituras.join() || 'ninguna'})`)
+  // Sin poder leer las pruebas del paso 2: la fila dice «—» y sigue «Qué toca ahora» de antes.
+  const Ml = require(R + '/lib/builder/misListas.js')
+  const sinLeer = await Ml.construyeMisEstrategias({ estrategias: [lista[3]], lotes: [], pruebas: [], planes: [], pruebasAzar: null })
+  ok(sinLeer[0].azar === null && sinLeer[0].toca.texto === 'Probarla contra el azar' && sinLeer[0].toca.accion.tipo === 'prueba', 'sin las pruebas del paso 2: «—» y la acción de siempre')
+
   console.log(fallos ? `planes-montaje: ${fallos} fallos` : 'planes-montaje: todas bien')
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(1) })

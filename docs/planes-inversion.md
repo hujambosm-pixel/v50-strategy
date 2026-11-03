@@ -327,6 +327,7 @@ vendrá con el «Modo de asignación» de `lib/mcAsignacion.js`). Se amplía el 
 - **Norma de cierre** (docs/builder.md §53): en la pantalla, el CAGR de todas las filas es `twrNeto` y el último punto de cada línea, `valorNeto`. El motor no cambia.
 - **Campos de euros con punto de miles** (docs/builder.md §56): solo cómo se ven; el plan guardado y su huella no cambian. Las cifras de referencia de abajo, comprobadas iguales.
 - **SPY y QQQ en el gráfico, tiempo en el ocioso y «Año a año»** (docs/builder.md §57): `/api/plan` con `curvas` añade el patrimonio de QQQ y SPY, que ya se ejecutaban. La tabla sale del VL de la serie y de `valorNeto`: el producto de los años da el `twrNeto`. El motor no cambia.
+- **«Mi trabajo» compacto** (docs/builder.md §58): la fila de cada estrategia dice cuántos planes guardados la usan, con «Abrir» al paso 3. Borrar una estrategia no borra sus planes: siguen con su foto.
 
 ### Cifras de referencia de los planes guardados (03/11/2026)
 
