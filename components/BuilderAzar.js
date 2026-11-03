@@ -261,8 +261,8 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
     return (
       <div style={S.pagina}>
         <CabeceraPasos actual={2} estrategia={viendo.fila.estrategia_nombre || nombre} onVolver={onVolver} enlace={enlaceTesis?.('estrategia', viendo.fila.estrategia_id)} onPaso={(n) => { if (n === 1) aPaso1(); else if (n === 3) onPaso3?.(viendo.fila.estrategia_id) }}/>
-        <div style={{ marginBottom: 12 }}><button data-boton="volver" style={{ ...S.enlace, color: B.secundario }} onClick={() => setViendo(null)}>← Volver</button></div>
-        <BuilderAzarResultado prueba={viendo.fila} resultado={viendo.resultado} onPaso1={aPaso1} onPaso3={() => onPaso3?.(viendo.fila.estrategia_id)} onBorrar={() => pideBorrar(viendo.fila)}/>
+        <BuilderAzarResultado prueba={viendo.fila} resultado={viendo.resultado} onVolver={() => setViendo(null)} onPaso1={aPaso1} onPaso3={() => onPaso3?.(viendo.fila.estrategia_id)} onBorrar={() => pideBorrar(viendo.fila)}
+          obtenerPrecios={() => leePrecios([viendo.fila.valor, ...tickersDe(viendo.fila.estrategia_foto.definition)])} ctx={ctx} version={version}/>
         {ventanaBorrar}
       </div>
     )

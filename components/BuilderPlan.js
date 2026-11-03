@@ -82,7 +82,7 @@ function CampoNumero({ valor, onCambia, etiqueta: nombre, ancho, minimo = 0, enE
 }
 
 // El ancho real del gráfico: 1 unidad = 1 píxel, las letras miden siempre 12 px. Sin navegador, 760.
-function useAncho(defecto = 760) {
+export function useAncho(defecto = 760) {
   const ref = useRef(null)
   const [w, setW] = useState(defecto)
   useEffect(() => {
