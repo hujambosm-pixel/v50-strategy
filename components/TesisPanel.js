@@ -77,7 +77,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   const [borrandoA, setBorrandoA] = useState(inicial?.borrandoAdjunto || null)   // la fila que se va a borrar
   const [ladoQuiere, setLadoQuiere] = useState(!!inicial?.lado)   // «Ver al lado del texto»: cerrado al entrar y al cambiar de tesis
   const [ancho, setAncho] = useState(inicial?.ancho ?? 0)   // el de la ventana: con menos de ANCHO_MIN_LADO, sin botón y a pantalla completa
-  const [listaElegida, setListaElegida] = useState(inicial?.listaElegida ?? null)   // con el panel de al lado, lo pulsado con ≡ ('abierta' o 'plegada'); null: lo de por defecto
+  const [listaElegida, setListaElegida] = useState(inicial?.listaElegida ?? null)   // lo pulsado con ≡ ('abierta' o 'plegada'); null: lo de por defecto. No se recuerda al recargar
   const [ladoElegido, setLadoElegido] = useState(inicial?.ladoElegido ?? null)
   const firmadasEn = useRef(0)   // cuándo se firmaron las URL: cambiarlas recarga el PDF que se está leyendo, así que solo se renuevan si llevan casi una hora
   const Editor = deps?.Editor || EditorTesis
@@ -205,7 +205,8 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   }
   const abreVisor = (f) => { setVisor({ clase: f.clase, id: f.id }); renuevaUrls() }
   const elige = (f) => { setLadoElegido(f.id); renuevaUrls() }
-  const ponLado = (v) => { setLadoQuiere(v); setListaElegida(null); if (v) renuevaUrls() }
+  // Abrir o cerrar el panel vuelve a lo de por defecto de la lista; cambiar de tesis sin panel no la toca (si estaba plegada, sigue plegada).
+  const ponLado = (v) => { if (v !== ladoQuiere) setListaElegida(null); setLadoQuiere(v); if (v) renuevaUrls() }
   // Pulsar dos veces una imagen del texto: el visor, recorriendo las imágenes de la tesis.
   const abreImagen = async (ruta) => {
     const f = archivos.find(x => x.ruta === ruta) || (await leeArchivos()).find(x => x.ruta === ruta)
@@ -260,7 +261,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
   const cabeLado = ancho >= ANCHO_MIN_LADO
   const lado = ladoQuiere && cabeLado && !!borr   // el panel de al lado, abierto
   const elegida = adjuntos.find(f => f.id === ladoElegido) || adjuntos[0] || null
-  const plegada = lado && listaPlegadaDe(ancho, listaElegida)         // la lista de tesis, en una columna estrecha
+  const plegada = lado ? listaPlegadaDe(ancho, listaElegida) : listaElegida === 'plegada'         // la lista de tesis, en una columna estrecha: sin el panel, solo si se pulsa ≡
 
   return (
     <div data-tesis className="ts-pagina" style={{ ...S.pagina, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -278,7 +279,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
       </div>
       {fallo && <div data-fallo style={{ color: '#ff8b8b' }}>⚠ {fallo}</div>}
 
-      <div className="ts-cuerpo" style={lado ? { gridTemplateColumns: `${plegada ? '44px' : '360px'} minmax(0, 1fr) 560px` } : undefined}>
+      <div className="ts-cuerpo" style={lado ? { gridTemplateColumns: `${plegada ? '44px' : '360px'} minmax(0, 1fr) 560px` } : plegada ? { gridTemplateColumns: '44px minmax(0, 1fr)' } : undefined}>
         {/* ── Izquierda: buscador, filtros y lista ── */}
         {plegada ? (
           <div data-lista-plegada style={{ ...S.tarjeta, position: 'sticky', top: 0, width: 44, boxSizing: 'border-box', padding: '6px 0', display: 'flex', justifyContent: 'center' }}>
@@ -287,7 +288,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, salida
         ) : (
         <div data-lista className="ts-lista" style={{ ...S.tarjeta, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {lado && <BotonLista pista="Plegar la lista de tesis" onClick={() => setListaElegida('plegada')}/>}
+            <BotonLista pista="Plegar la lista de tesis" onClick={() => setListaElegida('plegada')}/>
             <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
               <input ref={cajaBusca} aria-label="Buscar" value={busca} onChange={e => setBusca(e.target.value)} placeholder={enTexto ? 'Buscar en títulos y textos…' : 'Buscar en los títulos…'} style={{ ...campo, width: '100%', paddingRight: 30 }}/>
               {!!busca && <button data-borrar-busca aria-label="Borrar la búsqueda" title="Borrar la búsqueda" onClick={() => { setBusca(''); cajaBusca.current?.focus() }}
