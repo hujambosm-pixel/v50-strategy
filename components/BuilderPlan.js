@@ -89,7 +89,8 @@ function useAncho(defecto = 760) {
 
 // «Cómo crece tu dinero»: tu plan, comprar y mantener la acción (Buy&Hold), el mismo plan con el ocioso en liquidez y lo aportado
 // (escalonado), en escala logarítmica; debajo, la franja dentro de la acción / en el ocioso. §50: todas continuas y finas, de colores
-// bien distintos, y al final de cada una su nombre y su importe final (el de la tabla: tras vender todo y pagar impuestos y comisiones).
+// bien distintos, y al final de cada una su nombre y su importe final (el de la tabla: tras vender todo y pagar impuestos y comisiones). §53: el último
+// punto de cada línea es ese mismo importe (cifrasPlan), así que línea y etiqueta coinciden.
 export const LINEAS_PLAN = [
   { k: 'plan', t: 'Tu plan', color: AZUL, ancho: 2 },
   { k: 'activo', t: 'Buy&Hold', color: '#d0d7de', ancho: 1.5 },
@@ -119,7 +120,7 @@ function GraficoPlan({ curva, activo, finales = {} }) {
   const tramos = []
   curva.dentro.forEach((d, i) => { const u = tramos[tramos.length - 1]; if (u && u.d === d) u.h = i; else tramos.push({ d, i, h: i }) })
   const yF = H1 + 8, ancho1 = n > 1 ? (W - IZQ - DER) / (n - 1) : 0
-  const resumen = `Cómo crece tu dinero, en escala logarítmica, del ${fechaCorta(curva.fechas[0])} al ${fechaCorta(curva.fechas[n - 1])}: ` + lineas.map(l => `${nombreLinea(l, activo)} termina en ${euros(Number.isFinite(finales[l.k]) ? finales[l.k] : l.v[l.v.length - 1], 0)}`).join('; ') + '.'
+  const resumen = `Cómo crece tu dinero, en escala logarítmica, del ${fechaCorta(curva.fechas[0])} al ${fechaCorta(curva.fechas[n - 1])}: ` + lineas.map(l => `${nombreLinea(LINEAS_PLAN.find(x => x.k === l.k), activo)} termina en ${euros(Number.isFinite(finales[l.k]) ? finales[l.k] : l.v[l.v.length - 1], 0)}`).join('; ') + '.'
   return (
     <div ref={ref} style={{ width: '100%', marginTop: 6 }}>
       <svg data-grafico="plan" width={W} height={yF + FR + 4} role="img" aria-label={resumen} style={{ display: 'block', fontFamily: B.letra }}>

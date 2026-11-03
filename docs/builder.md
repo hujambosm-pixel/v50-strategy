@@ -2120,3 +2120,20 @@ se mueve (comprobado antes y después, abajo).
   sin comisión, € fijos, % con mínimo, sin impuestos, ×2 con «compra», 2016–2020, sin aportación y los 2 planes guardados): respuesta y cifras de pantalla idénticas byte a
   byte salvo las órdenes. Planes guardados: ida y vuelta y huellas iguales con las dos versiones y las de la base. Montaje SWC con renderToString, con y sin comisión: las
   únicas diferencias del HTML son las órdenes y la tarjeta. No comprobado en la pantalla entera con sesión. Comprobaciones comunes.
+
+## 53. Paso 3 · la norma de cierre en la tabla y el gráfico
+
+**Norma de Sergi: TODO se mide como si se vendiera todo el último día** (comisión, impuestos y la orden de venta contada). `lib/builder/planPantalla.js` (`cifrasPlan`, `conCierre`, los «?») y el comentario de `components/BuilderPlan.js`. El motor no cambia: `twrNeto` y `valorNeto` ya salían de `lib/planes/medidas.js`.
+- **CAGR de todas las filas y la cifra «CAGR del plan»**: `twrNeto`, antes `twr` (el VL del último cierre, antes de vender).
+- **Último punto de cada línea del gráfico** (plan, Buy&Hold, ocioso en liquidez): el `valorNeto` de su fila (`conCierre`). Línea, etiqueta y tabla dicen lo mismo; por eso una línea puede bajar de golpe el último día.
+- **Se aparta de la regla de oro del encargo, decidido por Sergi el 03/11/2026**: el encargo pedía que el CAGR del plan no cambiara, porque en su captura ya coincidía. Solo coincidía en ese plan, sin impuesto final pendiente. Con impuesto o comisión final, el CAGR del plan también baja (tabla). Se aplicó la norma a todas las filas para comparar plan y Buy&Hold con la misma vara. Final, TIR, caída, impuestos, comisiones y órdenes no cambian en ninguna fila (`planes-pantalla.js` lo compara con la versión anterior).
+- **Tramos («CAGR de tu plan» por tramo): NO cumplen la norma, y no se han tocado.** Son el VL de cada mitad, del mismo cálculo: no venden al final de cada tramo. Para cumplirla habría que simular cada tramo aparte, con sus propios impuestos. Su «?» lo dice.
+
+| Plan (cifras de hoy) | Final | CAGR del plan | CAGR Buy&Hold acción | Fin de la línea Buy&Hold |
+|---|---|---|---|---|
+| Prueba editor EMA20 · AAPL · 2016–2025 · 10.000 € + 300 €/mes · GLD · 0,1 % | 114.340,91 € (igual) | 15,84 % → 15,74 % | 26,63 % → 24,08 % | 247.456,87 € → 201.921,87 € |
+| Plan 4, «Copia editor 23 / gold» | 197.917,32 € (igual) | 24,55 % → 24,55 % | 26,64 % → 24,10 % | 247.525,86 € → 202.152,60 € |
+| Plan 6, «SuperTrend 10/3 / gold» | 75.122,81 € (igual) | 22,98 % → 22,37 % | 26,65 % → 23,89 % | 105.974,05 € → 85.019,73 € |
+| Plan 7, «Prueba editor EMA20» | 64.625,48 € (igual) | 20,81 % → 20,54 % | 26,65 % → 23,89 % | 105.974,05 € → 85.019,73 € |
+
+- Comprobado: a mano, en `scripts/comprobaciones/planes-pantalla.js` (en `comunes.sh`): 10.000 € sin aportación, de 100 a 114 en 10 años: 1.400 € de ganancia, 19 % = 266 €, quedan 11.134 €; CAGR = (11.134 / 10.000)^(1/años) − 1 = 1,0801 %, igual a su TIR. Tabla de arriba con los precios reales de la caché, en solo lectura. Planes guardados: ida y vuelta y huellas iguales. No comprobado en la pantalla entera con sesión.

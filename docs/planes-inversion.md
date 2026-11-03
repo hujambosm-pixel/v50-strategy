@@ -324,3 +324,16 @@ vendrá con el «Modo de asignación» de `lib/mcAsignacion.js`). Se amplía el 
   pantalla enseña «—»). El motor no cambia; la tabla de la pantalla ya no enseña la referencia LIQUIDEZ, aunque se sigue calculando.
 - **Contador de órdenes** (docs/builder.md §52): `costes.ordenes` cuenta todas las compras y ventas de símbolos (no LIQUIDEZ), con o sin costes, y la venta final (una por símbolo
   con posición el último día). Corrige la línea anterior: ya no se queda en 0 sin costes y la pantalla ya no enseña «—». Ningún importe cambia.
+- **Norma de cierre** (docs/builder.md §53): en la pantalla, el CAGR de todas las filas es `twrNeto` y el último punto de cada línea, `valorNeto`. El motor no cambia.
+
+### Cifras de referencia de los planes guardados (03/11/2026)
+
+Para comparar a partir de ahora. Precios de la caché de esa fecha; final tras vender todo el último día. Sergi confirmó que el 02/11 a las 00:18–00:20 creó el plan 7 y puso 300 €/mes de aportación al plan 4. Todos: AAPL · 2016–2025 · ocioso GLD · 0,37 € fijos por orden · España.
+
+| Plan | Dinero | Final | CAGR | TIR | Órdenes | Comisiones | Impuestos |
+|---|---|---|---|---|---|---|---|
+| 4 · Copia editor 23 / gold | 10.000 € + 300 €/mes | 197.917,32 € | 24,55 % | 22,98 % | 446 | 165,02 € | 39.785,50 € |
+| 6 · SuperTrend 10/3 / gold | 10.000 € | 75.122,81 € | 22,37 % | 22,37 % | 163 | 60,31 € | 16.345,97 € |
+| 7 · Prueba editor EMA20 | 10.000 € | 64.625,48 € | 20,54 % | 20,54 % | 502 | 185,74 € | 13.335,61 € |
+
+La de siempre, «Prueba editor EMA20» · AAPL · 2016–2025 · 10.000 € + 300 €/mes · GLD · 0,1 %: 114.340,91 €, CAGR 15,74 %, TIR 14,50 %, caída −34,02 %, 624 órdenes.
