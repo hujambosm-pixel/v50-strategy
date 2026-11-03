@@ -170,6 +170,19 @@ texto con visor a pantalla completa, más un botón para leerlos al lado del tex
   archivo de la prueba lo sube la clave de servicio a `_humo/` y lo borra.
 - **`usuarios`**: por HTTP y con `lib/tesisArchivos.js`: crea dos usuarios temporales con la API de administración y comprueba que B no ve, descarga, lista, firma, borra ni
   sube nada de A; borra usuarios, tesis y archivos al terminar, salga bien o mal. **Lo lanza Sergi a mano**: Claude no crea cuentas en la base de producción.
+  Cuando A borra lo suyo hay cuatro comprobaciones separadas: que se borran 2; que no queda nada (la lista de A, las filas con la clave de servicio y los objetos de `storage.objects`
+  con `consulta`); que ya no se puede firmar una URL nueva; y que la URL vieja deja de servir (cada 5 s hasta 90 s, con los segundos, el código HTTP y cuándo caducaba la firma). Tarda hasta minuto y medio más.
+
+### Duración de las URL firmadas y límites conocidos
+
+- **Duración**: 1 hora las imágenes y los adjuntos que se ven en pantalla (`urlFirmada` y `urlsFirmadas`, por defecto); 5 minutos las descargas (`descargar`). La prueba `usuarios` firma con 60 s.
+- **Caché tras borrar (SOSPECHA, sin confirmar)**: la primera vez que se lanzó el modo `usuarios` falló la comprobación que juntaba borrar, lista vacía y URL vieja. La sospecha es que la URL ya pedida se sigue
+  sirviendo un rato desde la caché de Storage (los archivos se suben con `max-age=3600`). Si se confirma, quien ya tenga una URL firmada podría seguir viendo un archivo borrado un rato, como mucho hasta que caduque o
+  expire la caché. Las comprobaciones separadas de arriba son las que lo tienen que decidir: si el archivo ya no se puede firmar y la URL vieja sigue sirviendo, es la caché.
+- **PENDIENTE: `borrar` no comprueba lo borrado** (auditoría del 03/11/2026). Devuelve cuántos archivos le pidieron, no cuántos se han borrado. Sin permiso, el bucket responde bien con una lista vacía
+  y el borrado de filas responde bien con 0 filas, sin error (la propia prueba lo enseña: B llama a `borrar` con lo de A, no da error y no borra nada). Por eso, si el bucket no borrara pero la fila sí, quedaría un archivo
+  huérfano sin aviso; y `borrarTodoDeTesis` no terminaría con 1000 archivos o más si las filas no se borraran. No hay indicios de que esté pasando: las políticas dejan al dueño borrar lo suyo y ese día no había huérfanos
+  (1 archivo, 1 fila). Arreglo previsto, aparte: comparar lo borrado con lo pedido y, si falta algo, dar error y conservar la fila.
 
 ## Comprobaciones
 

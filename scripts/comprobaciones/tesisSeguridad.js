@@ -164,6 +164,7 @@ async function pruebaUsuarios() {
     const iA = await L.subir(a.ctx, { tesisId: tA.id, clase: 'imagen', archivo: archivo('c.png', 'image/png', 'png de A') })
     ok(fA.nombre === 'Guía ñ.txt' && fA.ruta.startsWith(`${a.id}/${tA.id}/adjunto/`), 'A sube: fila con el nombre original y ruta en su carpeta')
     ok((await L.listar(a.ctx, tA.id)).length === 2 && await L.espacioUsado(a.ctx) === fA.bytes + iA.bytes, 'A lista lo suyo y ve su espacio usado')
+    const firmadaEn = Date.now()
     const firmada = await L.urlFirmada(a.ctx, fA.ruta, 60)
     ok(await (await fetch(firmada)).text() === 'secreto de A', 'A lee su archivo con una URL firmada')
     ok(Object.keys(await L.urlsFirmadas(a.ctx, [fA.ruta, iA.ruta])).length === 2, 'A firma en lote')
@@ -198,7 +199,25 @@ async function pruebaUsuarios() {
     // Lo propio de B sí funciona, y A borra lo suyo.
     await L.subir(b.ctx, { tesisId: tB.id, clase: 'adjunto', archivo: archivo('b.txt', 'text/plain', 'de B') })
     ok((await L.listar(b.ctx, tB.id)).length === 1, 'B sí sube a lo suyo')
-    ok(await L.borrarTodoDeTesis(a.ctx, tA.id) === 2 && (await L.listar(a.ctx, tA.id)).length === 0 && !(await fetch(firmada)).ok, 'A borra lo suyo: filas y archivos fuera (y la URL firmada ya no sirve)')
+    const borrados = await L.borrarTodoDeTesis(a.ctx, tA.id), borradoEn = Date.now()
+    ok(borrados === 2, `A borra lo suyo: se borran 2${borrados === 2 ? '' : ` (devuelve ${borrados})`}`)
+    // Lo que queda de verdad: la lista de A, las filas con la clave de servicio y los objetos con consulta (storage.objects no se lee por REST).
+    const listaA = await L.listar(a.ctx, tA.id)
+    const filasSrv = await (await fetch(`${URL_S}/rest/v1/tesis_adjuntos?select=id&tesis_id=eq.${tA.id}`, { headers: hs })).json()
+    const objetosA = await consulta(`SELECT count(*)::int AS n FROM storage.objects WHERE bucket_id = '${BUCKET}' AND name LIKE '${a.id}/${tA.id}/%'`)
+    ok(listaA.length === 0 && Array.isArray(filasSrv) && filasSrv.length === 0 && objetosA[0].n === 0, `A borra lo suyo: la lista queda vacía (lista ${listaA.length}, filas ${Array.isArray(filasSrv) ? filasSrv.length : '?'}, objetos ${objetosA[0].n})`)
+    // Una firma nueva la decide el archivo, no la caché: si ya no existe, no se puede firmar.
+    let sinFirma = null
+    try { await L.urlFirmada(a.ctx, fA.ruta, 60) } catch (e) { sinFirma = e.message }
+    ok(sinFirma !== null, `A borra lo suyo: ya no se puede firmar una URL nueva${sinFirma ? ` (${sinFirma})` : ' (se ha firmado: el archivo sigue existiendo)'}`)
+    // La URL vieja, cada 5 s hasta 90 s (más que su caducidad de 60 s).
+    const caducaA = Math.round((firmadaEn + 60000 - borradoEn) / 1000)
+    let vieja = await fetch(firmada), segundos = Math.round((Date.now() - borradoEn) / 1000)
+    while (vieja.ok && segundos < 90) {
+      await new Promise(bien => setTimeout(bien, 5000))
+      vieja = await fetch(firmada); segundos = Math.round((Date.now() - borradoEn) / 1000)
+    }
+    ok(!vieja.ok, `A borra lo suyo: la URL firmada deja de servir (${vieja.ok ? 'sigue sirviendo' : 'deja de servir'} a los ${segundos} s de borrar, HTTP ${vieja.status}; la firma caducaba a los ${caducaA} s)`)
     await T.borrarTesis(a.ctx, tA.id)
   } finally {
     // Limpieza, salga bien o mal: archivos con la clave de servicio, tesis y usuarios.
