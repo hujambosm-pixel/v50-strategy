@@ -46,7 +46,7 @@ import { esDeCodigo } from '../lib/builder/codigo'
 import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
 import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, AVISO_PRUEBA, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
-  ayudaCaida, ayudaPrueba, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros,
+  ayudaCaida, ayudaPrueba, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS } from '../lib/builder/planPantalla'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0', AZUL = '#58a6ff', GRIS_FRANJA = '#3a4656'
@@ -103,15 +103,17 @@ function useAncho(defecto = 760) {
 export const LINEAS_PLAN = [
   { k: 'plan', t: 'Tu plan', color: AZUL, ancho: 2 },
   { k: 'activo', t: 'Buy&Hold', color: '#d0d7de', ancho: 1.5 },
+  { k: 'spy', t: 'Buy&Hold SPY', color: '#d2a8ff', ancho: 1.5 },
+  { k: 'qqq', t: 'Buy&Hold QQQ', color: '#56d4dd', ancho: 1.5 },
   { k: 'ociosoLiquidez', t: 'Ocioso en liquidez', color: '#f0883e', ancho: 1.5 },
   { k: 'aportado', t: 'Lo aportado', color: '#6e7681', ancho: 1, escalon: true },
 ]
 const nombreLinea = (l, activo) => l.k === 'activo' && activo ? `${l.t} ${activo}` : l.t
-// finales: { plan, activo, ociosoLiquidez, aportado } en euros (el texto al final de cada línea; sin él, solo el nombre).
-function GraficoPlan({ curva, activo, finales = {} }) {
+// finales: { plan, activo, spy, qqq, ociosoLiquidez, aportado } en euros (el texto al final de cada línea; sin él, solo el nombre). §57: visibles: { clave: sí o no } (Tu plan siempre se ve); más alto (375 px, antes 250).
+function GraficoPlan({ curva, activo, finales = {}, visibles = LINEAS_DEFECTO }) {
   const [ref, W] = useAncho()
-  const IZQ = 76, DER = 200, H1 = 250, ARR = 22, FR = 14, n = curva.fechas.length
-  const lineas = LINEAS_PLAN.filter(l => curva[l.k]?.length).map(l => ({ ...l, t: `${nombreLinea(l, activo)}${Number.isFinite(finales[l.k]) ? ` ${euros(finales[l.k], 0)}` : ''}`, v: curva[l.k] }))
+  const IZQ = 76, DER = 200, H1 = 375, ARR = 22, FR = 14, n = curva.fechas.length
+  const lineas = LINEAS_PLAN.filter(l => curva[l.k]?.length && (l.k === 'plan' || visibles[l.k])).map(l => ({ ...l, t: `${nombreLinea(l, activo)}${Number.isFinite(finales[l.k]) ? ` ${euros(finales[l.k], 0)}` : ''}`, v: curva[l.k] }))
   const vals = lineas.flatMap(l => l.v).filter(v => Number.isFinite(v) && v > 0)
   if (!vals.length || n < 2) return null
   const lo = Math.min(...vals), hi = Math.max(...vals), L = Math.log
@@ -143,11 +145,13 @@ function GraficoPlan({ curva, activo, finales = {} }) {
     </div>
   )
 }
-function Leyenda({ sinOcioso = false, activo = null }) {
+// §57: cada línea que se puede ocultar lleva su casilla; Tu plan, no.
+function Leyenda({ curva, activo = null, visibles = LINEAS_DEFECTO, onMarca = null }) {
   const muestra = (l) => <svg width="30" height="10" aria-hidden="true"><line x1="1" x2="29" y1="5" y2="5" stroke={l.color} strokeWidth={l.ancho}/></svg>
   return (
     <div data-leyenda style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: B.secundario, marginTop: 6, alignItems: 'center' }}>
-      {LINEAS_PLAN.filter(l => !(sinOcioso && l.k === 'ociosoLiquidez')).map(l => <span key={l.k} data-muestra={l.k} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{muestra(l)}{nombreLinea(l, activo)}</span>)}
+      {LINEAS_PLAN.filter(l => curva[l.k]?.length).map(l => l.k === 'plan' ? <span key={l.k} data-muestra={l.k} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{muestra(l)}{nombreLinea(l, activo)}</span>
+        : <label key={l.k} data-muestra={l.k} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}><input type="checkbox" data-casilla={l.k} checked={!!visibles[l.k]} onChange={e => onMarca?.(l.k, e.target.checked)} style={{ margin: 0 }}/>{muestra(l)}{nombreLinea(l, activo)}</label>)}
       <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><span style={{ width: 14, height: 10, background: AZUL, display: 'inline-block' }}/>dentro de la acción</span>
       <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><span style={{ width: 14, height: 10, background: GRIS_FRANJA, display: 'inline-block' }}/>en el ocioso</span>
     </div>
@@ -224,6 +228,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const [calc, setCalc] = useState({ calculando: !!inicial?.calculando, resultado: inicial?.resultado || null, error: inicial?.error || null })
   const [todasPruebas, setTodasPruebas] = useState(inicial?.pruebas || null)
   const [huella, setHuella] = useState(inicial?.huella || null)
+  // §57: las líneas marcadas del gráfico, recordadas en este navegador (si no se puede leer o escribir, las de por defecto).
+  const [lineasVisibles, setLineasVisibles] = useState(inicial?.lineas || LINEAS_DEFECTO)
+  useEffect(() => { if (inicial?.lineas) return; try { const g = JSON.parse(window.localStorage.getItem(CLAVE_LINEAS)); if (g && typeof g === 'object') setLineasVisibles({ ...LINEAS_DEFECTO, ...g }) } catch (_) {} }, [])
+  const marcaLinea = (k, si) => { const x = { ...lineasVisibles, [k]: si }; setLineasVisibles(x); try { window.localStorage.setItem(CLAVE_LINEAS, JSON.stringify(x)) } catch (_) {} }
   const [resPrueba, setResPrueba] = useState(inicial?.resultadoPrueba || null)
   const vivo = useRef(true)
   useEffect(() => { vivo.current = true; return () => { vivo.current = false } }, [])
@@ -604,18 +612,26 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const resultado = !cifras ? (
     <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{!estrategia ? 'Elige una estrategia de tarjetas de velas diarias.' : calc.calculando || clave ? 'Calculando tu plan…' : 'Sin resultado todavía.'}</div>
   ) : (<>
-    <div data-cifras style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 10 }}>
+    <div data-cifras style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 165px), 1fr))', gap: 10 }}>
       <Cifra id="aportado" titulo="Has aportado" ayuda={AYUDA_PLAN.aportado} valor={euros(s.aportado, 0)}/>
       <Cifra id="final" titulo="Tienes al final" ayuda={AYUDA_PLAN.final} valor={euros(s.final, 0)} sub={`ganancia neta ${euros(s.ganancia, 0)}`}/>
       <Cifra id="caida" titulo="Peor caída" ayuda={ayudaCaida(s)} valor={pct(s.caidaPct)} sub={`${fechaCorta(s.caidaPctValle)} · ${euros(s.caidaEuros, 0)}`}/>
       <Cifra id="twr" titulo="CAGR del plan" ayuda={AYUDA_PLAN.twr} valor={pct(s.twr)}/>
       <Cifra id="tir" titulo="Rentabilidad de tu dinero (TIR)" ayuda={AYUDA_PLAN.tir} valor={pct(s.tir)}/>
-      <Cifra id="costes" titulo="Impuestos y comisiones" ayuda={AYUDA_PLAN.costes} valor={<span style={{ display: 'flex', flexDirection: 'column', fontSize: 15, lineHeight: 1.35 }}>
-        <span data-impuestos>{`Impuestos ${euros(s.impuestos, 0)}`}</span><span data-comisiones>{`Comisiones ${euros(s.costes, 0)} (${cifras.ordenes} órdenes)`}</span></span>}/>
+      <Cifra id="ocioso" titulo="En el ocioso" ayuda={AYUDA_PLAN.enOcioso} valor={`${pct(cifras.enOcioso, 1)} del tiempo`}/>
+      {/* §57: en una línea; el detalle de las órdenes, en su tooltip y en su «?». */}
+      <Cifra id="costes" titulo="Impuestos y comisiones" ayuda={`${AYUDA_PLAN.costes} En este plan: ${euros(s.impuestos, 0)} de impuestos y ${euros(s.costes, 0)} de comisiones en ${cifras.ordenes} órdenes.`} valor={<span title={`Impuestos ${euros(s.impuestos, 0)} · Comisiones ${euros(s.costes, 0)} (${cifras.ordenes} órdenes)`} style={{ fontSize: 16, whiteSpace: 'nowrap' }}>
+        <span data-impuestos>{euros(s.impuestos, 0)}</span> · <span data-comisiones>{euros(s.costes, 0)}</span></span>}/>
     </div>
     <Tarjeta id="grafico" titulo="Cómo crece tu dinero" ayuda={`${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franja}`}>
-      <GraficoPlan curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes} finales={finalesDe(cifras)}/>
-      <Leyenda sinOcioso={sinOcioso} activo={activoRes}/>
+      <GraficoPlan curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles}/>
+      <Leyenda curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes} visibles={lineasVisibles} onMarca={marcaLinea}/>
+    </Tarjeta>
+    <Tarjeta id="anios" titulo="Año a año" ayuda={AYUDA_PLAN.anios}>
+      <div style={{ overflowX: 'auto' }}><table data-tabla="anios" style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <thead><tr>{['Año', 'Rentabilidad del plan', 'Buy&Hold del valor', 'Peor caída del plan en el año', 'Peor caída Buy&Hold', '% del año en el ocioso'].map(h => <th key={h} style={cab}>{h}</th>)}</tr></thead>
+        <tbody>{cifras.anios.map(x => <tr key={x.anio} data-anio={x.anio}><td style={celda}>{x.anio}</td><td style={{ ...celda, color: x.plan < 0 ? ROJO : B.texto, fontWeight: 700 }}>{pct(x.plan)}</td><td style={{ ...celda, color: x.activo < 0 ? ROJO : B.texto }}>{pct(x.activo)}</td><td style={celda}>{pct(x.caidaPlan)}</td><td style={celda}>{pct(x.caidaActivo)}</td><td style={celda}>{pct(x.enOcioso, 1)}</td></tr>)}</tbody>
+      </table></div>
     </Tarjeta>
     <Tarjeta id="alternativas" titulo={TITULO_ALTERNATIVAS} ayuda={AYUDA_PLAN.alternativas}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="alternativas" style={{ borderCollapse: 'collapse', width: '100%' }}>

@@ -77,6 +77,44 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   ok(h.slice(h.indexOf('data-cifra="twr"')).includes(Pa.pct(c.seis.twr)), `la cifra «CAGR del plan», ${Pa.pct(c.seis.twr)}`)
 
 
+  // ── 1b · «Año a año» y el tiempo en el ocioso, a mano (§57) ──
+  // Dos años naturales. Buy&Hold: compra a 100; 2021 acaba en 114 (+14 %); 2022 sigue en 114, con la venta final: 11.400 € − 19 % de 1.400 € = 11.134 € (−2,3333 %). 1,14 × 0,976667 = 1,1134.
+  // Tu plan: entra a 105 (fila 3), máximo de cierre 120, cierre 113 (−5,8333 %), sale a 114 en la fila 10: 2021 acaba en 114 / 105 (+8,5714 %); 2022: 10.857,14 € → 10.694,29 € tras 162,86 € de impuesto (−1,5 %).
+  const fs2 = [...Array.from({ length: 11 }, (_, i) => dia('2021-01-01', i)), '2022-12-31'], anios2 = (Date.parse('2022-12-31') - Date.parse('2021-01-01')) / 864e5 / 365.25
+  const conResp = (plan, datos) => { const e0 = E.evaluaPlan(plan, datos, { detalle: true }), ej0 = Object.fromEntries(E.referenciasDe(plan).filter(x => ['OCIOSO_LIQUIDEZ', 'ACTIVO', 'QQQ', 'SPY'].includes(x.id)).map(x => [x.id, P.ejecutaPlan(x.plan, datos, { detalle: false })]))
+    return { evaluacion: e0, curvas: Object.fromEntries(Object.entries(ej0).map(([id, r]) => [id, { patrimonio: r.serie.map(x => x.patrimonio), vl: r.serie.map(x => x.vl) }])), ordenesReferencias: Object.fromEntries(Object.entries(ej0).map(([id, r]) => [id, r.costes.ordenes])) } }
+  const p2 = planMano(fs2), c2 = Pa.cifrasPlan(conResp(p2, datosMano(fs2)), p2), A0 = c2.anios[0], A1 = c2.anios[1]
+  ok(c2.anios.length === 2 && A0.anio === '2021' && A1.anio === '2022', 'una fila por año natural')
+  ok(cerca(A0.activo, 0.14) && cerca(A1.activo, 11134 / 11400 - 1), `Buy&Hold: +14 % y, con la venta final, −2,3333 % (obtenido ${Pa.pct(A0.activo)} y ${Pa.pct(A1.activo)})`)
+  ok(cerca(A0.plan, 114 / 105 - 1) && cerca(A1.plan, -0.015), `tu plan: +8,5714 % y, con la venta final, −1,5 % (obtenido ${Pa.pct(A0.plan, 4)} y ${Pa.pct(A1.plan, 4)})`)
+  ok(cerca(A0.caidaActivo, 113 / 120 - 1) && cerca(A0.caidaPlan, 113 / 120 - 1) && A1.caidaPlan === 0 && A1.caidaActivo === 0, 'las caídas del año: 2021, de 120 a 113 (−5,8333 %) en los dos; 2022, ninguna: la venta final no cuenta como caída')
+  ok(cerca(A0.enOcioso, 4 / 11) && A1.enOcioso === 1 && cerca(c2.enOcioso, 5 / 12), `en el ocioso: 4 de 11 velas en 2021, 1 de 1 en 2022, 5 de 12 en total (${Pa.pct(c2.enOcioso, 1)})`)
+  const prod = (xs, k) => xs.reduce((m, x) => m * (1 + x[k]), 1)
+  ok(cerca(prod(c2.anios, 'plan'), Math.pow(1 + c2.seis.twr, anios2), 1e-9) && cerca(prod(c2.anios, 'plan'), 10694.285714285714 / 10000, 1e-9), `el producto de (1 + cada año) = (1 + CAGR)^años, con ${anios2.toFixed(3)} años: ${prod(c2.anios, 'plan').toFixed(6)}`)
+  ok(Math.abs(prod(c2.anios, 'plan') / Math.pow(1 + c2.seis.twr, 2) - 1) < 0.001, 'y a menos de un 0,1 % de (1 + CAGR)^2')
+  ok(cerca(prod(c2.anios, 'activo'), Math.pow(1 + f(c2, 'ACTIVO').twr, anios2), 1e-9), 'lo mismo en Buy&Hold, con su CAGR')
+  // Con aportaciones: no cuentan como ganancia. 500 € el día 1 de cada mes (entran solo en la última fila, sin moverse después): la rentabilidad de cada año es la misma que sin ellas.
+  const p3 = planMano(fs2, { dinero: { capitalInicial: 10000, aportaciones: { importe: 500, frecuencia: 'mensual', crecimientoAnual: 0 }, extraordinarias: [] } }), c3 = Pa.cifrasPlan(conResp(p3, datosMano(fs2)), p3)
+  ok(c3.seis.aportado > 10000 && cerca(c3.anios[0].activo, 0.14) && cerca(prod(c3.anios, 'plan'), Math.pow(1 + c3.seis.twr, anios2), 1e-9) && cerca(prod(c3.anios, 'activo'), Math.pow(1 + f(c3, 'ACTIVO').twr, anios2), 1e-9), `con aportaciones (${Pa.euros(c3.seis.aportado, 0)}): 2021 sigue siendo +14 % en Buy&Hold y el producto sigue dando el CAGR`)
+  ok(Pa.parteOciosa([]) === null && Pa.parteOciosa([1, 1, 0, 0]) === 0.5, 'parteOciosa: sin franja, nada; 2 de 4, el 50 %')
+  ok(fin(c2.curva.qqq) === f(c2, 'QQQ').final && fin(c2.curva.spy) === f(c2, 'SPY').final && Pa.finalesDe(c2).qqq === fin(c2.curva.qqq) && Pa.finalesDe(c2).spy === fin(c2.curva.spy), 'SPY y QQQ: el último punto de la línea = su fila de la tabla = su etiqueta')
+  const pintaB = (o = {}) => renderToString(React.createElement(BP, { estrategias: [est], estrategiaId: 'x', deps: { ctx: null, calcula: async () => null }, inicial: { planes: [], simbolos: ['TEST'], pruebas: [], huella: 'h', huellas: { x: 'h' }, ajustes: { activo: 'TEST', ocioso: 'OCI' }, resultado: { respuesta: conResp(p2, datosMano(fs2)), plan: p2 }, ...o } })).split('<!-- -->').join('')
+  let hB = pintaB()
+  ok(hB.includes('data-tabla="anios"') && hB.includes('data-anio="2021"') && hB.includes('data-anio="2022"') && hB.indexOf('data-tarjeta="grafico"') < hB.indexOf('data-tarjeta="anios"') && hB.indexOf('data-tarjeta="anios"') < hB.indexOf('data-tarjeta="alternativas"'), 'la tabla «Año a año», justo bajo el gráfico')
+  ok(hB.slice(hB.indexOf('data-cifra="ocioso"')).includes(`${Pa.pct(5 / 12, 1)} del tiempo`), `la tarjeta «En el ocioso»: ${Pa.pct(5 / 12, 1)} del tiempo`)
+  const tCostes = hB.slice(hB.indexOf('data-cifra="costes"'), hB.indexOf('</div></div>', hB.indexOf('data-cifra="costes"')))
+  ok(tCostes.includes('white-space:nowrap') && tCostes.includes(' · <span data-comisiones') && !tCostes.includes('flex-direction:column'), '«Impuestos y comisiones», en una línea')
+  ok(/height="39[0-9]|height="40[0-9]/.test(hB) , 'el gráfico, 1,5 veces más alto (375 px + la franja)')
+  ok(hB.includes('data-casilla="activo"') && hB.includes('data-casilla="spy"') && hB.includes('data-casilla="qqq"') && hB.includes('data-casilla="ociosoLiquidez"') && hB.includes('data-casilla="aportado"') && !hB.includes('data-casilla="plan"'), 'las casillas de la leyenda, salvo Tu plan')
+  ok(hB.includes('data-linea="plan"') && hB.includes('data-linea="activo"') && !hB.includes('data-linea="spy"') && !hB.includes('data-linea="qqq"') && hB.includes('data-linea="ociosoLiquidez"') && hB.includes('data-linea="aportado"'), 'por defecto: Buy&Hold del valor, ocioso en liquidez y lo aportado sí; SPY y QQQ no')
+  hB = pintaB({ lineas: { activo: true, spy: true, qqq: true, ociosoLiquidez: true, aportado: true } })
+  const yEts = [...hB.matchAll(/data-etiqueta="[^"]+" x="[^"]+" y="([0-9.]+)"/g)].map(x => Number(x[1])).sort((a, b) => a - b)
+  ok(yEts.length === 6 && yEts.every((y, i) => !i || y - yEts[i - 1] >= 15.9), `las 6 líneas: ninguna etiqueta se monta sobre otra (y: ${yEts.map(y => y.toFixed(0)).join(', ')})`)
+  hB = pintaB({ lineas: { activo: false, spy: false, qqq: false, ociosoLiquidez: false, aportado: false } })
+  ok(hB.includes('data-linea="plan"') && !hB.includes('data-linea="activo"') && !hB.includes('data-linea="aportado"') && !hB.includes('data-etiqueta="Lo aportado'), 'todo desmarcado: queda Tu plan, sin casilla')
+  const tx = Pa.textoParaClaudePlan({ ajustes: Pa.ajustesDe(p2), estrategia: est, plan: p2, cifras: c2, estado: null, resultadoPrueba: null, version: 'x' })
+  ok(tx.includes('En el ocioso: 41,7 % del tiempo') && tx.includes('Año a año'), '«Copiar para Claude» lleva el ocioso y el año a año')
+
   // ── 2 · Las pestañas: las piezas puras (§54) ──
   const T = require(R + '/lib/builder/pestanasPlan.js'), G = require(R + '/lib/builder/planesGuardados.js')
   const filaPlan = (id, foto = 'x', dia = 10) => ({ id, nombre: id === 4 ? 'Un plan con un nombre larguísimo que no cabe de ninguna manera en la pestaña' : `Plan ${id}`, plan: { ...Pa.planDe(Pa.ajustesDe(p), { ...p.piezas[0].estrategia, id: foto }), nombre: `Plan ${id}` }, huella: 'h', created_at: `2026-10-${dia}T10:00:00Z`, updated_at: `2026-10-${dia}T10:00:00Z` })

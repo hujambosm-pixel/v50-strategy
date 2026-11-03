@@ -114,6 +114,31 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   const ida = Pa.planDe(Pa.ajustesDe(r0.plan), r0.plan.piezas[0].estrategia, r0.nombre)
   ok(Lt.jsonCanonico(Pl.paraHuellaPlan(ida)) === Lt.jsonCanonico(Pl.paraHuellaPlan(r0.plan)) && await Pl.huellaPlan(ida) === await Pl.huellaPlan(r0.plan), 'ida y vuelta plan → ajustes → plan: la misma huella')
 
+  // ── 3 · Las casillas del gráfico (§57): se ocultan y se recuerdan ──
+  const dia = (f, n) => new Date(Date.parse(f + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10)
+  const E = require(R + '/lib/planes/evalua.js'), fs2 = [...Array.from({ length: 11 }, (_, i) => dia('2021-01-01', i)), '2022-12-31']
+  const PERIODO = [[100, 100, 100, 100], [100, 105, 100, 104], [105, 108, 104, 107], [107, 111, 106, 110], [110, 113, 109, 112], [112, 116, 111, 115], [115, 119, 114, 118], [118, 121, 117, 120], [120, 120, 112, 113], [114, 115, 113, 114], [114, 115, 113, 114], [114, 115, 113, 114]]
+  const cal = Array.from({ length: 300 }, (_, i) => dia('2019-01-01', i)), todas = [...cal, ...fs2], vela = (date, [open, high, low, close]) => ({ date, open, high, low, close, volume: 1000 })
+  const plano = todas.map(date => ({ date, open: 100, close: 100 }))
+  const datos = { fechas: todas, qqq: plano, spy: plano, etf: todas.map(() => null), qqqVelas: plano, velas: { TEST: todas.map((f, i) => vela(f, i < 300 ? [100, 100, 100, 100] : PERIODO[i - 300])), OCI: todas.map(f => vela(f, [50, 50, 50, 50])) } }
+  const calcula = async (plan) => { const ev = E.evaluaPlan(plan, datos, { detalle: true }), ej = Object.fromEntries(E.referenciasDe(plan).filter(x => ['OCIOSO_LIQUIDEZ', 'ACTIVO', 'QQQ', 'SPY'].includes(x.id)).map(x => [x.id, Pl.ejecutaPlan(x.plan, datos, { detalle: false })]))
+    return { evaluacion: ev, curvas: Object.fromEntries(Object.entries(ej).map(([id, r]) => [id, { patrimonio: r.serie.map(x => x.patrimonio), vl: r.serie.map(x => x.vl) }])), ordenesReferencias: Object.fromEntries(Object.entries(ej).map(([id, r]) => [id, r.costes.ordenes])), huella: 'h' } }
+  const montaPlan = () => D.monta(h(BPlan, { estrategias: [est('e', 'EMA2')], estrategiaId: 'e', apiFetch: api, deps: { ctx: null, calcula }, inicial: { planes: [], simbolos: ['TEST'], pruebas: [], huella: 'h', huellas: { e: 'h' }, ajustes: { activo: 'TEST', ocioso: 'OCI', capital: 10000, aportacion: 0, periodo: 'otras', desde: fs2[0], hasta: fs2[11], impuestos: 'ES-ahorro', comision: 0 } } }), RDC)
+  const lineas = (x) => x.raiz.conAtributo('data-linea').map(n => n.getAttribute('data-linea')).sort().join()
+  const marca = (x, k) => { const c = x.raiz.busca(n => n.getAttribute('data-casilla') === k); c.checked = !c.checked; D.propsDe(c).onChange({ target: c }) }
+  localStorage.clear(); m = montaPlan(); await D.espera(800)
+  ok(lineas(m) === 'activo,aportado,ociosoLiquidez,plan', `al entrar: ${lineas(m)}`)
+  marca(m, 'spy'); await D.espera(5); marca(m, 'aportado'); await D.espera(5)
+  ok(lineas(m) === 'activo,ociosoLiquidez,plan,spy', `al marcar SPY y desmarcar lo aportado: ${lineas(m)}`)
+  ok(JSON.parse(localStorage.getItem('builder_paso3_lineas')).spy === true, 'se guarda en el navegador'); m.quita(); await D.espera(5)
+  m = montaPlan(); await D.espera(800)
+  ok(lineas(m) === 'activo,ociosoLiquidez,plan,spy', `al volver, lo marcado se recuerda: ${lineas(m)}`); m.quita(); await D.espera(5)
+  const lsBueno = window.localStorage; window.localStorage = { getItem() { throw new Error('bloqueado') }, setItem() { throw new Error('bloqueado') } }
+  m = montaPlan(); await D.espera(800)
+  ok(lineas(m) === 'activo,aportado,ociosoLiquidez,plan', 'con el almacén bloqueado: las de por defecto, sin error')
+  marca(m, 'qqq'); await D.espera(5)
+  ok(lineas(m).includes('qqq'), 'y se puede marcar igual'); m.quita(); await D.espera(5); window.localStorage = lsBueno
+
   console.log(fallos ? `planes-montaje: ${fallos} fallos` : 'planes-montaje: todas bien')
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(1) })
