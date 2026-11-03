@@ -156,8 +156,10 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
     for (const t of ['pruebas_azar', 'pruebas_azar_resultados']) {
       const ps = pol.filter(p => p.tablename === t)
       ok(rls.some(r => r.relname === t && r.relrowsecurity === true), `${t}: RLS activa`)
-      ok(ps.map(p => p.cmd).sort().join(',') === 'INSERT,SELECT' && ps.every(p => p.roles === '{authenticated}' && String(p.qual || p.with_check).includes('auth.uid() = user_id')), `${t}: solo dos políticas, SELECT e INSERT del dueño (${ps.map(p => p.cmd).join(', ')})`)
-      ok(gr.filter(g => g.table_name === t).map(g => `${g.grantee}:${g.p}`).join(' ') === 'authenticated:INSERT,SELECT', `${t}: permisos ${gr.filter(g => g.table_name === t).map(g => `${g.grantee}: ${g.p}`).join(' · ')} (sin UPDATE ni DELETE; anon, nada)`)
+      // §60: se puede borrar una prueba propia (y su resultado se va con ella); cambiar, nada.
+      const cmds = t === 'pruebas_azar' ? 'DELETE,INSERT,SELECT' : 'INSERT,SELECT', permisos = t === 'pruebas_azar' ? 'authenticated:DELETE,INSERT,SELECT' : 'authenticated:INSERT,SELECT'
+      ok(ps.map(p => p.cmd).sort().join(',') === cmds && ps.every(p => p.roles === '{authenticated}' && String(p.qual || p.with_check).includes('auth.uid() = user_id')), `${t}: políticas del dueño: ${ps.map(p => p.cmd).join(', ')}`)
+      ok(gr.filter(g => g.table_name === t).map(g => `${g.grantee}:${g.p}`).join(' ') === permisos, `${t}: permisos ${gr.filter(g => g.table_name === t).map(g => `${g.grantee}: ${g.p}`).join(' · ')} (sin UPDATE; anon, nada)`)
     }
     ok(pol.some(p => p.tablename === 'pruebas_azar_resultados' && p.cmd === 'INSERT' && /EXISTS/.test(p.with_check) && /pruebas_azar p/.test(p.with_check)), 'pruebas_azar_resultados: solo se añade un resultado a una prueba propia')
   } catch (e) { ok(false, `no se pudieron leer las políticas: ${e.message}`) }

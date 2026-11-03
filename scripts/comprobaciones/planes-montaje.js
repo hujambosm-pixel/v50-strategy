@@ -196,17 +196,17 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   const pulsaAtr = (k, v) => D.pulsa(m.raiz.busca(n => n.getAttribute(k) === v))
   pulsaAtr('data-borrar-estrategia', 'e9'); await D.espera(5)
   let vent = m.raiz.busca(n => n.getAttribute('data-pregunta') === 'borrar-estrategia')
-  ok(!!vent && vent.textContent.includes('¿Eliminar esta estrategia? «Sin planes»') && !escrituras.length, 'la papelera pregunta antes, con el aviso de siempre')
+  ok(!!vent && vent.textContent.includes('¿Borrar la estrategia «Sin planes»?') && !escrituras.length, 'la papelera pregunta antes')
   D.pulsa(vent.busca(n => n.nodeName === 'BUTTON' && n.textContent === 'Cancelar')); await D.espera(5)
   ok(!hayQ(m, 'data-pregunta', 'borrar-estrategia') && !escrituras.length && nFilas() === 4, 'cancelar: no se borra nada')
   pulsaAtr('data-borrar-estrategia', 'e7'); await D.espera(5)
-  ok(m.raiz.busca(n => n.getAttribute('data-pregunta') === 'borrar-estrategia').textContent.includes('La usan 2 planes'), 'si la usan planes, lo dice')
+  ok(m.raiz.busca(n => n.getAttribute('data-pregunta') === 'borrar-estrategia').textContent.includes('2 planes: se quedan, con su copia guardada'), 'si la usan planes, lo dice')
   D.pulsa(m.raiz.busca(n => n.getAttribute('data-pregunta') === 'borrar-estrategia').busca(n => n.nodeName === 'BUTTON' && n.textContent === 'Cancelar')); await D.espera(5)
   borraBien = false; pulsaAtr('data-borrar-estrategia', 'e9'); await D.espera(5); pulsaAtr('data-boton', 'si-borrar-estrategia'); await D.espera(20)
   vent = m.raiz.busca(n => n.getAttribute('data-pregunta') === 'borrar-estrategia')
   ok(!!vent && vent.busca(n => n.getAttribute('data-aviso-pregunta') != null)?.textContent.includes('HTTP 403') && nFilas() === 4, 'si la base no deja borrar: lo dice y la fila sigue')
   borraBien = true; escrituras.length = 0; pulsaAtr('data-boton', 'si-borrar-estrategia'); await D.espera(20)
-  ok(escrituras.length === 1 && escrituras[0] === 'DELETE strategies?id=eq.e9' && !filaDe(m, 'e9') && nFilas() === 3, `borra solo esa: ${escrituras.join()}`); escrituras.length = 0
+  ok(escrituras.join() === 'DELETE strategies?id=eq.e9,DELETE pruebas_azar?estrategia_id=eq.e9' && !filaDe(m, 'e9') && nFilas() === 3, `borra solo esa, y sus pruebas: ${escrituras.join()}`); escrituras.length = 0
   // Abrir un plan
   D.pulsa(filaDe(m, 'e4').busca(n => n.getAttribute('data-abrir-plan-fila') === '4')); await D.espera(LARGO)
   ok(vista(m).activa === 'g4' && hayQ(m, 'data-pantalla', 'plan'), 'con un plan: «Abrir» lleva al paso 3 con ese plan activo'); m.quita(); await D.espera(5)

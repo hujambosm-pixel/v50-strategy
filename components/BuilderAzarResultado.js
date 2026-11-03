@@ -6,6 +6,7 @@
 //   Convertirla en plan» está siempre activo, también si la prueba no pasa; el plan lo avisa en rojo).
 import { B, S, CHIPS } from '../lib/builder/estilo'
 import BotonCopiar from './BotonCopiar'
+import { Papelera } from './VentanaPregunta'
 import { REGLA_AZAR_REGLAS } from '../lib/azarReglas'
 import { textoParaClaude } from '../lib/pruebaAzar'
 import { histogramaCopias, textosResultado, numero, pctTexto } from '../lib/resultadoAzar'
@@ -87,13 +88,13 @@ function TarjetaPeriodo({ periodo: p, informativo }) {
   )
 }
 
-export default function BuilderAzarResultado({ prueba, resultado, onPaso1, onPaso3 = null }) {
+export default function BuilderAzarResultado({ prueba, resultado, onPaso1, onPaso3 = null, onBorrar = null }) {
   const t = textosResultado(resultado), [fondo, borde, colorTitulo] = CAJA[resultado.veredicto] || CAJA.sinVeredicto
   const nombre = prueba.estrategia_nombre, velas = prueba.velas || resultado.velas
   const sinVer = resultado.veredicto === 'sinVeredicto'
   return (
     <div data-pantalla="resultado-azar" data-caso={t.caso}>
-      <div data-linea-superior style={S.apagado}>{nombre} · Prueba confirmada el {fecha(prueba.creada_en)} · {prueba.valor} · velas {velas} · congelada</div>
+      <div data-linea-superior style={{ ...S.apagado, display: 'flex', alignItems: 'center', gap: 8 }}><span>{nombre} · Prueba confirmada el {fecha(prueba.creada_en)} · {prueba.valor} · velas {velas} · congelada</span>{onBorrar && <button data-borrar-prueba={prueba.id} aria-label="Borrar esta prueba" title="Borrar esta prueba" onClick={onBorrar} style={{ marginLeft: 'auto', background: 'transparent', border: `1px solid ${B.borde}`, borderRadius: 6, cursor: 'pointer', padding: 6, display: 'inline-flex' }}><Papelera tamano={16}/></button>}</div>
       <div style={{ fontSize: 22, fontWeight: 700, color: B.titulo, marginTop: 6 }}>Resultado de la prueba</div>
       <div style={{ ...S.secundario, marginTop: 4, marginBottom: 16 }}>{nombre} en {prueba.valor}, velas {velas}, contra {miles(R.copias)} copias que compran en fechas al azar.</div>
 

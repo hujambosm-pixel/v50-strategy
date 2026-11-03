@@ -15,9 +15,11 @@ import { B, S } from '../lib/builder/estilo'
 import { CabeceraPasos } from './BuilderPanel'
 import Ayuda from './BuilderAyuda'
 import BuilderAzarResultado from './BuilderAzarResultado'
+import { Papelera } from './VentanaPregunta'
+import { VentanaBorrarPrueba } from './BorrarPrueba'
 import BuscadorValor from './BuscadorValor'
 import { REGLA_AZAR_REGLAS } from '../lib/azarReglas'
-import { PERIODOS_AZAR, comprobarPrecios, confirmarPrueba, ejecutarPrueba, esDeTarjetas, fotoDe, guardarResultado, huellaEstrategia, leerResultado, listarPruebas, tickersDe } from '../lib/pruebaAzar'
+import { PERIODOS_AZAR, comprobarPrecios, confirmarPrueba, ejecutarPrueba, esDeTarjetas, fotoDe, guardarResultado, huellaEstrategia, leerResultado, listarPruebas, tickersDe, borrarPrueba } from '../lib/pruebaAzar'
 import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0'
@@ -58,6 +60,9 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
   const [huella, setHuella] = useState(inicial?.huella || null)
   const [curso, setCurso] = useState(inicial?.curso || null)   // { fila, etapa, hecho, total, resultado?, error? }
   const [viendo, setViendo] = useState(inicial?.viendo || null)   // §46: { fila, resultado }, la pantalla «Resultado de la prueba» abierta
+  const [borrandoP, setBorrandoP] = useState(inicial?.borrandoP || null)   // §60: la prueba que pide «¿Borrar esta prueba?»
+  const [borrandoYa, setBorrandoYa] = useState(false)
+  const [falloBorrar, setFalloBorrar] = useState(null)
   const vivo = useRef(true)
   useEffect(() => () => { vivo.current = false }, [])
   // §50: el token, el vigente en cada llamada (y renovado ante 401/403), no el del momento de montar: ctxConSesion.
@@ -114,6 +119,14 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
     recargaPruebas()
     await ejecuta(fila)
   }
+  // §60: borrar una prueba, desde sus anteriores o desde su resultado. Vuelve a la pantalla de confirmación.
+  const borraPrueba = async () => {
+    setBorrandoYa(true); setFalloBorrar(null)
+    try { await borrarPrueba(ctx, borrandoP.id); if (viendo?.fila.id === borrandoP.id) setViendo(null); if (curso?.fila?.id === borrandoP.id) setCurso(null); setBorrandoP(null); await recargaPruebas() } catch (e) { setFalloBorrar(e.message) }
+    setBorrandoYa(false)
+  }
+  const pideBorrar = (fila) => { setFalloBorrar(null); setBorrandoP(fila) }
+  const ventanaBorrar = borrandoP && <VentanaBorrarPrueba prueba={borrandoP} ocupado={borrandoYa} fallo={falloBorrar} onCancelar={() => setBorrandoP(null)} onBorrar={borraPrueba}/>
   const verResultado = async (fila) => {
     try { const r = await leerResultado(ctx, fila.id); if (r && vivo.current) setViendo({ fila, resultado: r.resultado }) } catch (e) { setFallo(e.message) }
   }
@@ -222,9 +235,9 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
     <div data-tarjeta="anteriores" style={{ ...S.tarjeta, marginTop: 16 }}>
       <div style={S.cabeceraTarjeta}>Pruebas anteriores de esta estrategia</div>
       {!pruebas ? <div style={{ ...S.cuerpo, ...S.secundario }}>{ctx ? 'Cargando…' : 'Sin conexión con la base de datos.'}</div>
-        : !pruebas.length ? <div data-sin-pruebas style={{ ...S.cuerpo, ...S.secundario }}>Todavía no hay ninguna. Cada prueba confirmada quedará aquí, con su fecha y su resultado, y no se podrá borrar.</div>
+        : !pruebas.length ? <div data-sin-pruebas style={{ ...S.cuerpo, ...S.secundario }}>Todavía no hay ninguna. Cada prueba confirmada quedará aquí, con su fecha y su resultado.</div>
         : <div style={{ overflowX: 'auto' }}><table style={{ borderCollapse: 'collapse', width: '100%' }} data-tabla="pruebas-azar">
-          <thead><tr>{['Fecha', 'Valor', 'Velas', 'Veredicto'].map(h => <th key={h} style={{ ...celda, color: B.secundario, fontWeight: 600, fontSize: 12, background: B.cabecera }}>{h}</th>)}</tr></thead>
+          <thead><tr>{['Fecha', 'Valor', 'Velas', 'Veredicto', ''].map(h => <th key={h} style={{ ...celda, color: B.secundario, fontWeight: 600, fontSize: 12, background: B.cabecera }}>{h}</th>)}</tr></thead>
           <tbody>{pruebas.map(p => {
             const corriendo = enMarcha && curso?.fila?.id === p.id
             return (
@@ -234,6 +247,7 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
                 <td style={celda}>{p.velas}</td>
                 <td style={celda}>{p.resultado ? <><span style={S.chip(CHIP_VEREDICTO[p.resultado.veredicto])}>{p.resultado.texto}</span> <button style={{ ...S.enlace, fontSize: 13, marginLeft: 6 }} onClick={() => verResultado(p)}>Ver</button></>
                   : <><span style={S.chip('borrador')}>{corriendo ? 'Calculando…' : 'Sin terminar'}</span>{!corriendo && <button data-boton="terminar" style={{ ...S.boton, padding: '4px 10px', fontSize: 13, marginLeft: 8 }} disabled={enMarcha || !ctx} onClick={() => ejecuta(p)}>Terminar el cálculo</button>}</>}</td>
+                <td style={{ ...celda, width: 30 }}><button data-borrar-prueba={p.id} aria-label="Borrar esta prueba" title="Borrar esta prueba" disabled={corriendo} onClick={() => pideBorrar(p)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, display: 'inline-flex' }}><Papelera tamano={15}/></button></td>
               </tr>
             )
           })}</tbody>
@@ -248,7 +262,8 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
       <div style={S.pagina}>
         <CabeceraPasos actual={2} estrategia={viendo.fila.estrategia_nombre || nombre} onVolver={onVolver} enlace={enlaceTesis?.('estrategia', viendo.fila.estrategia_id)} onPaso={(n) => { if (n === 1) aPaso1(); else if (n === 3) onPaso3?.(viendo.fila.estrategia_id) }}/>
         <div style={{ marginBottom: 12 }}><button data-boton="volver" style={{ ...S.enlace, color: B.secundario }} onClick={() => setViendo(null)}>← Volver</button></div>
-        <BuilderAzarResultado prueba={viendo.fila} resultado={viendo.resultado} onPaso1={aPaso1} onPaso3={() => onPaso3?.(viendo.fila.estrategia_id)}/>
+        <BuilderAzarResultado prueba={viendo.fila} resultado={viendo.resultado} onPaso1={aPaso1} onPaso3={() => onPaso3?.(viendo.fila.estrategia_id)} onBorrar={() => pideBorrar(viendo.fila)}/>
+        {ventanaBorrar}
       </div>
     )
   }
@@ -261,6 +276,7 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
         <div data-columna="izquierda" style={{ flex: '1 1 380px', minWidth: 0 }}>{tarjetaA}{tarjetaB}</div>
         <div data-columna="derecha" style={{ flex: '1 1 380px', minWidth: 0 }}>{queSePrueba}{etapas}{anteriores}</div>
       </div>
+      {ventanaBorrar}
     </div>
   )
 }

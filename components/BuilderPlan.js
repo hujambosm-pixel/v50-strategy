@@ -39,7 +39,7 @@ import { marcasLog, separaEtiquetas } from '../lib/builder/escalaGrafico'
 import { esDeTarjetas, huellaEstrategia, leerResultado } from '../lib/pruebaAzar'
 import { validaPlan, paraHuellaPlan } from '../lib/planes/plan'
 import { jsonCanonico } from '../lib/lotesLab'
-import { AVISO_BORRADA, AVISO_CAMBIADA, AYUDA_CAMBIADA, borrarPlan, cambiarPlan, comparaEstrategia, crearPlan, fotoDelPlan, guardarPestanas, leerPestanas, listarPlanes, listarPruebasUsuario, nombreLimpio } from '../lib/builder/planesGuardados'
+import { AVISO_BORRADA, ETIQUETA_BORRADA, AVISO_CAMBIADA, AYUDA_CAMBIADA, borrarPlan, cambiarPlan, comparaEstrategia, crearPlan, fotoDelPlan, guardarPestanas, leerPestanas, listarPlanes, listarPruebasUsuario, nombreLimpio } from '../lib/builder/planesGuardados'
 import { cambiaClave, claveDe, conPestana, eligeEntrada, idDe, idsDe, ordenInicial, sinPestana, trasDe, vecina } from '../lib/builder/pestanasPlan'
 import { respondeSalida } from '../lib/tesis'
 import { esDeCodigo } from '../lib/builder/codigo'
@@ -209,6 +209,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const estrategiaActual = diarias.find(s => String(s.id) === estId) || null
   const usaGuardada = !!fotoG && String(fotoG.id) === estId && (cualVersion === 'guardada' || !estrategiaActual)
   const estrategia = usaGuardada ? fotoG : estrategiaActual
+  const estBorrada = !!fotoG && String(fotoG.id) === estId && !estrategias.some(s => String(s.id) === estId)   // §60: se borró; el plan sigue con su copia
   const cambia = (k, v) => setA(x => ({ ...x, [k]: v }))
   const [otroForzado, setOtroForzado] = useState(false)
   const otroOcioso = otroForzado || !OCIOSOS_FIJOS.some(([k]) => k === a.ocioso)
@@ -478,7 +479,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // ── Avisos (una línea; el detalle, tras «?») ──
   const avisoPrueba = estado && (
     <div data-aviso="prueba" data-estado={estado.clave} style={{ color: estado.clave === 'pasa' ? VERDE : estado.clave === 'noPasa' ? ROJO : AMARILLO, fontWeight: estado.clave === 'noPasa' ? 700 : 400, display: 'flex', alignItems: 'center', gap: 2 }}>
-      {AVISO_PRUEBA[estado.clave]}<span style={S.apagado}>&nbsp;·&nbsp;</span><button data-boton="ver-prueba" style={{ ...S.enlace, fontSize: 13 }} onClick={() => pide({ tipo: 'paso2' })}>{estado.clave === 'sinPrueba' ? 'Probarla ahora' : 'Ver la prueba'}</button><Ayuda texto={ayudaPrueba(estado, resPrueba)} etiqueta="La prueba contra el azar"/>
+      {AVISO_PRUEBA[estado.clave]}<span style={S.apagado}>&nbsp;·&nbsp;</span>{!estBorrada && <button data-boton="ver-prueba" style={{ ...S.enlace, fontSize: 13 }} onClick={() => pide({ tipo: 'paso2' })}>{estado.clave === 'sinPrueba' ? 'Probarla ahora' : 'Ver la prueba'}</button>}<Ayuda texto={ayudaPrueba(estado, resPrueba)} etiqueta="La prueba contra el azar"/>
     </div>
   )
   // §54: una línea bajo las pestañas: los avisos (en el móvil, uno debajo del otro: .bp-avisos), «Calculando…» y, a la derecha, guardar y «Comparar planes».
@@ -535,7 +536,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           <div>
             <Etiqueta texto="Estrategia" ayuda={AYUDA_PLAN.estrategia}/>
             {tarjetas.length ? <select aria-label="Estrategia" value={estId} onChange={e => { setEstId(e.target.value); setCualVersion('actual') }} style={{ ...campo, maxWidth: '100%' }}>
-              {fotoG && String(fotoG.id) === estId && !tarjetas.some(s => String(s.id) === estId) && <option value={estId}>{`${fotoG.name} (versión guardada)`}</option>}
+              {fotoG && String(fotoG.id) === estId && !tarjetas.some(s => String(s.id) === estId) && <option value={estId}>{`${fotoG.name} ${ETIQUETA_BORRADA}`}</option>}
               {tarjetas.map(s => { const sem = esSemanal(s), ps = [ETIQUETA_PRUEBA[estadosLista[s.id]], sem ? 'semanal: llegará más adelante' : null].filter(Boolean)
                 return <option key={s.id} value={String(s.id)} disabled={sem}>{`${s.name}${ps.length ? ` (${ps.join(' · ')})` : ''}`}</option> })}
               {/* §50: al final, en gris y sin poder elegirse, cuántas de código hay (no sirven aquí). */}
@@ -660,7 +661,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
 
   return (
     <div ref={pagina} className="bp-pagina" style={{ ...S.pagina, '--bp-arriba': arriba != null ? `${arriba}px` : undefined }} data-pantalla="plan">
-      <CabeceraPasos actual={3} estrategia={estrategia?.name || null} onVolver={(donde) => pide({ tipo: 'volver', donde })} hechos={{ 1: !!estrategia, 2: !!estado && estado.clave !== 'sinPrueba' }}
+      <CabeceraPasos actual={3} estrategia={estBorrada ? `${estrategia?.name} ${ETIQUETA_BORRADA}` : estrategia?.name || null} desactivados={estBorrada ? { 1: AVISO_BORRADA, 2: AVISO_BORRADA } : {}} onVolver={(donde) => pide({ tipo: 'volver', donde })} hechos={{ 1: !!estrategia, 2: !!estado && estado.clave !== 'sinPrueba' }}
         onPaso={(n) => { if (n === 1) pide({ tipo: 'paso1' }); else if (n === 2) pide({ tipo: 'paso2' }) }}/>
       {pestanasPlanes}
       {avisos}
@@ -677,7 +678,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           {resultado}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
             <BotonCopiar obtenerTexto={texto} titulo="Copia en texto plano todos los ajustes, el plan y sus cifras"/>
-            <button data-boton="paso2" style={S.boton} onClick={() => pide({ tipo: 'paso2' })}>Volver al paso 2</button>
+            {!estBorrada && <button data-boton="paso2" style={S.boton} onClick={() => pide({ tipo: 'paso2' })}>Volver al paso 2</button>}
           </div>
         </div>
       </div> : orden && <div data-sin-pestanas style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario, marginTop: 6 }}>Ningún plan abierto. Pulsa «+ Añadir plan».</div>}

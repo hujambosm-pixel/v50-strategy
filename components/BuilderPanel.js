@@ -24,7 +24,9 @@ import ConLimpiar from './LimpiarBusqueda'
 import ProteccionPanel from './ProteccionPanel'
 import Ayuda from './BuilderAyuda'
 import { IconoDuplicar } from './BuilderPestanas'
-import { Papelera, Pregunta, ROJO_PAPELERA } from './VentanaPregunta'
+import { Papelera } from './VentanaPregunta'
+import { VentanaBorrarEstrategia, VentanaBorrarPrueba } from './BorrarPrueba'
+import { borrarPrueba, borrarPruebasDeEstrategia } from '../lib/pruebaAzar'
 
 export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convertirla en plan']
 export const PASOS_CORTOS = ['Crear', 'Probar contra el azar', 'Convertirla en plan']   // §56: el nombre al lado de cada círculo de la cabecera B
@@ -68,10 +70,10 @@ function MenuPlantillas({ plantillas, onElige }) {
   )
 }
 // La columna «Prueba contra el azar»: el resultado corto, cuándo y en qué valor (solo en el tooltip si no cabe) y «Ver».
-function CeldaAzar({ f, onVer }) {
+function CeldaAzar({ f, onVer, onBorrar }) {
   if (!f.azar) return <span style={{ color: B.apagado }}>{f.origen === 'código' ? 'No se prueba aquí' : '—'}</span>
   const [tipo, txt] = CHIP_AZAR[f.azar.clave]
-  return <span data-azar={f.azar.clave} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={S.chip(tipo)}>{txt}</span>{f.azar.detalle && <span style={S.apagado}>{f.azar.detalle}</span>}{f.azar.hay && <button data-ver-prueba style={{ ...S.enlace, fontSize: 12 }} onClick={onVer}>Ver</button>}</span>
+  return <span data-azar={f.azar.clave} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={S.chip(tipo)}>{txt}</span>{f.azar.detalle && <span style={S.apagado}>{f.azar.detalle}</span>}{f.azar.hay && <button data-ver-prueba style={{ ...S.enlace, fontSize: 12 }} onClick={onVer}>Ver</button>}{f.azar.fila && <button data-borrar-prueba={f.azar.fila.id} aria-label="Borrar esta prueba" title="Borrar esta prueba" style={iconoFila} onClick={onBorrar}><Papelera tamano={14}/></button>}</span>
 }
 // La columna «Planes»: cuántos, los nombres en el tooltip y «Abrir» (si hay varios, un desplegable). En una tabla con barra de desplazamiento: el desplegable va fijo a la ventana, para que no se corte.
 function CeldaPlanes({ planes, onAbrir }) {
@@ -172,6 +174,7 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   const [filtro, setFiltro] = useState(filtroInicial)
   const [buscar, setBuscar] = useState(buscarInicial)   // V9.1058: el buscador de «Mi trabajo» (por nombre y por la frase de la regla; V9.1063: resaltado)
   const [borrando, setBorrando] = useState(null)   // §58: la fila de la estrategia que pide «¿Eliminar?»
+  const [borrandoP, setBorrandoP] = useState(null)   // §60: la prueba que pide «¿Borrar esta prueba?»
   const [borrandoYa, setBorrandoYa] = useState(false)
   const [falloBorrar, setFalloBorrar] = useState(null)
   const [borradas, setBorradas] = useState([])   // lo recién borrado, hasta que la página recargue sus estrategias
@@ -252,7 +255,13 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   const abrePlan = (estrategiaId) => setPlan({ estrategiaId, n: Date.now() })
   // «Tesis: …» de una estrategia o un plan (docs/tesis.md): solo enlaces directos, leídos de las tesis del usuario.
   const enlaceTesis = (tipo, id) => <TesisEnlace lista={tesisDe(datos.tesis, tipo, id)} onAbrir={onAbrirTesis}/>
-  // §58: la papelera de cada fila, con el aviso de siempre (el «¿Eliminar esta estrategia?» de la página). Si la base no la borra, lo dice y no se quita.
+  // §60: la papelera de la prueba de cada fila.
+  const borraPrueba = async () => {
+    setBorrandoYa(true); setFalloBorrar(null)
+    try { await borrarPrueba(ctxConSesion(), borrandoP.id); setBorrandoP(null); await recarga() } catch (e) { setFalloBorrar(e.message) }
+    setBorrandoYa(false)
+  }
+  // §58 y §60: la papelera de cada fila. Primero la estrategia y, si sale bien, sus pruebas; los planes se quedan con su copia guardada. Si la base no la borra, lo dice y no se quita.
   const borraEstrategia = async () => {
     const id = borrando.estrategia.id
     setBorrandoYa(true); setFalloBorrar(null)
@@ -260,7 +269,8 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
       const r = await fetch(`${getSupaUrl()}/rest/v1/strategies?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: { ...getSupaH(), Prefer: 'return=representation' } })
       const j = r.ok ? await r.json() : null
       if (!r.ok || !j?.length) throw new Error(r.ok ? 'No se pudo borrar: ya no existe.' : `No se pudo borrar (HTTP ${r.status}).`)
-      setBorradas(b => [...b, String(id)]); setGuardadas(g => g.filter(x => String(x.id) !== String(id))); setBorrando(null); onGuardada?.(null)
+      setBorradas(b => [...b, String(id)]); setGuardadas(g => g.filter(x => String(x.id) !== String(id))); onGuardada?.(null)
+      try { await borrarPruebasDeEstrategia(ctxConSesion(), id); setBorrando(null); await recarga() } catch (e) { setFalloBorrar(`La estrategia se ha borrado, pero sus pruebas no: ${e.message}`) }
     } catch (e) { setFalloBorrar(e.message) }
     setBorrandoYa(false)
   }
@@ -334,7 +344,7 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
                         title={f.subtitulo || (f.origen === 'editor' ? 'Abrir en el editor por tarjetas' : 'Abrir: sus parámetros y su código')}><Resaltado texto={f.nombre} consulta={buscar}/>{f.desactivada && <span style={{ ...S.apagado, fontWeight: 400 }}> · desactivada</span>}</button>
                     </td>
                     <td style={{ ...fila, color: B.secundario }}>{f.version}</td>
-                    <td style={fila}><CeldaAzar f={f} onVer={() => abreAzar(f.estrategia.id)}/></td>
+                    <td style={fila}><CeldaAzar f={f} onVer={() => abreAzar(f.estrategia.id)} onBorrar={() => { setFalloBorrar(null); setBorrandoP(f.azar.fila) }}/></td>
                     <td style={fila}><CeldaPlanes planes={f.planes || []} onAbrir={id => setPlan({ planId: id, n: Date.now() })}/></td>
                     <td data-celda-tesis style={{ ...fila, maxWidth: 200 }}><TesisEnlace lista={tesisDe(datos.tesis, 'estrategia', f.estrategia.id)} onAbrir={onAbrirTesis} corto/></td>
                     <td style={fila}>{f.toca?.accion ? <button data-toca style={{ ...S.enlace, fontSize: 13, fontWeight: 700 }} title={f.toca.nota} onClick={() => accion(f)}>{f.toca.texto}</button> : <span title={f.toca?.nota} style={{ color: B.apagado }}>{f.toca?.texto || '—'}</span>}</td>
@@ -351,11 +361,9 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
           </div>
           <div style={{ ...S.apagado, padding: '10px 12px' }}>Las estrategias de código no entran en el paso 2: no se pueden probar contra el azar aquí, en el Builder. Para probarla aquí, rehazla en tarjetas.</div>
       </div>
-      {borrando && (
-        <Pregunta id="borrar-estrategia" texto={`¿Eliminar esta estrategia? «${borrando.estrategia.name}»`} detalle={borrando.planes?.length ? `La usan ${borrando.planes.length === 1 ? '1 plan' : `${borrando.planes.length} planes`}: seguirán con la versión guardada en cada plan.` : null} aviso={falloBorrar}>
-          <button data-boton="si-borrar-estrategia" disabled={borrandoYa} onClick={borraEstrategia} style={{ ...S.botonVerde, background: ROJO_PAPELERA, borderColor: ROJO_PAPELERA, color: '#fff' }}>{borrandoYa ? 'Borrando…' : 'Sí, borrar'}</button>
-          <button disabled={borrandoYa} onClick={() => setBorrando(null)} style={S.boton}>Cancelar</button>
-        </Pregunta>)}
+      {borrando && <VentanaBorrarEstrategia nombre={borrando.estrategia.name} pruebas={datos.pruebasAzar && datos.pruebasAzar.filter(p => String(p.estrategia_id) === String(borrando.estrategia.id))} planes={borrando.planes || []} deTarjetas={borrando.origen !== 'código'} ocupado={borrandoYa} fallo={falloBorrar}
+        onCancelar={() => setBorrando(null)} onBorrar={borraEstrategia} onAbrirPlan={id => { setBorrando(null); setPlan({ planId: id, n: Date.now() }) }}/>}
+      {borrandoP && <VentanaBorrarPrueba prueba={borrandoP} ocupado={borrandoYa} fallo={falloBorrar} onCancelar={() => setBorrandoP(null)} onBorrar={borraPrueba}/>}
     </div>
   )
 }
