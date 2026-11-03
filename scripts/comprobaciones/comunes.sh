@@ -40,6 +40,8 @@ paso planes-pantalla node "$DIR/planes-pantalla.js" < /dev/null
 tail -1 "$SAL/planes-pantalla.txt"
 paso planes-montaje node "$DIR/planes-montaje.js" < /dev/null
 tail -1 "$SAL/planes-montaje.txt"
+paso version-paso2 node "$DIR/version-paso2.js" < /dev/null
+tail -1 "$SAL/version-paso2.txt"
 paso azar-graficos node "$DIR/azar-graficos.js" < /dev/null
 tail -1 "$SAL/azar-graficos.txt"
 paso borrar node "$DIR/borrar.js" < /dev/null

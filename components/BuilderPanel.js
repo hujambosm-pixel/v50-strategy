@@ -254,7 +254,8 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   const abreAzar = (estrategiaId) => setAzar({ estrategiaId, n: Date.now() })
   const abrePlan = (estrategiaId) => setPlan({ estrategiaId, n: Date.now() })
   // «Tesis: …» de una estrategia o un plan (docs/tesis.md): solo enlaces directos, leídos de las tesis del usuario.
-  const enlaceTesis = (tipo, id) => <TesisEnlace lista={tesisDe(datos.tesis, tipo, id)} onAbrir={onAbrirTesis}/>
+  // guardia (opcional): quien lo pinta pregunta antes si tiene cambios sin guardar; guardia(seguir).
+  const enlaceTesis = (tipo, id, guardia = null) => <TesisEnlace lista={tesisDe(datos.tesis, tipo, id)} onAbrir={t => guardia ? guardia(() => onAbrirTesis?.(t)) : onAbrirTesis?.(t)}/>
   // §60: la papelera de la prueba de cada fila.
   const borraPrueba = async () => {
     setBorrandoYa(true); setFalloBorrar(null)
@@ -306,7 +307,7 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
         <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Builder</span>
         <span style={S.secundario}>Crea una estrategia, pruébala contra el azar y conviértela en un plan.</span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 16, flexWrap: 'wrap' }}>
-          <button style={S.boton} onClick={() => setGuia(true)} title="Qué es una prueba, qué hace cada laboratorio y cómo leer sus resultados">Guía: cómo se prueba una estrategia</button>
+          <button style={S.boton} onClick={() => setGuia(true)} title="Qué es una prueba, cómo se compara con el azar y cómo leer su resultado">Guía: cómo se prueba una estrategia</button>
           <button style={{ ...S.enlace, color: B.apagado, fontSize: 13 }} onClick={() => onBacktestValor?.()} title="Donde las estrategias se ejecutan sobre un valor y se ven en el gráfico">Backtest de un valor</button>
         </span>
       </div>

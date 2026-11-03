@@ -26,7 +26,11 @@ import { GRUPOS, buscaCatalogo, nombreCond, explicacionCond, filaNueva, soloDelV
   leeVenta, escribeVenta, leeProteccion, AYUDA_QUIEN, opcionesQuien, leeOrden, ponModoOrden, ponAjuste, ponVelasOrden, CANCELAR_DEFECTO, ponCancelar, vigilaDesdeLaCompra, ponVigilancia, AJUSTES, fraseCompra, TIPOS_STOP, CAMPOS_STOP_TARJETA, numeroStop, anadeStopDef, cambiaTipoStopDef, quitaStopDef, ponNumeroStop, ponSalida, DEFECTO_PROTECCION,
   opcionesClasico, frasesClasico, fraseStopTarjeta, plantillaFila, opcionesOp, opDe, opDesactivada, conOp, conVuelta, conCruce, puedeVuelta, puedeCruce, conNumero, tieneLado, erroresFila, erroresProteccion, cuentaErroresProteccion, notaFila, fraseRegla,
   datosSuficientes, aTexto, deTexto, mueve, ORDEN_IGUAL, ORDEN_VENTA, ORDEN_STOPS, ORDEN_STOPS_MAS_ALTO, AYUDA_MODO_STOPS, leeModoStops, ponModoStops, PIEZAS, aplicaPieza, ponNivelOrden, avisoIndices, COMO_FILTRAR_INDICE, GRUPOS_FUERZA, avisoFila, combinacionesImposibles } from '../lib/builder/tarjetas'
-import { partesNombre, planGuardado, avisoVersion } from '../lib/builder/versiones'
+import { partesNombre, planGuardado, avisoVersion, pruebasDeLaRegla } from '../lib/builder/versiones'
+import { listarPruebas } from '../lib/pruebaAzar'
+import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
+import { respondeSalida } from '../lib/tesis'
+import { Pregunta } from './VentanaPregunta'
 import { PERIODOS_DEFECTO } from '../lib/editor/lotes'
 import Ayuda from './BuilderAyuda'
 import BuilderGuia from './BuilderGuia'
@@ -253,7 +257,16 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
   const [guia, setGuia] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState(null)
-  const enPrueba = enPruebaInicial || []   // §59: las pruebas congeladas donde está la estrategia de partida (eran las de lotes, ya retiradas: hoy, ninguna)
+  // §63: las pruebas del paso 2 de la estrategia de partida, con su regla de ahora. Con alguna, cambiar la regla crea «· versión 2» y la original se queda como está.
+  const [enPrueba, setEnPrueba] = useState(enPruebaInicial || [])
+  const [falloPruebas, setFalloPruebas] = useState(false)
+  useEffect(() => {
+    if (enPruebaInicial || !fila?.id || !hayConfigSupabase()) return
+    let vivo = true
+    listarPruebas(ctxConSesion(), fila.id).then(xs => { if (vivo) setEnPrueba(pruebasDeLaRegla(xs, orig.current.def, orig.current.valores)) }).catch(() => { if (vivo) setFalloPruebas(true) })
+    return () => { vivo = false }
+  }, [fila?.id])
+  const [preguntaTesis, setPreguntaTesis] = useState(null)   // §63: la ventana de cambios sin guardar al ir a una tesis: { seguir, fallo }
 
   const filtro = leeFiltro(def), compra = leeCompra(def), venta = leeVenta(def), prot = leeProteccion(def)
   const modoC = compra.modo || modoCompraUI, modoV = venta.modo || modoVentaUI
@@ -353,8 +366,11 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.errores ? j.errores.join(' ') : (j.error || `HTTP ${res.status}`))
       onGuardada?.({ ...pl.cuerpo, ...j, id: j?.id || pl.cuerpo.id }, { version: pl.version, ...info })
+      setGuardando(false)
+      return true
     } catch (e) { alFallar(`No se pudo guardar: ${e.message}`) }
     setGuardando(false)
+    return false
   }
   const guarda = async () => {
     if (hayErrores || guardando) return
@@ -366,20 +382,28 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
   // estrategia con la regla de versiones de siempre (si está en una prueba, «· versión 2») y se sigue en la misma pestaña, con la
   // estrategia guardada.
   const guardaValores = async () => {
-    if (guardando) return
+    if (guardando) return false
     setMsgValores(null)
     const est2 = conPrueba   // V9.1067: con los enlazados
     let errs = []; try { errs = validaDefinicion(est2.def, est2.valores) } catch (e) { errs = [e.message] }
-    if (errs.length || errNombre) { setMsgValores(`No se puede guardar: ${errNombre || errs[0]}`); return }
+    if (errs.length || errNombre) { setMsgValores(`No se puede guardar: ${errNombre || errs[0]}`); return false }
     const cambia2 = jsonCanonico(paraHuella(est2.def, est2.valores)) !== jsonCanonico(paraHuella(orig.current.def, orig.current.valores))
     const plan2 = planGuardado({ fila, est: est2, orig: orig.current, enPrueba, estrategias, cambiaRegla: cambia2 })
-    if (plan2.metodo === 'ninguno') { volverGuardados(); return }
-    await guardaPlan(plan2, { quedarse: true, pestana }, setMsgValores)
+    if (plan2.metodo === 'ninguno') { volverGuardados(); return true }
+    return guardaPlan(plan2, { quedarse: true, pestana }, setMsgValores)
   }
   // «Volver a los guardados» (V9.1073): la estrategia exactamente como está guardada: sin los cambios de las tarjetas ni las casillas.
   const volverGuardados = () => {
     setEst(estadoDe(fila)); setCambiosPrueba({}); setSueltos(new Set()); setMsgValores(null); setMsg(null)
     setModoCompraUI(leeCompra(orig.current.def).modo || 'todas'); setModoVentaUI(leeVenta(orig.current.def).modo || 'alguna')
+  }
+  // §63: ir a una tesis con cambios sin guardar: la misma ventana que en el paso 3.
+  const guardiaTesis = (seguir) => { if (cambiado) { setMsgValores(null); setPreguntaTesis({ seguir }) } else seguir() }
+  const respondeTesis = async (que) => {
+    const d = preguntaTesis
+    if (que === 'cancelar') { setPreguntaTesis(null); return }
+    const r = await respondeSalida(que, { guardar: guardaValores, descartar: volverGuardados, seguir: d.seguir })
+    setPreguntaTesis(r === 'fallo' ? { ...d, fallo: true } : null)
   }
   const abreClasico = () => onEditorClasico?.({ id: fila?.id ?? null, name: est.nombre, description: est.descripcion, definition: def, params: { ...valores } })
 
@@ -419,7 +443,7 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
   return (
     <div style={S.pagina}>
       {/* §45 y §54: la cabecera B; el paso 2 («Probarla contra el azar») abre la estrategia GUARDADA (una nueva, al guardarla). */}
-      <CabeceraPasos actual={1} estrategia={est.nombre.trim() || null} onVolver={onVolver} enlace={enlaceTesis?.('estrategia', fila?.id)} onPaso={onPaso2 ? (n) => { if (n === 2 && fila?.id) onPaso2(fila); else if (n === 3 && fila?.id) onPaso3?.(fila) } : null}
+      <CabeceraPasos actual={1} estrategia={est.nombre.trim() || null} onVolver={onVolver} enlace={enlaceTesis?.('estrategia', fila?.id, guardiaTesis)} onPaso={onPaso2 ? (n) => { if (n === 2 && fila?.id) onPaso2(fila); else if (n === 3 && fila?.id) onPaso3?.(fila) } : null}
         desactivados={nueva ? { 2: 'Guárdala primero: el paso 2 prueba la estrategia tal como está guardada', 3: 'Guárdala primero: el plan usa la estrategia tal como está guardada' } : esSemanal(fila) ? { 3: 'El paso 3, por ahora, solo con estrategias de velas diarias' } : {}}/>
       {/* V9.1073: la fila del título, fija arriba al desplazarse (con la barra de los cambios). */}
       <div data-fila-titulo style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 20, background: B.fondo, padding: '6px 0' }}>
@@ -430,6 +454,7 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
             {cambiado ? <>● Probando cambios sin guardar: {resumenCambios(cambiosBarra)}</> : nueva ? '● Estrategia nueva: todavía sin guardar' : '✓ Sin cambios: ves la estrategia guardada'}
           </span>
           {msgValores && <span data-error-barra style={{ color: ROJO, fontSize: 13 }}>{msgValores}</span>}
+          {falloPruebas && <span data-aviso="pruebas-sin-leer" style={{ color: AMARILLO, fontSize: 13 }}>⚠ No se han podido leer sus pruebas: si cambias la regla, se guardará sobre esta misma</span>}
           <button data-boton="volver" style={cambiado && !guardando ? S.boton : S.botonDesactivado} disabled={!cambiado || guardando} onClick={volverGuardados}
             title="Deshace los cambios de las tarjetas y de las casillas de prueba: la estrategia queda como está guardada">Volver a los guardados</button>
           <button data-boton="guardar-valores" style={puedeGuardarBarra ? S.botonVerde : S.botonDesactivado} disabled={!puedeGuardarBarra} onClick={guardaValores}
@@ -743,6 +768,12 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
       </div>
       </>}
 
+      {preguntaTesis && (
+        <Pregunta id="sin-guardar" texto={`Tienes cambios sin guardar en «${est.nombre.trim() || 'Sin nombre'}».`} detalle={planBarra?.version ? avisoVersion(planBarra.version) : null} aviso={preguntaTesis.fallo ? msgValores : null}>
+          <button data-salida="guardar" disabled={!puedeGuardarBarra} onClick={() => respondeTesis('guardar')} style={puedeGuardarBarra ? S.botonVerde : S.botonDesactivado}>{guardando ? 'Guardando…' : 'Guardar'}</button>
+          <button data-salida="salir" disabled={guardando} onClick={() => respondeTesis('salir')} style={S.boton}>Salir sin guardar</button>
+          <button data-salida="cancelar" disabled={guardando} onClick={() => respondeTesis('cancelar')} style={S.boton}>Cancelar</button>
+        </Pregunta>)}
     </div>
   )
 }
