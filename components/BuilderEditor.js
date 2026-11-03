@@ -199,7 +199,7 @@ function Tarjeta({ titulo, color, derecha, children, datos, soltar = null }) {
   )
 }
 
-export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, onVolver, onGuardada, onEditorClasico, onPaso2 = null, onPaso3 = null, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null, abiertosInicial = null, ayudaInicial = null, anadiendoInicial = null, arrastreInicial = null, cargaSimbolos = null, cargaVelas = null, comisiones = null, pestanaInicial = 'tarjetas', panelInicial = null, senalesInicial = null, dibujoInicial = null, cambiosInicial = null, entradaBuilder = 0, sueltosInicial = null }) {
+export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiFetch, enlaceTesis = null, onVolver, onGuardada, onEditorClasico, onPaso2 = null, onPaso3 = null, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null, abiertosInicial = null, ayudaInicial = null, anadiendoInicial = null, arrastreInicial = null, cargaSimbolos = null, cargaVelas = null, comisiones = null, pestanaInicial = 'tarjetas', panelInicial = null, senalesInicial = null, dibujoInicial = null, cambiosInicial = null, entradaBuilder = 0, sueltosInicial = null }) {
   const [est, setEst] = useState(() => estadoInicial || estadoDe(fila))
   const orig = useRef(null); if (!orig.current) orig.current = estadoDe(fila)
   const { def, valores } = est
@@ -430,7 +430,7 @@ export default function BuilderEditor({ fila, estrategias = [], lotes = [], apiF
   return (
     <div style={S.pagina}>
       {/* §45 y §54: la cabecera B; el paso 2 («Probarla contra el azar») abre la estrategia GUARDADA (una nueva, al guardarla). */}
-      <CabeceraPasos actual={1} estrategia={est.nombre.trim() || null} onVolver={onVolver} onPaso={onPaso2 ? (n) => { if (n === 2 && fila?.id) onPaso2(fila); else if (n === 3 && fila?.id) onPaso3?.(fila) } : null}
+      <CabeceraPasos actual={1} estrategia={est.nombre.trim() || null} onVolver={onVolver} enlace={enlaceTesis?.('estrategia', fila?.id)} onPaso={onPaso2 ? (n) => { if (n === 2 && fila?.id) onPaso2(fila); else if (n === 3 && fila?.id) onPaso3?.(fila) } : null}
         desactivados={nueva ? { 2: 'Guárdala primero: el paso 2 prueba la estrategia tal como está guardada', 3: 'Guárdala primero: el plan usa la estrategia tal como está guardada' } : esSemanal(fila) ? { 3: 'El paso 3, por ahora, solo con estrategias de velas diarias' } : {}}/>
       {/* V9.1073: la fila del título, fija arriba al desplazarse (con la barra de los cambios). */}
       <div data-fila-titulo style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 20, background: B.fondo, padding: '6px 0' }}>

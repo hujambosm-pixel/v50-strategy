@@ -174,7 +174,7 @@ const Tarjeta = ({ id, titulo, ayuda, children }) => (
   </div>
 )
 
-export default function BuilderPlan({ estrategias = [], estrategiaId = null, planId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, salida = null, deps = null, inicial = null }) {
+export default function BuilderPlan({ estrategias = [], estrategiaId = null, planId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, salida = null, enlaceTesis = null, deps = null, inicial = null }) {
   const tarjetas = useMemo(() => estrategias.filter(esDeTarjetas).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
   const diarias = useMemo(() => tarjetas.filter(s => !esSemanal(s)), [tarjetas])
   const deCodigo = useMemo(() => estrategias.filter(esDeCodigo).length, [estrategias])
@@ -485,6 +485,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const avisos = actual ? (
     <div data-avisos className="bp-avisos" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 24px', alignItems: 'center', marginBottom: 12 }}>
       {estrategia && (avisoPrueba || <div data-aviso="prueba" data-estado="leyendo" style={S.secundario}>Leyendo la prueba…</div>)}
+      {enlaceTesis?.('plan', fila?.id)}
       <div data-aviso="a-mano" style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>⚠ {AVISO_A_MANO}<Ayuda texto={AYUDA_PLAN.aMano} etiqueta={AVISO_A_MANO}/></div>
       {nuevaActual && <div data-aviso="sin-guardar" style={{ color: AMARILLO }}>Sin guardar: se perderá al recargar</div>}
       {calc.calculando && <div data-calculando style={{ color: AMARILLO }}>Calculando…</div>}

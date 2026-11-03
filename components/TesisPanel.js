@@ -25,7 +25,7 @@ const NUEVA = Object.freeze({ titulo: TITULO_NUEVA, texto: '', estado: 'idea', r
 const borradorDe = (t) => ({ titulo: t.titulo, texto: t.texto || '', estado: t.estado, relacionados: Array.isArray(t.relacionados) ? t.relacionados : [] })
 const ROJO = '#f85149', AMARILLO = '#f2cc60'
 // El editor, solo en el navegador y solo al abrir una tesis: el resto de la app no carga TipTap.
-const EditorTesis = dynamic(() => import('./TesisEditor'), { ssr: false, loading: () => <div data-texto data-cargando className="ts-texto" style={{ ...S.apagado, height: 'calc(100vh - 380px)', minHeight: 400, padding: B.aire, boxSizing: 'border-box', background: HOJA.fondo, borderRadius: B.radioBoton }}>Cargando el editor…</div> })
+const EditorTesis = dynamic(() => import('./TesisEditor'), { ssr: false, loading: () => <div data-texto data-cargando className="ts-texto" style={{ ...S.apagado, height: 'calc(100vh - 424px)', minHeight: 400, padding: B.aire, boxSizing: 'border-box', background: HOJA.fondo, borderRadius: B.radioBoton }}>Cargando el editor…</div> })
 
 const Etiqueta = ({ estado }) => { const e = estadoTesis(estado); return <span data-estado={e.id} style={{ display: 'inline-block', padding: '1px 9px', borderRadius: 999, background: e.fondo, color: e.color, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>{e.nombre}</span> }
 const HojaLineas = () => (
@@ -35,7 +35,8 @@ const HojaLineas = () => (
 // Un texto en trozos ([{ t, marca }]), con lo buscado resaltado. React lo escapa: nada se interpreta como HTML.
 const Resaltado = ({ trozos }) => trozos.map((x, k) => x.marca ? <mark key={k} data-marca style={{ background: COLORES_RESALTE[0].color, color: B.titulo, borderRadius: 2 }}>{x.t}</mark> : <span key={k}>{x.t}</span>)
 
-export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbrirPlan, salida = null, deps = null, inicial = null }) {
+// abrirId: la tesis que se pide abrir al entrar (desde «Tesis: …» del Builder); onAbierta: ya se ha atendido, para no repetirlo la próxima vez que se entre.
+export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbrirPlan, salida = null, abrirId = null, onAbierta = null, deps = null, inicial = null }) {
   // El ctx en cada llamada: ctxConSesion() pone el token vigente y renueva la sesión ante 401 (nada congelado al montar).
   const ctx = () => deps?.ctx || (hayConfigSupabase() ? ctxConSesion() : null)
   const [tesis, setTesis] = useState(inicial?.tesis || null)
@@ -83,7 +84,13 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbri
   }, [])
   const ordenadas = useMemo(() => ordenTesis(tesis || []), [tesis])
   // Leídas las tesis, se abre la más reciente.
-  useEffect(() => { if (tesis && abierta == null && !nueva && !borr && ordenadas[0]) { setAbierta(ordenadas[0].id); setBorr(borradorDe(ordenadas[0])) } }, [tesis])
+  useEffect(() => {
+    if (!tesis || abierta != null || nueva || borr) return
+    const pedida = abrirId != null ? ordenadas.find(t => String(t.id) === String(abrirId)) : null
+    if (abrirId != null) { if (!pedida && !fallo) setFallo('Esa tesis ya no existe: se ha borrado.'); onAbierta?.() }
+    const t = pedida || ordenadas[0]
+    if (t) { setAbierta(t.id); setBorr(borradorDe(t)) }
+  }, [tesis])
   useEffect(() => { if (foco && titulo.current) { titulo.current.focus(); titulo.current.select() } }, [foco])
   // Los archivos de la tesis abierta, con sus URL para las miniaturas, y el resumen de todas.
   const idAbierta = useRef(null)
@@ -348,16 +355,11 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbri
               </span>
               <button data-revisada disabled={!fila || ocupado} onClick={revisada} style={{ ...S.boton, padding: '5px 12px', fontSize: 13, opacity: fila ? 1 : 0.5, cursor: fila ? 'pointer' : 'not-allowed' }}>✓ Marcar como revisada hoy</button>
             </div>
-            <Editor key={hoja} valor={borr.texto} onCambio={(v) => cambia('texto', v)} tesisId={nueva ? null : abierta} ctx={ctx} onSubiendo={(n) => { setSubiendo(x => x + n); if (n < 0) { leeArchivos(); leeResumen() } }} onAbrirImagen={abreImagen}/>
-
-            <ZonaAdjuntos filas={adjuntos} bytes={bytesAdjuntos} nueva={nueva} urls={urls} subidas={lado ? [] : subidas} avisos={lado ? [] : avisosA} arrastrando={arrastrando && !lado} onArrastrando={setArrastrando}
-              onAnadir={anadeArchivos} onAbrir={abreVisor} onDescargar={bajaArchivo} onBorrar={setBorrandoA} extraCabecera={cabeLado ? <BotonLado activo={lado} onClick={() => ponLado(!lado)}/> : null}/>
-
-            <div data-relacionado>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 2, fontWeight: 700, color: B.titulo, marginBottom: 8 }}>Relacionado<Ayuda texto={AYUDA_RELACIONADO} etiqueta="Relacionado"/></div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <div data-relacionado style={{ position: 'relative' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontWeight: 700, fontSize: 13, color: B.titulo, marginRight: 4 }}>Relacionado<Ayuda texto={AYUDA_RELACIONADO} etiqueta="Relacionado"/></span>
                 {fichas.map((f, k) => (
-                  <span key={`${f.tipo}${f.id}`} data-ficha={`${f.tipo}-${f.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 6px 4px 12px', borderRadius: 999, border: `1px solid ${B.borde}`, background: B.cabecera }}>
+                  <span key={`${f.tipo}${f.id}`} data-ficha={`${f.tipo}-${f.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '1px 4px 1px 10px', fontSize: 13, borderRadius: 999, border: `1px solid ${B.borde}`, background: B.cabecera }}>
                     {f.borrado
                       ? <span data-borrado style={{ color: B.apagado }}>{f.etiqueta} · (borrado)</span>
                       : <span>{f.etiqueta} · {f.nombre}</span>}
@@ -365,10 +367,10 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbri
                     {!f.borrado && f.tipo === 'plan' && onAbrirPlan && <button data-abrir data-abrir-plan={f.id} onClick={() => conGuardia(() => onAbrirPlan(f.id))} style={{ ...S.enlace, fontSize: 13 }}>Abrir</button>}
                     <button aria-label={`Quitar ${f.etiqueta.toLowerCase()}`} onClick={() => quita(k)} style={{ ...S.enlace, color: B.apagado, fontSize: 16, padding: '0 4px' }}>×</button>
                   </span>))}
-                <button data-anadir onClick={() => setAnadiendo(a => !a)} style={{ ...S.boton, padding: '5px 12px', fontSize: 13 }}>+ Añadir estrategia o plan</button>
+                <button data-anadir aria-expanded={anadiendo} onClick={() => setAnadiendo(a => !a)} style={{ ...S.boton, padding: '2px 10px', fontSize: 13 }}>+ Añadir estrategia o plan</button>
               </div>
               {anadiendo && (
-                <div data-elegir style={{ marginTop: 8, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, maxHeight: 260, overflowY: 'auto', padding: 8, background: B.fondo }}>
+                <div data-elegir style={{ position: 'absolute', top: '100%', left: 0, zIndex: 30, width: 420, maxWidth: '100%', marginTop: 4, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, maxHeight: 260, overflowY: 'auto', padding: 8, background: B.fondo, boxShadow: '0 8px 24px rgba(0,0,0,0.45)' }}>
                   <div style={{ ...S.apagado, margin: '2px 4px 4px' }}>Estrategias de tarjetas</div>
                   {!tarjetas.length && <div style={{ ...S.apagado, margin: '0 4px 6px' }}>No tienes estrategias de tarjetas.</div>}
                   {tarjetas.map(s => <button key={`e${s.id}`} disabled={yaEsta('estrategia', s.id)} onClick={() => enlaza('estrategia', s.id)} style={{ ...S.enlace, display: 'block', padding: '4px', opacity: yaEsta('estrategia', s.id) ? 0.45 : 1 }}>{s.name}</button>)}
@@ -377,6 +379,10 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbri
                   {planes.map(p => <button key={`p${p.id}`} disabled={yaEsta('plan', p.id)} onClick={() => enlaza('plan', p.id)} style={{ ...S.enlace, display: 'block', padding: '4px', opacity: yaEsta('plan', p.id) ? 0.45 : 1 }}>{p.nombre}</button>)}
                 </div>)}
             </div>
+            <Editor key={hoja} valor={borr.texto} onCambio={(v) => cambia('texto', v)} tesisId={nueva ? null : abierta} ctx={ctx} onSubiendo={(n) => { setSubiendo(x => x + n); if (n < 0) { leeArchivos(); leeResumen() } }} onAbrirImagen={abreImagen}/>
+
+            <ZonaAdjuntos filas={adjuntos} bytes={bytesAdjuntos} nueva={nueva} urls={urls} subidas={lado ? [] : subidas} avisos={lado ? [] : avisosA} arrastrando={arrastrando && !lado} onArrastrando={setArrastrando}
+              onAnadir={anadeArchivos} onAbrir={abreVisor} onDescargar={bajaArchivo} onBorrar={setBorrandoA} extraCabecera={cabeLado ? <BotonLado activo={lado} onClick={() => ponLado(!lado)}/> : null}/>
           </div>
         ) : (
           <div style={{ ...S.tarjeta, padding: B.aire, ...S.secundario }}>{tesis == null ? 'Leyendo tus tesis…' : 'Elige una tesis de la lista o pulsa «+ Nueva tesis».'}</div>

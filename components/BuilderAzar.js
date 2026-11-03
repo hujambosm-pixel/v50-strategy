@@ -45,7 +45,7 @@ export function progresoDe(curso) {
 }
 const velasDeRespuesta = (v) => Array.isArray(v) ? v : v?.velas || []
 
-export default function BuilderAzar({ estrategias = [], estrategiaId = null, apiFetch, version = null, cargaSimbolos = null, cargaVelas = null, onVolver, onPaso1, onPaso3 = null, deps = null, inicial = null }) {
+export default function BuilderAzar({ estrategias = [], estrategiaId = null, apiFetch, version = null, cargaSimbolos = null, cargaVelas = null, onVolver, onPaso1, onPaso3 = null, enlaceTesis = null, deps = null, inicial = null }) {
   const tarjetas = useMemo(() => estrategias.filter(esDeTarjetas).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
   const [estId, setEstId] = useState(() => String((tarjetas.find(s => String(s.id) === String(estrategiaId)) || tarjetas[0])?.id ?? ''))
   const estrategia = tarjetas.find(s => String(s.id) === estId) || null
@@ -246,7 +246,7 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
     const aPaso1 = () => onPaso1?.(tarjetas.find(s => String(s.id) === String(viendo.fila.estrategia_id)) || estrategia)
     return (
       <div style={S.pagina}>
-        <CabeceraPasos actual={2} estrategia={viendo.fila.estrategia_nombre || nombre} onVolver={onVolver} onPaso={(n) => { if (n === 1) aPaso1(); else if (n === 3) onPaso3?.(viendo.fila.estrategia_id) }}/>
+        <CabeceraPasos actual={2} estrategia={viendo.fila.estrategia_nombre || nombre} onVolver={onVolver} enlace={enlaceTesis?.('estrategia', viendo.fila.estrategia_id)} onPaso={(n) => { if (n === 1) aPaso1(); else if (n === 3) onPaso3?.(viendo.fila.estrategia_id) }}/>
         <div style={{ marginBottom: 12 }}><button data-boton="volver" style={{ ...S.enlace, color: B.secundario }} onClick={() => setViendo(null)}>← Volver</button></div>
         <BuilderAzarResultado prueba={viendo.fila} resultado={viendo.resultado} onPaso1={aPaso1} onPaso3={() => onPaso3?.(viendo.fila.estrategia_id)}/>
       </div>
@@ -254,7 +254,7 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
   }
   return (
     <div style={S.pagina}>
-      <CabeceraPasos actual={2} estrategia={estrategia?.name || null} onVolver={onVolver} bloqueada={enMarcha} onPaso={(n) => { if (n === 1) onPaso1?.(estrategia); else if (n === 3) onPaso3?.(estrategia?.id ?? null) }}/>
+      <CabeceraPasos actual={2} estrategia={estrategia?.name || null} onVolver={onVolver} bloqueada={enMarcha} enlace={enlaceTesis?.('estrategia', estrategia?.id)} onPaso={(n) => { if (n === 1) onPaso1?.(estrategia); else if (n === 3) onPaso3?.(estrategia?.id ?? null) }}/>
       <div style={{ fontSize: 20, fontWeight: 700, color: B.titulo, marginTop: 8 }}>¿Gana «{nombre}» por algo más que suerte?</div>
       <div style={{ ...S.secundario, marginTop: 4, marginBottom: 16 }}>Tú eliges dónde probarla y confirmas. Lo demás lo hace la app sola, en orden.</div>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>

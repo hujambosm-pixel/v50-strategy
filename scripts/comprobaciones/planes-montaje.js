@@ -169,7 +169,7 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   ok(filtros() === 'De tarjetas (4) | De código (1)', `filtros: ${filtros()}`)
   ok(!hayQ(m, 'data-regla-fila') && m.raiz.conAtributo('data-nombre').every(n => n.getAttribute('title')?.length > 5 && n.style.whiteSpace === 'nowrap'), 'una línea por estrategia: la regla, en el tooltip del nombre')
   const cabeceras = m.raiz.busca(n => n.getAttribute('data-tabla') === 'estrategias').todos(n => n.nodeName === 'TH').map(n => n.textContent.replace('?', '').trim()).join(' · ')
-  ok(cabeceras.startsWith('Estrategia · Versión · Prueba contra el azar · Planes · Qué toca ahora'), `columnas: ${cabeceras}`)
+  ok(cabeceras.startsWith('Estrategia · Versión · Prueba contra el azar · Planes · Tesis · Qué toca ahora'), `columnas: ${cabeceras}`)
   // Sin prueba, no pasa, pasa, y una prueba de una regla anterior (otra huella): esa no cuenta.
   const az = (id) => filaDe(m, id).busca(n => n.getAttribute('data-azar') != null)
   ok(az('e9').getAttribute('data-azar') === 'sinPrueba' && az('e9').textContent === 'Sin probar' && !filaDe(m, 'e9').busca(n => n.getAttribute('data-ver-prueba') != null), 'sin prueba: «Sin probar», sin «Ver»')

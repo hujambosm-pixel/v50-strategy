@@ -250,7 +250,7 @@ const B_AMAR = () => '#f2cc60'
   ]
   const base = { tesis: [tes, otra], abierta: 7, borrador: bor, archivos: arch, urls: { r1: 'https://f/r1', r4: 'https://f/r4', r6: 'https://f/r6' }, resumen: A.resumenArchivos(arch) }
   let h = pinta(base)
-  ok(h.includes('Adjuntos (5)') && cuenta(h, 'data-adjunto="') === 5 && !h.includes('Pegada.png') && h.includes('Ocupan 1,2 MB') && h.indexOf('data-adjuntos') < h.indexOf('data-relacionado') && h.indexOf('data-texto') < h.indexOf('data-adjuntos'), 'la zona: debajo del editor y encima de «Relacionado», sin las imágenes del texto')
+  ok(h.includes('Adjuntos (5)') && cuenta(h, 'data-adjunto="') === 5 && !h.includes('Pegada.png') && h.includes('Ocupan 1,2 MB') && h.indexOf('data-relacionado') < h.indexOf('data-texto') && h.indexOf('data-texto') < h.indexOf('data-adjuntos'), 'la zona: debajo del editor («Relacionado» va encima de él), sin las imágenes del texto')
   ok(h.includes('Arrastra archivos aquí o') && h.includes('+ Añadir archivos') && /type="file"[^>]*multiple/.test(h), '«Arrastra archivos aquí o» y «+ Añadir archivos» (varios a la vez)')
   ok(h.includes('<img src="https://f/r4"') && ['data-etiqueta-tipo="PDF"', 'data-etiqueta-tipo="XLSX"', 'data-etiqueta-tipo="DOCX"', 'data-etiqueta-tipo="CSV"'].every(x => h.includes(x)), 'miniaturas: la imagen, y la etiqueta del tipo en lo demás')
   ok(h.includes('title="Guía de 24 páginas con un nombre larguísimo.pdf"') && h.includes('85 KB · solo descargar') && h.includes('1 KB · solo descargar') && h.includes('>1,1 MB<') && cuenta(h, 'data-borrar-adjunto') === 5 && cuenta(h, 'data-descargar-adjunto') === 5, 'cada tarjeta: nombre con tooltip, tamaño («· solo descargar» en Word y Excel), descargar y borrar')

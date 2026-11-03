@@ -185,6 +185,15 @@ texto con visor a pantalla completa, más un botón para leerlos al lado del tex
 - **Por qué solo con las rutas de la carpeta del usuario**: esa respuesta es la misma para «no existe» y para «no tienes acceso» (lo dice el propio mensaje; comprobado el 03/11/2026 con anon y con la clave de servicio). Por eso una ruta ajena, o sin sesión, nunca se comprueba: da error y no se pide borrar su fila. En lo propio, el bucket deja al dueño leer su carpeta y la tabla sigue protegida por la RLS.
 - **Límite conocido**: si la política de LEER del bucket se rompiera para el dueño, un archivo suyo parecería inexistente, se borraría su fila y el archivo quedaría huérfano. Si se tocan esas políticas, repetir los tres modos de `tesisSeguridad.js` y mirar si hay huérfanos.
 
+## «Relacionado» en los dos sentidos
+
+`components/TesisEnlace.js` (nuevo), `components/TesisPanel.js`, `components/BuilderPanel.js`, `BuilderEditor.js`, `BuilderAzar.js`, `BuilderPlan.js`, `lib/tesis.js` (`listarEnlacesTesis`, `tesisDe`) y `pages/index.js`. Sin cambios en la base: se lee de las tesis del usuario, sin el texto. Ninguna cifra cambia.
+- **En la tesis**, «Relacionado» sube justo bajo la línea de título, estado y revisión, antes del editor: fichas en una línea que se parten si no caben y «+ Añadir estrategia o plan» al final. La lista de elegir se abre encima del editor, opaca, para no empujarlo. El editor baja de alto lo que ocupa esa línea (44 px).
+- **Del otro lado**: paso 3, en la línea de avisos, junto a «Sin prueba · Probarla ahora», según el plan de la pestaña activa; pasos 1 y 2, a la derecha de la ruta de la cabecera B, para la estrategia; «Mi trabajo», columna «Tesis». Una: «Tesis: <título> ›» (en la columna, el título). Varias: «Tesis (N) ▾» (en la columna, «N tesis ▾», con los títulos en el tooltip) y un desplegable opaco. Ninguna: nada.
+- **Solo enlaces directos**: la tesis enlaza esa estrategia o ese plan. Un plan no hereda las tesis de su estrategia. Un plan de una pestaña sin guardar no tiene ninguna.
+- **Pulsar** abre la pestaña Tesis con esa tesis (`abrirTesis` de la página, que pasa por `salirDeTesis`): con cambios sin guardar en un plan, sale la ventana de siempre. **El paso 1 no tiene esa guardia, hoy tampoco para los otros caminos**: el Builder sigue montado y oculto mientras se está en Tesis, así que lo escrito sigue ahí al volver. Si la tesis ya no existe al abrirla, lo dice y abre la más reciente.
+- Comprobado: `scripts/comprobaciones/tesis-enlaces.js` (en `comunes.sh`), con estado y efectos: 0, 1 y varias tesis en los tres pasos y en «Mi trabajo»; tesis borrada; plan sin guardar; la guardia con «Cancelar» y «Salir sin guardar»; mirar no escribe en la base.
+
 ## Comprobaciones
 
 `scripts/comprobaciones/tesisArchivos.js` (en `comunes.sh`): `lib/tesisArchivos.js` con un fetch falso, sus piezas puras y el SQL guardado.

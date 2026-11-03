@@ -35,7 +35,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1113'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1114'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1075,6 +1075,9 @@ export default function Home() {
   // §54: lo mismo con los cambios sin guardar de un plan (el paso 3 del Builder).
   const tesisSalida=useRef(null), builderSalida=useRef(null)
   const salirDeTesis=(seguir)=>{ if(sidePanel==='tesis'&&tesisSalida.current?.(seguir)) return; if(sidePanel==='builder'&&builderSalida.current?.(seguir)) return; seguir() }
+  // «Tesis: …» de una estrategia o un plan del Builder (docs/tesis.md): esa tesis en su pestaña, con la guardia de arriba. { id, n }
+  const [tesisAbrir,setTesisAbrir]=useState(null)
+  const abrirTesis=(id)=>salirDeTesis(()=>{ setTesisAbrir({id:Number(id),n:Date.now()}); setSidePanel('tesis') })
   // Ficha fundamental del símbolo activo. Se pide SOLO con la sección abierta (ver el efecto más abajo).
   const [fundFicha,setFundFicha]=useState(null)
   const [fundCargando,setFundCargando]=useState(false)
@@ -6318,7 +6321,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1113</title>
+        <title>Trading Simulator V9.1114</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6407,7 +6410,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1113
+            <span className="dot"/>Trading Simulator V9.1114
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -9470,7 +9473,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 página recarga sus estrategias. ══ */}
             {(builderVisitado||sidePanel==='builder')&&(
               <div style={{display:sidePanel==='builder'?'contents':'none'}}>
-                <ProteccionPanel nombre="Builder"><BuilderPanel estrategias={strategies} salida={builderSalida} visible={sidePanel==='builder'} apiFetch={apiFetch} version={VERSION_APP} abrir={builderAbrir} comisiones={indComisiones}
+                <ProteccionPanel nombre="Builder"><BuilderPanel estrategias={strategies} salida={builderSalida} visible={sidePanel==='builder'} apiFetch={apiFetch} version={VERSION_APP} abrir={builderAbrir} comisiones={indComisiones} onAbrirTesis={abrirTesis}
                   onGuardada={()=>reloadStrategies()}
                   onAbrirEstrategia={(s,como)=>{if(como==='editor'){setEditorFila({...s});setSidePanel('editor')}}}
                   onBacktestValor={()=>setSidePanel('config')}/></ProteccionPanel>{/* V9.1066 */}
@@ -9479,7 +9482,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
             {/* ══ TESIS (V9.1092, components/TesisPanel.js, docs/tesis.md): mis tesis de inversión en texto libre, a ancho completo.
                 Aislada: no toca el motor ni el Builder. «Abrir» de una estrategia enlazada la abre en el paso 1 del Builder. ══ */}
             {sidePanel==='tesis'&&(
-              <ProteccionPanel nombre="Tesis"><TesisPanel estrategias={strategies} salida={tesisSalida} onAbrirEstrategia={(s)=>abrirEnBuilder(s)} onAbrirPlan={abrirPlanEnBuilder}/></ProteccionPanel>
+              <ProteccionPanel nombre="Tesis"><TesisPanel estrategias={strategies} salida={tesisSalida} abrirId={tesisAbrir?.id??null} onAbierta={()=>setTesisAbrir(null)} onAbrirEstrategia={(s)=>abrirEnBuilder(s)} onAbrirPlan={abrirPlanEnBuilder}/></ProteccionPanel>
             )}
             {/* ══ LABORATORIO DE CARTERA (components/CarteraPanel.js): a ancho completo, montado desde la primera visita ══ */}
             {(carteraVisitado||sidePanel==='cartera')&&(

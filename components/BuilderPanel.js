@@ -20,6 +20,8 @@ import BuilderEditor from './BuilderEditor'
 import BuilderCodigo from './BuilderCodigo'
 import { esDeCodigo, filaCopiaCodigo } from '../lib/builder/codigo'
 import BuilderGuia from './BuilderGuia'
+import TesisEnlace from './TesisEnlace'
+import { listarEnlacesTesis, tesisDe } from '../lib/tesis'
 import { coincide, conNombres } from '../lib/builder/buscar'
 import Resaltado from './Resaltado'
 import ConLimpiar from './LimpiarBusqueda'
@@ -32,7 +34,7 @@ export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convert
 export const PASOS_CORTOS = ['Crear', 'Probar contra el azar', 'Convertirla en plan']   // §56: el nombre al lado de cada círculo de la cabecera B
 export const SUBTITULOS_PASOS = ['Cuándo compro, cuándo vendo y cuánto arriesgo', '¿Gana por algo más que suerte?', 'Dinero real, aportaciones e impuestos']
 // La firma de lo leído de la base (lotes y pruebas: id y huella / fecha): si no cambia, no se recalcula «Mi trabajo».
-export const firmaDatos = (lotes, pruebas, planes, pruebasAzar) => JSON.stringify([(lotes || []).map(l => [l.id, l.hash_lote]), (pruebas || []).map(p => [p.id, p.creado]), (planes || []).map(p => [p.id, p.updated_at]), pruebasAzar && pruebasAzar.map(p => [p.id, p.resultado?.id ?? null])])
+export const firmaDatos = (lotes, pruebas, planes, pruebasAzar, tesis) => JSON.stringify([(lotes || []).map(l => [l.id, l.hash_lote]), (pruebas || []).map(p => [p.id, p.creado]), (planes || []).map(p => [p.id, p.updated_at]), pruebasAzar && pruebasAzar.map(p => [p.id, p.resultado?.id ?? null]), (tesis || []).map(t => [t.id, t.updated_at])])
 const campoSel = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px' }
 const celda = { padding: '10px 12px', borderBottom: `1px solid ${B.borde}`, verticalAlign: 'top', textAlign: 'left' }
 const cabecera = { ...celda, color: B.secundario, fontWeight: 600, fontSize: 12, position: 'sticky', top: 0, background: B.cabecera }
@@ -41,12 +43,12 @@ const copia = (x) => JSON.parse(JSON.stringify(x))
 const fila = { ...celda, padding: '6px 12px', verticalAlign: 'middle', whiteSpace: 'nowrap', fontSize: 13 }
 const botonPeque = { padding: '4px 12px', fontSize: 13 }
 const iconoFila = { background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 3px', display: 'inline-flex', alignItems: 'center', color: B.secundario }
-const menuFijo = { zIndex: 40, padding: 6, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, boxShadow: '0 8px 24px rgba(0,0,0,0.45)', opacity: 1 }
-const opcionMenu = { ...S.enlace, display: 'block', width: '100%', padding: '5px 6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+export const menuFijo = { zIndex: 40, padding: 6, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, boxShadow: '0 8px 24px rgba(0,0,0,0.45)', opacity: 1 }
+export const opcionMenu = { ...S.enlace, display: 'block', width: '100%', padding: '5px 6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
 
 const Chip = ({ clave }) => { const [tipo, txt] = CHIP[clave] || CHIP.sinVeredicto; return <span style={S.chip(tipo)}>{txt}</span> }
 // §58: un desplegable (fondo opaco) que se cierra al pulsar fuera o con Esc. boton(abierto, alterna, ref) lo pinta quien lo usa.
-function useDesplegable() {
+export function useDesplegable() {
   const [abierto, setAbierto] = useState(false)
   const caja = useRef(null)
   useEffect(() => {
@@ -122,7 +124,8 @@ export function BarraPasos({ actual = 1, onPaso = null, desactivados = {} }) {
 // círculos pequeños: ✓ en los hechos (hechos: { n: true/false }; por defecto, los anteriores al actual), el actual en verde. Se pulsan como la barra: desactivados (string: el motivo, en el tooltip) no.
 // bloqueada: mientras corre algo, nada se pulsa. §56: cada círculo con su nombre al lado (hecho: ✓ de borde verde y texto apagado; actual: círculo verde relleno con su número y texto en negrita blanco;
 // pendiente: número y texto apagados). En una ventana estrecha (< 900 px) el texto se oculta y queda el círculo con el nombre en el tooltip.
-export function CabeceraPasos({ actual = 1, onPaso = null, desactivados = {}, hechos = {}, estrategia = null, onVolver = null, bloqueada = false }) {
+// enlace: lo que va a la derecha de la ruta («Tesis: …», components/TesisEnlace.js).
+export function CabeceraPasos({ actual = 1, onPaso = null, desactivados = {}, hechos = {}, estrategia = null, onVolver = null, bloqueada = false, enlace = null }) {
   const miga = { ...S.enlace, color: B.secundario, fontSize: 13 }, sep = <span aria-hidden="true" style={{ color: B.apagado }}>›</span>
   return (
     <div data-cabecera-b style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -130,6 +133,7 @@ export function CabeceraPasos({ actual = 1, onPaso = null, desactivados = {}, he
         <button data-ruta="builder" style={miga} disabled={bloqueada || !onVolver} onClick={() => onVolver?.()}>Builder</button>{sep}
         <button data-ruta="mi-trabajo" style={miga} disabled={bloqueada || !onVolver} onClick={() => onVolver?.('miTrabajo')}>Mi trabajo</button>
         {estrategia && <>{sep}<span data-ruta="estrategia" title={estrategia} style={{ color: B.titulo, fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{estrategia}</span></>}
+        {enlace && <span style={{ flex: 'none', marginLeft: 10 }}>{enlace}</span>}
       </nav>
       <style>{`@media (max-width: 900px) { .bp-nombre-paso { display: none } }`}</style>
       <div aria-label="Pasos del Builder" style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
@@ -166,7 +170,7 @@ export const filaCopia = (s) => esDeCodigo(s) ? filaCopiaCodigo(s) : ({ id: null
 // «Código de la estrategia». onAbrirEstrategia(s, 'editor') las abre en el Editor clásico (la pestaña «Editor»). onBacktestValor:
 // el enlace «Backtest de un valor» (la pestaña donde se ejecutan y se ven en el gráfico). abrir ({ fila, n }): la página pide
 // abrir una estrategia (al pulsar su nombre en «Backtest de un valor»); cada n nuevo la abre. §55: { planId, n }, un plan en el paso 3. V9.1058: buscarInicial (para las pruebas de montaje): lo escrito en el buscador de «Mi trabajo».
-export default function BuilderPanel({ estrategias = [], salida = null, onAbrirEstrategia, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '' }) {
+export default function BuilderPanel({ estrategias = [], salida = null, onAbrirEstrategia, onAbrirTesis = null, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, pestanaInicial = 'estrategias', filtroInicial = 'editor', visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '' }) {
   // §58: planes y pruebasAzar (null: no se han podido leer; entonces la fila dice «—» y «Qué toca ahora» sale de las pruebas de lotes, como antes).
   const [datos, setDatos] = useState(() => datosIniciales || { lotes: [], pruebas: [], planes: [], pruebasAzar: null, cargando: !datosIniciales, error: null })
   const [filasE, setFilasE] = useState(listasIniciales?.estrategias || null)
@@ -192,11 +196,11 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
       const r = await fetch(`${getSupaUrl()}/rest/v1/editor_lotes?select=id,creado,version_app,nombre,lote,hash_lote,huellas&order=creado.desc,id.desc&limit=200`, { headers: getSupaH() })
       const lotes = r.ok ? await r.json() : []
       const pruebas = await listarPruebas({ url: getSupaUrl(), headers: getSupaH() }, { limite: 500, soloResumen: false, filtro: '&config->>prueba=in.(editorLote,editorLab,editorCalibracion,planLote)' })
-      const ctx = ctxConSesion(), [planes, pruebasAzar] = await Promise.all([listarPlanes(ctx).catch(() => []), listarPruebasUsuario(ctx).catch(() => null)])
-      const error = r.ok ? null : `No se pudieron leer las pruebas (HTTP ${r.status}).`, f = firmaDatos(lotes, pruebas, planes, pruebasAzar)
+      const ctx = ctxConSesion(), [planes, pruebasAzar, tesis] = await Promise.all([listarPlanes(ctx).catch(() => []), listarPruebasUsuario(ctx).catch(() => null), listarEnlacesTesis(ctx).catch(() => [])])
+      const error = r.ok ? null : `No se pudieron leer las pruebas (HTTP ${r.status}).`, f = firmaDatos(lotes, pruebas, planes, pruebasAzar, tesis)
       if (f === firma.current && !error) return   // nada nuevo: no se toca
       firma.current = f
-      setDatos({ lotes, pruebas, planes, pruebasAzar, cargando: false, error })
+      setDatos({ lotes, pruebas, planes, pruebasAzar, tesis, cargando: false, error })
     } catch (e) { setDatos(d => ({ ...d, cargando: false, error: e.message })) }
   }, [datosIniciales])
   useEffect(() => { if (visible !== false) recarga() }, [visible, recarga])
@@ -261,6 +265,8 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   const alVolver = (cierra) => (donde) => { cierra(); recarga(); if (donde === 'miTrabajo') setIrMiTrabajo(Date.now()) }
   const abreAzar = (estrategiaId) => setAzar({ estrategiaId, n: Date.now() })
   const abrePlan = (estrategiaId) => setPlan({ estrategiaId, n: Date.now() })
+  // «Tesis: …» de una estrategia o un plan (docs/tesis.md): solo enlaces directos, leídos de las tesis del usuario.
+  const enlaceTesis = (tipo, id) => <TesisEnlace lista={tesisDe(datos.tesis, tipo, id)} onAbrir={onAbrirTesis}/>
   // §58: la papelera de cada fila, con el aviso de siempre (el «¿Eliminar esta estrategia?» de la página). Si la base no la borra, lo dice y no se quita.
   const borraEstrategia = async () => {
     const id = borrando.estrategia.id
@@ -294,11 +300,11 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   if (editor && esDeCodigo(editor.fila)) return <ProteccionPanel nombre="Estrategia de código"><BuilderCodigo key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
     onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardarCodigo}/></ProteccionPanel>
   if (editor) return <ProteccionPanel nombre="Editor por tarjetas"><BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} lotes={datos.lotes} apiFetch={apiFetch}
-    onVolver={alVolver(() => setEditor(null))} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} onPaso2={f => { setEditor(null); abreAzar(f.id) }} onPaso3={f => { setEditor(null); abrePlan(f.id) }} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'} entradaBuilder={entrada}/></ProteccionPanel>
+    onVolver={alVolver(() => setEditor(null))} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} onPaso2={f => { setEditor(null); abreAzar(f.id) }} onPaso3={f => { setEditor(null); abrePlan(f.id) }} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'} entradaBuilder={entrada} enlaceTesis={enlaceTesis}/></ProteccionPanel>
   if (azar) return <ProteccionPanel nombre="Probarla contra el azar"><BuilderAzar key={azar.n} estrategias={estrategiasEf} estrategiaId={azar.estrategiaId} version={version}
-    cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} onVolver={alVolver(() => setAzar(null))} onPaso1={f => { setAzar(null); if (f) abreEditor(f); else recarga() }} onPaso3={id => { setAzar(null); abrePlan(id) }}/></ProteccionPanel>
+    cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} onVolver={alVolver(() => setAzar(null))} onPaso1={f => { setAzar(null); if (f) abreEditor(f); else recarga() }} onPaso3={id => { setAzar(null); abrePlan(id) }} enlaceTesis={enlaceTesis}/></ProteccionPanel>
   if (plan) return <ProteccionPanel nombre="Convertirla en plan"><BuilderPlan key={plan.n} estrategias={estrategiasEf} estrategiaId={plan.estrategiaId} planId={plan.planId ?? null} salida={salida} apiFetch={apiFetch} version={version}
-    cargaSimbolos={cargaSimbolosCache} onVolver={alVolver(() => setPlan(null))} onPaso1={f => { setPlan(null); if (f) abreEditor(f); else recarga() }} onPaso2={id => { setPlan(null); abreAzar(id) }}/></ProteccionPanel>
+    cargaSimbolos={cargaSimbolosCache} onVolver={alVolver(() => setPlan(null))} onPaso1={f => { setPlan(null); if (f) abreEditor(f); else recarga() }} onPaso2={id => { setPlan(null); abreAzar(id) }} enlaceTesis={enlaceTesis}/></ProteccionPanel>
   if (prueba) return <ProteccionPanel nombre="Probarla contra el azar"><BuilderPrueba key={prueba.n} estrategias={estrategiasEf} lotes={datos.lotes} inicio={prueba} apiFetch={apiFetch} version={version}
     onVolver={alVolver(() => setPrueba(null))} onNuevaPrueba={() => setPrueba({ n: Date.now() })} onCambio={recarga}/></ProteccionPanel>
   const pestanaBtn = (k, t, n) => (
@@ -345,7 +351,7 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
           </div>
           <div style={{ overflowX: 'auto', maxHeight: 560, overflowY: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }} data-tabla="estrategias">
-              <thead><tr>{[['Estrategia'], ['Versión'], ['Prueba contra el azar', AYUDA_MI_TRABAJO.azar], ['Planes', AYUDA_MI_TRABAJO.planes], ['Qué toca ahora'], ['']].map(([h, a]) => <th key={h} style={{ ...cabecera, verticalAlign: 'middle', padding: '7px 12px', whiteSpace: 'nowrap' }}>{a ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{h}<Ayuda texto={a} etiqueta={h}/></span> : h}</th>)}</tr></thead>
+              <thead><tr>{[['Estrategia'], ['Versión'], ['Prueba contra el azar', AYUDA_MI_TRABAJO.azar], ['Planes', AYUDA_MI_TRABAJO.planes], ['Tesis', AYUDA_MI_TRABAJO.tesis], ['Qué toca ahora'], ['']].map(([h, a]) => <th key={h} style={{ ...cabecera, verticalAlign: 'middle', padding: '7px 12px', whiteSpace: 'nowrap' }}>{a ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{h}<Ayuda texto={a} etiqueta={h}/></span> : h}</th>)}</tr></thead>
               <tbody>
                 {visiblesE.map(f => (
                   <tr key={f.clave} data-fila-estrategia={f.estrategia.id}>
@@ -356,6 +362,7 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
                     <td style={{ ...fila, color: B.secundario }}>{f.version}</td>
                     <td style={fila}><CeldaAzar f={f} onVer={() => abreAzar(f.estrategia.id)}/></td>
                     <td style={fila}><CeldaPlanes planes={f.planes || []} onAbrir={id => setPlan({ planId: id, n: Date.now() })}/></td>
+                    <td data-celda-tesis style={{ ...fila, maxWidth: 200 }}><TesisEnlace lista={tesisDe(datos.tesis, 'estrategia', f.estrategia.id)} onAbrir={onAbrirTesis} corto/></td>
                     <td style={fila}>{f.toca?.accion ? <button data-toca style={{ ...S.enlace, fontSize: 13, fontWeight: 700 }} title={f.toca.nota} onClick={() => accion(f)}>{f.toca.texto}</button> : <span title={f.toca?.nota} style={{ color: B.apagado }}>{f.toca?.texto || '—'}</span>}</td>
                     <td style={{ ...fila, width: 56 }}>
                       <button data-duplicar-estrategia={f.estrategia.id} aria-label={`Duplicar ${f.nombre}`} title="Duplicar: se abre una copia nueva, la original no cambia" style={iconoFila} onClick={() => abreEditor(filaCopia(f.estrategia))}><IconoDuplicar/></button>
@@ -363,8 +370,8 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
                     </td>
                   </tr>
                 ))}
-                {filasE && !visiblesE.length && <tr><td colSpan={6} style={{ ...celda, color: B.secundario }}>{!filasE.length ? 'Todavía no hay estrategias. Empieza en blanco o desde una plantilla.' : buscar.trim() ? `Nada con «${buscar.trim()}»${filtraEstrategias(filasE, filtro).length ? ' con este filtro' : ''}.` : 'Nada con este filtro.'}</td></tr>}
-                {!filasE && <tr><td colSpan={6} style={{ ...celda, color: B.secundario }}>Cargando…</td></tr>}
+                {filasE && !visiblesE.length && <tr><td colSpan={7} style={{ ...celda, color: B.secundario }}>{!filasE.length ? 'Todavía no hay estrategias. Empieza en blanco o desde una plantilla.' : buscar.trim() ? `Nada con «${buscar.trim()}»${filtraEstrategias(filasE, filtro).length ? ' con este filtro' : ''}.` : 'Nada con este filtro.'}</td></tr>}
+                {!filasE && <tr><td colSpan={7} style={{ ...celda, color: B.secundario }}>Cargando…</td></tr>}
               </tbody>
             </table>
           </div>
