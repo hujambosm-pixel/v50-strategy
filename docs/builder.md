@@ -2303,3 +2303,13 @@ Decidido por Sergi el 03/11/2026. Ninguna cifra cambia. La prueba es la del paso
 - **«?» de lo ya elegido**: se quedan los que había (swing, línea bajista, SuperTrend, stop del SuperTrend, stop de la EMA) y se añaden los que solo vivían en el catálogo: orden de ruptura, stop fijo por ATR, stop en el mínimo de N velas y stop bajo el mínimo de swing. El texto del antiguo «?» de «Cómo compro», que solo hablaba de la orden en el máximo, pasa al «?» de esa opción.
 - Ninguna cifra cambia: el motor no se toca y las definiciones guardadas tampoco.
 - Comprobado: `catalogo.js` (`comunes.sh`), montado con estado y efectos: con todos los grupos abiertos, solo condiciones; cada pieza se elige en su desplegable y tiene su «?»; los «?» de opciones se abren con todas; buscar «swing» encuentra sus condiciones.
+
+## 70. Mi trabajo: una sola lista
+
+`components/BuilderPanel.js`, `lib/builder/misListas.js`, `scripts/comprobaciones/planes-montaje.js`. Sustituye a los filtros «De tarjetas» y «De código» de §59.
+
+- **Una sola lista**: primero las de tarjetas (por nombre) y debajo las de código (en el orden de siempre); ese orden ya lo daba `construyeMisEstrategias`. Fuera `FILTROS_ESTRATEGIAS`, `filtraEstrategias`, el estado `filtro` y `filtroInicial`.
+- **El buscador**, dentro de la tarjeta de la lista, donde estaban las pestañas, y sobre todas: antes solo enseñaba lo de la pestaña activa. Sigue contando «3 de 84» junto al título.
+- **Icono `</>`**, solo en las de código, delante del nombre (para que no lo corte el «…»), con tooltip y explicado en el «?» de la lista. Cuando no quede ninguna de código, ni el icono ni la nota de abajo salen, sin tocar nada.
+- Ninguna cifra cambia: solo pantalla.
+- Comprobado: `planes-montaje.js` (`comunes.sh`), montado con estado y efectos: las 5 filas sin pestañas, la de código la última y con su icono, el buscador encuentra las dos clases, la ✕ limpia, y duplicar y borrar siguen igual.

@@ -165,7 +165,10 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   const filtros = () => m.raiz.conAtributo('aria-pressed').map(n => n.textContent).join(' | ')
   ok(!hayQ(m, 'data-tarjeta', 'copia') && !hayQ(m, 'data-bloque', 'empezar') && !m.raiz.textContent.includes('Desde una de mis estrategias') && !m.raiz.textContent.includes('¿Desde dónde empiezas?'), 'sin «Desde una de mis estrategias» ni el bloque de arriba')
   ok(hayQ(m, 'data-boton', 'en-blanco') && hayQ(m, 'data-boton', 'desde-plantilla'), '«En blanco» y «Desde una plantilla», arriba a la derecha')
-  ok(filtros() === 'De tarjetas (4) | De código (1)', `filtros: ${filtros()}`)
+  ok(filtros() === '' && m.raiz.conAtributo('data-fila-estrategia').length === 5, 'una sola lista, sin pestañas: las 5')
+  { const orden = m.raiz.conAtributo('data-fila-estrategia').map(n => n.getAttribute('data-fila-estrategia')); ok(orden[orden.length - 1] === 'c1', `primero las de tarjetas, debajo las de código: ${orden.join()}`) }
+  ok(filaDe(m, 'c1').conAtributo('data-icono-codigo').length === 1 && m.raiz.conAtributo('data-icono-codigo').length === 1 && hayQ(m, 'data-nota-codigo'), 'el icono </>, solo en la de código, y su nota')
+  ok(m.raiz.busca(n => n.getAttribute('data-tabla') === 'estrategias').parentNode.parentNode.conAtributo('data-buscar', 'mi-trabajo').length === 1, 'el buscador, dentro de la tarjeta de la lista')
   ok(!hayQ(m, 'data-regla-fila') && m.raiz.conAtributo('data-nombre').every(n => n.getAttribute('title')?.length > 5 && n.style.whiteSpace === 'nowrap'), 'una línea por estrategia: la regla, en el tooltip del nombre')
   const cabeceras = m.raiz.busca(n => n.getAttribute('data-tabla') === 'estrategias').todos(n => n.nodeName === 'TH').map(n => n.textContent.replace('?', '').trim()).join(' · ')
   ok(cabeceras.startsWith('Estrategia · Versión · Prueba contra el azar · Planes · Tesis · Qué toca ahora'), `columnas: ${cabeceras}`)
@@ -186,7 +189,7 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   ok(nFilas() === 1 && !!filaDe(m, 'e7'), 'buscar «LINEA» encuentra «Línea bajista»: sin mayúsculas ni acentos')
   ok(hayQ(m, 'data-limpiar-busqueda'), 'con ✕ al escribir')
   D.pulsa(m.raiz.busca(n => n.getAttribute('data-limpiar-busqueda') != null)); await D.espera(5)
-  ok(nFilas() === 4 && casillaB().value === '', 'la ✕ limpia')
+  ok(nFilas() === 5 && casillaB().value === '', 'la ✕ limpia')
   // La plantilla: desplegable opaco
   D.pulsa(m.raiz.busca(n => n.getAttribute('data-boton') === 'desde-plantilla')); await D.espera(5)
   const menuPl = m.raiz.busca(n => n.getAttribute('data-menu') === 'plantillas')
@@ -197,15 +200,15 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   let vent = m.raiz.busca(n => n.getAttribute('data-pregunta') === 'borrar-estrategia')
   ok(!!vent && vent.textContent.includes('¿Borrar la estrategia «Sin planes»?') && !escrituras.length, 'la papelera pregunta antes')
   D.pulsa(vent.busca(n => n.nodeName === 'BUTTON' && n.textContent === 'Cancelar')); await D.espera(5)
-  ok(!hayQ(m, 'data-pregunta', 'borrar-estrategia') && !escrituras.length && nFilas() === 4, 'cancelar: no se borra nada')
+  ok(!hayQ(m, 'data-pregunta', 'borrar-estrategia') && !escrituras.length && nFilas() === 5, 'cancelar: no se borra nada')
   pulsaAtr('data-borrar-estrategia', 'e7'); await D.espera(5)
   ok(m.raiz.busca(n => n.getAttribute('data-pregunta') === 'borrar-estrategia').textContent.includes('2 planes: se quedan, con su copia guardada'), 'si la usan planes, lo dice')
   D.pulsa(m.raiz.busca(n => n.getAttribute('data-pregunta') === 'borrar-estrategia').busca(n => n.nodeName === 'BUTTON' && n.textContent === 'Cancelar')); await D.espera(5)
   borraBien = false; pulsaAtr('data-borrar-estrategia', 'e9'); await D.espera(5); pulsaAtr('data-boton', 'si-borrar-estrategia'); await D.espera(20)
   vent = m.raiz.busca(n => n.getAttribute('data-pregunta') === 'borrar-estrategia')
-  ok(!!vent && vent.busca(n => n.getAttribute('data-aviso-pregunta') != null)?.textContent.includes('HTTP 403') && nFilas() === 4, 'si la base no deja borrar: lo dice y la fila sigue')
+  ok(!!vent && vent.busca(n => n.getAttribute('data-aviso-pregunta') != null)?.textContent.includes('HTTP 403') && nFilas() === 5, 'si la base no deja borrar: lo dice y la fila sigue')
   borraBien = true; escrituras.length = 0; pulsaAtr('data-boton', 'si-borrar-estrategia'); await D.espera(20)
-  ok(escrituras.join() === 'DELETE strategies?id=eq.e9,DELETE pruebas_azar?estrategia_id=eq.e9' && !filaDe(m, 'e9') && nFilas() === 3, `borra solo esa, y sus pruebas: ${escrituras.join()}`); escrituras.length = 0
+  ok(escrituras.join() === 'DELETE strategies?id=eq.e9,DELETE pruebas_azar?estrategia_id=eq.e9' && !filaDe(m, 'e9') && nFilas() === 4, `borra solo esa, y sus pruebas: ${escrituras.join()}`); escrituras.length = 0
   // Abrir un plan
   D.pulsa(filaDe(m, 'e4').busca(n => n.getAttribute('data-abrir-plan-fila') === '4')); await D.espera(LARGO)
   ok(vista(m).activa === 'g4' && hayQ(m, 'data-pantalla', 'plan'), 'con un plan: «Abrir» lleva al paso 3 con ese plan activo'); m.quita(); await D.espera(5)
@@ -231,10 +234,12 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   m = await portada()
   D.pulsa(filaDe(m, 'e7').busca(n => n.getAttribute('data-duplicar-estrategia') != null)); await D.espera(LARGO)
   ok(m.raiz.conAtributo('data-ruta', 'estrategia')[0]?.textContent === 'Línea bajista (copia)' && !escrituras.length, 'el icono abre esa copia en el paso 1, sin guardar nada todavía'); m.quita(); await D.espera(5)
-  // Las de código, en su filtro; §59: «Mis pruebas» ya no está
+  // Las de código, en la misma lista y en el buscador (§70); §59: «Mis pruebas» ya no está
   m = await portada()
-  D.pulsa(m.raiz.conAtributo('aria-pressed').find(n => n.textContent.startsWith('De código'))); await D.espera(5)
-  ok(nFilas() === 1 && filaDe(m, 'c1').textContent.includes('No se prueba aquí') && !!filaDe(m, 'c1').busca(n => n.getAttribute('data-duplicar-estrategia') === 'c1') && !!filaDe(m, 'c1').busca(n => n.getAttribute('data-borrar-estrategia') === 'c1'), 'una de código: su línea, sin prueba aquí, con los dos iconos')
+  D.escribe(casillaB(), lista.find(x => String(x.id) === 'c1').name.slice(0, 4).toUpperCase()); await D.espera(5)
+  ok(!!filaDe(m, 'c1'), 'el buscador también encuentra las de código')
+  D.escribe(casillaB(), ''); await D.espera(5)
+  ok(nFilas() === 5 && filaDe(m, 'c1').textContent.includes('No se prueba aquí') && !!filaDe(m, 'c1').busca(n => n.getAttribute('data-duplicar-estrategia') === 'c1') && !!filaDe(m, 'c1').busca(n => n.getAttribute('data-borrar-estrategia') === 'c1'), 'una de código: su línea, sin prueba aquí, con los dos iconos')
   ok(!hayQ(m, 'data-tabla', 'pruebas') && !m.raiz.busca(n => n.getAttribute('role') === 'tab' && n.textContent.startsWith('Mis pruebas')) && hayQ(m, 'data-buscar', 'mi-trabajo') && m.raiz.conAtributo('data-titulo-lista')[0]?.textContent.startsWith('Mis estrategias'), 'sin la pestaña «Mis pruebas», con el buscador')
   m.quita(); await D.espera(5)
   ok(!escrituras.length, `mirar y navegar por «Mi trabajo» no escribe nada en estrategias ni en planes (${escrituras.join() || 'ninguna'})`)
