@@ -41,14 +41,14 @@ export const puntosCopia = (velas, ops) => ops.flatMap(o => [{ time: velas[o.e].
 
 // Las cifras del ejemplo del «?», de la vista abierta (en «Tu estrategia», la típica). Velas fuera como en la tasa de lib/azarReglas.js: la vela de compra cuenta como fuera, porque en ella se sorteó.
 export function cifrasEjemplo(v, cual) {
-  const ops = v.copias[cual || 'tipica'].ops, N1 = v.estrategia.libres, A = v.estrategia.operaciones, tasa = N1 ? A / N1 : 0
+  const ops = v.copias[cual || 'tipica'].ops, N1 = v.estrategia.libres, A = v.estrategia.operaciones, tasa = N1 ? A / N1 : 0, decimales = tasa < 0.01 ? 2 : 1
   const N2 = v.i1 - v.i0 + 1 - ops.reduce((s, o) => s + o.x - o.e, 0)
-  return { tasa, N1, A, N2, B: Math.round(N2 * tasa), C: ops.length }
+  return { tasa, decimales, N1, A, N2, B: Math.round(N2 * Number((tasa * 100).toFixed(decimales)) / 100), C: ops.length }   // B, con el % tal como se muestra: la cuenta cuadra a mano
 }
 const entero = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 const parrafo = { display: 'block', marginTop: 8 }
 function AyudaCopias({ v, cual }) {
-  const c = cifrasEjemplo(v, cual), X = `${numero(c.tasa * 100, c.tasa < 0.01 ? 2 : 1)} %`
+  const c = cifrasEjemplo(v, cual), X = `${numero(c.tasa * 100, c.decimales)} %`
   return <Ayuda etiqueta="Cómo nacen las copias" zIndice={2600} texto={<span data-ayuda-copias style={{ display: 'block' }}>
     <span style={{ display: 'block', fontWeight: 700, color: B.titulo }}>¿Por qué la copia no hace las mismas operaciones que tu estrategia?</span>
     <span style={parrafo}>Las copias no repiten tus operaciones: solo copian tu forma de VENDER.</span>

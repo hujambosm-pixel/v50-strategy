@@ -749,7 +749,7 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
                 ? `✓ Hay datos suficientes: la condición más larga necesita ${datos.necesita} velas previas.`
                 : `✓ Necesita ${datos.necesita} velas previas: se cargarán automáticamente.`}</li>}
               {datos?.falta && <li data-comprueba="faltan" style={{ color: ROJO }}>{datos.falta.sinDatos
-                ? `✕ ${nombreQuien(datos.falta.ticker)} todavía no está en los precios guardados de la app: el backtest lo descarga, pero los laboratorios de la prueba (paso 2) no lo pueden usar y el filtro no dejaría comprar nunca.`
+                ? `✕ ${nombreQuien(datos.falta.ticker)} todavía no está en los precios guardados de la app: el backtest lo descarga, pero la prueba contra el azar (paso 2) no lo puede usar y el filtro no dejaría comprar nunca.`
                 : `✕ Para empezar el ${fechaCorta(datos.desdePeriodo)} hacen falta datos desde el ${fechaCorta(datos.falta.hace)}, y ${nombreQuien(datos.falta.ticker)} solo tiene desde el ${fechaCorta(datos.falta.tiene)}.`}</li>}
               {imposibles.map((x, k) => <li key={`imp${k}`} data-comprueba="combinacion" data-nivel={x.nivel} style={{ color: AMARILLO }}>⚠ {x.texto}</li>)}
               {nErrores > 0 && <li data-comprueba="errores" style={{ color: ROJO }}>✕ {plural(nErrores, 'error', 'errores')} en {zonas.map(([z]) => z).join(', ').replace(/, ([^,]*)$/, ' y $1')}</li>}

@@ -145,6 +145,18 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA', stops: [{ id:
   const G = D.monta(h(require(R + '/components/BuilderGuia.js').default, { onVolver: () => {} }), RDC); await D.espera(5)
   ok(G.raiz.conAtributo('data-guia').length === GUIA.length && !G.raiz.textContent.includes('laboratorio'), `la pantalla de la guía: ${GUIA.length} apartados, sin laboratorios`); G.quita()
 
+  // ── 5 · El aviso del plan compara solo la regla y los textos de ejemplo (§68) ──
+  const { comparaEstrategia } = require(R + '/lib/builder/planesGuardados.js')
+  const planCon = (f) => ({ piezas: [{ tipo: 'estrategia', estrategia: f }] }), plan = planCon(foto()), copiaPlan = JSON.stringify(plan)
+  const cambia = async (x) => (await comparaEstrategia(plan, [{ ...fila, ...x }])).cambiada
+  ok(await cambia({}) === false, 'plan: sin cambios, sin aviso')
+  ok(await cambia({ name: 'Otro nombre' }) === false && await cambia({ description: 'otra' }) === false && await cambia({ definition: { ...fila.definition, nombre: 'Otro', descripcion: 'otra' } }) === false, 'plan: otro nombre u otra descripción, sin aviso')
+  ok(await cambia({ params: { ema: 30, intervalo: 'diario' } }) === true && await cambia({ definition: { ...fila.definition, stops: [{ id: 'inicial', pct: 5, tipo: 'porcentaje', motivo: 'stop' }] } }) === true, 'plan: otra regla (un número o un stop), con aviso')
+  ok((await comparaEstrategia(plan, [])).borrada === true, 'plan: estrategia borrada, como siempre')
+  ok(JSON.stringify(plan) === copiaPlan, 'la copia guardada en el plan no cambia')
+  const fuentes = ['components/BuilderCodigo.js', 'components/BuilderEditor.js', 'components/TesisEnlace.js', 'lib/builder/enlaces.js', 'lib/builder/misListas.js', 'lib/builder/ayuda.js', 'lib/builder/planPantalla.js', 'lib/tesis.js'].map(a => require('fs').readFileSync(path.join(R, a), 'utf8')).join('\n')
+  for (const x of ['«V50 EMA10/11»', '«SuperTrend 10/3»', '«Growth investing»', '«EMA20»', '«EMA20 con', '«EMA20 en AAPL', 'EMA20 en AAPL compra', 'Copia editor 23', 'laboratorios de la prueba']) ok(!fuentes.includes(x), `ya no sale ${x}`)
+
   console.log(fallos ? `version-paso2: ${fallos} fallos` : 'version-paso2: todas bien')
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.log('✗', e.stack || e.message || e); process.exit(1) })

@@ -225,7 +225,7 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   m.quita(); await D.espera(5)
   // ── 5 · El «?» de las velas: cómo nacen las copias (§67) ──
   const wC = G.vistaPestana(prueba, precios, g.pestanas.completo, 'completo'), eT = Ve.cifrasEjemplo(wC, 'tipica')
-  ok(eT.C === 103 && eT.A === 123 && eT.N1 === 909 && eT.N2 === 780 && eT.B === 106 && Math.abs(eT.N2 * eT.tasa - eT.C) < 5, `típica de EMA20, 2016–2025: ${eT.N1} velas fuera, ${eT.A} compras; la copia ${eT.N2} velas, ≈ ${eT.B}, salieron ${eT.C}`)
+  ok(eT.C === 103 && eT.A === 123 && eT.N1 === 909 && eT.N2 === 780 && eT.B === 105 && Math.round(780 * 13.5 / 100) === 105 && Math.abs(eT.N2 * eT.tasa - eT.C) < 5, `típica de EMA20, 2016–2025: ${eT.N1} velas fuera, ${eT.A} compras; la copia ${eT.N2} velas, ≈ ${eT.B}, salieron ${eT.C}`)
   for (const per of guardado.periodos) {
     const w = G.vistaPestana(prueba, precios, g.pestanas[per.desde], per.desde)
     ok(cerca(Ve.cifrasEjemplo(w, 'tipica').tasa, per.tasa, 1e-12), `${per.desde}: la frecuencia del ejemplo es la tasa guardada (${per.tasa.toFixed(4)})`)

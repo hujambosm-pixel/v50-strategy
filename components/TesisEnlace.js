@@ -11,7 +11,7 @@ export default function TesisEnlace({ lista = [], onAbrir, corto = false }) {
   if (!lista.length) return null
   if (lista.length === 1) {
     const t = lista[0]
-    return <button data-enlace-tesis={t.id} title={corto ? `Abrir la tesis «${t.titulo}»` : 'Abrir la tesis'} style={{ ...enlace, maxWidth: corto ? '100%' : 280 }} onClick={() => onAbrir?.(t.id)}>{corto ? t.titulo : `💡 ${t.titulo} ›`}</button>
+    return <button data-enlace-tesis={t.id} title={`Abrir la tesis «${t.titulo}»`} style={{ ...enlace, maxWidth: corto ? '100%' : 280 }} onClick={() => onAbrir?.(t.id)}>{corto ? t.titulo : `💡 ${t.titulo} ›`}</button>
   }
   return (
     <span ref={caja}>

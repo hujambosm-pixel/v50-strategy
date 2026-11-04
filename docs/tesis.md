@@ -201,7 +201,7 @@ texto con visor a pantalla completa, más un botón para leerlos al lado del tex
 - **El editor recupera los 44 px** que perdió cuando «Relacionado» tenía línea propia: `calc(100vh - 380px)`. Es un alto fijo: cuando «Relacionado» baja a su línea, el editor no encoge y la página crece esa línea.
 - **Contador en la lista**: icono de enlace y número, detrás del clip, con su mismo estilo; tooltip «1 plan relacionado» / «2 estrategias y 1 plan relacionados». Solo sale si hay alguno. Cuenta los enlaces que existen: los mismos que «Relacionado» no marca «(borrado)». Si la lista de planes no se puede leer, sus enlaces no cuentan, igual que allí salen como borrados.
 - **En la tesis abierta cuenta lo que hay en pantalla**, también sin guardar: sube y baja al añadir o quitar, y vuelve a lo guardado con «Descartar cambios». La nueva sin guardar también lo enseña.
-- **Enlace del Builder**: «💡 <título> ›» o «💡 Tesis (N) ▾», tooltip «Abrir la tesis». Mismo comportamiento. La celda de «Mi trabajo» no cambia.
+- **Enlace del Builder**: «💡 <título> ›» o «💡 Tesis (N) ▾», tooltip «Abrir la tesis» (desde builder.md §68, con una sola tesis, «Abrir la tesis «<título completo>»»). Mismo comportamiento. La celda de «Mi trabajo» no cambia.
 - Comprobado: `tesis-enlaces.js` (`comunes.sh`), con estado y efectos: 0, 1 y varias fichas, 0, 1 y varios en el contador, enlaces borrados, añadir, quitar y descartar. El aspecto, en un navegador con una página temporal no subida, a 1920, 1500, 1100 y 700 px de ancho.
 
 ## Comprobaciones

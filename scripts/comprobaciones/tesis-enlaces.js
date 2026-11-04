@@ -73,7 +73,7 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
       if (!cab) { ok(false, `${t}: sin cabecera`); m.quita(); continue }
       const tx = cab.textContent
       if (n === 0) ok(!tx.includes('Tesis'), `${t}, 0 tesis: nada`)
-      if (n === 1) { ok(tx.includes('💡 Primera ›') && !tx.includes('Tesis:'), `${t}, 1 tesis: «💡 Primera ›»`); ok(enlace(m, una).getAttribute('title') === 'Abrir la tesis', `${t}, 1 tesis: tooltip`); D.pulsa(enlace(m, una)); ok(abiertas.join() === '1', `${t}, 1 tesis: pulsar abre`) }
+      if (n === 1) { ok(tx.includes('💡 Primera ›') && !tx.includes('Tesis:'), `${t}, 1 tesis: «💡 Primera ›»`); ok(enlace(m, una).getAttribute('title') === 'Abrir la tesis «Primera»', `${t}, 1 tesis: tooltip`); D.pulsa(enlace(m, una)); ok(abiertas.join() === '1', `${t}, 1 tesis: pulsar abre`) }
       if (n === 2) { ok(tx.includes('💡 Tesis (2) ▾'), `${t}, varias: «💡 Tesis (2) ▾»`); ok(varias(m).getAttribute('title') === 'Abrir la tesis', `${t}, varias: tooltip`); D.pulsa(varias(m)); await D.espera(5); D.pulsa(enlace(m, 2)); await D.espera(5); ok(abiertas.join() === '2', `${t}, varias: elegir abre`) }
       m.quita(); await D.espera(5)
     }
