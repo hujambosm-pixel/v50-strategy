@@ -2322,3 +2322,14 @@ Decidido por Sergi el 03/11/2026. Ninguna cifra cambia. La prueba es la del paso
 - **Solo en el paso 1**, decidido por Sergi (04/11): `nucleoBacktest.js` no se toca, así que «Backtest de un valor», el optimizador y los rankings siguen con su Buy&Hold sin comisión. El «?» de las cifras dice esa diferencia.
 - **Cifras** (AAPL, 10.000 €, final y CAGR, antes → después). Con 0,36 € por compra: 2010–2015 34.429,23 → 34.427,99 € y 22,934 → 22,933 %; 2021–2025 21.007,65 → 21.006,89 € y 16,045 → 16,044 %; 2016–2025 103.221,64 → 103.217,92 € y 26,321 → 26,320 %. Con 0,1 %: 34.360,41 € y 22,893 %; 20.965,65 € y 15,998 %; 103.015,30 € y 26,295 %. La peor caída y las cifras de la estrategia, iguales.
 - Comprobado: `sinteticas.js` (`comunes.sh`), calculado a mano con 0,1 %, con 0,36 € y sin comisión, y `cifrasRegla` montado con velas sintéticas.
+
+## 72. Paso 1: la guardia de cambios sin guardar, en todas las salidas
+
+`components/BuilderEditor.js`, `components/BuilderPanel.js`, `scripts/comprobaciones/version-paso2.js`. Completa §63, que solo preguntaba al ir a una tesis.
+
+- **Preguntan ahora**: el menú, el logo y «Salir» (el ref `salida` de la página, el mismo que usa el paso 3), «Builder» y «Mi trabajo» de la ruta de arriba, y los pasos 2 y 3 de arriba. La misma ventana: «Guardar / Salir sin guardar / Cancelar». Sin cambios, no pregunta.
+- **Si se pregunta con la guía abierta**, se cierra la guía: la ventana se pinta en la pantalla de las tarjetas.
+- **Tras «Guardar» desde los pasos**, se sigue con la estrategia guardada (`guardada`), que puede ser la «· versión 2» y no la original. Guardar remonta el editor (`key={editor.n}`), por eso va en un ref que se rellena al guardar.
+- Sin tocar: «Guardar y pasar al paso 2» (ya guarda) y el enlace al Editor clásico (se lleva lo escrito). Cerrar la pestaña del navegador sigue sin preguntar.
+- Ninguna cifra cambia.
+- Comprobado: `version-paso2.js` (`comunes.sh`), montado con el Builder de verdad: sin cambios no pregunta; con cambios, Cancelar, Salir sin guardar y Guardar desde el ref `salida`, la ruta y los pasos; `salida` queda libre al cerrar.

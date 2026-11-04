@@ -34,12 +34,15 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA', stops: [{ id:
     return b }
   const servidor = (o = {}) => { const a = []; const f = async (u, q = {}) => { if (u === '/api/strategies') { a.push({ metodo: q.method, cuerpo: JSON.parse(q.body) }); if (o.falla) return { ok: false, status: 500, json: async () => ({ error: 'falla la base' }) }; return { ok: true, status: 200, json: async () => ({ id: q.method === 'POST' ? 'e2' : JSON.parse(q.body).id }) } } return { ok: false, status: 404, json: async () => ({}) } }; f.llamadas = a; return f }
   const q = (m, k, v) => m.raiz.busca(n => n.getAttribute(k) != null && (v == null || n.getAttribute(k) === String(v)))
-  const LARGO = 120
+  const LARGO = 300
+  // Esperar a lo que se busca, no un tiempo fijo (el equipo puede ir cargado): cada 5 ms, 20 s como máximo; el ok() de después da el veredicto.
+  const hasta = async (cond, max = 20000) => { const t0 = Date.now(); do { await D.espera(5); try { if (cond()) { await D.espera(5); return true } } catch (_) {} } while (Date.now() - t0 < max); return false }
+  const avisaVersion = (x) => { const n = q(x, 'data-boton', 'guardar-valores'); return !!n && (n.getAttribute('title')?.includes('versión 2') || D.propsDe(n).title?.includes('versión 2')) }
   const est = (o = {}) => ({ def: fila.definition, valores: { ema: 20, intervalo: 'diario' }, nombre: 'Mi EMA', descripcion: 'una', ...o })
   const montaEd = async (estadoInicial, api, extra = {}) => { const guardadas = []; const m = D.monta(h(Ed.default, { fila, estrategias: [fila], apiFetch: api, estadoInicial, onGuardada: (x, i) => guardadas.push([x, i]), ...extra }), RDC); await D.espera(LARGO); m.guardadas = guardadas; return m }
   const copiaFila = JSON.stringify(fila)
 
-  let b = base([prueba()]), api = servidor(), m = await montaEd(est({ valores: { ema: 50, intervalo: 'diario' } }), api)
+  let b = base([prueba()]), api = servidor(), m = await montaEd(est({ valores: { ema: 50, intervalo: 'diario' } }), api); await hasta(() => avisaVersion(m))
   ok(b.leidas.length === 1 && b.leidas[0].includes('estrategia_id=eq.e1'), 'lee las pruebas de esa estrategia')
   ok(q(m, 'data-boton', 'guardar-valores').getAttribute('title')?.includes('versión 2') || D.propsDe(q(m, 'data-boton', 'guardar-valores')).title.includes('versión 2'), 'antes de guardar, el botón avisa de la versión 2')
   D.pulsa(q(m, 'data-boton', 'guardar-valores')); await D.espera(LARGO)
@@ -97,6 +100,40 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA', stops: [{ id:
   api = servidor({ falla: true }); m = await abre(api); D.escribe(nombre(m), 'Otro'); await D.espera(10)
   D.pulsa(q(m, 'data-enlace-tesis', 7)); await D.espera(10); D.pulsa(q(m, 'data-salida', 'guardar')); await D.espera(LARGO)
   ok(m.abiertas.length === 0 && q(m, 'data-pregunta', 'sin-guardar')?.textContent.includes('falla la base'), 'si «Guardar» falla: lo dice, sigue la ventana y no se va'); m.quita(); await D.espera(5)
+
+  // §72: el menú, el logo y «Salir» preguntan por el ref «salida»; la ruta de arriba y los pasos, también.
+  const abreS = async (apiX) => { b = base([prueba()], { tesis }); const salida = { current: null }; const x = D.monta(h(BP, { estrategias: [fila], salida, visible: true, apiFetch: apiX, vistaInicial: { editor: fila }, onAbrirTesis: () => {}, onGuardada: () => {} }), RDC); await D.espera(LARGO); x.salida = salida; return x }
+  const enPaso1 = (x) => !!nombre(x)
+  const escribeS = async (x, v) => { const antes = x.salida.current; D.escribe(nombre(x), v); await hasta(() => x.salida.current !== antes && nombre(x).value === v) }
+  m = await abreS(servidor()); let fuera = 0
+  ok(typeof m.salida.current === 'function' && m.salida.current(() => { fuera++ }) === false && fuera === 0 && !q(m, 'data-pregunta', 'sin-guardar'), 'menú o logo sin cambios: no pregunta; la página sigue')
+  await escribeS(m, 'Otro')
+  ok(m.salida.current(() => { fuera++ }) === true, 'con cambios, la página no sale: pregunta el paso 1'); await hasta(() => !!q(m, 'data-pregunta', 'sin-guardar'))
+  ok(!!q(m, 'data-pregunta', 'sin-guardar') && fuera === 0, 'sale la ventana y no se va')
+  D.pulsa(q(m, 'data-salida', 'cancelar')); await D.espera(10)
+  ok(fuera === 0 && nombre(m).value === 'Otro', '«Cancelar»: sigue ahí, con lo escrito')
+  m.salida.current(() => { fuera++ }); await hasta(() => !!q(m, 'data-salida', 'salir')); D.pulsa(q(m, 'data-salida', 'salir')); await D.espera(LARGO)
+  ok(fuera === 1 && nombre(m).value === 'Mi EMA', '«Salir sin guardar»: se va y vuelve a lo guardado'); m.quita(); await D.espera(5)
+  ok(m.salida.current === null, 'al cerrar el paso 1, el ref queda libre')
+  api = servidor(); m = await abreS(api); fuera = 0; await escribeS(m, 'Otro')
+  m.salida.current(() => { fuera++ }); await hasta(() => !!q(m, 'data-salida', 'guardar')); D.pulsa(q(m, 'data-salida', 'guardar')); await D.espera(LARGO)
+  ok(fuera === 1 && api.llamadas.length === 1 && api.llamadas[0].cuerpo.name === 'Otro', '«Guardar»: guarda y se va'); m.quita(); await D.espera(5)
+  m = await abreS(servidor()); D.escribe(nombre(m), 'Otro'); await D.espera(10)
+  D.pulsa(q(m, 'data-ruta', 'mi-trabajo')); await D.espera(10)
+  ok(!!q(m, 'data-pregunta', 'sin-guardar') && enPaso1(m), '«Mi trabajo» de la ruta con cambios: pregunta y no se va')
+  D.pulsa(q(m, 'data-salida', 'salir')); await D.espera(LARGO)
+  ok(!enPaso1(m) && !!q(m, 'data-buscar', 'mi-trabajo'), '«Salir sin guardar»: va a Mi trabajo'); m.quita(); await D.espera(5)
+  m = await abreS(servidor()); D.pulsa(q(m, 'data-ruta', 'mi-trabajo')); await D.espera(LARGO)
+  ok(!enPaso1(m) && !q(m, 'data-pregunta', 'sin-guardar'), '«Mi trabajo» sin cambios: va sin preguntar'); m.quita(); await D.espera(5)
+  m = await abreS(servidor()); D.escribe(nombre(m), 'Otro'); await D.espera(10)
+  D.pulsa(q(m, 'data-paso', 2)); await D.espera(10)
+  ok(!!q(m, 'data-pregunta', 'sin-guardar') && enPaso1(m), 'el paso 2 de arriba con cambios: pregunta y no se va')
+  D.pulsa(q(m, 'data-salida', 'cancelar')); await D.espera(10); m.quita(); await D.espera(5)
+  // Cambiar la regla de una con prueba y «Guardar» desde los pasos: crea «· versión 2» y sigue con ESA, no con la original.
+  b = base([prueba()], { tesis }); let aPaso2 = null
+  m = await montaEd(est({ valores: { ema: 50, intervalo: 'diario' } }), api = servidor(), { onPaso2: (f) => { aPaso2 = f }, onPaso3: () => {} })
+  D.pulsa(q(m, 'data-paso', 2)); await D.espera(10); D.pulsa(q(m, 'data-salida', 'guardar')); await D.espera(LARGO)
+  ok(api.llamadas[0]?.cuerpo.name === 'Mi EMA · versión 2' && aPaso2?.id === 'e2' && aPaso2?.name === 'Mi EMA · versión 2', 'desde los pasos, «Guardar» con otra regla crea «· versión 2» y sigue con ella'); m.quita(); await D.espera(5)
 
   // ── 3b · §64: renombrar no quita la prueba; cambiar la regla, sí ──
   const Pa = require(R + '/lib/builder/planPantalla.js'), PA = require(R + '/lib/pruebaAzar.js'), Ml = require(R + '/lib/builder/misListas.js'), Lt = require(R + '/lib/lotesLab.js')

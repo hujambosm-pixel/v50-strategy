@@ -210,7 +210,7 @@ function Tarjeta({ titulo, color, derecha, children, datos, soltar = null }) {
   )
 }
 
-export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlaceTesis = null, onVolver, onGuardada, onEditorClasico, onPaso2 = null, onPaso3 = null, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null, abiertosInicial = null, ayudaInicial = null, anadiendoInicial = null, arrastreInicial = null, cargaSimbolos = null, cargaVelas = null, comisiones = null, pestanaInicial = 'tarjetas', panelInicial = null, senalesInicial = null, dibujoInicial = null, cambiosInicial = null, entradaBuilder = 0, sueltosInicial = null }) {
+export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlaceTesis = null, salida = null, onVolver, onGuardada, onEditorClasico, onPaso2 = null, onPaso3 = null, estadoInicial = null, enPruebaInicial = null, buscarInicial = '', menuInicial = null, abiertosInicial = null, ayudaInicial = null, anadiendoInicial = null, arrastreInicial = null, cargaSimbolos = null, cargaVelas = null, comisiones = null, pestanaInicial = 'tarjetas', panelInicial = null, senalesInicial = null, dibujoInicial = null, cambiosInicial = null, entradaBuilder = 0, sueltosInicial = null }) {
   const [est, setEst] = useState(() => estadoInicial || estadoDe(fila))
   const orig = useRef(null); if (!orig.current) orig.current = estadoDe(fila)
   const { def, valores } = est
@@ -366,13 +366,15 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
   const cambiaModoVenta = () => { const m = otroModo(modoV); setModoVentaUI(m); if (venta.filas.length > 1) cambiaVenta(venta.filas, m) }
 
   // Guardar un plan (el de la pantalla o el de «Guardar estos valores en la estrategia»): lo mismo que el editor de siempre.
+  const guardada = useRef(null)
   const guardaPlan = async (pl, info = {}, alFallar = setMsg) => {
     setGuardando(true)
     try {
       const res = await apiFetch('/api/strategies', { method: pl.metodo, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pl.cuerpo) })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(j.errores ? j.errores.join(' ') : (j.error || `HTTP ${res.status}`))
-      onGuardada?.({ ...pl.cuerpo, ...j, id: j?.id || pl.cuerpo.id }, { version: pl.version, ...info })
+      guardada.current = { ...pl.cuerpo, ...j, id: j?.id || pl.cuerpo.id }   // §72: tras «Guardar», los pasos de arriba siguen con esta (puede ser «· versión 2»)
+      onGuardada?.(guardada.current, { version: pl.version, ...info })
       setGuardando(false)
       return true
     } catch (e) { alFallar(`No se pudo guardar: ${e.message}`) }
@@ -404,8 +406,11 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
     setEst(estadoDe(fila)); setCambiosPrueba({}); setSueltos(new Set()); setMsgValores(null); setMsg(null)
     setModoCompraUI(leeCompra(orig.current.def).modo || 'todas'); setModoVentaUI(leeVenta(orig.current.def).modo || 'alguna')
   }
-  // §63: ir a una tesis con cambios sin guardar: la misma ventana que en el paso 3.
+  // §63: ir a una tesis con cambios sin guardar: la misma ventana que en el paso 3. §72: también con la ruta de arriba, los pasos, el menú, el
+  // logo y «Salir» (salida: un ref; la página pregunta por él antes de salir del Builder, como en el paso 3).
   const guardiaTesis = (seguir) => { if (cambiado) { setMsgValores(null); setPreguntaTesis({ seguir }) } else seguir() }
+  useEffect(() => { if (salida) salida.current = (seguir) => { if (!cambiado) return false; setGuia(false); setMsgValores(null); setPreguntaTesis({ seguir }); return true } })
+  useEffect(() => () => { if (salida) salida.current = null }, [])
   const respondeTesis = async (que) => {
     const d = preguntaTesis
     if (que === 'cancelar') { setPreguntaTesis(null); return }
@@ -450,7 +455,7 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
   return (
     <div style={S.pagina}>
       {/* §45 y §54: la cabecera B; el paso 2 («Probarla contra el azar») abre la estrategia GUARDADA (una nueva, al guardarla). */}
-      <CabeceraPasos actual={1} estrategia={est.nombre.trim() || null} onVolver={onVolver} enlace={enlaceTesis?.('estrategia', fila?.id, guardiaTesis)} onPaso={onPaso2 ? (n) => { if (n === 2 && fila?.id) onPaso2(fila); else if (n === 3 && fila?.id) onPaso3?.(fila) } : null}
+      <CabeceraPasos actual={1} estrategia={est.nombre.trim() || null} onVolver={(donde) => guardiaTesis(() => onVolver?.(donde))} enlace={enlaceTesis?.('estrategia', fila?.id, guardiaTesis)} onPaso={onPaso2 ? (n) => guardiaTesis(() => { const f = guardada.current || fila; if (n === 2 && f?.id) onPaso2(f); else if (n === 3 && f?.id) onPaso3?.(f) }) : null}
         desactivados={nueva ? { 2: 'Guárdala primero: el paso 2 prueba la estrategia tal como está guardada', 3: 'Guárdala primero: el plan usa la estrategia tal como está guardada' } : esSemanal(fila) ? { 3: 'El paso 3, por ahora, solo con estrategias de velas diarias' } : {}}/>
       {/* V9.1073: la fila del título, fija arriba al desplazarse (con la barra de los cambios). */}
       <div data-fila-titulo style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 20, background: B.fondo, padding: '6px 0' }}>
