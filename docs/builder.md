@@ -2313,3 +2313,12 @@ Decidido por Sergi el 03/11/2026. Ninguna cifra cambia. La prueba es la del paso
 - **Icono `</>`**, solo en las de código, delante del nombre (para que no lo corte el «…»), con tooltip y explicado en el «?» de la lista. Cuando no quede ninguna de código, ni el icono ni la nota de abajo salen, sin tocar nada.
 - Ninguna cifra cambia: solo pantalla.
 - Comprobado: `planes-montaje.js` (`comunes.sh`), montado con estado y efectos: las 5 filas sin pestañas, la de código la última y con su icono, el buscador encuentra las dos clases, la ✕ limpia, y duplicar y borrar siguen igual.
+
+## 71. Paso 1: «Comprar y mantener» paga su comisión
+
+`lib/builder/ensayo.js` (`buyHoldConComisiones`), `components/BuilderSenales.js`, `scripts/comprobaciones/sinteticas.js`. Norma de cierre al final: con comisión, la estrategia la pagaba y su Buy&Hold no.
+
+- **El cálculo**: compra el primer día y venta el último, con `comisionDe`. Ejemplo: 10.000 € que se duplican con 0,1 %: compra 10 €, quedan 9.990 €, suben a 19.980 €, venta 19,98 € → 19.960,02 €. Cambian el CAGR, la curva y la peor caída de «Comprar y mantener» en el paso 1. Sin comisión, nada cambia.
+- **Solo en el paso 1**, decidido por Sergi (04/11): `nucleoBacktest.js` no se toca, así que «Backtest de un valor», el optimizador y los rankings siguen con su Buy&Hold sin comisión. El «?» de las cifras dice esa diferencia.
+- **Cifras** (AAPL, 10.000 €, final y CAGR, antes → después). Con 0,36 € por compra: 2010–2015 34.429,23 → 34.427,99 € y 22,934 → 22,933 %; 2021–2025 21.007,65 → 21.006,89 € y 16,045 → 16,044 %; 2016–2025 103.221,64 → 103.217,92 € y 26,321 → 26,320 %. Con 0,1 %: 34.360,41 € y 22,893 %; 20.965,65 € y 15,998 %; 103.015,30 € y 26,295 %. La peor caída y las cifras de la estrategia, iguales.
+- Comprobado: `sinteticas.js` (`comunes.sh`), calculado a mano con 0,1 %, con 0,36 € y sin comisión, y `cifrasRegla` montado con velas sintéticas.

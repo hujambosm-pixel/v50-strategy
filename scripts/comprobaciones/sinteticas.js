@@ -71,6 +71,19 @@ const velas = (xs) => xs.map(([open, high, low, close], i) => ({ date: new Date(
     ok(p1.desde === primera && b.data[0].date === primera && p1.hasta === xs[xs.length - 1].date && b.data[b.data.length - 1].date === xs[xs.length - 1].date, `primera vela ${primera} y última ${xs[xs.length - 1].date} en las dos`)
     ok(m.n > 0 && p1.regla.operaciones === m.n && p1.regla.cagr === m.cagrC && p1.regla.maxDD === ddBV, `mismas operaciones (${m.n}), mismo CAGR y mismo Max Drawdown`)
     ok(p1.bh.cagr === m.cagrBH, 'comprar y mantener el mismo valor: el mismo CAGR')
+    // Comprar y mantener del paso 1 con comisión (V9.1131), a mano: 10.000 € que se duplican.
+    //   0,1 %: compra 10 → 9.990 → 19.980; venta 19,98 → 19.960,02. 0,36 € por compra: 9.999,64 × 2 = 19.999,28.
+    const { buyHoldConComisiones: bhc } = require(path.join(C0.RAIZ, 'lib/builder/ensayo.js'))
+    const cur = [{ date: 'a', value: 10000 }, { date: 'b', value: 15000 }, { date: 'c', value: 20000 }], cerca = (x, y) => Math.abs(x - y) < 1e-6
+    const r1 = bhc({ capital: 10000, ganBH: 10000, curva: cur, comisiones: normalizaComisiones({ compra: 0, venta: 0, porcentaje: 0.1 }) })
+    ok(cerca(r1.ganBH, 9960.02) && cerca(r1.curva[0].value, 9990) && cerca(r1.curva[1].value, 14985) && cerca(r1.curva[2].value, 19960.02) && cur[2].value === 20000, 'con 0,1 %: 10.000 € duplicados acaban en 19.960,02 € y la curva recibida no se toca')
+    const r2 = bhc({ capital: 10000, ganBH: 10000, curva: cur, comisiones: normalizaComisiones({ compra: 0.36, venta: 0, porcentaje: 0 }) })
+    ok(cerca(r2.ganBH, 9999.28) && cerca(r2.curva[2].value, 19999.28), 'con 0,36 € por compra: acaban en 19.999,28 €')
+    const r0 = bhc({ capital: 10000, ganBH: 10000, curva: cur, comisiones: normalizaComisiones(null) })
+    ok(r0.ganBH === 10000 && r0.curva === cur, 'sin comisión: lo mismo que recibe')
+    const p1c = await cifrasRegla({ def: lb, valores: { intervalo: 'diario' }, intervalo: 'diario', simbolo: 'SINT', velas: { SINT: xs }, desde: per.desde, hasta: per.hasta, comisiones: { compra: 0, venta: 0, porcentaje: 0.1 } })
+    const finalBruto = 10000 * Math.pow(1 + p1.bh.cagr / 100, p1.metricas.anios), finalNeto = 10000 * Math.pow(1 + p1c.bh.cagr / 100, p1c.metricas.anios)
+    ok(cerca(finalNeto, finalBruto * 0.999 * 0.999) && p1c.bh.cagr < p1.bh.cagr && cerca(p1c.curvas.bh[p1c.curvas.bh.length - 1].value, finalNeto / 100), 'el paso 1 con 0,1 %: comprar y mantener, final × 0,999 × 0,999, en el CAGR y en la curva')
   }
   // 3 · Paso 2 · azar re-simulado (lib/azarReglas.js, §43): la operación que abre una entrada forzada, calculada a mano. 15 velas;
   //     compra a la apertura de la vela 2 (101) y de la 9 (99). ATR(1) = el rango verdadero de la vela: vela 1 = 102 − 99 = 3; vela 8 =
