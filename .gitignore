@@ -38,3 +38,8 @@ C*Tempvl.json
 scripts/comprobaciones/datos/
 scripts/comprobaciones/.viejo/
 scripts/comprobaciones/salida/
+
+# Este repositorio es PÚBLICO. CLAUDE.local.md es la memoria privada entre sesiones (normas, cifras y planes de Sergi) y bocetos/
+# son pruebas de pantallas en HTML con datos reales: ninguno de los dos debe subirse.
+CLAUDE.local.md
+bocetos/
