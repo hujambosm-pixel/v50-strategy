@@ -903,6 +903,7 @@ están en el scratchpad de la sesión 0c02b5f9 de Claude Code; conviene copiarla
 
 Comprobado en V9.1056 desde la nueva ubicación: el mismo resultado que el arnés de antes (guardián 0, build, batería 52/52 y
 44/44 byte a byte, 21 resultados de cartera idénticos, lotes y carteras 12 de 12 (6 con la versión anterior y 6 con la de ahora), las tres huellas).
+- **Esperar a lo que se busca, no un tiempo fijo** (`azar-graficos.js` y `tesis-enlaces.js`): con el equipo cargado, las esperas de pocos milisegundos hacían fallar de vez en cuando «si fallan los precios» y «con esa tesis abierta». Ahora `hasta(condición)` mira cada 5 ms, con 20 s como máximo, y el `ok()` de después sigue siendo quien da el veredicto. Quedan esperas fijas solo donde no hay nada que buscar: tras desmontar y para ver que algo NO aparece, siempre después de que hayan llegado los datos.
 
 ## 23. Señales en el gráfico: el stop cortado, franjas de las piezas y comisiones pagadas (V9.1057)
 

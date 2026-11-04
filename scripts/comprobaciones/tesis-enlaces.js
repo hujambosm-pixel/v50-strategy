@@ -4,6 +4,8 @@ const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
 let fallos = 0
 const ok = (c, t) => { console.log(`${c ? 'OK  ' : 'MAL '} ${t}`); if (!c) fallos++ }
+// Espera a que aparezca lo que se busca, sin esperas fijas que fallen con el equipo cargado (docs/builder.md, §22). El límite solo se alcanza si de verdad no aparece: entonces el ok() de después lo dice.
+const hasta = async (cond, max = 20000) => { const t0 = Date.now(); do { await D.espera(5); try { if (cond()) { await D.espera(5); return true } } catch (_) {} } while (Date.now() - t0 < max); return false }
 const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id: 'inicial', pct: 8, tipo: 'porcentaje', motivo: 'stop' }],
   entrada: { orden: { tipo: 'apertura' }, senal: { c: 'cruza', de: { c: 'precioVsMedia', p: { lado: 'encima', tipo: 'EMA', periodo: '$ema' } } } },
   salidas: [{ si: { c: 'cruza', de: { c: 'precioVsMedia', p: { lado: 'debajo', tipo: 'EMA', periodo: '$ema' } } }, tipo: 'condicion', motivo: 'cruce_bajista', precio: 'apertura' }],
@@ -51,16 +53,16 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   const varias = (m) => m.raiz.busca(n => n.getAttribute('data-enlace-tesis-varias') != null)
 
   // ── «Mi trabajo»: la columna «Tesis» ──
-  let b = base(), abiertas = [], m = D.monta(h(BP, props({ onAbrirTesis: id => abiertas.push(id) })), RDC); await D.espera(LARGO)
+  let b = base(), abiertas = [], m = D.monta(h(BP, props({ onAbrirTesis: id => abiertas.push(id) })), RDC); await hasta(() => !!m.raiz.busca(x => x.getAttribute('data-celda-tesis') != null && x.textContent === 'Primera') && m.raiz.conAtributo('data-enlace-tesis-varias').length > 0)
   ok(m.raiz.todos(n => n.nodeName === 'TH').some(n => n.textContent.includes('Tesis')), 'Mi trabajo: columna «Tesis»')
   const celda = (id) => m.raiz.busca(n => n.getAttribute('data-fila-estrategia') === id).todos(n => n.getAttribute('data-celda-tesis') != null)[0]
   ok(celda('e0').textContent === '', 'sin tesis: vacía')
   ok(celda('e1').textContent === 'Primera', `una: su título (${celda('e1').textContent})`)
   ok(celda('e2').textContent.includes('2 tesis') && celda('e2').todos(n => n.getAttribute('data-enlace-tesis-varias') != null)[0].getAttribute('title') === 'Segunda · Primera', 'varias: «N tesis», con los títulos en el tooltip')
   D.pulsa(celda('e1').todos(n => n.getAttribute('data-enlace-tesis') === '1')[0]); ok(abiertas.join() === '1', 'pulsar una: abre esa tesis')
-  D.pulsa(celda('e2').todos(n => n.getAttribute('data-enlace-tesis-varias') != null)[0]); await D.espera(5)
+  D.pulsa(celda('e2').todos(n => n.getAttribute('data-enlace-tesis-varias') != null)[0]); await hasta(() => m.raiz.conAtributo('data-menu', 'tesis').length === 1)
   ok(m.raiz.conAtributo('data-menu', 'tesis').length === 1, 'pulsar «N tesis»: la lista')
-  D.pulsa(m.raiz.conAtributo('data-menu', 'tesis')[0].todos(n => n.getAttribute('data-enlace-tesis') === '2')[0]); await D.espera(5)
+  D.pulsa(m.raiz.conAtributo('data-menu', 'tesis')[0].todos(n => n.getAttribute('data-enlace-tesis') === '2')[0]); await hasta(() => abiertas.join() === '1,2' && !m.raiz.conAtributo('data-menu', 'tesis').length)
   ok(abiertas.join() === '1,2' && !m.raiz.conAtributo('data-menu', 'tesis').length, 'elegir en la lista: abre esa y se cierra')
   ok(b.escrituras === 0, 'mirar y pulsar no escribe nada en la base')
   m.quita(); await D.espera(5)
@@ -68,13 +70,15 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   // ── Pasos 1 y 2: en la cabecera, a la derecha de la ruta ──
   for (const [t, vistaInicial] of [['paso 1', e => ({ editor: e })], ['paso 2', e => ({ azar: { estrategiaId: e.id } })]]) {
     for (const [e, una, n] of [[ests[0], null, 0], [ests[1], 1, 1], [ests[2], null, 2]]) {
-      abiertas = []; b = base(); m = D.monta(h(BP, props({ vistaInicial: vistaInicial(e), onAbrirTesis: id => abiertas.push(id), cargaVelas: null })), RDC); await D.espera(LARGO)
+      abiertas = []; b = base(); m = D.monta(h(BP, props({ vistaInicial: vistaInicial(e), onAbrirTesis: id => abiertas.push(id), cargaVelas: null })), RDC)
+      const buscada = ['', '💡 Primera ›', '💡 Tesis (2) ▾'][n]
+      await hasta(() => b.leidas > 0 && m.raiz.busca(x => x.getAttribute('data-cabecera-b') != null).textContent.includes(buscada)); if (!buscada) await D.espera(LARGO)   // sin tesis no aparece nada: un momento más, para ver que sigue sin salir
       const cab = m.raiz.busca(x => x.getAttribute('data-cabecera-b') != null)
       if (!cab) { ok(false, `${t}: sin cabecera`); m.quita(); continue }
       const tx = cab.textContent
       if (n === 0) ok(!tx.includes('Tesis'), `${t}, 0 tesis: nada`)
       if (n === 1) { ok(tx.includes('💡 Primera ›') && !tx.includes('Tesis:'), `${t}, 1 tesis: «💡 Primera ›»`); ok(enlace(m, una).getAttribute('title') === 'Abrir la tesis «Primera»', `${t}, 1 tesis: tooltip`); D.pulsa(enlace(m, una)); ok(abiertas.join() === '1', `${t}, 1 tesis: pulsar abre`) }
-      if (n === 2) { ok(tx.includes('💡 Tesis (2) ▾'), `${t}, varias: «💡 Tesis (2) ▾»`); ok(varias(m).getAttribute('title') === 'Abrir la tesis', `${t}, varias: tooltip`); D.pulsa(varias(m)); await D.espera(5); D.pulsa(enlace(m, 2)); await D.espera(5); ok(abiertas.join() === '2', `${t}, varias: elegir abre`) }
+      if (n === 2) { ok(tx.includes('💡 Tesis (2) ▾'), `${t}, varias: «💡 Tesis (2) ▾»`); ok(varias(m).getAttribute('title') === 'Abrir la tesis', `${t}, varias: tooltip`); D.pulsa(varias(m)); await hasta(() => !!enlace(m, 2)); D.pulsa(enlace(m, 2)); await hasta(() => abiertas.length > 0); ok(abiertas.join() === '2', `${t}, varias: elegir abre`) }
       m.quita(); await D.espera(5)
     }
   }
@@ -82,7 +86,8 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   // ── Paso 3: según el plan de la pestaña activa ──
   const avisos = (x) => x.raiz.busca(n => n.getAttribute('data-avisos') != null)?.textContent || ''
   for (const [planId, esperado] of [[10, null], [11, '💡 Primera ›'], [12, '💡 Tesis (2) ▾']]) {
-    b = base(); m = D.monta(h(BP, props({ abrir: { planId, n: 1 }, onAbrirTesis: () => {} })), RDC); await D.espera(LARGO)
+    b = base(); m = D.monta(h(BP, props({ abrir: { planId, n: 1 }, onAbrirTesis: () => {} })), RDC)
+    await hasta(() => b.leidas > 0 && avisos(m).includes(esperado || 'Probarla ahora') && avisos(m).includes('Probarla ahora')); if (!esperado) await D.espera(LARGO)
     ok(esperado ? avisos(m).includes(esperado) : !avisos(m).includes('Tesis'), `paso 3, plan ${planId}: ${esperado || 'sin enlace'}`)
     if (planId === 11) {
       const antes = avisos(m); ok(antes.indexOf('💡 Primera') > antes.indexOf('Probarla ahora') && antes.includes('Probarla ahora'), 'va junto a «Sin prueba · Probarla ahora»')
@@ -91,7 +96,7 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   }
   // Una pestaña sin guardar, directamente: abrir la estrategia sin planes guardados.
   b = base(); globalThis.fetch = (f0 => async (u, o) => String(u).includes('planes_inversion') ? J([]) : f0(u, o))(globalThis.fetch)
-  m = D.monta(h(BP, props({ estrategias: [ests[1]], vistaInicial: { plan: { estrategiaId: 'e1' } }, onAbrirTesis: () => {} })), RDC); await D.espera(LARGO)
+  m = D.monta(h(BP, props({ estrategias: [ests[1]], vistaInicial: { plan: { estrategiaId: 'e1' } }, onAbrirTesis: () => {} })), RDC); await hasta(() => b.leidas > 0 && !!m.raiz.busca(n => n.getAttribute('data-aviso') === 'sin-guardar')); await D.espera(LARGO)
   ok(!!m.raiz.busca(n => n.getAttribute('data-aviso') === 'sin-guardar') && !avisos(m).includes('Tesis'), 'plan de una pestaña sin guardar: sin enlace, aunque su estrategia tenga tesis')
   m.quita(); await D.espera(5)
 
@@ -105,32 +110,33 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
       h('div', { 'data-builder': panel }, h(BP, props({ visible: panel === 'builder', salida, abrir: { planId: 11, n: 1 }, onAbrirTesis: abrirTesis }))),
       panel === 'tesis' && h(TP, { estrategias: ests, abrirId: pedida, onAbierta: () => setPedida(null), deps: { ctx: ctxTP(), Editor: Sustituto } }))
   }
-  b = base(); m = D.monta(h(Pagina, { inicial: 'builder' }), RDC); await D.espera(LARGO)
-  D.pulsa(enlace(m, 1)); await D.espera(LARGO)
+  b = base(); m = D.monta(h(Pagina, { inicial: 'builder' }), RDC); await hasta(() => !!enlace(m, 1))
+  D.pulsa(enlace(m, 1)); await hasta(() => m.raiz.busca(n => n.getAttribute('data-builder') != null).getAttribute('data-builder') === 'tesis' && m.raiz.busca(n => n.getAttribute('data-item') === '1')?.getAttribute('aria-current') === 'true')
   ok(m.raiz.busca(n => n.getAttribute('data-builder') != null).getAttribute('data-builder') === 'tesis', 'sin cambios: pasa a la pestaña Tesis')
   ok(m.raiz.busca(n => n.getAttribute('data-item') === '1')?.getAttribute('aria-current') === 'true', 'con esa tesis abierta, no con la más reciente')
   m.quita(); await D.espera(5)
-  b = base(); m = D.monta(h(Pagina, { inicial: 'builder' }), RDC); await D.espera(LARGO)
+  b = base(); m = D.monta(h(Pagina, { inicial: 'builder' }), RDC); await hasta(() => !!enlace(m, 1) && !!m.raiz.busca(n => n.nodeName === 'INPUT' && n.getAttribute('aria-label') === 'Dinero inicial'))
   const cap = m.raiz.busca(n => n.nodeName === 'INPUT' && n.getAttribute('aria-label') === 'Dinero inicial')
-  D.propsDe(cap).onFocus(); D.escribe(cap, '25000'); await D.espera(5); D.propsDe(cap).onBlur(); await D.espera(5)
-  D.pulsa(enlace(m, 1)); await D.espera(10)
+  const con25000 = () => String(D.propsDe(cap).value).replace(/\D/g, '') === '25000'
+  D.propsDe(cap).onFocus(); D.escribe(cap, '25000'); await hasta(con25000); D.propsDe(cap).onBlur(); await hasta(con25000)
+  D.pulsa(enlace(m, 1)); await hasta(() => m.raiz.conAtributo('data-pregunta', 'sin-guardar').length === 1)
   ok(m.raiz.conAtributo('data-pregunta', 'sin-guardar').length === 1 && m.raiz.busca(n => n.getAttribute('data-builder') != null).getAttribute('data-builder') === 'builder', 'con cambios sin guardar: pregunta y no se va')
-  D.pulsa(m.raiz.busca(n => n.getAttribute('data-salida') === 'cancelar')); await D.espera(10)
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-salida') === 'cancelar')); await hasta(() => !m.raiz.conAtributo('data-pregunta', 'sin-guardar').length)
   ok(m.raiz.busca(n => n.getAttribute('data-builder') != null).getAttribute('data-builder') === 'builder', '«Cancelar»: sigue en el plan')
-  D.pulsa(enlace(m, 1)); await D.espera(10); D.pulsa(m.raiz.busca(n => n.getAttribute('data-salida') === 'salir')); await D.espera(LARGO)
+  D.pulsa(enlace(m, 1)); await hasta(() => !!m.raiz.busca(n => n.getAttribute('data-salida') === 'salir')); D.pulsa(m.raiz.busca(n => n.getAttribute('data-salida') === 'salir')); await hasta(() => m.raiz.busca(n => n.getAttribute('data-builder') != null).getAttribute('data-builder') === 'tesis' && m.raiz.busca(n => n.getAttribute('data-item') === '1')?.getAttribute('aria-current') === 'true')
   ok(m.raiz.busca(n => n.getAttribute('data-builder') != null).getAttribute('data-builder') === 'tesis' && m.raiz.busca(n => n.getAttribute('data-item') === '1')?.getAttribute('aria-current') === 'true', '«Salir sin guardar»: a esa tesis')
   m.quita(); await D.espera(5)
 
   // ── La pantalla Tesis: la pedida, una ya borrada, y sin pedir ninguna ──
   const montaTP = (abrirId, onAbierta) => D.monta(h(TP, { estrategias: ests, abrirId, onAbierta, deps: { ctx: ctxTP(), Editor: Sustituto } }), RDC)
   const actual = (x) => x.raiz.busca(n => n.getAttribute('data-item') != null && n.getAttribute('aria-current') === 'true')?.getAttribute('data-item')
-  let at = 0; b = base(); m = montaTP(2, () => at++); await D.espera(LARGO)
+  let at = 0; b = base(); m = montaTP(2, () => at++); await hasta(() => actual(m) === '2' && at === 1)
   ok(actual(m) === '2' && at === 1, `la pedida (${actual(m)}), y avisa de que ya está atendida`); ok(!m.raiz.busca(n => n.getAttribute('data-fallo') != null), 'sin aviso de fallo'); m.quita(); await D.espera(5)
-  at = 0; b = base(); m = montaTP(99, () => at++); await D.espera(LARGO)
+  at = 0; b = base(); m = montaTP(99, () => at++); await hasta(() => !!m.raiz.busca(n => n.getAttribute('data-fallo') != null) && actual(m) === '3' && at === 1)
   ok(m.raiz.busca(n => n.getAttribute('data-fallo') != null)?.textContent.includes('ya no existe') && actual(m) === '3' && at === 1, 'tesis borrada mientras tanto: lo dice y abre la más reciente'); m.quita(); await D.espera(5)
-  at = 0; b = base([]); m = montaTP(99, () => at++); await D.espera(LARGO)
+  at = 0; b = base([]); m = montaTP(99, () => at++); await hasta(() => !!m.raiz.busca(n => n.getAttribute('data-fallo') != null) && at === 1)
   ok(m.raiz.busca(n => n.getAttribute('data-fallo') != null)?.textContent.includes('ya no existe') && at === 1, 'borrada y sin ninguna más: lo dice, sin error'); m.quita(); await D.espera(5)
-  at = 0; b = base(); m = montaTP(null, () => at++); await D.espera(LARGO)
+  at = 0; b = base(); m = montaTP(null, () => at++); await hasta(() => actual(m) === '3'); await D.espera(LARGO)
   ok(actual(m) === '3' && at === 0 && !m.raiz.busca(n => n.getAttribute('data-fallo') != null), 'sin pedir ninguna: la más reciente, como siempre'); m.quita(); await D.espera(5)
 
   // ── «Relacionado» en la línea de estado, a la derecha ──
@@ -162,18 +168,18 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   ok(clipYEnlace.indexOf('data-clip="1"') > 0 && clipYEnlace.indexOf('data-clip="1"') < clipYEnlace.indexOf('data-enlaces="1"'), 'junto al clip, detrás')
   const estiloDe = (a) => (clipYEnlace.slice(clipYEnlace.indexOf(a)).match(/style="([^"]*)"/) || [])[1]
   ok(estiloDe('data-clip="1"') === estiloDe('data-enlaces="1"'), 'mismo tamaño y color que el clip')
-  b = base(tesisL); m = D.monta(h(TP, { estrategias: ests, deps: { ctx: ctxTP(), Editor: Sustituto }, inicial: { tesis: tesisL, planes: PLANES, abierta: 3, borrador: { titulo: 'Varias', texto: '', estado: 'idea', relacionados: tesisL[2].relacionados }, resumen: { bytes: 0, porTesis: {} }, archivos: [] } }), RDC); await D.espera(LARGO)
+  b = base(tesisL); m = D.monta(h(TP, { estrategias: ests, deps: { ctx: ctxTP(), Editor: Sustituto }, inicial: { tesis: tesisL, planes: PLANES, abierta: 3, borrador: { titulo: 'Varias', texto: '', estado: 'idea', relacionados: tesisL[2].relacionados }, resumen: { bytes: 0, porTesis: {} }, archivos: [] } }), RDC); await hasta(() => !!conta(m, 3))
   ok(!conta(m, 1) && conta(m, 2).getAttribute('data-enlaces') === '1' && conta(m, 2).getAttribute('title') === '1 plan relacionado', 'sin enlaces, nada; con 1, «1 plan relacionado»')
   ok(conta(m, 3).getAttribute('data-enlaces') === '3' && conta(m, 3).getAttribute('title') === '2 estrategias y 1 plan relacionados', 'con varios, «2 estrategias y 1 plan relacionados»')
   ok(!conta(m, 4), 'un enlace a algo borrado no cuenta')
   const escriturasL = b.escrituras
-  D.pulsa(m.raiz.busca(n => n.getAttribute('data-ficha') === 'plan-10').todos(n => (n.getAttribute('aria-label') || '').startsWith('Quitar'))[0]); await D.espera(5)
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-ficha') === 'plan-10').todos(n => (n.getAttribute('aria-label') || '').startsWith('Quitar'))[0]); await hasta(() => conta(m, 3).getAttribute('data-enlaces') === '2')
   ok(conta(m, 3).getAttribute('data-enlaces') === '2' && conta(m, 3).getAttribute('title') === '2 estrategias relacionadas', 'al quitar un enlace baja sin recargar')
-  D.pulsa(m.raiz.busca(n => n.getAttribute('data-anadir') != null)); await D.espera(5)
-  D.pulsa(m.raiz.busca(n => n.getAttribute('data-elegir') != null).todos(n => n.nodeName === 'BUTTON' && n.textContent === PLANES[1].nombre)[0]); await D.espera(5)
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-anadir') != null)); await hasta(() => !!m.raiz.busca(n => n.getAttribute('data-elegir') != null))
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-elegir') != null).todos(n => n.nodeName === 'BUTTON' && n.textContent === PLANES[1].nombre)[0]); await hasta(() => conta(m, 3).getAttribute('data-enlaces') === '3')
   ok(conta(m, 3).getAttribute('data-enlaces') === '3' && conta(m, 3).getAttribute('title') === '2 estrategias y 1 plan relacionados', 'al añadir un enlace sube sin recargar')
   ok(conta(m, 2).getAttribute('data-enlaces') === '1' && b.escrituras === escriturasL, 'las otras no cambian y el contador no escribe en la base')
-  D.pulsa(m.raiz.busca(n => n.getAttribute('data-descartar') != null)); await D.espera(LARGO)
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-descartar') != null)); await hasta(() => conta(m, 3).getAttribute('data-enlaces') === '3' && m.raiz.conAtributo('data-ficha', 'plan-10').length === 1)
   ok(conta(m, 3).getAttribute('data-enlaces') === '3' && m.raiz.conAtributo('data-ficha', 'plan-10').length === 1, 'descartar: vuelve a lo guardado')
   m.quita(); await D.espera(5)
   const conNueva = renderToString(h(TP, { estrategias: ests, deps: { ctx: null, Editor: Sustituto }, inicial: { tesis: tesisL, planes: PLANES, nueva: true, borrador: { titulo: 'Nueva tesis', texto: '', estado: 'idea', relacionados: [{ tipo: 'estrategia', id: 'e1' }] } } }))

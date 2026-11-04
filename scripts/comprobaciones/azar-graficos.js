@@ -5,6 +5,8 @@ const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
 let fallos = 0
 const ok = (c, t) => { console.log(`${c ? 'OK  ' : 'MAL '} ${t}`); if (!c) fallos++ }
+// Espera a que aparezca lo que se busca, sin esperas fijas que fallen con el equipo cargado (docs/builder.md, §22). El límite solo se alcanza si de verdad no aparece: entonces el ok() de después lo dice.
+const hasta = async (cond, max = 20000) => { const t0 = Date.now(); do { await D.espera(5); try { if (cond()) { await D.espera(5); return true } } catch (_) {} } while (Date.now() - t0 < max); return false }
 const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
 
 ;(async () => {
@@ -70,7 +72,7 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   ok(await G.mismosPrecios(prueba, guardado, { AAPL: precios.AAPL.map((b, i) => i === 500 ? { ...b, close: b.close + 1 } : b) }) === false, 'si cambia una vela: lo detecta')
 
   // ── 3 · La pantalla ──
-  const monta = async (extra = {}) => { const m = D.monta(h(Res, { prueba, resultado: guardado, graficosInicial: g, preciosInicial: precios, onBorrar: () => {}, ...extra }), RDC); await D.espera(30); return m }
+  const monta = async (extra = {}) => { const m = D.monta(h(Res, { prueba, resultado: guardado, graficosInicial: g, preciosInicial: precios, onBorrar: () => {}, ...extra }), RDC); await hasta(() => m.raiz.conAtributo('data-abanico').length === 5 && (!extra.velasInicial || !!q(m, 'data-velas-azar'))); return m }
   const q = (m, k, val) => m.raiz.busca(n => n.getAttribute(k) != null && (val == null || n.getAttribute(k) === String(val)))
   let m = await monta()
   ok(q(m, 'data-titulo-prueba').textContent === 'Prueba contra el azar · AAPL · velas diarias', 'el título')
@@ -95,7 +97,7 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   ok(/\d\.\d{3} €/.test(celda('final-estrategia')) && /\d\.\d{3} €/.test(celda('final-mejor')) && /\d\.\d{3} €/.test(celda('final-tipica')) && /\d\.\d{3} €/.test(celda('final-peor')), 'los finales de tu estrategia y de las 3 copias')
   ok(celda('fiabilidad').includes('Fiable ✓'), 'fiabilidad')
   for (const [k, pct] of [['2016-01-01', '99,2 %'], ['2021-01-01', '11,3 %']]) {
-    D.pulsa(q(m, 'data-pestana-azar', k)); await D.espera(10)
+    D.pulsa(q(m, 'data-pestana-azar', k)); await hasta(() => q(m, 'data-pestana-azar', k).getAttribute('aria-selected') === 'true' && q(m, 'data-gana-a').textContent === pct)
     ok(q(m, 'data-gana-a').textContent === pct && !q(m, 'data-nota-gana').textContent.includes('solo informativo'), `${k}: ganó al ${pct}, sin «solo informativo»`)
     ok(celda('periodo-2016-01-01').includes('99,2 %') && celda('periodo-2021-01-01').includes('11,3 %'), `${k}: las dos filas siguen a la vista`)
     ok(lineas(m) === '5+estrategia,mejor,peor,tipica' && sinMontar() && unaTipica(), `${k}: sus líneas, con las etiquetas sin montarse y una sola de la típica`)
@@ -103,20 +105,20 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   }
   m.quita(); await D.espera(5)
   // Sin precios todavía, o si fallan: el veredicto se ve igual.
-  m = D.monta(h(Res, { prueba, resultado: guardado, obtenerPrecios: () => new Promise(() => {}) }), RDC); await D.espera(10)
+  m = D.monta(h(Res, { prueba, resultado: guardado, obtenerPrecios: () => new Promise(() => {}) }), RDC); await hasta(() => !!q(m, 'data-sin-grafico'))
   ok(q(m, 'data-sin-grafico').textContent === 'Preparando el gráfico…' && celda('periodo-2016-01-01').includes('99,2 %') && q(m, 'data-gana-a').textContent === '—', 'mientras tanto: «Preparando» y el veredicto a la vista'); m.quita(); await D.espera(5)
-  m = D.monta(h(Res, { prueba, resultado: guardado, obtenerPrecios: async () => { throw new Error('sin red') } }), RDC); await D.espera(10)
+  m = D.monta(h(Res, { prueba, resultado: guardado, obtenerPrecios: async () => { throw new Error('sin red') } }), RDC); await hasta(() => q(m, 'data-sin-grafico').textContent.includes('sin red'))
   ok(q(m, 'data-sin-grafico').textContent.includes('No se pudo preparar el gráfico: sin red') && celda('periodo-2021-01-01').includes('11,3 %'), 'si fallan los precios: lo dice y el veredicto sigue'); m.quita(); await D.espera(5)
   // Sin gráfico guardado: se calcula una vez, se guarda aparte y no se pide lo demás; con él, no se calcula.
   const llamadas = []
   const ctx = (guardados) => ({ url: 'https://f', headers: {}, fetch: async (u, o = {}) => { llamadas.push(`${o.method || 'GET'} ${String(u).split('/rest/v1/')[1].split('?')[0]}`); if ((o.method || 'GET') === 'POST') { const c = JSON.parse(o.body); return { ok: true, status: 201, json: async () => [{ datos: c.datos }] } } return { ok: true, status: 200, json: async () => guardados } } })
-  m = D.monta(h(Res, { prueba, resultado: guardado, ctx: ctx([]), preciosInicial: precios }), RDC); await D.espera(1500)
+  m = D.monta(h(Res, { prueba, resultado: guardado, ctx: ctx([]), preciosInicial: precios }), RDC); await hasta(() => llamadas.length >= 2 && !!q(m, 'data-grafico', 'azar')); await D.espera(50)   // y un momento, por si pidiera algo de más
   ok(llamadas.join() === 'GET pruebas_azar_graficos,POST pruebas_azar_graficos' && !!q(m, 'data-grafico', 'azar'), `sin guardar: lo calcula, lo guarda aparte y lo dibuja (${llamadas.join(', ')})`); m.quita(); await D.espera(5)
   llamadas.length = 0
-  m = D.monta(h(Res, { prueba, resultado: guardado, ctx: ctx([{ datos: g }]), preciosInicial: precios }), RDC); await D.espera(100)
+  m = D.monta(h(Res, { prueba, resultado: guardado, ctx: ctx([{ datos: g }]), preciosInicial: precios }), RDC); await hasta(() => llamadas.length >= 1 && !!q(m, 'data-grafico', 'azar')); await D.espera(50)   // y un momento, por si pidiera algo de más
   ok(llamadas.join() === 'GET pruebas_azar_graficos' && !!q(m, 'data-grafico', 'azar'), 'guardado: solo lo lee'); m.quita(); await D.espera(5)
   // Otros precios: una línea.
-  m = D.monta(h(Res, { prueba, resultado: guardado, graficosInicial: g, preciosInicial: { AAPL: precios.AAPL.map((b, i) => i === 500 ? { ...b, close: b.close + 1 } : b) } }), RDC); await D.espera(100)
+  m = D.monta(h(Res, { prueba, resultado: guardado, graficosInicial: g, preciosInicial: { AAPL: precios.AAPL.map((b, i) => i === 500 ? { ...b, close: b.close + 1 } : b) } }), RDC); await hasta(() => !!q(m, 'data-otros-precios'))
   ok(!!q(m, 'data-otros-precios'), 'si los precios han cambiado: lo avisa en una línea'); m.quita(); await D.espera(5)
   // Pasa y sin veredicto.
   const con = (o) => ({ ...guardado, ...o })
@@ -148,16 +150,17 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   }
   m = await monta()
   // Regla de oro: la tabla de las velas, con la pestaña completa.
-  D.pulsa(q(m, 'data-ver-velas', 'tipica')); await D.espera(20)
+  D.pulsa(q(m, 'data-ver-velas', 'tipica')); await hasta(() => !!q(m, 'data-fila-velas', 'final'))
   for (const [k, x] of [['final', ['55.706 €', '44.332 €']], ['operaciones', ['123', '103']], ['ganadoras', ['42,3 %', '52,4 %']], ['caida', ['29,1 %', '27,6 %']], ['dentro', ['68,7 %', '73,1 %']]]) ok(q(m, 'data-fila-velas', k).textContent.endsWith(x.join('')), `regla de oro, ${k}: tú ${x[0]}, típica ${x[1]}`)
-  D.pulsa(q(m, 'data-cerrar-velas')); await D.espera(10); m.quita(); await D.espera(5)
+  D.pulsa(q(m, 'data-cerrar-velas')); await hasta(() => !q(m, 'data-velas-azar')); m.quita(); await D.espera(5)
   m = await monta({ pestanaInicial: '2021-01-01' })
   ok(m.raiz.conAtributo('data-ver-velas').map(n => n.getAttribute('data-ver-velas')).join() === 'estrategia,mejor,tipica,peor', 'el icono de velas en tu estrategia y en cada copia, en el panel')
   ok(m.raiz.conAtributo('data-ver-velas').every(n => D.propsDe(n).title === 'Ver en velas'), 'cada icono, con su «Ver en velas» al pasar por encima')
   ok(q(m, 'data-ver-velas-arriba').textContent === 'Ver en velas', 'el botón «Ver en velas» arriba del gráfico')
   ok(!q(m, 'data-leyenda-azar').textContent.includes('Ver en velas'), 'la leyenda de abajo, solo con los nombres')
   ok(q(m, 'data-cifra', 'final-tipica').textContent.startsWith('La típica') && /\d €$/.test(q(m, 'data-cifra', 'final-tipica').textContent), 'el icono no cambia el texto de la fila')
-  D.pulsa(q(m, 'data-ver-velas-arriba')); await D.espera(20)
+  LW.series = {}; LW.mode = null   // las del gráfico anterior no cuentan
+  D.pulsa(q(m, 'data-ver-velas-arriba')); await hasta(() => !!q(m, 'data-titulo-velas') && LW.mode != null && !!LW.series.velas?.marcas)
   ok(q(m, 'data-titulo-velas').textContent === 'Tu estrategia' && q(m, 'data-copia-velas', 'estrategia').getAttribute('aria-pressed') === 'true', 'el botón de arriba abre «Tu estrategia»')
   ok(m.raiz.conAtributo('data-copia-velas').map(n => n.textContent).join(' · ') === 'Tu estrategia · La mejor copia · La típica · La peor copia', 'el selector, con las cuatro vistas')
   const capasVe = () => m.raiz.conAtributo('data-capa-velas').map(n => n.getAttribute('data-capa-velas')).join()
@@ -168,7 +171,7 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   ok(LW.mode === 1 && LW.margenes.top > 0 && q(m, 'data-escala-velas', 'log').getAttribute('aria-pressed') === 'true', 'por defecto, escala logarítmica')
   ok(LW.opciones.timeScale.minBarSpacing * G.vistaPestana(prueba, precios, g.pestanas.completo, 'completo').fechas.length < 400, 'el periodo completo cabe en una ventana estrecha (menos de 400 píxeles)')
   for (const [k, t] of [['mejor', 'Tu estrategia frente a la mejor copia'], ['tipica', 'Tu estrategia frente a la copia típica'], ['peor', 'Tu estrategia frente a la peor copia']]) {
-    D.pulsa(q(m, 'data-copia-velas', k)); await D.espera(10)
+    D.pulsa(q(m, 'data-copia-velas', k)); await hasta(() => q(m, 'data-titulo-velas').textContent === t && circulos() === deCopia(k))
     ok(q(m, 'data-titulo-velas').textContent === t && capasVe() === 'tuCompra,tuVenta,tuDentro,copiaCompra,copiaVenta' && nTH() === 3 && circulos() === deCopia(k) && LW.series.velas.marcas.length === todasMarcas, `vista ${k}: «${t}», 5 capas, dos columnas, sus ${deCopia(k)} círculos y tus marcas`)
   }
   // Cada filtro, apagado y encendido.
@@ -176,37 +179,41 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   const N = wE.estrategia.ops.length, Nc = wE.copias.peor.ops.length
   ok(cuenta().join() === [N, N, true, Nc, Nc].join(), `todo encendido: ${cuenta().join()}`)
   for (const [k, apagado] of [['tuCompra', [0, N, true, Nc, Nc]], ['tuVenta', [N, 0, true, Nc, Nc]], ['tuDentro', [N, N, false, Nc, Nc]], ['copiaCompra', [N, N, true, 0, Nc]], ['copiaVenta', [N, N, true, Nc, 0]]]) {
-    D.pulsa(q(m, 'data-capa-velas', k)); await D.espera(10)
+    D.pulsa(q(m, 'data-capa-velas', k)); await hasta(() => cuenta().join() === apagado.join() && q(m, 'data-capa-velas', k).getAttribute('aria-pressed') === 'false')
     const p = D.propsDe(q(m, 'data-capa-velas', k)).style
     ok(cuenta().join() === apagado.join() && q(m, 'data-capa-velas', k).getAttribute('aria-pressed') === 'false' && p.textDecoration === 'line-through' && p.opacity < 1, `${k} apagada: ${cuenta().join()}, atenuada y tachada`)
     ok(JSON.parse(window.localStorage.getItem('builder_azar_velas_capas'))[k] === false, `${k}: recordada en el navegador`)
-    D.pulsa(q(m, 'data-capa-velas', k)); await D.espera(10)
+    D.pulsa(q(m, 'data-capa-velas', k)); await hasta(() => cuenta().join() === [N, N, true, Nc, Nc].join() && q(m, 'data-capa-velas', k).getAttribute('aria-pressed') === 'true')
     ok(cuenta().join() === [N, N, true, Nc, Nc].join() && D.propsDe(q(m, 'data-capa-velas', k)).style.textDecoration === 'none', `${k} encendida otra vez`)
   }
   // Se mantiene al cambiar de vista y al volver a abrir; en «Tu estrategia» no salen las de la copia.
-  D.pulsa(q(m, 'data-capa-velas', 'tuVenta')); D.pulsa(q(m, 'data-capa-velas', 'tuVenta')); await D.espera(5)
-  D.pulsa(q(m, 'data-capa-velas', 'copiaVenta')); await D.espera(5); D.pulsa(q(m, 'data-copia-velas', 'mejor')); await D.espera(10)
+  D.pulsa(q(m, 'data-capa-velas', 'tuVenta')); await hasta(() => q(m, 'data-capa-velas', 'tuVenta').getAttribute('aria-pressed') === 'false')
+  D.pulsa(q(m, 'data-capa-velas', 'tuVenta')); await hasta(() => q(m, 'data-capa-velas', 'tuVenta').getAttribute('aria-pressed') === 'true')
+  D.pulsa(q(m, 'data-capa-velas', 'copiaVenta')); await hasta(() => q(m, 'data-capa-velas', 'copiaVenta').getAttribute('aria-pressed') === 'false')
+  D.pulsa(q(m, 'data-copia-velas', 'mejor')); await hasta(() => q(m, 'data-copia-velas', 'mejor').getAttribute('aria-pressed') === 'true' && circulos() === wE.copias.mejor.ops.length)
   ok(q(m, 'data-capa-velas', 'copiaVenta').getAttribute('aria-pressed') === 'false' && circulos() === wE.copias.mejor.ops.length, 'lo apagado sigue apagado al cambiar de copia')
-  D.pulsa(q(m, 'data-cerrar-velas')); await D.espera(10); D.pulsa(q(m, 'data-ver-velas', 'peor')); await D.espera(20)
+  D.pulsa(q(m, 'data-cerrar-velas')); await hasta(() => !q(m, 'data-velas-azar'))
+  LW.series = {}; LW.mode = null
+  D.pulsa(q(m, 'data-ver-velas', 'peor')); await hasta(() => !!q(m, 'data-capa-velas', 'copiaVenta') && LW.mode != null && !!LW.series.velas?.marcas)
   ok(q(m, 'data-capa-velas', 'copiaVenta').getAttribute('aria-pressed') === 'false', 'y al volver a abrir')
-  D.pulsa(q(m, 'data-capa-velas', 'copiaVenta')); await D.espera(5)
+  D.pulsa(q(m, 'data-capa-velas', 'copiaVenta')); await hasta(() => q(m, 'data-capa-velas', 'copiaVenta').getAttribute('aria-pressed') === 'true')
   // Log / Normal.
-  D.pulsa(q(m, 'data-escala-velas', 'normal')); await D.espera(10)
+  D.pulsa(q(m, 'data-escala-velas', 'normal')); await hasta(() => LW.mode === 0 && circulos() === deCopia('peor'))
   const base = () => ({ priceRange: { minValue: 20, maxValue: 280 }, margins: { above: 30, below: 30 } })
   ok(LW.mode === 0 && LW.margenes.top === 0 && LW.margenes.bottom === 0 && LW.proveedor(base).priceRange.minValue === 0 && LW.proveedor(base).margins.below === 0 && circulos() === deCopia('peor'), 'Normal: escala normal y el eje no baja de 0')
-  D.pulsa(q(m, 'data-escala-velas', 'log')); await D.espera(10)
+  D.pulsa(q(m, 'data-escala-velas', 'log')); await hasta(() => LW.mode === 1 && circulos() === deCopia('peor'))
   ok(LW.mode === 1 && LW.proveedor(base).margins.below === 30 && circulos() === deCopia('peor'), 'Log: otra vez logarítmica, con sus círculos')
-  D.pulsa(q(m, 'data-cerrar-velas')); await D.espera(10); m.quita(); await D.espera(5)
+  D.pulsa(q(m, 'data-cerrar-velas')); await hasta(() => !q(m, 'data-velas-azar')); m.quita(); await D.espera(5)
   // Lo guardado roto, o un navegador que no deja guardar: no molesta.
   window.localStorage.setItem('builder_azar_velas_capas', 'esto no es json'); m = await monta({ velasInicial: 'tipica' })
   ok(q(m, 'data-capa-velas', 'copiaVenta').getAttribute('aria-pressed') === 'true', 'si lo guardado está roto: todo encendido')
   const set = window.localStorage.setItem; window.localStorage.setItem = () => { throw new Error('lleno') }
-  D.pulsa(q(m, 'data-capa-velas', 'tuDentro')); await D.espera(10)
+  D.pulsa(q(m, 'data-capa-velas', 'tuDentro')); await hasta(() => q(m, 'data-capa-velas', 'tuDentro').getAttribute('aria-pressed') === 'false')
   ok(q(m, 'data-capa-velas', 'tuDentro').getAttribute('aria-pressed') === 'false', 'si no se puede guardar: el filtro funciona igual')
   window.localStorage.setItem = set; window.localStorage.removeItem('builder_azar_velas_capas'); m.quita(); await D.espera(5)
   Mod._load = cargaReal
   m = await monta({ pestanaInicial: '2021-01-01' })
-  D.pulsa(q(m, 'data-ver-velas', 'tipica')); await D.espera(20)
+  D.pulsa(q(m, 'data-ver-velas', 'tipica')); await hasta(() => !!q(m, 'data-titulo-velas') && !!q(m, 'data-fila-velas', 'final'))
   const fila5 = (k) => q(m, 'data-fila-velas', k).textContent
   ok(q(m, 'data-titulo-velas').textContent === 'Tu estrategia frente a la copia típica' && q(m, 'data-periodo-velas').textContent === 'AAPL · 2021–2025 · velas diarias', 'el título, el símbolo y el periodo')
   ok(q(m, 'data-copia-velas', 'tipica').getAttribute('aria-pressed') === 'true' && m.raiz.textContent.includes('Rueda: zoom · arrastrar: moverse'), 'la elegida marcada, y cómo moverse')
@@ -214,13 +221,13 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   ok(fila5('final').includes(RA.euros(wT.estrategia.final)) && fila5('final').includes(RA.euros(wT.copias.tipica.final)) && fila5('final').startsWith('Final (10.000 € al empezar)'), `Final: ${fila5('final')}`)
   ok(fila5('operaciones').includes(String(wT.estrategia.operaciones)) && fila5('ganadoras').startsWith('Ganadoras') && fila5('caida').startsWith('Peor caída') && fila5('dentro').startsWith('Tiempo dentro de AAPL'), `las filas de la tabla: ${fila5('dentro')}`)
   ok(q(m, 'data-fila-velas', 'caida').textContent.includes(RA.numero(guardado.periodos[1].caida, 1, true)), 'su peor caída, la del resultado')
-  D.pulsa(q(m, 'data-copia-velas', 'mejor')); await D.espera(10)
+  D.pulsa(q(m, 'data-copia-velas', 'mejor')); await hasta(() => q(m, 'data-titulo-velas').textContent === 'Tu estrategia frente a la mejor copia')
   ok(q(m, 'data-titulo-velas').textContent === 'Tu estrategia frente a la mejor copia' && fila5('final').includes(RA.euros(wT.copias.mejor.final)), 'cambiar a la mejor: título y tabla')
-  D.pulsa(q(m, 'data-copia-velas', 'peor')); await D.espera(10)
+  D.pulsa(q(m, 'data-copia-velas', 'peor')); await hasta(() => q(m, 'data-titulo-velas').textContent === 'Tu estrategia frente a la peor copia')
   ok(q(m, 'data-titulo-velas').textContent === 'Tu estrategia frente a la peor copia', 'y a la peor')
-  D.pulsa(q(m, 'data-cerrar-velas')); await D.espera(10)
+  D.pulsa(q(m, 'data-cerrar-velas')); await hasta(() => !q(m, 'data-velas-azar') && !!q(m, 'data-grafico', 'azar'))
   ok(!q(m, 'data-velas-azar') && !!q(m, 'data-grafico', 'azar'), '× la cierra y vuelve al gráfico')
-  D.pulsa(q(m, 'data-ver-velas', 'estrategia')); await D.espera(20)
+  D.pulsa(q(m, 'data-ver-velas', 'estrategia')); await hasta(() => q(m, 'data-titulo-velas')?.textContent === 'Tu estrategia' && !!q(m, 'data-tabla-velas'))
   ok(q(m, 'data-titulo-velas').textContent === 'Tu estrategia' && !m.raiz.textContent.includes('La copia compra') && q(m, 'data-tabla-velas').todos(n => n.nodeName === 'TH').length === 2, 'desde tu estrategia: solo tus operaciones')
   m.quita(); await D.espera(5)
   // ── 5 · El «?» de las velas: cómo nacen las copias (§67) ──
@@ -239,20 +246,20 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   HTMLElement.prototype.cloneNode = HTMLElement.prototype.cloneNode || function () { const c = document.createElement('span'); c.remove = () => c.parentNode?.removeChild(c); return c }   // lo que usa el «?» al medirse; el DOM falso no mide
   document.querySelector = (s) => s === '[data-ayuda-ventana]' ? document.body.conAtributo('data-ayuda-ventana')[0] || null : null
   const tecla = (key) => { for (const f of [...(document.oyentes.keydown || [])]) f({ key }) }
-  m = await monta(); D.pulsa(q(m, 'data-ver-velas-arriba')); await D.espera(20)
+  m = await monta(); D.pulsa(q(m, 'data-ver-velas-arriba')); await hasta(() => !!q(m, 'data-titulo-velas'))
   const botonQ = () => m.raiz.busca(n => n.getAttribute('aria-label') === 'Ayuda: Cómo nacen las copias'), ventanaQ = () => document.body.conAtributo('data-ayuda-ventana')[0] || null
   const miles = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
   ok(!!botonQ() && botonQ().parentNode.parentNode.contains(q(m, 'data-titulo-velas')) && q(m, 'data-titulo-velas').textContent === 'Tu estrategia', 'el «?», junto al título, sin cambiar el título')
   for (const [k, c] of [['estrategia', 'tipica'], ['mejor', 'mejor'], ['tipica', 'tipica'], ['peor', 'peor']]) {
-    D.pulsa(q(m, 'data-copia-velas', k)); await D.espera(10)
-    D.pulsa(botonQ()); await D.espera(10)
+    D.pulsa(q(m, 'data-copia-velas', k)); await hasta(() => q(m, 'data-copia-velas', k).getAttribute('aria-pressed') === 'true')
+    D.pulsa(botonQ()); await hasta(() => !!ventanaQ() && (document.oyentes.keydown || []).length >= 2)
     const e = Ve.cifrasEjemplo(wC, c), X = '13,5 %', t = ventanaQ()?.textContent || ''
     ok(t === `¿Por qué la copia no hace las mismas operaciones que tu estrategia?Las copias no repiten tus operaciones: solo copian tu forma de VENDER.1. Cuándo compran: al azar, con tu misma frecuencia. Tú compras en el ${X} de las velas en que estás fuera; la copia, en cada vela en que está fuera, compra con esa misma probabilidad (en la apertura siguiente).2. Cuándo venden: con tus mismas reglas de venta y tus mismos stops.Por eso la duración cambia (tu regla de venta, aplicada desde otro día de compra, se cumple antes o después) y el número de operaciones también.Ejemplo con esta prueba: tú estás fuera ${miles(e.N1)} velas y haces ${e.A} compras → ${X}. La copia está fuera ${miles(e.N2)} velas → ${miles(e.N2)} × ${X} ≈ ${e.B} compras; le salieron ${e.C}.Así la prueba contesta una sola pregunta: ¿tu momento de compra aporta algo? Todo lo demás es igual que en tu estrategia.`, `vista ${k}: el texto entero, con ${miles(e.N2)} velas, ≈ ${e.B} y ${e.C}`)
     ok(D.propsDe(ventanaQ()).style.zIndex > D.propsDe(q(m, 'data-velas-azar')).style.zIndex, `vista ${k}: la ventana del «?», por encima de la pantalla de velas`)
-    tecla('Escape'); await D.espera(10)
+    tecla('Escape'); await hasta(() => !ventanaQ())
     ok(!ventanaQ() && !!q(m, 'data-velas-azar'), `vista ${k}: Esc cierra el «?» y las velas siguen abiertas`)
   }
-  tecla('Escape'); await D.espera(10)
+  tecla('Escape'); await hasta(() => !q(m, 'data-velas-azar'))
   ok(!q(m, 'data-velas-azar'), 'sin el «?» abierto, Esc cierra las velas'); m.quita(); await D.espera(5)
   const fuenteV = require('fs').readFileSync(path.join(R, 'components/BuilderAzarVelas.js'), 'utf8')
   ok(fuenteV.includes("e.key === 'Escape'") && fuenteV.includes("import('lightweight-charts')"), 'Esc cierra; lightweight-charts, como el resto de la app')
