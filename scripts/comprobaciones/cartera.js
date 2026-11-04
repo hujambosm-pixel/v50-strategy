@@ -38,6 +38,14 @@ const DATOS = process.env.COMPROBACIONES_DATOS || path.join(__dirname, 'datos')
     if (!igual) fallos++
     console.log(`${igual ? '✓' : '✗'} ${k}: ${igual ? 'idéntico a la versión anterior' : 'DISTINTO'} (${(jb.length / 1024).toFixed(0)} KB)`)
   }
+  // §73: la venta final cuenta en las órdenes y en el coste pagado. A mano, 100 % QQQ sin rebalanceo y horquilla del 0,1 %: compra el primer
+  // día (coste 0,001 de 1) y vende el último (0,001 × lo que valga). Dos órdenes.
+  { const C = require(R + '/lib/laboratorioCartera.js'), L = require(R + '/lib/lotesLab.js')
+    const d = C.alineaDatos({ qqq, etf: { simbolo: 'QQQ', velas: qqq }, spy: qqq }, { QQQ: [], SPY: [] }), fs = d.fechas, i0 = fs.findIndex(x => x >= '2016-01-04'), i1 = fs.findIndex(x => x >= '2016-12-30')
+    const r = C.simula({ datos: d, regla: L.reglaMezcla(100, 'anual'), i0, i1, costes: { comisionPct: 0, comisionMinEur: 0, horquillaPct: { QQQ: 0.1, ETF: 0.1 } } })
+    const q = d.qqq, unidades = 0.999 / q[i0].open, final = unidades * q[i1].close, esperado = 0.001 + 0.001 * final
+    const bien = r.costes.ordenes === 2 && Math.abs(r.costes.pagado - esperado) < 1e-9; if (!bien) fallos++
+    console.log(`${bien ? '✓' : '✗'} la venta final cuenta: ${r.costes.ordenes} órdenes, coste ${r.costes.pagado} (a mano ${esperado})`) }
   console.log(`\n${Object.keys(a).length} resultados · ${fallos ? fallos + ' DISTINTOS' : 'todos idénticos byte a byte'} · ${((Date.now() - t0) / 1000).toFixed(0)} s`)
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error('FALLO', e.stack); process.exit(2) })

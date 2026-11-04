@@ -2333,3 +2333,13 @@ Decidido por Sergi el 03/11/2026. Ninguna cifra cambia. La prueba es la del paso
 - Sin tocar: «Guardar y pasar al paso 2» (ya guarda) y el enlace al Editor clásico (se lleva lo escrito). Cerrar la pestaña del navegador sigue sin preguntar.
 - Ninguna cifra cambia.
 - Comprobado: `version-paso2.js` (`comunes.sh`), montado con el Builder de verdad: sin cambios no pregunta; con cambios, Cancelar, Salir sin guardar y Guardar desde el ref `salida`, la ruta y los pasos; `salida` queda libre al cerrar.
+
+## 73. Laboratorio de cartera: la venta final cuenta en las órdenes
+
+`lib/laboratorioCartera.js`, `scripts/comprobaciones/cartera.js`. Vocabulario: «órdenes» son todas las compras y ventas, incluida la venta final.
+
+- **La tabla «Costes por operación»** (cálculo 2 con costes): «Operaciones (órdenes)» y «Coste pagado» no contaban la venta final, aunque el valor neto sí la descontaba. Ahora la cuentan. El CAGR, la curva y el valor final neto no cambian.
+- **Cifras** (CARTERA_1 V1, ETF sintético, horquilla 0,05 %, sin comisión; antes → después). 2008–2015: 217 → 218 órdenes, 453,29 → 463,08 €. 2016–2020: 83 → 84, 342,54 → 356,92 €. 2021–2025: 119 → 120, 246,51 → 253,85 €. 2008–2025: 417 → 418, 2.438,41 → 2.479,06 €. Valor final neto, igual (17.543,39 €, 24.043,93 €, 13.775,81 € y 57.568,13 €).
+- **Sin efecto en lo guardado**: ninguna de las 45 pruebas guardadas tiene esa tabla, y CARTERA_1–3 y las exploraciones salen idénticas byte a byte.
+- **Queda igual**: esa tabla sale de la simulación sin impuestos; las ventas para pagar impuestos del cálculo 2 no están en ella.
+- Comprobado: `cartera.js` (`comunes.sh`), a mano con 100 % QQQ y horquilla del 0,1 %: dos órdenes y su coste.
