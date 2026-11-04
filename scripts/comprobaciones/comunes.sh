@@ -46,6 +46,8 @@ paso azar-graficos node "$DIR/azar-graficos.js" < /dev/null
 tail -1 "$SAL/azar-graficos.txt"
 paso borrar node "$DIR/borrar.js" < /dev/null
 tail -1 "$SAL/borrar.txt"
+paso catalogo node "$DIR/catalogo.js" < /dev/null
+tail -1 "$SAL/catalogo.txt"
 paso tesis-enlaces node "$DIR/tesis-enlaces.js" < /dev/null
 tail -1 "$SAL/tesis-enlaces.txt"
 paso tesis node "$DIR/tesis.js" < /dev/null
