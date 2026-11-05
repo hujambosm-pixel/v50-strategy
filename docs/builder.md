@@ -18,7 +18,7 @@ La navegación principal es la columna de iconos de la izquierda (`pages/index.j
 | Backtesting (`multi`) | El multibacktest: varias estrategias o una sobre una lista o el universo dinámico del Nasdaq-100; modos de reparto; la prueba contra el azar de la cartera (A / B) | `pages/index.js`, `components/AzarCarteraPanel.js` |
 | Optimización | Rejilla de parámetros, robustez, walk-forward, azar | `components/OptimizacionPanel.js` |
 | **Laboratorio** | Ver §1.1 | `components/LaboratorioPanel.js` |
-| **Lab. cartera** | Ver §1.2 | `components/CarteraPanel.js` |
+| **Lab. cartera** | Ver §1.2 (**eliminada en §74**) | ~~`components/CarteraPanel.js`~~ |
 | TradeLog, Risk Mgmt | El diario real (con aportaciones) y la gestión del riesgo | — (fuera del Builder) |
 
 ### 1.1 Laboratorio (señales, salidas y estrategias del catálogo)
@@ -41,6 +41,8 @@ Botones y opciones:
 su «estrategia al azar» y su calibración). No se toca en estas tandas.
 
 ### 1.2 Lab. cartera
+
+> **Eliminada** (05/11/2026, §74): la pantalla, su modo en el Editor y sus pruebas guardadas. Su motor (`lib/laboratorioCartera.js`) sigue: lo usan los planes.
 
 Qué hace: la máquina de estados de una cartera de QQQ + un ETF apalancado (CARTERA_1–3) frente a comprar y mantener, la
 mezcla 50/50 y el azar, con impuestos y costes.
@@ -2336,6 +2338,8 @@ Decidido por Sergi el 03/11/2026. Ninguna cifra cambia. La prueba es la del paso
 
 ## 73. Laboratorio de cartera: la venta final cuenta en las órdenes
 
+> La pantalla se eliminó después (§74); el cambio del motor (`lib/laboratorioCartera.js`) sigue.
+
 `lib/laboratorioCartera.js`, `scripts/comprobaciones/cartera.js`. Vocabulario: «órdenes» son todas las compras y ventas, incluida la venta final.
 
 - **La tabla «Costes por operación»** (cálculo 2 con costes): «Operaciones (órdenes)» y «Coste pagado» no contaban la venta final, aunque el valor neto sí la descontaba. Ahora la cuentan. El CAGR, la curva y el valor final neto no cambian.
@@ -2343,3 +2347,14 @@ Decidido por Sergi el 03/11/2026. Ninguna cifra cambia. La prueba es la del paso
 - **Sin efecto en lo guardado**: ninguna de las 45 pruebas guardadas tiene esa tabla, y CARTERA_1–3 y las exploraciones salen idénticas byte a byte.
 - **Queda igual**: esa tabla sale de la simulación sin impuestos; las ventas para pagar impuestos del cálculo 2 no están en ella.
 - Comprobado: `cartera.js` (`comunes.sh`), a mano con 100 % QQQ y horquilla del 0,1 %: dos órdenes y su coste.
+
+## 74. Fuera «Carteras QQQ + ETF con apalancamiento»
+
+Decisión de Sergi (05/11/2026): fue una prueba aislada para ver cómo funcionaría la app, no una herramienta. Se elimina, no se archiva. Ninguna cifra cambia.
+
+- **Se borra**: la pantalla (`components/CarteraPanel.js`) y su entrada 💼 del menú; el modo «Cartera (QQQ + ETF)» del Editor (`components/EditorCartera.js`: solo servía para ella); `lib/exploracionCartera.js`; en `lib/lotesLab.js`, CARTERA_1–3, sus huellas, las exploraciones, los criterios 5–7 y sus veredictos; en `lib/exportaTexto.js`, sus textos de «Copiar para Claude»; en `lib/calibracionLab.json`, las claves CARTERA_1 y CARTERA_3; en `pages/api/laboratorio.js`, sus dos ramas (cartera y exploración); `scripts/calibracionCartera.js`, `scripts/calibracionCartera3.js` y `scripts/comprobaciones/cartera.js` (con su paso en `comunes.sh`).
+- **Filas de la base**: las 17 de `lab_pruebas` (CARTERA_1: 4, CARTERA_2: 2, CARTERA_3: 8 y 3 exploraciones: curva de riesgo, estrés y mapa de la media; ids 138–141, 164–166, 188, 211–219). Quedan las 28 del Laboratorio (LOTE_1–3). Ninguna otra tabla tenía filas suyas. Copia entera en `backups/carteras_eliminadas_20261105.json` (fuera de git), con la instrucción de REVERSIÓN: volver a insertarlas con sus ids (`OVERRIDING SYSTEM VALUE`, `jsonb_populate_recordset`) por la Management API.
+- **El «204 pruebas registradas»** de su pantalla no era otra tabla: el contador (`cuentaPruebas`, `lib/registroLab.js`) cuenta cada exploración como tantas pruebas como combinaciones tiene: 45 filas − 3 + (44 + 22 + 96) = 204.
+- **Se queda** (lo usan los planes u otras pantallas): `lib/laboratorioCartera.js` entero (el motor del paso 3: precios con dividendos, condiciones, reglas; no se poda para no arriesgar cifras), `lib/etfSintetico.js`, `lib/etfSinteticos.json`, `lib/dividendosCartera.json` y sus scripts, `reglaMezcla` (la alternativa «Lo mismo a 50 % QQQ + 50 % ETF» del paso 3), la pieza «cartera» del motor de planes, y `esConfigCartera` / `esConfigExploracion` (el Laboratorio los usa para apartar esas filas de su historial). Nada del multiactivo (`AzarCarteraPanel`, `azarCartera`, `prioridadCartera`, `asignaCartera`).
+- **`planes-estrategia.js`** tomaba la regla de su pieza de cartera de CARTERA_3 (F1); ahora la construye con `reglaFiltro(50, 'diario', 'apalancado')` del motor: JSON idéntico.
+- **Comprobado**: los planes 4, 6 y 7 recalculados con los datos reales, antes y después: 197.917,32 €, 75.122,81 € y 64.625,48 € (CAGR 24,55 %, 22,37 % y 20,54 %), con la evaluación entera idéntica (md5). El Laboratorio, con sus 28 pruebas guardadas, antes (HEAD) y ahora: veredicto, criterio, regla, texto de «Copiar para Claude», validación de la petición, huellas y calibración de LOTE_1–3 idénticos. `comunes.sh` entero en verde (incluida la prueba EMA20 del paso 2).

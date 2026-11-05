@@ -11,9 +11,6 @@
 //   ESTRATEGIA COMPLETA (config.prueba = 'estrategias', LOTE_3): { config: { prueba, senales, salidas, universo, periodos,
 //   intervalo, entrada }, periodo } → ejecutaPeriodoEstrategias (lib/laboratorioEstrategias.js); se lee siempre QQQ (la
 //   referencia de comprar y mantener).
-//   CARTERA (config.prueba = 'cartera', CARTERA_1): { config: { prueba, regla, etf, periodos, … }, periodo } →
-//   ejecutaPeriodoCartera (lib/laboratorioCartera.js) con QQQ, el ETF y SPY de la caché (desde 3 años antes, para calentar
-//   la ventana de 252 velas) y los dividendos de lib/dividendosCartera.json (rentabilidad total).
 //
 // Datos: los miembros del Nasdaq-100 (universo_miembros) y las velas diarias de la caché (precios_diarios, por la función
 // leer_velas, exactas) con el JWT del usuario: desde 3 años antes del periodo (calentamiento de los indicadores; la
@@ -24,16 +21,11 @@ import { entradas, calculables, topeDe, indicadoresSalidas, tickersDeReferencia,
 import { distribucion, percentilesDe, percentilesParaBarras } from '../../lib/fuerzaRelativa'
 import { semanalesDesdeDiarias } from '../../lib/velasSemanales'
 import { ejecutaPeriodo, semillaLab, N_SIM_LAB } from '../../lib/laboratorio'
-import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigCartera, esConfigExploracion, esConfigEditorLab } from '../../lib/lotesLab'
+import { huella, validaConfig, esConfigSalidas, esConfigEstrategias, esConfigEditorLab } from '../../lib/lotesLab'
 import { ejecutaPeriodoEditor } from '../../lib/editor/laboratorio'
 import { validaDefinicion } from '../../lib/editor/definicion'
 import { aniosHistoria } from '../../lib/editor/historia'
 import { usaFuerzaRelativa } from '../../lib/fuerzaRelativa'
-import { ejecutaPeriodoCartera, alineaDatos, alineaVelasReferencia, N_SIM_CARTERA, calculoDe } from '../../lib/laboratorioCartera'
-import { curvaRiesgoEtf, sensibilidadEtf, estresParte, mapaMediaParte } from '../../lib/exploracionCartera'
-import { construyeSintetico } from '../../lib/etfSintetico'
-import { preciosTotales } from '../../lib/laboratorioCartera'
-import DIVIDENDOS from '../../lib/dividendosCartera.json'
 import { ejecutaPeriodoSalidas, calculablesIndicadores, decisionesDe, indicadoresPrueba, diasTrasPeriodo } from '../../lib/laboratorioSalidas'
 import { ejecutaPeriodoEstrategias } from '../../lib/laboratorioEstrategias'
 
@@ -50,15 +42,6 @@ export function validaPeticionLab(c, periodo) {
   const e = []
   if (!c || typeof c !== 'object') return ['Falta la configuración.']
   e.push(...validaConfig(c))
-  if (esConfigCartera(c)) {
-    if (!periodo || !(c.periodos || []).some(p => p.desde === periodo.desde && p.hasta === periodo.hasta)) e.push('El periodo pedido no es uno de los de la configuración.')
-    return e
-  }
-  if (esConfigExploracion(c)) {
-    // En una exploración, `periodo` es la parte que se pide: { etf } (una petición por ETF).
-    if (!periodo?.etf || !(c.etfs || []).includes(periodo.etf)) e.push('La parte pedida no es uno de los ETF de la exploración.')
-    return e
-  }
   // Estrategia del editor (V9.1027): su definición con sus valores, como al guardarla; por ahora solo con velas diarias (la
   // calibración se hace con velas diarias).
   if (esConfigEditorLab(c)) e.push(...validaDefinicion(c.definicion, c.valores || {}).map(x => `Definición: ${x}`))
@@ -88,47 +71,7 @@ export default async function handler(req, res) {
     return r.json()
   }
   try {
-    if (esConfigExploracion(cfg)) {
-      const etf = periodo.etf, ps = Array.isArray(cfg.periodos) ? cfg.periodos : [...(cfg.periodos?.[etf] || []), ...(cfg.fueraDeMuestra?.[etf] ? [cfg.fueraDeMuestra[etf].prueba] : [])]
-      const d0 = ps.reduce((m, p) => p.desde < m ? p.desde : m, '9999'), d1 = ps.reduce((m, p) => p.hasta > m ? p.hasta : m, '0000')
-      const lee = (sym) => get(`rpc/leer_velas?p_simbolo=${encodeURIComponent(sym)}&p_desde=${masAnios(d0, -3)}&p_hasta=${masDias(d1, 5)}`).then(velasDe)
-      const estres = ['estres', 'mapaMedia'].includes(cfg.tipo)
-      const [qqq, etfV, spy] = await Promise.all([lee('QQQ'), estres ? Promise.resolve([]) : lee(etf), lee('SPY')])
-      const t1 = Date.now()
-      if (!qqq.length || (!estres && !etfV.length) || !spy.length) return res.status(500).json({ error: 'Faltan velas en la caché de QQQ, del ETF o de SPY.' })
-      // Prueba de estrés: el ETF es el SINTÉTICO ×2 / ×3 construido sobre el QQQ de rentabilidad total (lib/etfSintetico.js).
-      const k = etf === 'x3' ? 3 : 2
-      const velasEtf = estres ? construyeSintetico(preciosTotales(qqq, DIVIDENDOS.simbolos.QQQ), { k, comision: cfg.sinteticos.comision[k], ajuste: cfg.sinteticos.ajuste[k] }) : etfV
-      const datos = alineaDatos({ qqq, etf: { simbolo: estres ? 'SINTETICO' : etf, velas: velasEtf }, spy }, { ...DIVIDENDOS.simbolos, SINTETICO: [] })
-      const resultado = cfg.tipo === 'mapaMedia' ? mapaMediaParte({ datos, config: cfg, parte: etf }) : estres ? estresParte({ datos, config: cfg, parte: etf })
-        : cfg.tipo === 'curvaRiesgo' ? curvaRiesgoEtf({ datos, config: cfg, etf }) : await sensibilidadEtf({ datos, config: cfg, etf, nSim: Math.min(nSim, N_SIM_CARTERA * 5) })
-      const t2 = Date.now()
-      return res.status(200).json({ resultado: { prueba: 'exploracion', tipo: cfg.tipo, ...resultado }, simbolos: 3, sinDatos: [], dividendos: DIVIDENDOS.descargado, tiempos: { datosMs: t1 - t0, calculoMs: t2 - t1, totalMs: t2 - t0 } })
-    }
     const { desde, hasta } = periodo
-    if (esConfigCartera(cfg)) {
-      const pc = cfg.periodos.find(p => p.desde === desde && p.hasta === hasta)
-      const lee = (sym) => get(`rpc/leer_velas?p_simbolo=${encodeURIComponent(sym)}&p_desde=${masAnios(desde, -3)}&p_hasta=${masDias(hasta, 5)}`).then(velasDe)
-      // CARTERA_3: el ETF es el SINTÉTICO ×2 / ×3 de V9.984 sobre el QQQ de rentabilidad total (no se lee de la caché).
-      const sint = ['x2', 'x3'].includes(cfg.etf)
-      const [qqq, etfV, spy] = await Promise.all([lee('QQQ'), sint ? Promise.resolve([]) : lee(cfg.etf), lee('SPY')])
-      const t1 = Date.now()
-      if (!qqq.length || (!sint && !etfV.length) || !spy.length) return res.status(500).json({ error: `Faltan velas en la caché: ${[['QQQ', qqq], ...(sint ? [] : [[cfg.etf, etfV]]), ['SPY', spy]].filter(([, v]) => !v.length).map(([s]) => s).join(', ')}.` })
-      const k = cfg.etf === 'x3' ? 3 : 2
-      const etf = sint ? construyeSintetico(preciosTotales(qqq, DIVIDENDOS.simbolos.QQQ), { k, comision: cfg.sinteticos.comision[k], ajuste: cfg.sinteticos.ajuste[k] }) : etfV
-      const datos = alineaDatos({ qqq, etf: { simbolo: sint ? 'SINTETICO' : cfg.etf, velas: etf }, spy }, sint ? { ...DIVIDENDOS.simbolos, SINTETICO: [] } : DIVIDENDOS.simbolos)
-      // La REFERENCIA de la regla (o de la comparada), si la hay: sus velas, alineadas a las fechas del QQQ (V9.1018).
-      const refs = [...new Set([cfg.regla?.referencia, cfg.comparaCon?.regla?.referencia].filter(Boolean))]
-      if (refs.length) {
-        const vr = await Promise.all(refs.map(lee))
-        const falta = refs.filter((_, i) => !vr[i].length)
-        if (falta.length) return res.status(500).json({ error: `Faltan velas en la caché: ${falta.join(', ')}.` })
-        datos.velasRef = Object.fromEntries(refs.map((s, i) => [s, alineaVelasReferencia(datos.fechas, vr[i])]))
-      }
-      const resultado = ejecutaPeriodoCartera({ datos, regla: cfg.regla, periodo: pc, nSim: Math.min(nSim, N_SIM_CARTERA * 5), semilla: semillaLab(await huella(cfg), desde), comparaCon: cfg.comparaCon || null, calculo: calculoDe(cfg), costes: cfg.costes || null })
-      const t2 = Date.now()
-      return res.status(200).json({ resultado, simbolos: 3, sinDatos: [], dividendos: DIVIDENDOS.descargado, tiempos: { datosMs: t1 - t0, calculoMs: t2 - t1, totalMs: t2 - t0 } })
-    }
     const miembros = await get('universo_miembros?indice=eq.NDX&select=simbolo_yahoo,desde,hasta,excluido_motivo')
     const tramos = {}
     for (const m of miembros) if (m.simbolo_yahoo && !m.excluido_motivo && m.desde <= hasta && (m.hasta == null || m.hasta > desde)) (tramos[m.simbolo_yahoo] ||= []).push(m)

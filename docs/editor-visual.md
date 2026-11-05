@@ -283,7 +283,7 @@ va en la etiqueta de la señal. Los textos van recortados; el entero, al pasar e
 
 **E8 aplazado** (Sergi, 20/10/2026): dibujar con el ratón se deja para más adelante; se sigue con E9 y E11.
 
-**Notas de E9 (V9.1018)**: la pestaña Editor tiene dos modos, «Estrategia de un activo» y «Cartera (QQQ + ETF)»
+**Notas de E9 (V9.1018)** (el modo Cartera se eliminó el 05/11/2026 con «Carteras QQQ + ETF»: docs/builder.md, §74): la pestaña Editor tiene dos modos, «Estrategia de un activo» y «Cartera (QQQ + ETF)»
 (`components/EditorCartera.js`); los dos quedan montados al cambiar. El de cartera edita la `regla` del laboratorio de
 cartera: estados (composición y pesos opcionales), estado inicial, transiciones por condición (todas a la vez, con O / NO /
 histéresis, calendario y «una semana de cada N»), sus movimientos y sus marcas (rebalancea, inicia / termina el ciclo, fija

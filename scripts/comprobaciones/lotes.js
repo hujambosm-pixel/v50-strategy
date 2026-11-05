@@ -1,4 +1,4 @@
-// scripts/comprobaciones/lotes.js — las huellas de los lotes congelados LOTE_1–3 y CARTERA_1–3, recalculadas con el código del
+// scripts/comprobaciones/lotes.js — las huellas de los lotes congelados LOTE_1–3, recalculadas con el código del
 // árbol de trabajo (y, si se da VIEJO, también con la versión anterior), frente a las guardadas en lib/lotesLab.js (HUELLAS_LOTES).
 const path = require('path')
 const C0 = require('./cargador')

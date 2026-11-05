@@ -103,8 +103,8 @@ const EMA20 = { tipo: 'editor', motor: 1, formato: 1, nombre: 'Prueba editor EMA
     return C.alineaDatos({ qqq, etf: { simbolo: 'SINTETICO', velas: S.construyeSintetico(C.preciosTotales(qqq, []), { k: 2, comision: SIN.comision[2], ajuste: SIN.ajuste[2] }) }, spy: qqq }, { QQQ: [], SPY: [], SINTETICO: [] })
   }
   {
-    const L = require(R + '/lib/lotesLab.js')
-    const regla = L.CARTERA_3.items[0].regla
+    // La regla de la pieza de cartera: SMA 50 diaria, solo el apalancado (la F1 del antiguo CARTERA_3, retirado en §74).
+    const regla = require(R + '/lib/laboratorioCartera.js').reglaFiltro(50, 'diario', 'apalancado')
     const base = { tipo: 'plan', formato: 1, calculo: 1, etf: 'x2', dinero: { capitalInicial: 10000, aportaciones: { importe: 300, frecuencia: 'mensual', crecimientoAnual: 2 }, extraordinarias: [{ fecha: '2018-05-10', importe: 5000 }] },
       reparto: { aportacionesA: 'infraponderada', rebalanceo: { calendario: 'anual', banda: 0.1 } }, impuestos: { regimen: 'ES-ahorro', reglaDosMeses: true },
       costes: { comisionPct: 0.1, comisionMinEur: 2, horquillaPct: { QQQ: 0.02, ETF: 0.05, SPY: 0.02 } }, periodo: { desde: '2012-01-01', hasta: '2024-12-31' } }
