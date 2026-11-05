@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/comprobaciones/comunes.sh — las comprobaciones comunes de cada commit (docs/builder.md, §22): guardián, build, batería
-# V9.949 (52 + 44) byte a byte, huellas de LOTE_1–3 y de las pruebas del
+# V9.949 (52 + 44) byte a byte, huellas de las pruebas del
 # editor; las pruebas sintéticas del motor (sinteticas.js, V9.1079); la huella del azar re-simulado (azar-reglas.js, §43); la prueba contra el azar del paso 2 (prueba-azar.js, §44); la pieza «estrategia» de los planes (planes-estrategia.js, §47); la pantalla del paso 3 (planes-pantalla.js, §53–§55, y planes-montaje.js, §56, con estado y efectos sobre un DOM mínimo); y la pantalla «Tesis» (tesis.js, tesis-enlaces.js y tesisArchivos.js, docs/tesis.md). Compara el árbol de trabajo con una copia de la versión anterior (por defecto HEAD) hecha con git archive.
 # Uso, desde cualquier sitio:   bash scripts/comprobaciones/comunes.sh [referencia de git]      (unos 15 minutos)
 # Necesita: npm install; una copia en backups/ (npm run backup); las fotos de precios en scripts/comprobaciones/datos/ (o en la
@@ -22,8 +22,6 @@ tail -2 "$SAL/guardian.txt" | head -1
 paso build npm run build
 paso bateria node "$DIR/bateria.js" < /dev/null
 tail -1 "$SAL/bateria.txt"
-paso lotes node "$DIR/lotes.js" < /dev/null
-echo "lotes iguales: $(grep -c ' igual ' "$SAL/lotes.txt") de $(grep -c 'igual\|DISTINTA' "$SAL/lotes.txt")"
 paso huellas node "$DIR/huellas.js" < /dev/null
 cat "$SAL/huellas.txt"
 paso sinteticas node "$DIR/sinteticas.js" < /dev/null

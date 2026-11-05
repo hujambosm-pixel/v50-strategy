@@ -12,7 +12,6 @@ import { CONDICIONES_EDITOR, FORMATO, MOTOR, validaDefinicion, valoresDe, fraseD
 import { DEF_V50, DEF_23 } from '../lib/editor/ejemplos'
 import { esDefinicionEditor } from '../lib/editor/fuente'
 import DiagramaEditor from './DiagramaEditor'
-import EditorLotes from './EditorLotes'
 import { exportaCodeJs, motivosNoExportable } from '../lib/editor/exporta'
 import { preparaGuardado } from '../lib/editor/guardar'
 import { anadeStop, cambiaTipoStop } from '../lib/editor/piezas'
@@ -365,35 +364,14 @@ const estadoDe = (filaInicial) => esDefinicionEditor(filaInicial?.definition)
   ? { def: copia(filaInicial.definition), valores: (() => { try { return typeof filaInicial.params === 'string' ? JSON.parse(filaInicial.params) : (filaInicial.params || {}) } catch (_) { return {} } })(), id: filaInicial.id, nombre: filaInicial.name || filaInicial.definition.nombre || '', descripcion: filaInicial.description || '' }
   : { def: NUEVA(), valores: {}, id: null, nombre: '', descripcion: '' }
 
-// Dos modos: «Estrategia» (de un activo, lo de arriba) y «Lotes» (components/EditorLotes.js, E10: se monta al abrirlo por
-// primera vez). El modo «Cartera» (E9) se quitó con «Carteras QQQ + ETF» (docs/builder.md, §74). Abrir una estrategia del
-// editor desde su panel vuelve al modo Estrategia.
-export default function EditorPanel({ apiFetch, filaInicial = null, onGuardada, onProbar, onExportar, version, estrategias = [], abrir = null }) {
-  const [modo, setModo] = useState('estrategia')
-  const [lotesVisto, setLotesVisto] = useState(false)
-  useEffect(() => { if (modo === 'lotes') setLotesVisto(true) }, [modo])
-  useEffect(() => { if (filaInicial) setModo('estrategia') }, [filaInicial])
-  // abrir (el Builder): { modo: 'lotes', loteId?, n } abre el modo Lotes y, si viene, ese lote.
-  useEffect(() => { if (abrir?.modo === 'lotes') setModo('lotes') }, [abrir])
-  const pestana = (m, texto, ayuda) => (
-    <button key={m} title={ayuda} onClick={() => setModo(m)}
-      style={{ ...boton, borderColor: modo === m ? 'var(--accent)' : 'var(--border)', color: modo === m ? 'var(--accent)' : 'var(--text)', fontWeight: modo === m ? 700 : 400 }}>{texto}</button>
-  )
+// Un solo modo: «Estrategia de un activo» (lo de arriba). Los modos «Cartera» (E9) y «Lotes» (E10) se quitaron con
+// «Carteras QQQ + ETF» y el Laboratorio (docs/builder.md, §74 y §75).
+export default function EditorPanel({ apiFetch, filaInicial = null, onGuardada, onProbar, onExportar, version }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '8px 12px 0', fontFamily: MONO }}>
-        {pestana('estrategia', 'Estrategia de un activo', 'Cuándo entrar y salir de un valor: se guarda como estrategia y se prueba en el backtest')}
-        {pestana('lotes', 'Lotes', 'Declarar y congelar un lote de variantes antes de ver resultados, y probarlo contra el azar')}
-      </div>
-      <div style={{ flex: 1, display: modo === 'estrategia' ? 'flex' : 'none', minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         <EditorEstrategia apiFetch={apiFetch} filaInicial={filaInicial} onGuardada={onGuardada} onProbar={onProbar} onExportar={onExportar} version={version}/>
       </div>
-      {/* Lotes: se monta al abrirlo por primera vez (lee la tabla editor_lotes). */}
-      {(modo === 'lotes' || lotesVisto) && (
-        <div style={{ flex: 1, display: modo === 'lotes' ? 'flex' : 'none', minHeight: 0 }}>
-          <EditorLotes apiFetch={apiFetch} version={version} estrategias={estrategias} abrirLote={abrir?.modo === 'lotes' && abrir.loteId != null ? abrir : null}/>
-        </div>
-      )}
     </div>
   )
 }

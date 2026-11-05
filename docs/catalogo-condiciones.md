@@ -3,7 +3,7 @@
 Estado: **propuesta**. Este documento no cambia nada en la app. Inventaría las condiciones que existen hoy, propone
 cómo debería ser una condición del catálogo único y da un plan de migración en commits pequeños.
 
-Destinatarios del catálogo: el Laboratorio de señales (LOTE_1–3), el Laboratorio de cartera (eliminado el 05/11/2026, docs/builder.md §74; CARTERA_1–3 y
+Destinatarios del catálogo: el Laboratorio de señales (eliminado el 05/11/2026, docs/builder.md §75; LOTE_1–3), el Laboratorio de cartera (eliminado el 05/11/2026, docs/builder.md §74; CARTERA_1–3 y
 exploraciones) y, más adelante, el editor visual de estrategias y carteras. El **motor principal** (las estrategias
 con `code_js`: 1 V50, 23…) **no se toca**: solo se inventaría.
 

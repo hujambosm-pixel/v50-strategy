@@ -26,7 +26,7 @@ camino y qué habría sacado haciendo algo más simple con el mismo dinero?».
 | Editor visual, modo Cartera (eliminado, docs/builder.md §74) | ~~`components/EditorCartera.js`~~ | Pantalla para declarar la regla de una pieza de cartera, con frase, diagrama y validación | — |
 | Estrategias del editor | `lib/editor/*` (intérprete, multibacktest con `definicionEditor`) | Una pieza «estrategia»: entradas y salidas de un valor sobre un universo | El multibacktest reparte un capital fijo (concentrado / compartido): no recibe dinero a mitad |
 | Universo dinámico | `universo_screener` (momentum y volatilidad, N = 10, 20, 30), `lib/screener.js` | La base de una «rotación por momentum»: los N con más momentum de cada año | Selección ANUAL; una rotación mensual necesitaría su propio cálculo |
-| Lotes y registro | `editor_lotes` (inmutable, huella), `lab_pruebas`, `lib/lotesLab.js` (LOTES y huellas en el código) | Declarar antes de mirar, congelar, contar cuántas cosas se probaron | Un tipo de lote para planes |
+| Lotes y registro | `editor_lotes` (inmutable, huella), `lab_pruebas`, `lib/lotesLab.js` (la huella; los LOTES del Laboratorio se retiraron, docs/builder.md §75) | Declarar antes de mirar, congelar, contar cuántas cosas se probaron | Un tipo de lote para planes |
 | Aportaciones reales | tabla `capital_contributions` y `computeBuyAndHold` (TradeLog, `pages/index.js`) | La idea de la referencia «lo mismo aportado al índice» ya existe para la cartera real | Es del diario, no del simulador; `capital_contributions` está sin RLS (es de antes de la autenticación) |
 
 Conclusión: el **motor de estados de cartera** es la base natural (ya hace calendario, rebalanceo, impuestos en caja y

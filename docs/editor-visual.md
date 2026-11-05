@@ -311,7 +311,7 @@ llamaba ese panel), y de la página, `saveStrategy` y `cloneStrategy` (sin uso; 
 400) con su estado. Se conserva la lectura de los parámetros heredados de una `definition` de bloques (por si se reactiva
 una de esas dos filas), ya no para las del editor. Quedan en el historial de git.
 
-**Notas de E10 (V9.1020)**: lotes del editor (decisiones 4 y 5), en el modo «Lotes» de la pestaña Editor
+**Notas de E10 (V9.1020)** (el modo Lotes se eliminó el 05/11/2026 con el Laboratorio: docs/builder.md, §75): lotes del editor (decisiones 4 y 5), en el modo «Lotes» de la pestaña Editor
 (`components/EditorLotes.js`, `lib/editor/lotes.js`).
 - **Declarar**: lo común (activos, periodo, temporalidad, reparto concentrado o compartido, máximo de posiciones,
   prioridad, simulaciones; sin filtros ni comisiones, como exige la prueba contra el azar) y de 1 a 20 variantes, cada una
