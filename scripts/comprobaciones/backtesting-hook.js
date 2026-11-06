@@ -57,6 +57,18 @@ function homeDe(raiz) {
 }
 const viejo = homeDe(VIEJO), nuevo = homeDe(RAIZ)
 if (!nuevo.hook) { console.error('El árbol de trabajo no tiene useCarteraPorDentro'); process.exit(1) }
+// Si la versión anterior YA tiene el hook, el traslado se demostró en el commit que lo creó (V9.1143): ahora se exige que el hook y
+// comun.js sigan idénticos (sentencia a sentencia, mismas entradas y salidas) y que la llamada siga bien puesta (lo de abajo).
+// pages/index.js puede cambiar en lo demás: eso lo vigilan las otras comprobaciones.
+const yaTenia = !!viejo.hook
+let saltados = 0, efectosSaltados = 0
+if (yaTenia) {
+  const a = viejo.hook.cuerpo.map(cod), b = nuevo.hook.cuerpo.map(cod)
+  if (a.length !== b.length) falla(`el hook tenía ${a.length} sentencias y ahora ${b.length}`)
+  a.forEach((c, i) => { if (c !== b[i]) falla('el hook cambia en la sentencia ' + i + ':\n antes: ' + String(c).slice(0, 160) + '\n ahora: ' + String(b[i]).slice(0, 160)) })
+  if (viejo.hook.params.join() !== nuevo.hook.params.join()) falla('el hook cambia sus entradas')
+  if (viejo.hook.devuelve.join() !== nuevo.hook.devuelve.join()) falla('el hook cambia lo que devuelve')
+} else {
 // 1) El traslado: en lo viejo, las sentencias del hook (por su código) se llevan al sitio de la llamada.
 const cHook = nuevo.hook.cuerpo.map(cod), cViejo = viejo.lista.map(cod), cNuevo = nuevo.lista.map(cod)
 const pos = cHook.map(c => { const i = cViejo.indexOf(c); if (i < 0 || cViejo.indexOf(c, i + 1) >= 0) falla('sentencia del hook sin un sitio único en lo viejo: ' + c.slice(0, 80)); return i })
@@ -67,9 +79,6 @@ const reordenado = [...resto.slice(0, nuevo.ini), ...cHook, ...resto.slice(nuevo
 if (reordenado.length !== cNuevo.length) falla(`Home tiene ${cNuevo.length} sentencias y lo viejo trasladado ${reordenado.length}`)
 reordenado.forEach((c, i) => { if (c !== cNuevo[i]) falla('Home distinto en la sentencia ' + i + ':\n antes: ' + String(c).slice(0, 160) + '\n ahora: ' + String(cNuevo[i]).slice(0, 160)) })
 // 2) Lo que salta el traslado: las sentencias de Home entre la primera del hook en lo viejo y el sitio nuevo.
-const nombresHook = new Set(nuevo.hook.devuelve)
-const iniViejo = Math.min(...pos), finViejo = viejo.lista.length
-let saltados = 0, efectosSaltados = 0
 const posEfectos = pos.filter((p, j) => esEfecto(nuevo.hook.cuerpo[j]))
 const restoNodos = viejo.lista.filter((_, i) => !enHook.has(i))
 const idxResto = viejo.lista.map((_, i) => i).filter(i => !enHook.has(i))
@@ -82,6 +91,8 @@ idxResto.forEach((iv, r) => {
   const n = viejo.lista[iv]
   if (esEfecto(n) && cambia(posEfectos)) { efectosSaltados++; falla('un efecto cambia de orden respecto a los del hook: línea ' + n.loc.start.line) }
 })
+}
+const nombresHook = new Set(nuevo.hook.devuelve)
 // Lecturas en el render, antes de la llamada, de nombres del hook (los cierres que se ejecutan después sí pueden).
 const INMEDIATOS = new Set(['useMemo', 'useState', 'useRef', 'useReducer'])
 const enRender = (p, fnHome) => { let f = p.getFunctionParent(); while (f) { if (f.node === fnHome) return true; const par = f.parentPath
@@ -102,11 +113,11 @@ const comunViejo = lee(VIEJO, 'components/backtesting/comun.js')
 const mV = modulo(viejo, !comunViejo), mN = modulo(nuevo, false)
 if (!comunViejo) { const todo = viejo.ast.program.body.map(cod); cComun.forEach(c => { if (!todo.includes(c)) falla('comun.js tiene algo que no estaba en pages/index.js: ' + c.slice(0, 80)) }) }
 else if (parsea(comunViejo).program.body.filter(n => n.type !== 'ImportDeclaration').map(n => cod(n.type === 'ExportNamedDeclaration' ? n.declaration : n)).join('\n') !== cComun.join('\n')) falla('comun.js distinto del de la versión anterior')
-if (mV.join('\n') !== mN.join('\n')) { let k = 0; while (mV[k] === mN[k]) k++; falla(`el resto de pages/index.js no es idéntico (sentencia ${k} de ${mV.length} / ${mN.length}):\n antes: ${String(mV[k]).slice(0, 160)}\n ahora: ${String(mN[k]).slice(0, 160)}`) }
+if (!yaTenia && mV.join('\n') !== mN.join('\n')) { let k = 0; while (mV[k] === mN[k]) k++; falla(`el resto de pages/index.js no es idéntico (sentencia ${k} de ${mV.length} / ${mN.length}):\n antes: ${String(mV[k]).slice(0, 160)}\n ahora: ${String(mN[k]).slice(0, 160)}`) }
 // 4) Nombres sin declarar.
 const libres = (s) => { const out = new Set(); traverse(parsea(s), { Identifier(p) { if (p.isReferencedIdentifier() && !p.scope.getBinding(p.node.name)) out.add(p.node.name) }, JSXIdentifier(p) { if (/^[A-Z]/.test(p.node.name) && p.parentPath.isJSXOpeningElement() && !p.scope.getBinding(p.node.name)) out.add(p.node.name) } }); return out }
 const libresViejo = new Set([...libres(lee(VIEJO, 'pages/index.js'))])
 for (const f of ['pages/index.js', 'components/backtesting/useCarteraPorDentro.js', 'components/backtesting/comun.js'])
   for (const n of libres(lee(RAIZ, f))) if (!libresViejo.has(n)) falla(`${f}: «${n}» sin declarar`)
-console.log(`backtesting-hook: ${nuevo.hook.cuerpo.length} sentencias en el hook (${nuevo.hook.devuelve.length} nombres, ${nuevo.hook.params.length} entradas), ${cComun.length} en comun.js; ${saltados} sentencias de Home cambian de lado (${efectosSaltados} efectos): ${fallos.length ? fallos.length + ' FALLOS' : 'todo idéntico'}`)
+console.log(`backtesting-hook: ${nuevo.hook.cuerpo.length} sentencias en el hook (${nuevo.hook.devuelve.length} nombres, ${nuevo.hook.params.length} entradas), ${cComun.length} en comun.js; ${yaTenia ? "la versión anterior ya lo tenía: hook y comun.js comparados con ella" : saltados + " sentencias de Home cambian de lado (" + efectosSaltados + " efectos)"}: ${fallos.length ? fallos.length + ' FALLOS' : 'todo idéntico'}`)
 process.exit(fallos.length ? 1 : 0)

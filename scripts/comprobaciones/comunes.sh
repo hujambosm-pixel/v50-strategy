@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/comprobaciones/comunes.sh — las comprobaciones comunes de cada commit (docs/builder.md, §22): guardián, build, batería
 # V9.949 (52 + 44) byte a byte, huellas de las pruebas del
-# editor; las pruebas sintéticas del motor (sinteticas.js, V9.1079); la huella del azar re-simulado (azar-reglas.js, §43); la prueba contra el azar del paso 2 (prueba-azar.js, §44); la pieza «estrategia» de los planes (planes-estrategia.js, §47); la pantalla del paso 3 (planes-pantalla.js, §53–§55, y planes-montaje.js, §56, con estado y efectos sobre un DOM mínimo); la pantalla «Tesis» (tesis.js, tesis-enlaces.js y tesisArchivos.js, docs/tesis.md); las piezas del panel izquierdo del Backtesting (backtesting-panel.js, §76); y sus resultados, «La cartera por dentro» (backtesting-resultados.js, §78), con su estado y cálculos en un hook (backtesting-hook.js, §82); y «Una lista» en el bloque del plan (plan-lista.js, §80). Compara el árbol de trabajo con una copia de la versión anterior (por defecto HEAD) hecha con git archive.
+# editor; las pruebas sintéticas del motor (sinteticas.js, V9.1079); la huella del azar re-simulado (azar-reglas.js, §43); la prueba contra el azar del paso 2 (prueba-azar.js, §44); la pieza «estrategia» de los planes (planes-estrategia.js, §47); la pantalla del paso 3 (planes-pantalla.js, §53–§55, y planes-montaje.js, §56, con estado y efectos sobre un DOM mínimo); la pantalla «Tesis» (tesis.js, tesis-enlaces.js y tesisArchivos.js, docs/tesis.md); las piezas del panel izquierdo del Backtesting (backtesting-panel.js, §76); y sus resultados, «La cartera por dentro» (backtesting-resultados.js, §78), con su estado y cálculos en un hook (backtesting-hook.js, §82) y la petición a /api/multibacktest (peticion-mc.js, §83); y «Una lista» en el bloque del plan (plan-lista.js, §80). Compara el árbol de trabajo con una copia de la versión anterior (por defecto HEAD) hecha con git archive.
 # Uso, desde cualquier sitio:   bash scripts/comprobaciones/comunes.sh [referencia de git]      (unos 15 minutos)
 # Necesita: npm install; una copia en backups/ (npm run backup); las fotos de precios en scripts/comprobaciones/datos/ (o en la
 # carpeta de COMPROBACIONES_DATOS); y, para el guardián y las políticas, «supabase login» (solo lectura). Termina en 0 si todo va bien.
@@ -56,6 +56,8 @@ paso backtesting-resultados node "$DIR/backtesting-resultados.js" < /dev/null
 tail -1 "$SAL/backtesting-resultados.txt"
 paso backtesting-hook node "$DIR/backtesting-hook.js" < /dev/null
 tail -1 "$SAL/backtesting-hook.txt"
+paso peticion-mc node "$DIR/peticion-mc.js" < /dev/null
+tail -1 "$SAL/peticion-mc.txt"
 paso plan-lista node "$DIR/plan-lista.js" < /dev/null
 tail -1 "$SAL/plan-lista.txt"
 echo "comparado con $REF · salidas en scripts/comprobaciones/salida/ · fallos: $fallos"

@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1143'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1144'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -47,6 +47,7 @@ import PanelUniverso from '../components/backtesting/PanelUniverso'
 import SelectorValores from '../components/backtesting/SelectorValores'
 import CarteraPorDentro from '../components/backtesting/CarteraPorDentro'
 import useCarteraPorDentro from '../components/backtesting/useCarteraPorDentro'
+import { cfgBaseMc, cuerpoMc, pesosNormalizadosMc } from '../lib/peticionMc'
 import { MC_COLOR_TOTAL, MC_COLOR_CAJA, COLORES_ACTIVO, asignaColoresActivos, MC_ID_CAJA, MC_ID_TOTAL, MC_TODAS, nombreIndicador, mcVisibleActivo, saneaCurva, capitalDeRespuesta, apiFetch } from '../components/backtesting/comun'
 import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart, AssetSignalChart } from '../components/BacktestCharts'
 import dynamic from 'next/dynamic'
@@ -4811,11 +4812,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     setMcShowGantt(false);setGanttDiscarded(null)
     mcChartsSyncRef.current={isSyncing:false,charts:[],lastRange:null}  // reset sync group for new run
     mcChartRefsMap.current={}  // reset chart refs for new run
-    const weightsNorm={}
-    if(mcMode==='custom'){
-      const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
-      mcSelected.forEach(sym=>{weightsNorm[sym]=total>0?(Number(mcWeights[sym])||0)/total*100:100/mcSelected.length})
-    }
+    // Pesos, cfg y cuerpo de la petición: lib/peticionMc.js (los usa también el plan, docs/builder.md §83).
+    const weightsNorm=pesosNormalizadosMc(mcMode,mcSelected,mcWeights)
     // El periodo viaja SIEMPRE como desde/hasta: «ultimos N años» se traduce aqui, en el cliente,
     // para que el servidor tenga un solo camino. `years` se sigue mandando solo en modo Años, que es
     // lo que distingue «he pedido 5 años» de «he pedido este rango» en los avisos de histórico.
@@ -4836,13 +4834,11 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
     }
     // Los activos de la ejecución: los marcados o, con universo dinámico, los de la máscara.
     const _activosMc=_estU?_estU.universo.simbolos:mcSelected
-    const baseCfg={emaR:Number(emaR),emaL:Number(emaL),years:_mcYears,capitalIni:mcCapitalIni,
-      fromDate:_mcFrom,toDate:_mcTo,
-      tipoStop,atrPeriod:Number(atrP),atrMult:Number(atrM),sinPerdidas,reentry,
-      tipoFiltro,sp500EmaR:Number(sp500EmaR),sp500EmaL:Number(sp500EmaL),tipoCapital:mcCapital,
-      sizeRules:{riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,assumedStopPct:mcAssumedStopPct,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,criterioUso:mcCriterioUso,momentumN:Number(mcMomentumN),rsWindow:Number(mcRsWindow),rsGateThr:Number(mcRsGateThr),momGateThr:Number(mcMomGateThr),proxGateThr:Number(mcProxGateThr),
-        ...(mcCalculoPrioridad===1?{calculoPrioridad:1}:{}),
-        scoreMap:Object.fromEntries(_activosMc.map(sym=>[sym,wlData[sym.toUpperCase()]?.active?.scoreMetricas??null]))}}
+    const baseCfg=cfgBaseMc({emaR,emaL,years:_mcYears,capitalIni:mcCapitalIni,fromDate:_mcFrom,toDate:_mcTo,
+      tipoStop,atrP,atrM,sinPerdidas,reentry,tipoFiltro,sp500EmaR,sp500EmaL,tipoCapital:mcCapital,
+      riskPerTrade:mcRiskPerTrade,maxPortfolioPct:mcMaxPortfolioPct,maxAccumRisk:mcMaxAccumRisk,assumedStopPct:mcAssumedStopPct,maxPosiciones:mcMaxPosiciones,prioridad:mcPrioridad,criterioUso:mcCriterioUso,momentumN:mcMomentumN,rsWindow:mcRsWindow,rsGateThr:mcRsGateThr,momGateThr:mcMomGateThr,proxGateThr:mcProxGateThr,
+      calculoPrioridad:mcCalculoPrioridad,
+      scoreMap:Object.fromEntries(_activosMc.map(sym=>[sym,wlData[sym.toUpperCase()]?.active?.scoreMetricas??null]))})
     const buildCfgFromStrat=(strat)=>{
       // Parsear params del code_js (campo principal para estrategias modernas)
       let stratParams={}
@@ -4900,7 +4896,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
           const _strat1=strategies.find(s=>s.id===stratIds[0])
           const isNoStrategy=(_strat1?.name||'').includes('No Strategy')
           // La petición se anota junto al resultado (sin tocarlo): la necesita la prueba contra el azar de la cartera.
-          const _cuerpoMc={symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,isNoStrategy,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones,..._prueba}
+          const _cuerpoMc={...cuerpoMc({symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,isNoStrategy,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones}),..._prueba}
           const res=await apiFetch('/api/multibacktest',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify(_cuerpoMc)})
           const json=await leeRespuestaMc(res)
@@ -5658,7 +5654,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1143</title>
+        <title>Trading Simulator V9.1144</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5747,7 +5743,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1143
+            <span className="dot"/>Trading Simulator V9.1144
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
