@@ -13,7 +13,7 @@
 // la referencia de cada pieza de cartera que la tenga; con una pieza «estrategia», las del valor, del ocioso y de los índices de
 // su regla: docs/builder.md §47).
 import { exigeAuth } from '../../lib/verificaJwt'
-import { validaPlan, huellaPlan, usaEtf } from '../../lib/planes/plan'
+import { validaPlan, huellaPlan, usaEtf, AVISO_LISTA_SIN_MOTOR } from '../../lib/planes/plan'
 import { evaluaPlan, iniciosRodantes, referenciasDe } from '../../lib/planes/evalua'
 import { ejecutaPlan } from '../../lib/planes/plan'
 import { cargaDatosPlan } from '../../lib/planes/datosServidor'
@@ -30,6 +30,7 @@ export default async function handler(req, res) {
   const errores = validaPlan(plan)
   if (rodantes && !(rodantes.duracion == null || (Number.isInteger(rodantes.duracion) && rodantes.duracion >= 1 && rodantes.duracion <= 30))) errores.push('La duración de los inicios rodantes, de 1 a 30 años.')
   if (errores.length) return res.status(400).json({ error: errores.join(' '), errores })
+  if (plan.piezas.some(x => x.tipo === 'estrategia' && x.donde === 'lista')) return res.status(400).json({ error: AVISO_LISTA_SIN_MOTOR })   // §80
   const t0 = Date.now()
   const headers = { apikey: SUPA_KEY, Authorization: `Bearer ${req.headers['x-supa-jwt']}` }
   try {

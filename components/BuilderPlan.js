@@ -44,10 +44,17 @@ import { cambiaClave, claveDe, conPestana, eligeEntrada, idDe, idsDe, ordenInici
 import { respondeSalida } from '../lib/tesis'
 import { esDeCodigo } from '../lib/builder/codigo'
 import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
+// §80 (fase 3 de «el plan con lista»): las piezas del panel izquierdo del Backtesting, tal cual, para el bloque «Una lista».
+import PanelAsignacion from './backtesting/PanelAsignacion'
+import PanelPesos from './backtesting/PanelPesos'
+import PanelUniverso from './backtesting/PanelUniverso'
+import SelectorValores from './backtesting/SelectorValores'
+import FiltrosPanel from './FiltrosPanel'
+import { mergeFiltros } from '../lib/filtros'
 import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, AVISO_PRUEBA, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
   ayudaCaida, ayudaPrueba, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
-  textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS } from '../lib/builder/planPantalla'
+  textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS, avisoPruebaLista, ayudaPruebaLista } from '../lib/builder/planPantalla'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0', AZUL = '#58a6ff', GRIS_FRANJA = '#3a4656'
 const campo = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px' }
@@ -174,7 +181,7 @@ const Tarjeta = ({ id, titulo, ayuda, children }) => (
   </div>
 )
 
-export default function BuilderPlan({ estrategias = [], estrategiaId = null, planId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, salida = null, enlaceTesis = null, deps = null, inicial = null }) {
+export default function BuilderPlan({ estrategias = [], estrategiaId = null, planId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, salida = null, enlaceTesis = null, deps = null, inicial = null, datosLista = null }) {
   const tarjetas = useMemo(() => estrategias.filter(esDeTarjetas).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
   const diarias = useMemo(() => tarjetas.filter(s => !esSemanal(s)), [tarjetas])
   const deCodigo = useMemo(() => estrategias.filter(esDeCodigo).length, [estrategias])
@@ -233,6 +240,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   useEffect(() => { if (inicial?.lineas) return; try { const g = JSON.parse(window.localStorage.getItem(CLAVE_LINEAS)); if (g && typeof g === 'object') setLineasVisibles({ ...LINEAS_DEFECTO, ...g }) } catch (_) {} }, [])
   const marcaLinea = (k, si) => { const x = { ...lineasVisibles, [k]: si }; setLineasVisibles(x); try { window.localStorage.setItem(CLAVE_LINEAS, JSON.stringify(x)) } catch (_) {} }
   const [resPrueba, setResPrueba] = useState(inicial?.resultadoPrueba || null)
+  // §80: «Una lista». Lo que se guarda va en a.lista (lib/planes/lista.js); esto es solo de la vista (buscar, ★, la lista de la Watchlist, qué está desplegado).
+  const [vistaLista, setVistaLista] = useState({ busca: '', favs: false, lista: '', seccion: { mode: true, strats: false }, mercado: false, activo: false, universoDatos: {} })
+  const ponVista = (k) => (v) => setVistaLista(x => ({ ...x, [k]: typeof v === 'function' ? v(x[k]) : v }))
+  const ponLista = (k) => (v) => setA(x => ({ ...x, lista: { ...x.lista, [k]: typeof v === 'function' ? v(x.lista[k]) : v } }))
   const vivo = useRef(true)
   useEffect(() => { vivo.current = true; return () => { vivo.current = false } }, [])
   // §50: la columna de ajustes fija al bajar. En la app se desplaza la VENTANA, pero entre la columna y la ventana hay contenedores con
@@ -255,7 +266,9 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // El plan de los ajustes de ahora; sus errores (los del motor) y, sin errores, la clave que dispara el cálculo.
   const plan = useMemo(() => estrategia ? planDe(a, estrategia) : null, [a, estrategia])
   const errores = useMemo(() => plan ? validaPlan(plan) : [], [plan])
-  const clave = actual && plan && !errores.length ? JSON.stringify(plan) : null
+  // §80: con «Una lista», «Tu dinero» todavía no se calcula (llegará en la fase 6): no se pide nada a /api/plan.
+  const enLista = a.donde === 'lista'
+  const clave = actual && plan && !errores.length && !enLista ? JSON.stringify(plan) : null
   const api = useRef(apiFetch); api.current = apiFetch
   // Un plan ya calculado (p. ej., al volver a una pestaña) se enseña sin repetir el cálculo.
   const hechos = useRef(new Map())
@@ -465,12 +478,12 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const ajustesDelResultado = calc.resultado?.plan?.piezas?.[0] || null
   // Lo que se enseña en «+ Añadir plan»: el final de los planes guardados ya calculados.
   useEffect(() => { if (fila && cifras && !hayCambios && clave === JSON.stringify(calc.resultado?.plan)) setFinales(x => ({ ...x, [fila.id]: cifras.seis.final })) }, [cifras, fila?.id, hayCambios])
-  const texto = () => textoParaClaudePlan({ ajustes: a, estrategia, plan, cifras, estado, resultadoPrueba: resPrueba, version, nombre: fila?.nombre || null })
+  const texto = () => textoParaClaudePlan({ ajustes: a, estrategia, plan, cifras: enLista ? null : cifras, estado, resultadoPrueba: resPrueba, version, nombre: fila?.nombre || null })
 
   // ── Avisos (una línea; el detalle, tras «?») ──
   const avisoPrueba = estado && (
-    <div data-aviso="prueba" data-estado={estado.clave} style={{ color: estado.clave === 'pasa' ? VERDE : estado.clave === 'noPasa' ? ROJO : AMARILLO, fontWeight: estado.clave === 'noPasa' ? 700 : 400, display: 'flex', alignItems: 'center', gap: 2 }}>
-      {AVISO_PRUEBA[estado.clave]}<span style={S.apagado}>&nbsp;·&nbsp;</span>{!estBorrada && <button data-boton="ver-prueba" style={{ ...S.enlace, fontSize: 13 }} onClick={() => pide({ tipo: 'paso2' })}>{estado.clave === 'sinPrueba' ? 'Probarla ahora' : 'Ver la prueba'}</button>}<Ayuda texto={ayudaPrueba(estado, resPrueba)} etiqueta="La prueba contra el azar"/>
+    <div data-aviso="prueba" data-estado={estado.clave} data-lista={enLista ? '1' : undefined} style={{ color: estado.clave === 'pasa' && !enLista ? VERDE : estado.clave === 'noPasa' ? ROJO : AMARILLO, fontWeight: estado.clave === 'noPasa' ? 700 : 400, display: 'flex', alignItems: 'center', gap: 2 }}>
+      {enLista ? avisoPruebaLista(estado) : AVISO_PRUEBA[estado.clave]}{enLista && <Ayuda texto={ayudaPruebaLista(estado)} etiqueta="La lista aún no tiene prueba"/>}<span style={S.apagado}>&nbsp;·&nbsp;</span>{!estBorrada && <button data-boton="ver-prueba" style={{ ...S.enlace, fontSize: 13 }} onClick={() => pide({ tipo: 'paso2' })}>{estado.clave === 'sinPrueba' ? 'Probarla ahora' : 'Ver la prueba'}</button>}<Ayuda texto={ayudaPrueba(estado, resPrueba)} etiqueta="La prueba contra el azar"/>
     </div>
   )
   // §54: una línea bajo las pestañas: los avisos (en el móvil, uno debajo del otro: .bp-avisos), «Calculando…» y, a la derecha, guardar y «Comparar planes».
@@ -480,7 +493,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       {enlaceTesis?.('plan', fila?.id)}
       <div data-aviso="a-mano" style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>⚠ {AVISO_A_MANO}<Ayuda texto={AYUDA_PLAN.aMano} etiqueta={AVISO_A_MANO}/></div>
       {nuevaActual && <div data-aviso="sin-guardar" style={{ color: AMARILLO }}>Sin guardar: se perderá al recargar</div>}
-      {calc.calculando && <div data-calculando style={{ color: AMARILLO }}>Calculando…</div>}
+      {calc.calculando && !enLista && <div data-calculando style={{ color: AMARILLO }}>Calculando…</div>}
       <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         {sinGuardar && <button data-boton="descartar" style={{ ...S.boton, padding: '6px 12px' }} disabled={guardando} onClick={descartaCambios}>Descartar cambios</button>}
         {hayCambios && <button data-boton="guardar-cambios" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={`Guardado por última vez el ${fechaCorta(fila.updated_at)}`} onClick={guardaAbierta}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>}
@@ -518,6 +531,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   )
 
   // ── Columna izquierda ──
+  const L = a.lista || {}
   const bloques = (
     <div data-tarjeta="bloques" style={{ ...S.tarjeta, overflow: 'visible' }}>
       <div style={{ ...S.cabeceraTarjeta, borderRadius: `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0`, display: 'flex', alignItems: 'center', gap: 2 }}>Bloques<Ayuda texto={AYUDA_PLAN.bloque} etiqueta="Bloques"/></div>
@@ -537,12 +551,39 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           </div>
           <div>
             <Etiqueta texto="Dónde se aplica" ayuda={AYUDA_PLAN.dondeSeAplica}/>
-            <Segmentos etiquetaGrupo="Dónde se aplica" valor="accion" onCambia={() => {}} opciones={[['accion', 'Una acción'], ['lista', 'Una lista', 'Llegará cuando los pasos 1 y 2 admitan listas']]}/>
-            <div style={{ marginTop: 10 }}><BuscadorValor valores={valoresLista} valor={a.activo} onCambia={s => cambia('activo', s)} etiqueta="Acción"/></div>
+            <Segmentos etiquetaGrupo="Dónde se aplica" valor={enLista ? 'lista' : 'accion'} onCambia={v => cambia('donde', v)} opciones={[['accion', 'Una acción'], ['lista', 'Una lista']]}/>
+            {!enLista && <div style={{ marginTop: 10 }}><BuscadorValor valores={valoresLista} valor={a.activo} onCambia={s => cambia('activo', s)} etiqueta="Acción"/></div>}
+            {/* §80: el universo y el selector de valores del Backtesting (elementos 13 y 14), tal cual. */}
+            {enLista && <div data-lista="valores" className="bp-mc" style={{ marginTop: 10 }}>
+              <PanelUniverso mcUniverso={L.universo} mcUniversoDatos={vistaLista.universoDatos} setMcUniverso={ponLista('universo')} setMcUniversoDatos={ponVista('universoDatos')}/>
+              <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 330 }}>
+                <SelectorValores mcListFilter={vistaLista.lista} mcOnlyFavs={vistaLista.favs} mcSearch={vistaLista.busca} mcSelected={L.simbolos} mcUniverso={L.universo} rankingData={datosLista?.rankingData || {}}
+                  setMcListFilter={ponVista('lista')} setMcOnlyFavs={ponVista('favs')} setMcSearch={ponVista('busca')} setMcSelected={ponLista('simbolos')} watchlist={datosLista?.watchlist || []} wlLists={datosLista?.wlLists || []}/>
+              </div>
+            </div>}
           </div>
+          {/* §80: el reparto dentro de la lista (elementos 5–10 y 12) y los filtros (3 y 4), con lo de este bloque. */}
+          {enLista && <div>
+            <Etiqueta texto="Reparto dentro de la lista" ayuda={AYUDA_PLAN.reparto}/>
+            <div data-lista="reparto" className="bp-mc">
+              <PanelAsignacion unSoloModo mcStratSelected={[estId]} mcUniverso={L.universo} selectedModos={[L.modo]} setSelectedModos={() => {}} mcMode={L.modo} setMcMode={ponLista('modo')} mcSectionOpen={vistaLista.seccion} setMcSectionOpen={ponVista('seccion')}
+                mcAssumedStopPct={L.assumedStopPct} setMcAssumedStopPct={ponLista('assumedStopPct')} mcCalculoPrioridad={L.calculoPrioridad} setMcCalculoPrioridad={ponLista('calculoPrioridad')} mcCriterioUso={L.criterioUso} setMcCriterioUso={ponLista('criterioUso')}
+                mcMaxAccumRisk={L.maxAccumRisk} setMcMaxAccumRisk={ponLista('maxAccumRisk')} mcMaxPortfolioPct={L.maxPortfolioPct} setMcMaxPortfolioPct={ponLista('maxPortfolioPct')} mcMaxPosiciones={L.maxPosiciones} setMcMaxPosiciones={ponLista('maxPosiciones')}
+                mcMomGateThr={L.momGateThr} setMcMomGateThr={ponLista('momGateThr')} mcMomentumN={L.momentumN} setMcMomentumN={ponLista('momentumN')} mcPrioridad={L.prioridad} setMcPrioridad={ponLista('prioridad')} mcProxGateThr={L.proxGateThr} setMcProxGateThr={ponLista('proxGateThr')}
+                mcRiskPerTrade={L.riskPerTrade} setMcRiskPerTrade={ponLista('riskPerTrade')} mcRsGateThr={L.rsGateThr} setMcRsGateThr={ponLista('rsGateThr')} mcRsWindow={L.rsWindow} setMcRsWindow={ponLista('rsWindow')}/>
+              <PanelPesos mcMode={L.modo} mcSelected={L.simbolos} mcWeights={L.pesos} setMcWeights={ponLista('pesos')}/>
+            </div>
+          </div>}
+          {enLista && <div>
+            <Etiqueta texto="Filtros" ayuda={AYUDA_PLAN.filtros}/>
+            <div data-lista="filtros" className="bp-mc">
+              <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO" filtros={mergeFiltros(L.filtros || [])} setFiltros={ponLista('filtros')} open={vistaLista.mercado} setOpen={ponVista('mercado')} variant="mc"/>
+              <FiltrosPanel ambito="activo" titulo="FILTROS DEL ACTIVO" filtros={mergeFiltros(L.filtros || [])} setFiltros={ponLista('filtros')} open={vistaLista.activo} setOpen={ponVista('activo')} variant="mc"/>
+            </div>
+          </div>}
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <div><Etiqueta texto="Parte de tu dinero" ayuda={AYUDA_PLAN.parte}/><span data-parte style={S.chip('neutro')}>100 %</span></div>
-            <div><Etiqueta texto="Modo de asignación" ayuda={AYUDA_PLAN.modo}/><select aria-label="Modo de asignación" disabled style={{ ...campo, color: B.apagado, cursor: 'not-allowed' }}><option>Solo con listas</option></select></div>
+            {!enLista && <div><Etiqueta texto="Modo de asignación" ayuda={AYUDA_PLAN.modo}/><select aria-label="Modo de asignación" disabled style={{ ...campo, color: B.apagado, cursor: 'not-allowed' }}><option>Solo con listas</option></select></div>}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}><button data-boton="anadir-bloque" type="button" disabled style={{ ...S.boton, color: B.apagado, cursor: 'not-allowed' }}>+ Añadir bloque</button><Ayuda texto={AYUDA_PLAN.anadirBloque} etiqueta="Añadir bloque"/></div>
@@ -602,7 +643,9 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const s = cifras?.seis, activoRes = ajustesDelResultado?.activo || a.activo, ociosoRes = ajustesDelResultado?.ocioso || a.ocioso
   // §49: con el ocioso en liquidez, el plan con el ocioso en liquidez es el mismo plan: ni su fila, ni su línea, ni «El ocioso añadió», ni caídas.
   const sinOcioso = ociosoRes === 'LIQUIDEZ'
-  const resultado = !cifras ? (
+  const resultado = enLista ? (
+    <div data-sin-motor-lista style={{ ...S.tarjeta, ...S.cuerpo, color: B.texto }}>{AYUDA_PLAN.listaSinMotor}</div>
+  ) : !cifras ? (
     <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{!estrategia ? 'Elige una estrategia de tarjetas de velas diarias.' : calc.calculando || clave ? 'Calculando tu plan…' : 'Sin resultado todavía.'}</div>
   ) : (<>
     <div data-cifras style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
@@ -661,6 +704,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           de ajustes queda fija al bajar, con su propia barra si no cabe (como mucho, el alto visible de la página menos su relleno); en el
           móvil, nada fijo y se desplaza la ventana, como antes. */}
       <style>{`.bp-avisos { flex-direction: row } @media (max-width: 700px) { .bp-avisos { flex-direction: column; align-items: flex-start !important } }
+/* §80: las piezas del Backtesting, en su caja oscura de siempre. */
+.bp-mc { background: var(--bg, #080c14); border: 1px solid var(--border, #1a2d45); border-radius: 6px; overflow: hidden; color: var(--text, #e2eaf5) }
 @media (min-width: 1000px) { .bp-pagina { box-sizing: border-box; height: calc(100vh - var(--bp-arriba, 56px)); flex: none !important }
   .bp-izq { position: sticky; top: 0; max-height: calc(100vh - var(--bp-arriba, 56px) - 40px); overflow-y: auto; padding-right: 4px } }`}</style>
       {actual ? <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>

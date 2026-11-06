@@ -340,3 +340,7 @@ Para comparar a partir de ahora. Precios de la caché de esa fecha; final tras v
 | 7 · Prueba editor EMA20 | 10.000 € | 64.625,48 € | 20,54 % | 20,54 % | 502 | 185,74 € | 13.335,61 € |
 
 La de siempre, «Prueba editor EMA20» · AAPL · 2016–2025 · 10.000 € + 300 €/mes · GLD · 0,1 %: 114.340,91 €, CAGR 15,74 %, TIR 14,50 %, caída −34,02 %, 624 órdenes.
+
+## 11. La pieza «estrategia» con una lista (fase 3, docs/builder.md §80)
+
+La pieza puede llevar `donde: 'lista'` y `lista` (lib/planes/lista.js): los ajustes del Backtesting guardados con el plan. Sin `donde`, una acción, como siempre (los planes guardados no cambian). Por ahora el motor NO calcula un plan con lista (`ejecutaPlan` lanza `AVISO_LISTA_SIN_MOTOR` y `/api/plan` responde 400): «Tu dinero» con lista llega en la fase 6.

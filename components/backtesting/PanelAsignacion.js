@@ -1,10 +1,11 @@
 // components/backtesting/PanelAsignacion.js — Backtesting, panel izquierdo. MODO DE ASIGNACIÓN (colapsable): los cuatro modos (casillas con una estrategia, para comparar modos; botones con varias), y debajo, según el modo, «Máx. activos simultáneos», el criterio de entrada (Desempate / Filtro, su umbral, N días o velas y el cálculo 1 / 2) y el Risk management de Position Sizing. Elementos 5–10 del inventario.
 // Fase 1 de «el plan con lista» (docs/builder.md §76): el bloque se sacó de pages/index.js TAL CUAL; el estado sigue allí y llega
 // por props con el mismo nombre que tenía.
+// §80 (fase 3): unSoloModo (el bloque de un plan): un solo modo, con botones (mcMode), como con varias estrategias. Sin él, igual que siempre.
 import { MONO } from '../../lib/utils'
 import Tip from '../Tip'
 
-export default function PanelAsignacion({ mcAssumedStopPct, mcCalculoPrioridad, mcCriterioUso, mcMaxAccumRisk, mcMaxPortfolioPct, mcMaxPosiciones, mcMode, mcMomGateThr, mcMomentumN, mcPrioridad, mcProxGateThr, mcRiskPerTrade, mcRsGateThr, mcRsWindow, mcSectionOpen, mcStratSelected, mcUniverso, selectedModos, setMcAssumedStopPct, setMcCalculoPrioridad, setMcCriterioUso, setMcMaxAccumRisk, setMcMaxPortfolioPct, setMcMaxPosiciones, setMcMode, setMcMomGateThr, setMcMomentumN, setMcPrioridad, setMcProxGateThr, setMcRiskPerTrade, setMcRsGateThr, setMcRsWindow, setMcSectionOpen, setSelectedModos }) {
+export default function PanelAsignacion({ mcAssumedStopPct, mcCalculoPrioridad, mcCriterioUso, mcMaxAccumRisk, mcMaxPortfolioPct, mcMaxPosiciones, mcMode, mcMomGateThr, mcMomentumN, mcPrioridad, mcProxGateThr, mcRiskPerTrade, mcRsGateThr, mcRsWindow, mcSectionOpen, mcStratSelected, mcUniverso, selectedModos, unSoloModo = false, setMcAssumedStopPct, setMcCalculoPrioridad, setMcCriterioUso, setMcMaxAccumRisk, setMcMaxPortfolioPct, setMcMaxPosiciones, setMcMode, setMcMomGateThr, setMcMomentumN, setMcPrioridad, setMcProxGateThr, setMcRiskPerTrade, setMcRsGateThr, setMcRsWindow, setMcSectionOpen, setSelectedModos }) {
   return (
     <div style={{flexShrink:0}}>
       <div onClick={()=>setMcSectionOpen(s=>({...s,mode:!s.mode}))}
@@ -14,7 +15,7 @@ export default function PanelAsignacion({ mcAssumedStopPct, mcCalculoPrioridad, 
         <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{mcSectionOpen.mode?'▼':'▶'}</span>
         <span style={{fontFamily:MONO,fontSize:12,color:'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>MODO DE ASIGNACIÓN</span>
         <span style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,color:'#4a6a88'}}>
-          {mcStratSelected.length<=1
+          {(!unSoloModo&&mcStratSelected.length<=1)
             ?(selectedModos.length===1
               ?(selectedModos[0]==='slots'?'Slots iguales':selectedModos[0]==='compartido'?'Capital compartido':selectedModos[0]==='concentrado'?'Capital concentrado':'Position Sizing')
               :selectedModos.map(m=>m==='slots'?'Slots':m==='compartido'?'Compartido':m==='concentrado'?'Concentrado':'Pos.Sizing').join(' + '))
@@ -23,7 +24,7 @@ export default function PanelAsignacion({ mcAssumedStopPct, mcCalculoPrioridad, 
       </div>
       {mcSectionOpen.mode&&(
         <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)'}}>
-          {mcStratSelected.length<=1&&(
+          {(!unSoloModo&&mcStratSelected.length<=1)&&(
             <div style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',marginBottom:6,letterSpacing:'0.05em'}}>
               SELECCIÓN MÚLTIPLE — compara modos en el mismo gráfico
             </div>
@@ -38,7 +39,7 @@ export default function PanelAsignacion({ mcAssumedStopPct, mcCalculoPrioridad, 
             {id:'positionsizing',label:'Position Sizing',ready:true,
               desc:'Pool de capital compartido con sizing por riesgo: el tamaño de cada posición sale de la distancia entrada→stop (capital × riesgo/trade ÷ distancia, limitado por el máximo de cartera por trade). Permite posiciones simultáneas con tamaños variables. Cuando una señal nueva supera el riesgo acumulado máximo o agota el pool disponible, se descarta. Las señales se procesan por fecha de entrada (más antigua primero) y, en empate de fecha, por orden alfabético del símbolo. IMPORTANTE: el stop debe existir en la vela de entrada. Se lee el primer nivel del historial de stops de la estrategia, y solo se acepta si su fecha no es posterior a la entrada. Las estrategias cuyo stop aparece más tarde (por ejemplo, cuando una vela cierra bajo la EMA20) entran sin stop conocido: esas operaciones se dimensionan con la "Distancia de stop asumida" configurable más abajo. Revisa en los resultados el aviso de operaciones dimensionadas sin stop inicial: si son muchas, el sizing depende de ese supuesto y conviene comparar con Concentrado o Compartido.'},
           ].map(m=>{
-            const isCheckbox=mcStratSelected.length<=1
+            const isCheckbox=(!unSoloModo&&mcStratSelected.length<=1)
             const isActive=isCheckbox?selectedModos.includes(m.id):mcMode===m.id
             // Universo dinámico: solo capital concentrado (el resto se ve desactivado, con el aviso de abajo).
             const _soloConc=mcUniverso!=='manual'&&m.id!=='concentrado'
@@ -82,7 +83,7 @@ export default function PanelAsignacion({ mcAssumedStopPct, mcCalculoPrioridad, 
           )}
         </div>
       )}
-      {(mcStratSelected.length<=1?selectedModos.includes('concentrado'):mcMode==='concentrado')&&(
+      {((!unSoloModo&&mcStratSelected.length<=1)?selectedModos.includes('concentrado'):mcMode==='concentrado')&&(
         <div style={{padding:'8px 10px',borderTop:'1px solid #1a2a3a'}}>
           {/* Máx. activos simultáneos */}
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
@@ -219,7 +220,7 @@ export default function PanelAsignacion({ mcAssumedStopPct, mcCalculoPrioridad, 
           )}
         </div>
       )}
-      {(mcStratSelected.length<=1?selectedModos.includes('positionsizing'):mcMode==='positionsizing')&&(
+      {((!unSoloModo&&mcStratSelected.length<=1)?selectedModos.includes('positionsizing'):mcMode==='positionsizing')&&(
         <div style={{padding:'8px 10px',borderTop:'1px solid #1a2a3a'}}>
           <div style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',letterSpacing:'0.07em',marginBottom:7,textTransform:'uppercase',fontWeight:600}}>Risk management</div>
           {[
