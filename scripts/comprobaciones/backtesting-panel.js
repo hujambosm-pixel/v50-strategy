@@ -54,7 +54,7 @@ function estado() {
 // Los «set…» graban lo que reciben; las funciones (p. ej. s => ({...s, mode: !s.mode})) se aplican sobre el valor de antes.
 function conSetters(e, registro) {
   const p = { ...e }
-  for (const k of Object.keys(e)) { const set = 'set' + k[0].toUpperCase() + k.slice(1); p[set] = (v) => registro.push([set, typeof v === 'function' ? v(e[k]) : v]) }
+  for (const k of Object.keys(e)) { const set = 'set' + k[0].toUpperCase() + k.slice(1); p[set] = (v) => registro.push([set, typeof v === 'function' ? v(e[k]) : v, typeof v === 'function' ? 'f' : 'v']) }
   return p
 }
 // La pieza «de antes» sacada de pages/index.js de la versión anterior: el bloque entre sus dos marcas, envuelto en una función.
@@ -76,6 +76,14 @@ function piezaDelIndice(raiz, nombre) {
   fs.writeFileSync(f, js); delete require.cache[f]
   return require(f).default
 }
+// CAMBIOS QUERIDOS: si la versión anterior aún no los tiene, se aplican a lo que ella graba antes de comparar (y solo eso puede cambiar).
+//   V9.1138 · «Todos» del selector de valores AÑADE los que se ven a los ya marcados (antes los cambiaba): los marcados que no se
+//   ven, delante, y luego los que se ven en su orden.
+const tieneTodosQueAnade = (raiz) => { const f = path.join(raiz, 'components/backtesting/SelectorValores.js'); return fs.existsSync(f) && fs.readFileSync(f, 'utf8').includes('prev.filter(s=>!_v.has(s))') }
+function aplicaCambiosQueridos(nombre, e, reg) {
+  if (nombre !== 'SelectorValores' || tieneTodosQueAnade(VIEJO)) return reg
+  return reg.map((x, i) => x[0] === 'setMcSelected' && reg[i + 1]?.[0] === '·' && reg[i + 1][3] === 'Todos' ? ['setMcSelected', [...e.mcSelected.filter(s => !x[1].includes(s)), ...x[1]], 'f'] : x)
+}
 const pieza = (raiz, nombre) => fs.existsSync(path.join(raiz, 'components/backtesting', nombre + '.js'))
   ? require(path.join(raiz, 'components/backtesting', nombre + '.js')).default : piezaDelIndice(raiz, nombre)
 
@@ -95,7 +103,7 @@ const pieza = (raiz, nombre) => fs.existsSync(path.join(raiz, 'components/backte
       if (!hn) vacios++
       // Pulsar: cada nodo con onClick / onChange / onMouseEnter… en las dos versiones, en el mismo orden, y comparar lo que graban.
       if (k % 8 === 0) {
-        const graba = async (C) => {
+        const graba = async (C, viejo) => {
           const reg = [], m = dom.monta(React.createElement(C, conSetters(e, reg)), cliente)
           await dom.espera(5)
           for (const n of m.raiz.todos(() => true)) {
@@ -105,17 +113,29 @@ const pieza = (raiz, nombre) => fs.existsSync(path.join(raiz, 'components/backte
               const opciones = n.todos(x => x.nodeName === 'OPTION').map(o => o.getAttribute('value'))
               const t = { value: opciones.length ? opciones[opciones.length - 1] : '7' }
               try { pr[ev]({ target: t, currentTarget: { style: {} }, stopPropagation() {}, preventDefault() {} }) } catch (err) { reg.push(['error', ev, String(err.message)]) }
-              reg.push(['·', n.nodeName, ev]); pulsaciones++
+              reg.push(['·', n.nodeName, ev, n.nodeName === 'BUTTON' ? n.textContent.trim() : '']); pulsaciones++
             }
           }
           m.quita(); await dom.espera(1)
-          return JSON.stringify(reg)
+          return JSON.stringify(viejo ? aplicaCambiosQueridos(nombre, e, reg) : reg)
         }
-        const ra = await graba(A), rn = await graba(N)
+        const ra = await graba(A, true), rn = await graba(N, false)
         if (ra !== rn) { fallos++; if (fallos < 4) out('PULSAR DISTINTO', nombre, k, '\n antes:', ra.slice(0, 400), '\n ahora:', rn.slice(0, 400)) }
       }
     }
     out(`${nombre}: ${iguales}/400 iguales (vacías: ${vacios})`)
+  }
+  // A mano (V9.1138): marcados AAPL y NVDA; con la lista «Tecnológicas» se ven MSFT, TSLA y MA (AAPL sale con la fila repetida, sin
+  // listas); «Todos» → AAPL, NVDA, MSFT, TSLA, MA (antes: MSFT, TSLA, MA, y se perdían AAPL y NVDA).
+  {
+    const e = { ...estado(), mcSelected: ['AAPL', 'NVDA'], mcListFilter: 'Tecnológicas', mcSearch: '', mcOnlyFavs: false, mcUniverso: 'manual', watchlist: WATCH, rankingData: {} }
+    const reg = [], m = dom.monta(React.createElement(pieza(RAIZ, 'SelectorValores'), conSetters(e, reg)), cliente); await dom.espera(5)
+    const vistos = m.raiz.todos(n => n.nodeName === 'DIV' && /^(MSFT|TSLA|MA|AAPL|NVDA)$/.test(n.textContent) && n.childNodes.length === 1).map(n => n.textContent)
+    dom.pulsa(m.raiz.busca(n => n.nodeName === 'BUTTON' && n.textContent.trim() === 'Todos')); m.quita(); await dom.espera(1)
+    const sale = JSON.stringify(reg.find(x => x[0] === 'setMcSelected')?.[1]), debe = JSON.stringify(['AAPL', 'NVDA', 'MSFT', 'TSLA', 'MA'])
+    const bien = sale === debe && JSON.stringify(vistos) === JSON.stringify(['MA', 'MSFT', 'TSLA'])   // en pantalla, por nombre: Mastercard, Microsoft, Tesla
+    if (!bien) fallos++
+    out(`${bien ? 'OK ' : 'MAL'} «Todos» con una segunda lista: se ven ${vistos.join(', ')} → ${sale} (debe: ${debe})`)
   }
   out(`backtesting-panel: ${casos} montajes, ${pulsaciones / 2} pulsaciones por versión, fallos: ${fallos}`)
   process.exit(fallos ? 1 : 0)

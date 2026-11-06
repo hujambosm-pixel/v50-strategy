@@ -35,7 +35,10 @@ export default function SelectorValores({ mcListFilter, mcOnlyFavs, mcSearch, mc
               const matchList=!mcListFilter||(w.list_ids||[]).some(lid=>{const l=wlLists.find(x=>x.id===lid);return l&&l.name===mcListFilter})
               return matchSearch&&matchFav&&matchList
             })
-            setMcSelected(filtered.map(w=>w.symbol))
+            // «Todos» AÑADE los que se ven a los ya marcados (V9.1138): antes los cambiaba, y al marcar una segunda lista se
+            // desmarcaba la primera. Los marcados que no se ven van delante; si todos se ven, queda igual que antes.
+            const vistos=filtered.map(w=>w.symbol), _v=new Set(vistos)
+            setMcSelected(prev=>[...prev.filter(s=>!_v.has(s)),...vistos])
           }}
             style={{fontFamily:MONO,fontSize:8,padding:'2px 5px',borderRadius:3,border:'1px solid var(--border)',background:'transparent',color:'#a8ccdf',cursor:'pointer'}}>
             Todos
