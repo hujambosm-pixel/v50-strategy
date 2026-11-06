@@ -112,7 +112,14 @@ const modulo = (x, quitaComun) => x.ast.program.body.filter(n => n.type !== 'Imp
 const comunViejo = lee(VIEJO, 'components/backtesting/comun.js')
 const mV = modulo(viejo, !comunViejo), mN = modulo(nuevo, false)
 if (!comunViejo) { const todo = viejo.ast.program.body.map(cod); cComun.forEach(c => { if (!todo.includes(c)) falla('comun.js tiene algo que no estaba en pages/index.js: ' + c.slice(0, 80)) }) }
-else if (parsea(comunViejo).program.body.filter(n => n.type !== 'ImportDeclaration').map(n => cod(n.type === 'ExportNamedDeclaration' ? n.declaration : n)).join('\n') !== cComun.join('\n')) falla('comun.js distinto del de la versión anterior')
+else {
+  // Lo que ya tenía comun.js sigue idéntico y en su orden, al principio; lo nuevo (V9.1145: el alto del equity y sus medidas) solo
+  // puede ser algo que estaba en pages/index.js de la versión anterior.
+  const cV = parsea(comunViejo).program.body.filter(n => n.type !== 'ImportDeclaration').map(n => cod(n.type === 'ExportNamedDeclaration' ? n.declaration : n))
+  if (cV.join('\n') !== cComun.slice(0, cV.length).join('\n')) falla('comun.js cambia lo que ya tenía')
+  const todoV = viejo.ast.program.body.map(cod)
+  cComun.slice(cV.length).forEach(c => { if (!todoV.includes(c)) falla('comun.js añade algo que no estaba en pages/index.js: ' + c.slice(0, 80)) })
+}
 if (!yaTenia && mV.join('\n') !== mN.join('\n')) { let k = 0; while (mV[k] === mN[k]) k++; falla(`el resto de pages/index.js no es idéntico (sentencia ${k} de ${mV.length} / ${mN.length}):\n antes: ${String(mV[k]).slice(0, 160)}\n ahora: ${String(mN[k]).slice(0, 160)}`) }
 // 4) Nombres sin declarar.
 const libres = (s) => { const out = new Set(); traverse(parsea(s), { Identifier(p) { if (p.isReferencedIdentifier() && !p.scope.getBinding(p.node.name)) out.add(p.node.name) }, JSXIdentifier(p) { if (/^[A-Z]/.test(p.node.name) && p.parentPath.isJSXOpeningElement() && !p.scope.getBinding(p.node.name)) out.add(p.node.name) } }); return out }

@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1144'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1145'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -48,7 +48,7 @@ import SelectorValores from '../components/backtesting/SelectorValores'
 import CarteraPorDentro from '../components/backtesting/CarteraPorDentro'
 import useCarteraPorDentro from '../components/backtesting/useCarteraPorDentro'
 import { cfgBaseMc, cuerpoMc, pesosNormalizadosMc } from '../lib/peticionMc'
-import { MC_COLOR_TOTAL, MC_COLOR_CAJA, COLORES_ACTIVO, asignaColoresActivos, MC_ID_CAJA, MC_ID_TOTAL, MC_TODAS, nombreIndicador, mcVisibleActivo, saneaCurva, capitalDeRespuesta, apiFetch } from '../components/backtesting/comun'
+import { MC_COLOR_TOTAL, MC_COLOR_CAJA, COLORES_ACTIVO, asignaColoresActivos, MC_ID_CAJA, MC_ID_TOTAL, MC_TODAS, nombreIndicador, mcVisibleActivo, saneaCurva, capitalDeRespuesta, apiFetch, ALTO_FRANJA_RENDIMIENTO, SUELO_EQUITY, desplazamientoSobre, scrollerDe } from '../components/backtesting/comun'
 import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart, AssetSignalChart } from '../components/BacktestCharts'
 import dynamic from 'next/dynamic'
 const McMonthlyGainsChart = dynamic(() => import('../components/McMonthlyGainsChart'), { ssr: false })
@@ -649,32 +649,6 @@ const TOPE_PRECIOS=20
 // —el peor caso— 46 px dejaban un ticker de 5 letras a dos píxeles de recortarse.
 const ANCHO_VARIACION=42
 
-const SUELO_EQUITY=420
-// Alto de la franja de rendimiento del activo cuando va DEBAJO del hueco visible, con alto propio en vez
-// de repartirse mcEquityH con las velas. Suficiente para leer la curva y su eje sin comerse pantalla.
-const ALTO_FRANJA_RENDIMIENTO=200
-// ── Desplazamiento acumulado por encima de un elemento ──────────────────────
-// Cuánto se ha bajado entre el principio del documento y este nodo, sumando TODOS los contenedores que
-// scrollean por el camino. Sirve para convertir un getBoundingClientRect().top —que es relativo a la
-// VENTANA y por tanto cambia al desplazarse— en la posición que el elemento tendría con todo arriba.
-// Se suma a ciegas: los ancestros que no scrollean tienen scrollTop 0 y no estorban. <html> se excluye
-// porque su scrollTop ES window.scrollY y se contaría dos veces.
-const desplazamientoSobre=(nodo)=>{
-  let s=window.scrollY||0
-  for(let p=nodo?.parentElement;p&&p!==document.documentElement;p=p.parentElement) s+=p.scrollTop||0
-  return s
-}
-// ── Quién scrollea de verdad por encima de un elemento ──────────────────────
-// No se puede dar por supuesto: en esta app el panel de multicartera tiene overflowY:auto pero NO llega a
-// activarse —.main no lleva min-height:0, así que crece con su contenido y el que scrollea es el
-// documento—. Devuelve el primer ancestro que scrollee de verdad, y si no hay ninguno, el documento.
-const scrollerDe=(nodo)=>{
-  for(let p=nodo?.parentElement;p&&p!==document.documentElement;p=p.parentElement){
-    const ov=getComputedStyle(p).overflowY
-    if((ov==='auto'||ov==='scroll')&&p.scrollHeight>p.clientHeight+1) return p
-  }
-  return document.scrollingElement||document.documentElement
-}
 
 
 
@@ -1083,8 +1057,6 @@ export default function Home() {
   const [priceAlarmDlg,setPriceAlarmDlg]=useState(null) // {price, symbol} o null
   // ── Ranking ─────────────────────────────────────────────────
   const [rankingData,setRankingData]=useState({})      // { SYMBOL: { score, rank, metrics } } — keys uppercase
-  // §80: lo que necesita el selector de valores del bloque «Una lista» del paso 3 (components/backtesting/SelectorValores.js).
-  const datosListaPlan=useMemo(()=>({watchlist,wlLists,rankingData}),[watchlist,wlLists,rankingData])
   const [rankingStratId,setRankingStratId]=useState(null)    // strategy id the ranking was calculated with
   const [rankingStratName,setRankingStratName]=useState('')  // display name
   const [rankingRunning,setRankingRunning]=useState(false)
@@ -1097,6 +1069,9 @@ export default function Home() {
   // { SYMBOL: { stratName, stratId, score, intervalo, stratCount } }
   const [bestStratBySymbol,setBestStratBySymbol]=useState({})
   const [wlData, setWlData] = useState({})
+  // §80 y §84: lo que el bloque «Una lista» del paso 3 necesita de la Watchlist: el selector de valores (components/backtesting/
+  // SelectorValores.js) y, en «La cartera por dentro», el scoreMap (wlData).
+  const datosListaPlan=useMemo(()=>({watchlist,wlLists,rankingData,wlData}),[watchlist,wlLists,rankingData,wlData])
   // wlData[SYM] = {
   //   active: { scoreMetricas, scoreMetSeñ, cagr, profit, winRate, maxDD, ops, stratName, stratId, intervalo, updatedAt },
   //   top:    { scoreMetricas, scoreMetSeñ, cagr, profit, winRate, maxDD, ops, stratName, stratId, intervalo, updatedAt }
@@ -5654,7 +5629,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1144</title>
+        <title>Trading Simulator V9.1145</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5743,7 +5718,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1144
+            <span className="dot"/>Trading Simulator V9.1145
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8308,6 +8283,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
             {(builderVisitado||sidePanel==='builder')&&(
               <div style={{display:sidePanel==='builder'?'contents':'none'}}>
                 <ProteccionPanel nombre="Builder"><BuilderPanel estrategias={strategies} salida={builderSalida} visible={sidePanel==='builder'} apiFetch={apiFetch} version={VERSION_APP} abrir={builderAbrir} comisiones={indComisiones} onAbrirTesis={abrirTesis} datosLista={datosListaPlan}
+                  onIrAValor={(sym)=>salirDeTesis(()=>{setSimbolo(sym);setSidePanel('watchlist')})}
                   onGuardada={()=>reloadStrategies()}
                   onAbrirEstrategia={(s,como)=>{if(como==='editor'){setEditorFila({...s});setSidePanel('editor')}}}
                   onBacktestValor={()=>setSidePanel('config')}/></ProteccionPanel>{/* V9.1066 */}

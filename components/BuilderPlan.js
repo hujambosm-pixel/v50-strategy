@@ -49,6 +49,7 @@ import PanelAsignacion from './backtesting/PanelAsignacion'
 import PanelPesos from './backtesting/PanelPesos'
 import PanelUniverso from './backtesting/PanelUniverso'
 import SelectorValores from './backtesting/SelectorValores'
+import PlanPorDentro from './backtesting/PlanPorDentro'
 import FiltrosPanel from './FiltrosPanel'
 import { mergeFiltros } from '../lib/filtros'
 import { numeroEs } from '../lib/utils'
@@ -181,7 +182,7 @@ const Tarjeta = ({ id, titulo, ayuda, children }) => (
   </div>
 )
 
-export default function BuilderPlan({ estrategias = [], estrategiaId = null, planId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, salida = null, enlaceTesis = null, deps = null, inicial = null, datosLista = null }) {
+export default function BuilderPlan({ estrategias = [], estrategiaId = null, planId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, salida = null, enlaceTesis = null, deps = null, inicial = null, datosLista = null, onIrAValor = null }) {
   const tarjetas = useMemo(() => estrategias.filter(esDeTarjetas).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
   const diarias = useMemo(() => tarjetas.filter(s => !esSemanal(s)), [tarjetas])
   const deCodigo = useMemo(() => estrategias.filter(esDeCodigo).length, [estrategias])
@@ -240,6 +241,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   useEffect(() => { if (inicial?.lineas) return; try { const g = JSON.parse(window.localStorage.getItem(CLAVE_LINEAS)); if (g && typeof g === 'object') setLineasVisibles({ ...LINEAS_DEFECTO, ...g }) } catch (_) {} }, [])
   const marcaLinea = (k, si) => { const x = { ...lineasVisibles, [k]: si }; setLineasVisibles(x); try { window.localStorage.setItem(CLAVE_LINEAS, JSON.stringify(x)) } catch (_) {} }
   const [resPrueba, setResPrueba] = useState(inicial?.resultadoPrueba || null)
+  // §84: con «Una lista», la columna derecha tiene dos pestañas: «Tu dinero» y «La cartera por dentro» (boceto C). Solo de la vista.
+  const [vistaDer, setVistaDer] = useState(inicial?.vistaDer || 'dinero')
   // §80: «Una lista». Lo que se guarda va en a.lista (lib/planes/lista.js); esto es solo de la vista (buscar, ★, la lista de la Watchlist, qué está desplegado).
   const [vistaLista, setVistaLista] = useState({ busca: '', favs: false, lista: '', seccion: { mode: true, strats: false }, mercado: false, activo: false, universoDatos: {} })
   const ponVista = (k) => (v) => setVistaLista(x => ({ ...x, [k]: typeof v === 'function' ? v(x[k]) : v }))
@@ -644,9 +647,19 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const s = cifras?.seis, activoRes = ajustesDelResultado?.activo || a.activo, ociosoRes = ajustesDelResultado?.ocioso || a.ocioso
   // §49: con el ocioso en liquidez, el plan con el ocioso en liquidez es el mismo plan: ni su fila, ni su línea, ni «El ocioso añadió», ni caídas.
   const sinOcioso = ociosoRes === 'LIQUIDEZ'
-  const resultado = enLista ? (
-    <div data-sin-motor-lista style={{ ...S.tarjeta, ...S.cuerpo, color: B.texto }}>{AYUDA_PLAN.listaSinMotor}</div>
-  ) : !cifras ? (
+  const pestanaDer = (id, texto, ayuda) => <span style={{ display: 'inline-flex', alignItems: 'center', borderBottom: `2px solid ${vistaDer === id ? B.enlace : 'transparent'}`, paddingRight: ayuda ? 8 : 0 }}>
+    <button type="button" data-vista-der={id} aria-pressed={vistaDer === id} onClick={() => setVistaDer(id)} style={{ background: 'none', border: 'none', padding: '8px 4px 8px 16px', fontSize: 14, cursor: 'pointer',
+      color: vistaDer === id ? B.titulo : B.secundario, fontWeight: vistaDer === id ? 700 : 400, paddingRight: ayuda ? 4 : 16 }}>{texto}</button>{ayuda && <Ayuda texto={ayuda} etiqueta={texto}/>}</span>
+  // §84: el motor del Backtesting calcula con la estrategia de AHORA (por su id). Con la versión guardada de un plan, solo si su regla
+  // sigue igual que la de ahora; si no, se dice por qué no se calcula.
+  const estPorDentro = !estrategia ? null : !usaGuardada ? estrategia : (estrategiaActual && cambio && !cambio.cambiada && !cambio.borrada ? estrategiaActual : null)
+  const motivoEstPorDentro = !estrategia || estPorDentro ? null : estBorrada ? 'La estrategia de este plan está borrada: «La cartera por dentro» solo sabe calcular con una estrategia que siga entre las tuyas.'
+    : !cambio ? 'Comprobando la estrategia…' : 'La estrategia ha cambiado desde que guardaste este plan y «La cartera por dentro» solo sabe calcular con la de ahora: pulsa «Usar la versión actual» para verla.'
+  const resultado = enLista ? (<>
+    <div data-pestanas-der role="group" aria-label="Qué ver del plan" style={{ display: 'flex', borderBottom: `1px solid ${B.borde}` }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('dentro', 'La cartera por dentro', AYUDA_PLAN.porDentro)}</div>
+    {vistaDer === 'dinero' && <div data-sin-motor-lista style={{ ...S.tarjeta, ...S.cuerpo, color: B.texto }}>{AYUDA_PLAN.listaSinMotor}</div>}
+    <PlanPorDentro a={a} estrategia={estPorDentro} motivo={motivoEstPorDentro} estrategias={estrategias} apiFetch={apiFetch} version={version} visible={vistaDer === 'dentro'} onIrAValor={onIrAValor} wlData={datosLista?.wlData || null} calcula={deps?.calculaPorDentro || null}/>
+  </>) : !cifras ? (
     <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{!estrategia ? 'Elige una estrategia de tarjetas de velas diarias.' : calc.calculando || clave ? 'Calculando tu plan…' : 'Sin resultado todavía.'}</div>
   ) : (<>
     <div data-cifras style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>

@@ -318,7 +318,9 @@ const cuenta = (html, s) => html.split(s).length - 1
   // V9.1139: los dos «↗ Watchlist» de la tabla del Backtesting se fueron con los resultados a components/backtesting/CarteraPorDentro.js (§78): se cuentan también.
   const llamadasPanel = [fuenteIndex, leer('components', 'backtesting', 'CarteraPorDentro.js')].join('\n').split('\n').filter(x => /setSidePanel\(/.test(x)).length
   ok(fuenteIndex.includes(), 'abrir una tesis desde el Builder también pregunta')
-  ok(llamadasPanel === 17, `los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
+  // V9.1145: el 18.º es el «↗ Watchlist» de «La cartera por dentro» del plan (onIrAValor del Builder, §84), que pasa por salirDeTesis.
+  ok(fuenteIndex.includes(`onIrAValor={(sym)=>salirDeTesis(()=>{setSimbolo(sym);setSidePanel('watchlist')})}`), 'el «↗» de «La cartera por dentro» del plan también pregunta')
+  ok(llamadasPanel === 18, `los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
 
   // El buscador.
   const tres2 = [

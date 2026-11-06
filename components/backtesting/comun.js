@@ -136,3 +136,31 @@ export function apiFetch(url, opts={}) {
     return headers
   })
 }
+// Alto del gráfico del equity y medidas del autoajuste: los usan pages/index.js y el plan (BuilderPlan, «La cartera por dentro»,
+// docs/builder.md §84). Sacados de pages/index.js tal cual.
+export const SUELO_EQUITY=420
+// Alto de la franja de rendimiento del activo cuando va DEBAJO del hueco visible, con alto propio en vez
+// de repartirse mcEquityH con las velas. Suficiente para leer la curva y su eje sin comerse pantalla.
+export const ALTO_FRANJA_RENDIMIENTO=200
+// ── Desplazamiento acumulado por encima de un elemento ──────────────────────
+// Cuánto se ha bajado entre el principio del documento y este nodo, sumando TODOS los contenedores que
+// scrollean por el camino. Sirve para convertir un getBoundingClientRect().top —que es relativo a la
+// VENTANA y por tanto cambia al desplazarse— en la posición que el elemento tendría con todo arriba.
+// Se suma a ciegas: los ancestros que no scrollean tienen scrollTop 0 y no estorban. <html> se excluye
+// porque su scrollTop ES window.scrollY y se contaría dos veces.
+export const desplazamientoSobre=(nodo)=>{
+  let s=window.scrollY||0
+  for(let p=nodo?.parentElement;p&&p!==document.documentElement;p=p.parentElement) s+=p.scrollTop||0
+  return s
+}
+// ── Quién scrollea de verdad por encima de un elemento ──────────────────────
+// No se puede dar por supuesto: en esta app el panel de multicartera tiene overflowY:auto pero NO llega a
+// activarse —.main no lleva min-height:0, así que crece con su contenido y el que scrollea es el
+// documento—. Devuelve el primer ancestro que scrollee de verdad, y si no hay ninguno, el documento.
+export const scrollerDe=(nodo)=>{
+  for(let p=nodo?.parentElement;p&&p!==document.documentElement;p=p.parentElement){
+    const ov=getComputedStyle(p).overflowY
+    if((ov==='auto'||ov==='scroll')&&p.scrollHeight>p.clientHeight+1) return p
+  }
+  return document.scrollingElement||document.documentElement
+}
