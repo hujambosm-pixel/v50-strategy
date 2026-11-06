@@ -33,13 +33,18 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1136'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1137'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
 import { payloadPrueba } from '../lib/optimizacion'
 import { curvasVelaAVela, caidaMaxima } from '../lib/ddVelaAVela'
-import { colorSigno, colorWinRate, colorFactor, COLOR_DRAWDOWN, COLOR_OPERACIONES, COLOR_TIEMPO, AYUDA_MAX_DD } from '../lib/coloresCifras'
+import { colorSigno, colorWinRate, colorFactor, COLOR_DRAWDOWN, COLOR_OPERACIONES, COLOR_TIEMPO, AYUDA_MAX_DD, STRAT_COMPARE_COLORS } from '../lib/coloresCifras'
+import PanelAsignacion from '../components/backtesting/PanelAsignacion'
+import PanelEstrategias from '../components/backtesting/PanelEstrategias'
+import PanelPesos from '../components/backtesting/PanelPesos'
+import PanelUniverso from '../components/backtesting/PanelUniverso'
+import SelectorValores from '../components/backtesting/SelectorValores'
 import { MultiCartChart, OccupancyBarChart, McOccupancyChart, StratCompareChart, AssetSignalChart } from '../components/BacktestCharts'
 import dynamic from 'next/dynamic'
 const McMonthlyGainsChart = dynamic(() => import('../components/McMonthlyGainsChart'), { ssr: false })
@@ -635,7 +640,6 @@ const MC_COLOR_TOTAL='#00e5a0', MC_COLOR_CAJA='#8aadcc'
 const MC_COLOR_PORTFOLIO='#ffd166'
 // Estrategias, por orden de ejecución. Ocho tonos sin dos verdes próximos: antes convivían #00e5a0,
 // #4ecdc4 y #c8f7c5, y además #9b72ff era EXACTAMENTE el del B&H SP500.
-const STRAT_COMPARE_COLORS=['#00d4ff','#ff6b9d','#ff9a3c','#00e5a0','#c3e63a','#e879f9','#5ea8ff','#ff5c5c']
 // ── Modo Activos del gráfico de equity ──────────────────────────────────────
 // Doce tonos repartidos por el círculo cromático, saltándose la banda del verde (la del total) y la del
 // violeta (la del SP500). Los ocho primeros son de familias distintas; los cuatro últimos repiten familia
@@ -6309,7 +6313,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1136</title>
+        <title>Trading Simulator V9.1137</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6398,7 +6402,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1136
+            <span className="dot"/>Trading Simulator V9.1137
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7558,505 +7562,14 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   forzarSemanal={mcIntervalo==='semanal'}
                   open={mcFiltrosActivoOpen} setOpen={setMcFiltrosActivoOpen} variant="mc"/>
 
-                {/* MODO DE ASIGNACIÓN — colapsable */}
-                <div style={{flexShrink:0}}>
-                  <div onClick={()=>setMcSectionOpen(s=>({...s,mode:!s.mode}))}
-                    style={{padding:'8px 12px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6,cursor:'pointer',background:'var(--bg2)',userSelect:'none'}}
-                    onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
-                    onMouseOut={e=>e.currentTarget.style.background='var(--bg2)'}>
-                    <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{mcSectionOpen.mode?'▼':'▶'}</span>
-                    <span style={{fontFamily:MONO,fontSize:12,color:'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>MODO DE ASIGNACIÓN</span>
-                    <span style={{marginLeft:'auto',fontFamily:MONO,fontSize:10,color:'#4a6a88'}}>
-                      {mcStratSelected.length<=1
-                        ?(selectedModos.length===1
-                          ?(selectedModos[0]==='slots'?'Slots iguales':selectedModos[0]==='compartido'?'Capital compartido':selectedModos[0]==='concentrado'?'Capital concentrado':'Position Sizing')
-                          :selectedModos.map(m=>m==='slots'?'Slots':m==='compartido'?'Compartido':m==='concentrado'?'Concentrado':'Pos.Sizing').join(' + '))
-                        :(mcMode==='slots'?'Slots iguales':mcMode==='compartido'?'Capital compartido':mcMode==='concentrado'?'Capital concentrado':mcMode==='positionsizing'?'Position Sizing':'Slots iguales')}
-                    </span>
-                  </div>
-                  {mcSectionOpen.mode&&(
-                    <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)'}}>
-                      {mcStratSelected.length<=1&&(
-                        <div style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',marginBottom:6,letterSpacing:'0.05em'}}>
-                          SELECCIÓN MÚLTIPLE — compara modos en el mismo gráfico
-                        </div>
-                      )}
-                      {[
-                        {id:'slots',label:'Slots iguales',ready:true,
-                          desc:'El capital se divide en partes iguales y cada slot crece de forma independiente con interés compuesto. Ejemplo: 1000€ con 4 activos → 250€ por slot. Si NVDA gana +42%, su slot pasa a 355€ y el siguiente trade de NVDA parte de esos 355€. Los slots nunca se redistribuyen entre activos.'},
-                        {id:'compartido',label:'Capital compartido',ready:true,
-                          desc:'Pool de capital único compartido entre todos los activos, sin límite de posiciones simultáneas. Justo antes de cada entrada: capital_por_slot = pool_libre / slots_libres. Cuando un trade cierra, su capital (con ganancias o pérdidas) vuelve al pool. Aunque no hay tope de slots, el pool puede agotarse si muchas señales coinciden en el tiempo: las que no encuentran capital disponible se descartan. Las señales se procesan por fecha de entrada (más antigua primero) y, en empate de fecha, por orden alfabético del símbolo.'},
-                        {id:'concentrado',label:'Capital concentrado',ready:true,
-                          desc:'Pool de capital único con un máximo de N posiciones simultáneas (configurable). Capital por operación = equity_total / N_slots, donde equity_total = capital libre + capital comprometido en posiciones abiertas. Así, aunque el capital esté casi todo invertido, cada nueva operación recibe siempre su fracción justa del portafolio. Al cerrar, capital ± P&L vuelve al pool. Cuando hay más señales de entrada el mismo día que slots libres disponibles, el criterio de prioridad (configurable) decide cuáles entran: alfabético, ranking del watchlist, momentum, fuerza relativa vs SP500, o proximidad al máximo de 52 semanas. Las señales que no caben ese día se descartan: no hay cola — el activo solo entrará cuando genere una nueva señal en el futuro.'},
-                        {id:'positionsizing',label:'Position Sizing',ready:true,
-                          desc:'Pool de capital compartido con sizing por riesgo: el tamaño de cada posición sale de la distancia entrada→stop (capital × riesgo/trade ÷ distancia, limitado por el máximo de cartera por trade). Permite posiciones simultáneas con tamaños variables. Cuando una señal nueva supera el riesgo acumulado máximo o agota el pool disponible, se descarta. Las señales se procesan por fecha de entrada (más antigua primero) y, en empate de fecha, por orden alfabético del símbolo. IMPORTANTE: el stop debe existir en la vela de entrada. Se lee el primer nivel del historial de stops de la estrategia, y solo se acepta si su fecha no es posterior a la entrada. Las estrategias cuyo stop aparece más tarde (por ejemplo, cuando una vela cierra bajo la EMA20) entran sin stop conocido: esas operaciones se dimensionan con la "Distancia de stop asumida" configurable más abajo. Revisa en los resultados el aviso de operaciones dimensionadas sin stop inicial: si son muchas, el sizing depende de ese supuesto y conviene comparar con Concentrado o Compartido.'},
-                      ].map(m=>{
-                        const isCheckbox=mcStratSelected.length<=1
-                        const isActive=isCheckbox?selectedModos.includes(m.id):mcMode===m.id
-                        // Universo dinámico: solo capital concentrado (el resto se ve desactivado, con el aviso de abajo).
-                        const _soloConc=mcUniverso!=='manual'&&m.id!=='concentrado'
-                        const handleClick=()=>{
-                          if(!m.ready||_soloConc) return
-                          if(isCheckbox){
-                            setSelectedModos(prev=>
-                              prev.includes(m.id)
-                                ?(prev.length>1?prev.filter(x=>x!==m.id):prev) // don't deselect last
-                                :[...prev,m.id]
-                            )
-                          } else {
-                            setMcMode(m.id)
-                          }
-                        }
-                        return(
-                          <div key={m.id} style={{marginBottom:3}}>
-                            <div onClick={handleClick} title={m.desc}
-                              style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',borderRadius:4,
-                                background:isActive?'rgba(0,212,255,0.08)':'transparent',
-                                border:`1px solid ${isActive?'var(--accent)':'var(--border)'}`,
-                                cursor:(m.ready&&!_soloConc)?'pointer':'not-allowed',opacity:(m.ready&&!_soloConc)?1:0.45}}>
-                              {isCheckbox
-                                ?<div style={{width:14,height:14,borderRadius:3,border:`2px solid ${isActive?'var(--accent)':'#3d5a7a'}`,
-                                    background:isActive?'var(--accent)':'transparent',flexShrink:0,
-                                    display:'flex',alignItems:'center',justifyContent:'center'}}>
-                                    {isActive&&<span style={{color:'#000b18',fontSize:9,fontWeight:900,lineHeight:1}}>✓</span>}
-                                  </div>
-                                :<div style={{width:14,height:14,borderRadius:'50%',border:`2px solid ${isActive?'var(--accent)':'#3d5a7a'}`,
-                                    background:isActive?'var(--accent)':'transparent',flexShrink:0}}/>
-                              }
-                              <span style={{fontFamily:MONO,fontSize:12,color:isActive?'var(--accent)':'#c8dff5',fontWeight:600,flex:1}}>{m.label}</span>
-                            </div>
-                          </div>
-                        )
-                      })}
-                      {mcUniverso!=='manual'&&(
-                        <div style={{fontFamily:MONO,fontSize:10,color:'#ffd166',lineHeight:1.5,marginTop:4}}>
-                          Con universo dinámico solo se admite Capital concentrado: los demás modos quedan desactivados y se ejecuta Concentrado.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {(mcStratSelected.length<=1?selectedModos.includes('concentrado'):mcMode==='concentrado')&&(
-                    <div style={{padding:'8px 10px',borderTop:'1px solid #1a2a3a'}}>
-                      {/* Máx. activos simultáneos */}
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-                        <span title="Número máximo de activos abiertos simultáneamente. Cuantos menos configures, mayor será el capital asignado por operación."
-                          style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>
-                          Máx. activos simultáneos
-                        </span>
-                        <input type="number" min="1" max="20" step="1"
-                          value={mcMaxPosiciones}
-                          onChange={e=>setMcMaxPosiciones(Math.max(1,Math.min(20,Number(e.target.value))))}
-                          style={{width:65,padding:'2px 4px',borderRadius:3,
-                            background:'#0d1929',border:'1px solid #1a2a3a',
-                            color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}
-                        />
-                      </div>
-                      {/* Prioridad de entrada */}
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:mcPrioridad==='momentum'?4:0}}>
-                        <span style={{display:'inline-flex',alignItems:'center',gap:3}}>
-                          <span title="Criterio para decidir qué activo entra primero cuando hay más señales simultáneas que slots disponibles. 'Score completo' combina rendimiento histórico + condiciones actuales del mercado (configurable en Ajustes → Ranking)"
-                            style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>
-                            Criterio de entrada
-                          </span>
-                          <Tip id="multicarteraDesempate"/>
-                        </span>
-                        <select value={mcPrioridad} onChange={e=>{const v=e.target.value;setMcPrioridad(v);if(v==='alfabetico'||v==='score_metricas'||v==='ranking')setMcCriterioUso('desempate')}}
-                          style={{padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',
-                            color:'#e0e8f0',fontSize:10,fontFamily:MONO,cursor:'pointer',maxWidth:130}}>
-                          <option value="score_metricas" title="Usa el Score métricas actual para priorizar entradas históricas. ⚠️ Sesgo futuro: el ranking actual no refleja el que existía en cada fecha del pasado.">Ranking por métricas (sesgo futuro) ⚠️</option>
-                          <option value="alfabetico"    title="Orden A→Z por ticker. Sin criterio financiero">Alfabético</option>
-                          <option value="momentum"      title="Prioriza el activo con mayor retorno en los últimos N días">Momentum (N días)</option>
-                          <option value="fuerza_relativa" title="Rendimiento del activo menos el del SP500 en los últimos 63 días. Como Filtro: solo entra si es > 0 (el activo ha batido al índice en ese periodo).">Fuerza relativa vs SP500</option>
-                          <option value="max52"         title="Prioriza el activo más cercano a su máximo de 52 semanas (favorece breakouts)">Proximidad máximo 52s</option>
-                        </select>
-                      </div>
-                      {/* Uso del criterio: Desempate (defecto) | Filtro (gate) — fuerza_relativa / momentum / max52 */}
-                      {(()=>{
-                        const _filtroDisabled=mcPrioridad==='alfabetico'||mcPrioridad==='score_metricas'||mcPrioridad==='ranking'
-                        const _filtroDisabledMsg="Esta métrica no puede usarse como filtro: el orden alfabético no define un umbral, y el ranking por métricas usa datos futuros. Elige Fuerza relativa, Momentum o Proximidad 52s para filtrar."
-                        return (
-                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
-                            <span style={{fontSize:9,color:'#4a6a88'}}>Uso del criterio</span>
-                            <div style={{display:'flex',gap:3}}>
-                              <button onClick={()=>setMcCriterioUso('desempate')}
-                                title="El criterio elegido solo decide qué activo entra cuando varias señales coinciden el mismo día y no hay slots libres para todas. No filtra nada: cualquier señal con un slot libre entra."
-                                style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:'pointer',
-                                  border:`1px solid ${mcCriterioUso==='desempate'?'#00d4ff':'#1a2d45'}`,
-                                  background:mcCriterioUso==='desempate'?'rgba(0,212,255,0.1)':'transparent',
-                                  color:mcCriterioUso==='desempate'?'#00d4ff':'#3d5a7a'}}>Desempate</button>
-                              <button onClick={()=>{if(!_filtroDisabled)setMcCriterioUso('filtro')}} disabled={_filtroDisabled}
-                                title={_filtroDisabled
-                                  ?_filtroDisabledMsg
-                                  :"El criterio elegido actúa como condición de entrada: solo se abren posiciones en activos que lo superan (según el umbral configurable). Las señales que no lo cumplen se descartan aunque haya un slot libre. (Aplica a Fuerza relativa, Momentum y Proximidad 52s, en el modo Capital concentrado.)"}
-                                style={{fontFamily:MONO,fontSize:9,padding:'2px 7px',borderRadius:3,cursor:_filtroDisabled?'not-allowed':'pointer',
-                                  border:`1px solid ${_filtroDisabled?'#16202c':(mcCriterioUso==='filtro'?'#00e5a0':'#1a2d45')}`,
-                                  background:mcCriterioUso==='filtro'&&!_filtroDisabled?'rgba(0,229,160,0.1)':'transparent',
-                                  color:_filtroDisabled?'#2a3a48':(mcCriterioUso==='filtro'?'#00e5a0':'#3d5a7a'),
-                                  opacity:_filtroDisabled?0.6:1}}>Filtro</button>
-                            </div>
-                          </div>
-                        )
-                      })()}
-                      {/* Umbral del gate — solo el de la métrica activa, cuando Filtro está activo */}
-                      {mcCriterioUso==='filtro'&&mcPrioridad==='fuerza_relativa'&&(
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
-                          <span title="Solo entra si la fuerza relativa vs SP500 (rendimiento del activo menos el del SP500 a 63 días) supera este %. Default 0 = basta con batir al índice."
-                            style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>RS mínima (%)</span>
-                          <input type="number" step="0.5" value={mcRsGateThr} onChange={e=>setMcRsGateThr(Number(e.target.value))}
-                            style={{width:65,padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}/>
-                        </div>
-                      )}
-                      {mcCriterioUso==='filtro'&&mcPrioridad==='momentum'&&(
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
-                          <span title="Solo entra si el activo ha subido más de este % en la ventana de N días del momentum. Default 10%."
-                            style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>Subida mínima (%)</span>
-                          <input type="number" step="0.5" value={mcMomGateThr} onChange={e=>setMcMomGateThr(Number(e.target.value))}
-                            style={{width:65,padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}/>
-                        </div>
-                      )}
-                      {mcCriterioUso==='filtro'&&mcPrioridad==='max52'&&(
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
-                          <span title="Solo entra si el precio está a menos de este % por debajo de su máximo de las últimas 52 semanas. Default 10% = dentro del 10% del máximo."
-                            style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted'}}>Máx. % bajo el máximo 52s</span>
-                          <input type="number" step="0.5" min="0" max="100" value={mcProxGateThr} onChange={e=>setMcProxGateThr(Math.max(0,Math.min(100,Number(e.target.value))))}
-                            style={{width:65,padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}/>
-                        </div>
-                      )}
-                      {mcPrioridad==='score_metricas'&&(
-                        <div style={{fontSize:9,color:'#f59e0b',lineHeight:1.4,paddingLeft:2,marginBottom:4,marginTop:2}}>
-                          ⚠️ Usa el score de métricas actual para priorizar entradas históricas. Los resultados pueden ser optimistas porque el ranking actual no refleja el que existía en cada fecha del pasado.
-                        </div>
-                      )}
-                      {mcPrioridad==='momentum'&&(
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                          <span title="Número de días de lookback para calcular el retorno de momentum en el momento de la señal."
-                            style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted',paddingLeft:10}}>
-                            N días lookback
-                          </span>
-                          <input type="number" min="5" max="120" step="1"
-                            value={mcMomentumN}
-                            onChange={e=>setMcMomentumN(Math.max(5,Math.min(120,Number(e.target.value))))}
-                            style={{width:65,padding:'2px 4px',borderRadius:3,
-                              background:'#0d1929',border:'1px solid #1a2a3a',
-                              color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}
-                          />
-                        </div>
-                      )}
-                      {mcPrioridad==='fuerza_relativa'&&(
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                          <span title="Número de VELAS de lookback para la fuerza relativa vs SP500 (retorno del activo menos el del SP500). Cuenta velas del timeframe activo: en semanal, 63 = 63 semanas. Independiente del RS de la cabecera y del ranking. Default 63."
-                            style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted',paddingLeft:10}}>
-                            N velas lookback
-                          </span>
-                          <input type="number" min="2" max="500" step="1"
-                            value={mcRsWindow}
-                            onChange={e=>setMcRsWindow(Math.max(2,Math.min(500,Number(e.target.value))))}
-                            style={{width:65,padding:'2px 4px',borderRadius:3,
-                              background:'#0d1929',border:'1px solid #1a2a3a',
-                              color:'#e0e8f0',fontSize:11,fontFamily:MONO,textAlign:'right'}}
-                          />
-                        </div>
-                      )}
-                      {(mcPrioridad==='momentum'||mcPrioridad==='fuerza_relativa'||mcPrioridad==='max52')&&(
-                        <div data-prueba="calculo-prioridad" style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
-                          <span title="Con qué vela se mide la prioridad. 2 (por defecto): con el último cierre conocido al comprar, la vela anterior a la de entrada (la propia si la estrategia entra al cierre). 1 (antiguo): con el cierre del día de entrada, que en una compra a la apertura o durante la vela todavía no se conoce; solo para reproducir resultados guardados antes de V9.997."
-                            style={{fontSize:9,color:'#4a6a88',cursor:'help',textDecoration:'underline dotted',paddingLeft:10}}>
-                            Cálculo
-                          </span>
-                          <select value={mcCalculoPrioridad} onChange={e=>setMcCalculoPrioridad(Number(e.target.value))}
-                            style={{padding:'2px 4px',borderRadius:3,background:'#0d1929',border:'1px solid #1a2a3a',color:mcCalculoPrioridad===1?'#f59e0b':'#e0e8f0',fontSize:10,fontFamily:MONO}}>
-                            <option value={2}>2 · cierre anterior</option>
-                            <option value={1}>1 · antiguo (mira al futuro)</option>
-                          </select>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {(mcStratSelected.length<=1?selectedModos.includes('positionsizing'):mcMode==='positionsizing')&&(
-                    <div style={{padding:'8px 10px',borderTop:'1px solid #1a2a3a'}}>
-                      <div style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',letterSpacing:'0.07em',marginBottom:7,textTransform:'uppercase',fontWeight:600}}>Risk management</div>
-                      {[
-                        {label:'Riesgo por trade',value:mcRiskPerTrade,set:setMcRiskPerTrade,
-                          tooltip:'Porcentaje del capital total que arriesgas en cada operación. Fórmula: capital × riesgo% / distancia_al_stop. Si no hay stop definido, se usa el % máximo de cartera por trade como fallback.'},
-                        {label:'Máx. cartera/trade',value:mcMaxPortfolioPct,set:setMcMaxPortfolioPct,
-                          tooltip:'Límite máximo del capital total que puedes invertir en una sola operación, independientemente del stop. Actúa como techo de seguridad cuando el stop está muy ajustado o no está definido.'},
-                        {label:'Máx. riesgo acumulado',value:mcMaxAccumRisk,set:setMcMaxAccumRisk,
-                          tooltip:'Porcentaje máximo del capital total que puede estar en riesgo simultáneamente entre todas las posiciones abiertas. Cuando se alcanza este límite, no se permiten nuevas entradas hasta que alguna posición cierre y libere riesgo.\n\nRELACIÓN CLAVE: este parámetro fija de hecho cuántas posiciones puedes tener a la vez ≈ máx. riesgo acumulado ÷ riesgo por trade. Con 20% y 5% caben 4 posiciones simultáneas; si bajas el acumulado a 10% caben solo 2, por mucho pool libre que tengas. Si ves muchas señales descartadas por riesgo acumulado, es esta división la que manda.'},
-                        {label:'Distancia de stop asumida',value:mcAssumedStopPct,set:setMcAssumedStopPct,
-                          tooltip:'Solo se aplica a las operaciones que NO tienen stop conocido en la vela de entrada — por ejemplo, estrategias cuyo stop aparece más tarde, cuando el precio cierra bajo una media. En esos casos se asume esta distancia entrada→stop y la operación se dimensiona con la fórmula normal (capital × riesgo/trade ÷ distancia, con el techo de cartera por trade), imputando al riesgo acumulado solo esa fracción y no la posición entera.\n\nSubirla = posiciones más pequeñas y menos riesgo imputado por operación (caben más simultáneas). Bajarla = posiciones mayores, que normalmente acabarán topando con el techo de cartera por trade.\n\nEl resultado del backtest indica cuántas operaciones se dimensionaron así.'},
-                      ].map(p=>(
-                        <div key={p.label} style={{display:'flex',alignItems:'center',
-                          justifyContent:'space-between',marginBottom:6}}>
-                          <span title={p.tooltip} style={{fontSize:9,color:'#4a6a88',
-                            cursor:'help',textDecoration:'underline dotted'}}>
-                            {p.label}
-                          </span>
-                          <div style={{display:'flex',alignItems:'center',gap:3}}>
-                            <input type="number" min="0.1" max="100" step="0.1"
-                              value={p.value}
-                              onChange={e=>p.set(Number(e.target.value))}
-                              style={{width:65,padding:'2px 4px',borderRadius:3,
-                                background:'#0d1929',border:'1px solid #1a2a3a',
-                                color:'#e0e8f0',fontSize:11,fontFamily:MONO,
-                                textAlign:'right'}}
-                            />
-                            <span style={{color:'#4a6a88',fontSize:11}}>%</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <PanelAsignacion {...{mcAssumedStopPct,mcCalculoPrioridad,mcCriterioUso,mcMaxAccumRisk,mcMaxPortfolioPct,mcMaxPosiciones,mcMode,mcMomGateThr,mcMomentumN,mcPrioridad,mcProxGateThr,mcRiskPerTrade,mcRsGateThr,mcRsWindow,mcSectionOpen,mcStratSelected,mcUniverso,selectedModos,setMcAssumedStopPct,setMcCalculoPrioridad,setMcCriterioUso,setMcMaxAccumRisk,setMcMaxPortfolioPct,setMcMaxPosiciones,setMcMode,setMcMomGateThr,setMcMomentumN,setMcPrioridad,setMcProxGateThr,setMcRiskPerTrade,setMcRsGateThr,setMcRsWindow,setMcSectionOpen,setSelectedModos}}/>
 
-                {/* ESTRATEGIAS — colapsable */}
-                <div style={{flexShrink:0}}>
-                  <div onClick={()=>setMcSectionOpen(s=>({...s,strats:!s.strats}))}
-                    style={{padding:'8px 12px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6,cursor:'pointer',background:'var(--bg2)',userSelect:'none'}}
-                    onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.04)'}
-                    onMouseOut={e=>e.currentTarget.style.background='var(--bg2)'}>
-                    <span style={{fontFamily:MONO,fontSize:9,color:'#4a7a9a',width:10}}>{mcSectionOpen.strats?'▼':'▶'}</span>
-                    <span style={{fontFamily:MONO,fontSize:12,color:'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>ESTRATEGIAS</span>
-                    {mcStratSelected.length>1&&<span style={{marginLeft:'auto',fontFamily:MONO,fontSize:9,color:'#ffd166',background:'rgba(255,209,102,0.12)',border:'1px solid rgba(255,209,102,0.3)',borderRadius:3,padding:'1px 5px'}}>{mcStratSelected.length}</span>}
-                  </div>
-                  {mcSectionOpen.strats&&(
-                    <div style={{padding:'8px 10px',borderBottom:'1px solid var(--border)'}}>
-                      {strLoading?(
-                        <div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)',padding:'4px 0'}}>Cargando...</div>
-                      ):strategies.length===0?(
-                        <div style={{fontFamily:MONO,fontSize:11,color:'var(--text3)',padding:'4px 0'}}>No hay estrategias guardadas</div>
-                      ):(
-                        <div style={{display:'flex',flexDirection:'column',gap:3}}>
-                          {mcStratSelected.length>=2&&(
-                            <div onClick={()=>setMcStratSelected(prev=>prev.includes('__portfolio__')?prev.filter(id=>id!=='__portfolio__'):[...prev,'__portfolio__'])}
-                              onMouseEnter={()=>setMcPortfolioTipOpen(true)} onMouseLeave={()=>setMcPortfolioTipOpen(false)}
-                              style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',borderRadius:6,cursor:'pointer',marginBottom:4,
-                                background:mcStratSelected.includes('__portfolio__')?'rgba(255,209,102,0.15)':'transparent',
-                                border:'1px solid rgba(255,209,102,0.4)'}}>
-                              <input type="checkbox" readOnly checked={mcStratSelected.includes('__portfolio__')}
-                                onClick={e=>e.stopPropagation()} style={{accentColor:'#ffd166'}}/>
-                              <span style={{fontFamily:MONO,color:'#ffd166',fontSize:11,fontWeight:600,display:'inline-flex',alignItems:'center'}}>◈ Multicartera ({mcStratSelected.filter(id=>id!=='__portfolio__').length})<Tip id="multicartera" open={mcPortfolioTipOpen} fontSize={12} hideIcon/></span>
-                            </div>
-                          )}
-                          {strategies.map((s,i)=>{
-                            const isActive=s.id===currentStratId
-                            const selIdx=mcStratSelected.indexOf(s.id)
-                            const isSel=selIdx!==-1
-                            const color=isSel?STRAT_COMPARE_COLORS[selIdx%STRAT_COMPARE_COLORS.length]:'#3d5a7a'
-                            return(
-                              <div key={s.id}
-                                onClick={()=>{
-                                  setMcStratSelected(prev=>prev.includes(s.id)?prev.filter(id=>id!==s.id):[...prev,s.id])
-                                }}
-                                style={{display:'flex',alignItems:'center',gap:7,padding:'5px 7px',borderRadius:4,
-                                  background:isSel?'rgba(0,212,255,0.06)':'transparent',
-                                  border:`1px solid ${isSel?'rgba(0,212,255,0.2)':'transparent'}`,
-                                  cursor:'pointer'}}
-                                onMouseOver={e=>{if(!isActive)e.currentTarget.style.background=isSel?'rgba(0,212,255,0.09)':'rgba(255,255,255,0.03)'}}
-                                onMouseOut={e=>e.currentTarget.style.background=isSel?'rgba(0,212,255,0.06)':'transparent'}>
-                                <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${isSel?'var(--accent)':'#3d5a7a'}`,
-                                  background:isSel?'var(--accent)':'transparent',flexShrink:0,
-                                  display:'flex',alignItems:'center',justifyContent:'center'}}>
-                                  {isSel&&<span style={{color:'#000',fontSize:11,lineHeight:1,fontWeight:900}}>✓</span>}
-                                </div>
-                                {isSel&&<div style={{width:9,height:9,borderRadius:'50%',background:STRAT_COMPARE_COLORS[selIdx%STRAT_COMPARE_COLORS.length],flexShrink:0}}/>}
-                                <span style={{fontFamily:MONO,fontSize:11,color:isSel?'#d0e8fa':'#7a9bc0',flex:1,minWidth:0,
-                                  overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name||`Estrategia ${i+1}`}</span>
-                                {isActive&&<span style={{fontFamily:MONO,fontSize:8,color:'#00d4ff',background:'rgba(0,212,255,0.12)',
-                                  border:'1px solid rgba(0,212,255,0.3)',borderRadius:3,padding:'1px 4px',flexShrink:0}}>activa</span>}
-                              </div>
-                            )
-                          })}
-                          {mcStratSelected.length>1&&(
-                            <div style={{marginTop:4,paddingTop:4,borderTop:'1px solid var(--border)',fontFamily:MONO,fontSize:10,color:'#7aabc8'}}>
-                              {mcStratSelected.length} estrategias · comparación al ejecutar
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <PanelEstrategias {...{currentStratId,mcPortfolioTipOpen,mcSectionOpen,mcStratSelected,setMcPortfolioTipOpen,setMcSectionOpen,setMcStratSelected,strLoading,strategies}}/>
 
-                {/* Pesos personalizados — solo visible cuando modo=custom y hay activos seleccionados */}
-                {mcMode==='custom'&&mcSelected.length>0&&(()=>{
-                  const total=mcSelected.reduce((s,sym)=>s+(Number(mcWeights[sym])||0),0)
-                  const ok=Math.abs(total-100)<0.5
-                  const distribute=()=>{
-                    const eq=(100/mcSelected.length)
-                    const w={}; mcSelected.forEach(s=>{w[s]=parseFloat(eq.toFixed(1))})
-                    setMcWeights(w)
-                  }
-                  const normalize=()=>{
-                    if(total===0){distribute();return}
-                    const w={}; mcSelected.forEach(s=>{w[s]=parseFloat(((Number(mcWeights[s])||0)/total*100).toFixed(1))})
-                    setMcWeights(w)
-                  }
-                  return(
-                    <div style={{padding:'10px 12px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:7}}>
-                        <div style={{fontFamily:MONO,fontSize:11,color:'#c8dff5',fontWeight:600,letterSpacing:'0.05em'}}>PESOS</div>
-                        <div style={{display:'flex',gap:4}}>
-                          <button onClick={distribute}
-                            style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',
-                              border:'1px solid #2a4060',background:'transparent',color:'#7aabc8'}}>
-                            Repartir igual
-                          </button>
-                          <button onClick={normalize}
-                            style={{fontFamily:MONO,fontSize:9,padding:'2px 6px',borderRadius:3,cursor:'pointer',
-                              border:'1px solid #2a4060',background:'transparent',color:'#7aabc8'}}>
-                            Normalizar
-                          </button>
-                        </div>
-                      </div>
-                      <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                        {mcSelected.map(sym=>{
-                          const v=mcWeights[sym]??''
-                          return(
-                            <div key={sym} style={{display:'flex',alignItems:'center',gap:6}}>
-                              <span style={{fontFamily:MONO,fontSize:11,color:'#a8ccdf',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{sym}</span>
-                              <div style={{display:'flex',alignItems:'center',gap:3}}>
-                                <input type="number" min="0" max="100" step="0.1" value={v}
-                                  onChange={e=>setMcWeights(prev=>({...prev,[sym]:e.target.value}))}
-                                  style={{width:52,background:'var(--bg3)',border:'1px solid var(--border)',
-                                    color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'2px 5px',
-                                    borderRadius:3,textAlign:'right'}}/>
-                                <span style={{fontFamily:MONO,fontSize:11,color:'#5a7a9a'}}>%</span>
-                              </div>
-                              {/* mini barra visual */}
-                              <div style={{width:40,height:6,borderRadius:3,background:'rgba(61,90,122,0.3)',overflow:'hidden',flexShrink:0}}>
-                                <div style={{height:'100%',borderRadius:3,width:`${Math.min(100,Number(v)||0)}%`,
-                                  background:ok?'#00d4ff':'#ffd166',transition:'width 0.2s'}}/>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                      {/* Indicador de suma */}
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:7,paddingTop:5,borderTop:'1px solid var(--border)'}}>
-                        <span style={{fontFamily:MONO,fontSize:10,color:'#7aabc8'}}>Suma total</span>
-                        <span style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:ok?'#00e5a0':Math.abs(total-100)<5?'#ffd166':'#ff4d6d'}}>
-                          {total.toFixed(1)}% {ok?'✓':'⚠'}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                })()}
+                <PanelPesos {...{mcMode,mcSelected,mcWeights,setMcWeights}}/>
 
-                {/* Universo: la lista manual de siempre o el Nasdaq-100 con los N más volátiles del año anterior o con más momentum */}
-                <div style={{padding:'5px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',flexDirection:'column',gap:4}}>
-                  <label style={{display:'flex',alignItems:'center',gap:6,fontFamily:MONO,fontSize:10,color:'#7aabc8'}}>
-                    Universo
-                    <select value={mcUniverso} onChange={e=>setMcUniverso(e.target.value)}
-                      style={{flex:1,background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'3px 5px',borderRadius:4,minWidth:0}}>
-                      <option value="manual">Lista manual</option>
-                      {[10,20,30].map(n=><option key={n} value={`ndx_vol_${n}`}>Nasdaq-100 · {n} más volátiles</option>)}
-                      {[10,20,30].map(n=><option key={`m${n}`} value={`ndx_mom_${n}`}>Nasdaq-100 · {n} con más momentum</option>)}
-                    </select>
-                  </label>
-                  {mcUniverso!=='manual'&&(
-                    <div style={{fontFamily:MONO,fontSize:10,color:'#a8ccdf',lineHeight:1.5}}>
-                      {/* Con volatilidad, el texto de siempre tal cual; con momentum, su regla en una frase (lib/universoMc.js). */}
-                      {reglaDeUniverso(mcUniverso)==='momentum'?(<>
-                      Cada 1 de enero, los {mcUniverso.split('_').pop()} miembros del Nasdaq-100 {FRASE_REGLA.momentum}. Solo pueden recibir
-                      ENTRADAS mientras están en el universo; las posiciones abiertas siguen hasta su salida normal. Los activos son los del universo
-                      en el periodo elegido. Solo con Capital concentrado y una estrategia.
-                      </>):(<>
-                      Cada 1 de enero, los {mcUniverso.split('_').pop()} miembros del Nasdaq-100 con mayor volatilidad del año anterior. Solo pueden recibir
-                      ENTRADAS mientras están en el universo; las posiciones abiertas siguen hasta su salida normal. Los activos son los del universo
-                      en el periodo elegido. Solo con Capital concentrado y una estrategia.
-                      </>)}
-                      <div style={{color:'#ffd166',marginTop:3}}>
-                        El universo empieza el 01/01/2016. En 2016–2018, entre el 14 % y el 22 % de los miembros elegibles no tienen datos de precios
-                        (deslistados): no se pueden medir ni elegir, así que esos años salen sesgados.
-                      </div>
-                      {/* V9.994: si falta el año en curso en universo_screener, aviso y «Regenerar universo» (components/AvisoUniverso.js). */}
-                      <AvisoUniverso datos={mcUniversoDatos[mcUniverso]} onRecarga={()=>setMcUniversoDatos({})}/>
-                    </div>
-                  )}
-                </div>
-                {/* Selector de activos */}
-                <div style={{display:mcUniverso==='manual'?'flex':'none',flexDirection:'column',flex:1,minHeight:0}}>
-                  {/* Filtros */}
-                  <div style={{padding:'5px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',gap:4,alignItems:'center'}}>
-                    <ConLimpiar valor={mcSearch||''} onLimpia={()=>setMcSearch('')} bloque estilo={{flex:1,minWidth:0}}><input type="text" placeholder="🔍 Buscar..." value={mcSearch||''} onChange={e=>setMcSearch(e.target.value)}
-                      style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:11,padding:'3px 7px',borderRadius:4,minWidth:0}}/></ConLimpiar>{/* V9.1065 */}
-                    <button onClick={()=>setMcOnlyFavs(f=>!f)}
-                      style={{background:mcOnlyFavs?'rgba(255,209,102,0.15)':'transparent',border:`1px solid ${mcOnlyFavs?'#ffd166':'var(--border)'}`,color:mcOnlyFavs?'#ffd166':'var(--text3)',fontFamily:MONO,fontSize:12,padding:'3px 6px',borderRadius:4,cursor:'pointer',flexShrink:0}}>
-                      ★
-                    </button>
-                    {(()=>{
-                      return(
-                        <select value={mcListFilter||''} onChange={e=>setMcListFilter(e.target.value)}
-                          style={{background:'var(--bg3)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:MONO,fontSize:10,padding:'3px 5px',borderRadius:4,maxWidth:80}}>
-                          <option value="">Todas</option>
-                          {wlLists.map(l=><option key={l.id} value={l.name}>{l.name}</option>)}
-                        </select>
-                      )
-                    })()}
-                  </div>
-                  <div style={{padding:'4px 8px',borderBottom:'1px solid var(--border)',flexShrink:0,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                    <div style={{fontFamily:MONO,fontSize:10,color:'#cde5ff',fontWeight:700}}>{mcSelected.length} seleccionados</div>
-                    <div style={{display:'flex',gap:4}}>
-                      <button onClick={()=>{
-                        const filtered=[...new Map(watchlist.map(w=>[w.symbol,w])).values()].filter(w=>{
-                          const matchSearch=!mcSearch||(w.symbol||'').toLowerCase().includes(mcSearch.toLowerCase())||(w.name||'').toLowerCase().includes(mcSearch.toLowerCase())
-                          const matchFav=!mcOnlyFavs||w.favorite
-                          const matchList=!mcListFilter||(w.list_ids||[]).some(lid=>{const l=wlLists.find(x=>x.id===lid);return l&&l.name===mcListFilter})
-                          return matchSearch&&matchFav&&matchList
-                        })
-                        setMcSelected(filtered.map(w=>w.symbol))
-                      }}
-                        style={{fontFamily:MONO,fontSize:8,padding:'2px 5px',borderRadius:3,border:'1px solid var(--border)',background:'transparent',color:'#a8ccdf',cursor:'pointer'}}>
-                        Todos
-                      </button>
-                      <button onClick={()=>setMcSelected([])}
-                        style={{fontFamily:MONO,fontSize:8,padding:'2px 5px',borderRadius:3,border:'1px solid var(--border)',background:'transparent',color:'#ff4d6d',cursor:'pointer'}}>
-                        Ninguno
-                      </button>
-                    </div>
-                  </div>
-                  <div style={{overflowY:'auto',flex:1}}>
-                  {[...new Map(watchlist.map(w=>[w.symbol,w])).values()].filter(w=>{
-                    const matchSearch=!mcSearch||(w.symbol||'').toLowerCase().includes(mcSearch.toLowerCase())||(w.name||'').toLowerCase().includes(mcSearch.toLowerCase())
-                    const matchFav=!mcOnlyFavs||w.favorite
-                    const matchList=!mcListFilter||(w.list_ids||[]).some(lid=>{const l=wlLists.find(x=>x.id===lid);return l&&l.name===mcListFilter})
-                    return matchSearch&&matchFav&&matchList
-                  }).sort((a,b)=>{
-                    const ra=rankingData[(a.symbol||'').toUpperCase()]?.rank, rb=rankingData[(b.symbol||'').toUpperCase()]?.rank
-                    if(ra!=null&&rb!=null) return ra-rb
-                    if(ra!=null) return -1
-                    if(rb!=null) return 1
-                    return a.name.localeCompare(b.name)
-                  }).map(w=>{
-                    const sel=mcSelected.includes(w.symbol)
-                    const rd=rankingData[(w.symbol||'').toUpperCase()]
-                    return(
-                      <div key={w.symbol} onClick={()=>setMcSelected(prev=>sel?prev.filter(s=>s!==w.symbol):[...prev,w.symbol])}
-                        style={{display:'flex',alignItems:'center',gap:7,padding:'5px 6px',borderRadius:3,marginBottom:2,cursor:'pointer',
-                          background:sel?'rgba(0,212,255,0.07)':'transparent',
-                          border:`1px solid ${sel?'rgba(0,212,255,0.2)':'transparent'}`}}
-                        onMouseOver={e=>e.currentTarget.style.background=sel?'rgba(0,212,255,0.1)':'rgba(255,255,255,0.03)'}
-                        onMouseOut={e=>e.currentTarget.style.background=sel?'rgba(0,212,255,0.07)':'transparent'}>
-                        <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${sel?'var(--accent)':'#3d5a7a'}`,
-                          background:sel?'var(--accent)':'transparent',flexShrink:0,
-                          display:'flex',alignItems:'center',justifyContent:'center'}}>
-                          {sel&&<span style={{color:'#000',fontSize:11,lineHeight:1,fontWeight:900}}>✓</span>}
-                        </div>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontFamily:MONO,fontSize:12,color:sel?'var(--accent)':'#d0e8fa',fontWeight:600}}>{w.symbol}</div>
-                          <div style={{fontFamily:MONO,fontSize:11,color:'#b0d0e8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
-                        </div>
-                        {rd&&<span style={{fontFamily:MONO,fontSize:9,fontWeight:700,
-                          color:rd.rank===1?'#ffd700':rd.rank===2?'#c0c0c0':rd.rank===3?'#cd7f32':rd.rank<=10?'#00d4ff':'#4a7a95',
-                          minWidth:22,textAlign:'right',flexShrink:0}}>
-                          {rd.rank<=3?['🥇','🥈','🥉'][rd.rank-1]:`#${rd.rank}`}
-                        </span>}
-                        {w.favorite&&<span style={{color:'#ffd166',fontSize:12}}>★</span>}
-                      </div>
-                    )
-                  })}
-                  </div>
-                </div>
+                <PanelUniverso {...{mcUniverso,mcUniversoDatos,setMcUniverso,setMcUniversoDatos}}/>
+                <SelectorValores {...{mcListFilter,mcOnlyFavs,mcSearch,mcSelected,mcUniverso,rankingData,setMcListFilter,setMcOnlyFavs,setMcSearch,setMcSelected,watchlist,wlLists}}/>
               </div>
             )}
 
