@@ -9,7 +9,7 @@ import { notaTemporalidad } from '../../lib/condicionesSimulacion'
 import { datosCabeceraMulticartera, textoMulticartera } from '../../lib/exportaTexto'
 import { exportGantt, exportHistorial } from '../../lib/exportTimeline'
 import { nombreUniverso } from '../../lib/universoMc'
-import { AYUDA_CAGR, MONO, fmt, fmtDate } from '../../lib/utils'
+import { AYUDA_CAGR, MONO, fmt, fmtDate, huecoBarras } from '../../lib/utils'
 import AzarCarteraPanel, { peticionMcDe, pruebasCalculadas } from '../AzarCarteraPanel'
 import { AssetSignalChart, McOccupancyChart, MultiCartChart, StratCompareChart } from '../BacktestCharts'
 import BotonCopiar, { leeTabla } from '../BotonCopiar'
@@ -1021,7 +1021,7 @@ export default function CarteraPorDentro({ ALTO_FRANJA_RENDIMIENTO, MC_TODAS, Mc
                         </span>
                         <span style={{fontSize:9,color:'#4a6a88'}}>· P&L en € · clic = ir al trade</span>
                       </div>
-                      <div className="equity-bars">
+                      <div className="equity-bars" style={{gap:huecoBarras(trades.length)}}>
                         {trades.map((t,i)=>{
                           const pnlS=t.pnlSimple??0
                           return(
@@ -1045,7 +1045,7 @@ export default function CarteraPorDentro({ ALTO_FRANJA_RENDIMIENTO, MC_TODAS, Mc
               <div className="section-title" style={{fontSize:14}}>
                 Resultados por Operación <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}>· P&L en € · clic = ir al trade</span>
               </div>
-              <div className="equity-bars">
+              <div className="equity-bars" style={{gap:huecoBarras(mcSoloActivoSel(mcResult.allTrades||[]).length)}}>
                 {(()=>{
                   const allT=mcSoloActivoSel(mcResult.allTrades||[])
                   // mx sobre el conjunto filtrado, por el mismo motivo que arriba.

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Fragment, memo } from 'react'
 import Head from 'next/head'
 import { ListFilter, Briefcase, Star, Bell, X as LucideX } from 'lucide-react'
-import { calcMetrics, metricasSinOperaciones, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, desgloseScoreHistorico, textoEs, AYUDA_CAGR } from '../lib/utils'
+import { calcMetrics, metricasSinOperaciones, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, desgloseScoreHistorico, textoEs, AYUDA_CAGR, huecoBarras } from '../lib/utils'
 import { WATCHLIST_DEFAULT } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt, fetchConSesion, setOnSesionCaducada, hayConfigSupabase } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1139'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1140'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -6314,7 +6314,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1139</title>
+        <title>Trading Simulator V9.1140</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6403,7 +6403,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1139
+            <span className="dot"/>Trading Simulator V9.1140
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8795,7 +8795,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   {result.trades?.length>0&&(
                     <div className="equity-section">
                       <div className="section-title" style={{fontSize:14}}>Resultados por Operación <span style={{fontWeight:400,fontSize:11,color:'#9acce0'}}>· clic = ir al trade</span></div>
-                      <div className="equity-bars">
+                      <div className="equity-bars" style={{gap:huecoBarras(result.trades.length)}}>
                         {result.trades.map((t,i)=>{
                           const mx=Math.max(...result.trades.map(x=>Math.abs(x.pnlPct)))
                           return <div key={i} className="equity-bar" onClick={()=>navigateToTrade(t)}
