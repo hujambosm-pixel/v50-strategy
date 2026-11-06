@@ -104,7 +104,7 @@ function CampoNumero({ campo: c, valor, onCommit, style }) {
 
 // Una sección de filtros: un ámbito, en un sitio. Se instancia cuatro veces (mercado y activo, en
 // el panel de estrategias y en el de multicartera), y las cuatro comparten el mismo estado `filtros`.
-export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open, setOpen, variant='panel', aviso=null, forzarSemanal=false }) {
+export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open, setOpen, variant='panel', aviso=null, forzarSemanal=false, botonGrande=false }) {
   const V = VARIANTES[variant] || VARIANTES.panel
   const items = filtrosDe(filtros, ambito)
   const onCnt = cuentaActivos(filtros, ambito)
@@ -176,9 +176,10 @@ export default function FiltrosPanel({ ambito, titulo, filtros, setFiltros, open
         </span>}
         <div style={{position:'relative',marginLeft:'auto',flexShrink:0}} ref={addRef}
           onClick={e=>e.stopPropagation()}>
+          {/* §81: botonGrande (el bloque del plan, donde sí hay sitio): «+ Añadir filtro ▾», más grande. Sin él, «+ ▾» como siempre. */}
           <span onClick={()=>setAddOpen(v=>!v)} title="Añadir filtro"
-            style={{fontFamily:MONO,fontSize:9,padding:'1px 6px',borderRadius:3,cursor:'pointer',
-              border:'1px solid #3d5a7a',color:'#7aabcc',userSelect:'none',whiteSpace:'nowrap'}}>+ ▾</span>
+            style={{fontFamily:MONO,fontSize:botonGrande?12:9,padding:botonGrande?'3px 10px':'1px 6px',borderRadius:3,cursor:'pointer',
+              border:`1px solid ${botonGrande?'#00d4ff':'#3d5a7a'}`,color:botonGrande?'#00d4ff':'#7aabcc',userSelect:'none',whiteSpace:'nowrap'}}>{botonGrande?'+ Añadir filtro ▾':'+ ▾'}</span>
           {addOpen&&(
             <div style={{position:'absolute',right:0,top:'100%',zIndex:200,marginTop:3,
               background:'var(--bg2)',border:'1px solid #3d5a7a',borderRadius:4,

@@ -576,9 +576,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           </div>}
           {enLista && <div>
             <Etiqueta texto="Filtros" ayuda={AYUDA_PLAN.filtros}/>
-            <div data-lista="filtros" className="bp-mc">
-              <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO" filtros={mergeFiltros(L.filtros || [])} setFiltros={ponLista('filtros')} open={vistaLista.mercado} setOpen={ponVista('mercado')} variant="mc"/>
-              <FiltrosPanel ambito="activo" titulo="FILTROS DEL ACTIVO" filtros={mergeFiltros(L.filtros || [])} setFiltros={ponLista('filtros')} open={vistaLista.activo} setOpen={ponVista('activo')} variant="mc"/>
+            {/* §81: sin recortar: el desplegable de «Añadir filtro» sale por debajo de la caja. */}
+            <div data-lista="filtros" className="bp-mc" style={{ overflow: 'visible' }}>
+              <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO" filtros={mergeFiltros(L.filtros || [])} setFiltros={ponLista('filtros')} open={vistaLista.mercado} setOpen={ponVista('mercado')} variant="mc" botonGrande/>
+              <FiltrosPanel ambito="activo" titulo="FILTROS DEL ACTIVO" filtros={mergeFiltros(L.filtros || [])} setFiltros={ponLista('filtros')} open={vistaLista.activo} setOpen={ponVista('activo')} variant="mc" botonGrande/>
             </div>
           </div>}
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>

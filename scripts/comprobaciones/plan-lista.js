@@ -83,6 +83,8 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   ok(hL.includes('3 seleccionados') && hL.includes('Tecnológicas') && hL.includes('Nvidia'), 'el selector con la Watchlist: «3 seleccionados», sus listas y sus valores')
   ok(hL.includes('✓ Pasa en AAPL · la lista aún no tiene prueba') && !hL.includes('✓ Pasa el azar'), '«✓ Pasa en AAPL · la lista aún no tiene prueba»')
   ok(!hL.includes('SELECCIÓN MÚLTIPLE'), 'el reparto, un solo modo (sin «compara modos»)')
+  ok((hL.match(/\+ Añadir filtro ▾/g) || []).length === 2 && !hL.includes('>+ ▾<'), '§81: los dos botones dicen «+ Añadir filtro ▾» (en el Backtesting siguen «+ ▾»)')
+  ok(/data-lista="filtros" class="bp-mc" style="overflow:visible"/.test(hL), '§81: la caja de los filtros no recorta el desplegable')
   ok(html({ ajustes: aL, pruebas: prueba('noPasa') }).includes('✕ No pasa en AAPL · la lista aún no tiene prueba'), '«✕ No pasa en AAPL · la lista aún no tiene prueba»')
   ok(html({ ajustes: aL, pruebas: [] }).includes('Sin prueba · la lista aún no tiene prueba'), '«Sin prueba · la lista aún no tiene prueba»')
   // Montada, con estado: de «Una acción» a «Una lista», marcar valores, cambiar el reparto, añadir un filtro, y volver.

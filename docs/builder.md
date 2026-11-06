@@ -2415,3 +2415,11 @@ Primera fase que cambia la pantalla del paso 3 (boceto `bocetos/plan-con-lista-C
 - **Validación**: con la lista manual, al menos un valor (si no, no se puede guardar); con el Nasdaq-100, solo «Capital concentrado».
 - El selector usa la Watchlist de la app: `pages/index.js` pasa `datosListaPlan` (watchlist, listas y ranking) al Builder y este al paso 3.
 - **Comprobado**: `plan-lista.js` (nuevo, en `comunes.sh`): valores de partida y saneado; planDe de «Una acción» idéntico a la versión anterior en 300 ajustes al azar; ida y vuelta de un plan con lista; el motor lo rechaza; la pantalla con y sin lista (renderToString) y montada con estado (pulsar «Una lista», marcar valores, elegir modo, volver a «Una acción» y recalcular, volver a la lista y seguir con sus valores). Visto en el navegador en local. `comunes.sh` en verde.
+
+## 81. «Una lista»: el desplegable de los filtros, entero y fácil de ver
+
+Lo vio Sergi al revisar la fase 3 (06/11/2026): en el bloque del plan, el desplegable de «añadir filtro» salía cortado (la caja oscura de las piezas, `.bp-mc`, recorta lo que sobresale) y el botón «+ ▾» era tan pequeño que no se entendía.
+
+- La caja de los filtros del bloque ya no recorta (`overflow: visible`): el desplegable sale entero por debajo.
+- `FiltrosPanel` tiene la opción `botonGrande`: «+ Añadir filtro ▾», en letra de 12 y en azul. Solo la usa el bloque del plan, donde hay sitio. En el Backtesting y en «Backtest de un valor» sigue «+ ▾» (su barra lateral de 240 px no tiene sitio para más: ver el comentario del componente).
+- **Comprobado**: `plan-lista.js` (los dos botones con el texto nuevo y la caja sin recortar); en el navegador, el desplegable con sus 4 filtros entero; `comunes.sh` en verde.
