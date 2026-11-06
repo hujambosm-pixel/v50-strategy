@@ -315,7 +315,8 @@ const cuenta = (html, s) => html.split(s).length - 1
   const fuenteIndex = leer('pages', 'index.js')
   ok(fuenteIndex.includes(`if(sidePanel==='tesis'&&tesisSalida.current?.(seguir)) return; if(sidePanel==='builder'&&builderSalida.current?.(seguir)) return; seguir()`), 'salirDeTesis: en Tesis o en el Builder y con cambios pregunta y sigue al responder; si no, sigue sin más')
   ok(fuenteIndex.includes(`else salirDeTesis(()=>setSidePanel(item.id))`) && fuenteIndex.includes(`className="header-logo" onClick={()=>salirDeTesis(()=>{`) && fuenteIndex.includes(`onClick={()=>salirDeTesis(handleLogout)}`), 'también preguntan el menú, el logo y «Cerrar sesión»')
-  const llamadasPanel = fuenteIndex.split('\n').map((x, k) => [x, k + 1]).filter(([x]) => /setSidePanel\(/.test(x)).length
+  // V9.1139: los dos «↗ Watchlist» de la tabla del Backtesting se fueron con los resultados a components/backtesting/CarteraPorDentro.js (§78): se cuentan también.
+  const llamadasPanel = [fuenteIndex, leer('components', 'backtesting', 'CarteraPorDentro.js')].join('\n').split('\n').filter(x => /setSidePanel\(/.test(x)).length
   ok(fuenteIndex.includes(), 'abrir una tesis desde el Builder también pregunta')
   ok(llamadasPanel === 17, `los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
 
