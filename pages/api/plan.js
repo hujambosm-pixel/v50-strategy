@@ -13,12 +13,31 @@
 // la referencia de cada pieza de cartera que la tenga; con una pieza «estrategia», las del valor, del ocioso y de los índices de
 // su regla: docs/builder.md §47).
 import { exigeAuth } from '../../lib/verificaJwt'
-import { validaPlan, huellaPlan, usaEtf, AVISO_LISTA_SIN_MOTOR } from '../../lib/planes/plan'
+import { validaPlan, huellaPlan, usaEtf, motivoListaNoCalculable } from '../../lib/planes/plan'
+import { comisionesDePlan, normalizaComisiones } from '../../lib/comisiones'
+import handlerMultibacktest from './multibacktest'
 import { evaluaPlan, iniciosRodantes, referenciasDe } from '../../lib/planes/evalua'
 import { ejecutaPlan } from '../../lib/planes/plan'
 import { cargaDatosPlan } from '../../lib/planes/datosServidor'
 
 export const config = { maxDuration: 60 }
+
+// §89: con «Una lista», la pantalla manda también cuerpoLista, la MISMA petición de «La cartera por dentro» (peticionPorDentro). Aquí se
+// comprueba que corresponde a este plan y se pide a /api/multibacktest (en este mismo proceso, con la sesión de la persona) con
+// conCandidatos: los candidatos de cada valor, que el motor del plan reparte con su dinero.
+export function errorCuerpoLista(plan, pieza, c) {
+  if (!c || typeof c !== 'object' || !c.cfg) return 'Falta la petición de la lista (cuerpoLista).'
+  const igual = String(c.strategyId) === String(pieza.estrategia?.id) && JSON.stringify(c.symbols) === JSON.stringify(pieza.lista?.simbolos) && c.modoAsig === pieza.lista?.modo
+    && c.cfg.capitalIni === plan.dinero.capitalInicial * pieza.peso && c.cfg.fromDate === plan.periodo.desde && c.cfg.toDate === plan.periodo.hasta && c.intervalo === 'diario'
+    && JSON.stringify(normalizaComisiones(c.comisiones)) === JSON.stringify(comisionesDePlan(plan.costes)) && JSON.stringify(c.filtros || []) === JSON.stringify(pieza.lista?.filtros || [])
+  return igual ? null : 'La petición de la lista no corresponde a este plan.'
+}
+function pideMultibacktest(req, body) {
+  return new Promise((resolve, reject) => {
+    const res = { statusCode: 200, setHeader() {}, status(c) { this.statusCode = c; return this }, json(o) { resolve({ status: this.statusCode, json: o }) }, send(o) { resolve({ status: this.statusCode, json: o }) }, end() { resolve({ status: this.statusCode, json: null }) } }
+    Promise.resolve(handlerMultibacktest({ method: 'POST', body, headers: req.headers, query: {} }, res)).catch(reject)
+  })
+}
 const SUPA_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPA_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -30,7 +49,11 @@ export default async function handler(req, res) {
   const errores = validaPlan(plan)
   if (rodantes && !(rodantes.duracion == null || (Number.isInteger(rodantes.duracion) && rodantes.duracion >= 1 && rodantes.duracion <= 30))) errores.push('La duración de los inicios rodantes, de 1 a 30 años.')
   if (errores.length) return res.status(400).json({ error: errores.join(' '), errores })
-  if (plan.piezas.some(x => x.tipo === 'estrategia' && x.donde === 'lista')) return res.status(400).json({ error: AVISO_LISTA_SIN_MOTOR })   // §80
+  const pLista = plan.piezas.find(x => x.tipo === 'estrategia' && x.donde === 'lista')
+  if (pLista) {   // §89
+    const motivo = motivoListaNoCalculable(plan) || errorCuerpoLista(plan, pLista, req.body?.cuerpoLista)
+    if (motivo) return res.status(400).json({ error: motivo })
+  }
   const t0 = Date.now()
   const headers = { apikey: SUPA_KEY, Authorization: `Bearer ${req.headers['x-supa-jwt']}` }
   try {
@@ -39,13 +62,21 @@ export default async function handler(req, res) {
     if (usaEtf(plan) && !plan.etf) return res.status(400).json({ error: 'El plan usa el ETF pero no dice cuál (plan.etf).' })
     const c = await cargaDatosPlan(plan, { d0, d1, supaUrl: SUPA_URL, headers })
     if (c.error) return res.status(500).json({ error: c.error })
+    let finalPorDentro = null
+    if (pLista) {
+      const r = await pideMultibacktest(req, { ...req.body.cuerpoLista, conCandidatos: true })
+      if (r.status !== 200 || !r.json?.candidatosAzar) return res.status(r.status === 401 ? 401 : 500).json({ error: r.json?.error || `La lista no se pudo calcular (HTTP ${r.status}).` })
+      c.datos.lista = r.json.candidatosAzar
+      const cc = r.json.compoundCurve || []
+      finalPorDentro = cc.length ? cc[cc.length - 1].value : null
+    }
     const t1 = Date.now()
     const evaluacion = evaluaPlan(plan, c.datos, { detalle: true })
     const ro = rodantes ? iniciosRodantes(plan, c.datos, { desde: rodantes.desde || plan.periodo.desde, hasta: rodantes.hasta || plan.periodo.hasta, duracion: rodantes.duracion ?? 10, hastaElFinal: !!rodantes.hastaElFinal }) : null
     const ej = curvas && plan.piezas.some(x => x.tipo === 'estrategia') ? referenciasDe(plan).filter(x => ['OCIOSO_LIQUIDEZ', 'ACTIVO', 'QQQ', 'SPY'].includes(x.id)).map(x => [x.id, ejecutaPlan(x.plan, c.datos, { detalle: false })]) : null
     const cu = ej ? Object.fromEntries(ej.map(([id, r]) => [id, ['OCIOSO_LIQUIDEZ', 'ACTIVO'].includes(id) ? { patrimonio: r.serie.map(p => p.patrimonio), vl: r.serie.map(p => p.vl) } : { patrimonio: r.serie.map(p => p.patrimonio) }])) : null
     const ordenesReferencias = ej ? Object.fromEntries(ej.map(([id, r]) => [id, r.costes.ordenes])) : null
-    return res.status(200).json({ evaluacion, ...(ro ? { rodantes: ro } : {}), ...(cu ? { curvas: cu, ordenesReferencias } : {}), huella: await huellaPlan(plan), tiempos: { datosMs: t1 - t0, calculoMs: Date.now() - t1 } })
+    return res.status(200).json({ evaluacion, ...(ro ? { rodantes: ro } : {}), ...(cu ? { curvas: cu, ordenesReferencias } : {}), ...(pLista ? { finalPorDentro } : {}), huella: await huellaPlan(plan), tiempos: { datosMs: t1 - t0, calculoMs: Date.now() - t1 } })
   } catch (e) {
     return res.status(500).json({ error: e.message || 'Error interno' })
   }

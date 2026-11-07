@@ -2471,7 +2471,7 @@ Primera vez que el plan con lista calcula algo (boceto `bocetos/plan-con-lista-C
 - **Nada cambia sin mínimo.** `normalizaComisiones` solo añade `minimo` si es mayor que 0; sin él, la expresión es la de antes (mismo número en coma flotante). El Backtesting suelto, el ranking y el paso 1 no lo mandan: R1–R3 salen idénticas byte a byte (md5 antes y después, `ref-backtesting.js`).
 - **`comisionesDePlan(costes)`**: los `costes` de un plan (`costesDe`) en el formato del Backtesting: % con mínimo y sin fijas. «2 € fijos por operación» es un mínimo de 2 € sin %. Sin costes, ninguna.
 - **En la pestaña** (`components/backtesting/PlanPorDentro.js`): la petición y el detalle de los valores llevan las comisiones del plan. La línea dice «… con las comisiones del plan (0,10 % por operación; «Comprar y mantener», sin comisión)», o «sin comisiones (el plan no tiene)». Los Buy&Hold de aquí siguen sin comisión, como en el Backtesting (excepción temporal de Sergi).
-- **Diferencia que queda con «Tu dinero»** (para la prueba de oro de la fase 6): el Backtesting cobra el % de la compra sobre el capital asignado; el plan, sobre lo que de verdad compra (el coste va dentro del precio). La diferencia es de segundo orden en el % (con 0,1 %, un 0,0001 de lo comprado).
+- ~~Diferencia que queda con «Tu dinero»~~ (corregido en §89): no la hay. El plan también cobra la comisión de la compra sobre el dinero que se destina a la compra (`compra` de `lib/planes/plan.js`: `costeOrden(C)` y luego `(C − coste) / precio`), igual que el Backtesting.
 - **Cifras con precios reales** (Prueba editor EMA20, Degiro, 10.000 €, 2016–2025, reparto por defecto de la lista): Capital concentrado, sin comisión 62.023,60 € → con 0,1 % 42.551,67 € (comisiones 9.527,12 €; con mínimo de 1 € igual: ninguna orden baja de 1.000 €) → con 2 € fijos 53.686,85 € (785 operaciones × 2 órdenes × 2 € = 3.140 €). Capital compartido: 39.849,58 € → 0,1 % 29.600,59 € → 0,1 % con mínimo de 1 € 29.407,28 € (en 313 de 1.859 operaciones manda el mínimo) → 2 € fijos 24.215,53 €.
 - **`plan-por-dentro.js`**: la petición lleva la comisión del plan en sus cuatro formas (escritas a mano, 400 listas al azar); cuentas a mano del mínimo (500 € → 1 €, 5.000 € → 5 €; 1.000 € que suben un 10 % con 0,1 % y mínimo de 2 € → 1.095,80 €; 10.000 € → 10.978,011 €); con la foto de Degiro, la comisión de cada una de las 1.859 operaciones cuadra con la fórmula escrita a mano; las dos líneas de texto.
 
@@ -2486,3 +2486,27 @@ Primera vez que el plan con lista calcula algo (boceto `bocetos/plan-con-lista-C
 - Decisión de Sergi (07/11): NO habrá comisión distinta de compra y de venta en el plan. Lo que se pone se cobra en CADA orden (al comprar y al vender), y lo dicen el «?» de «Comisión por operación», el «?» de «€ fijos por operación» y un tooltip en su campo: si el bróker cobra 0,37 € solo al comprar, se pone 0,185 € (0,185 + 0,185 = 0,37 €).
 - `textoComision` (la línea de «La cartera por dentro» y el texto para copiar del plan) muestra 3 decimales si el número los tiene («0,185 € fijos por operación»); con 2 o menos, igual que antes.
 - Nada cambia en las cifras: solo textos.
+
+## 89. El plan con lista, fase 6: «Tu dinero» con lista (la prueba de oro)
+
+- **Qué hace.** Con «Una lista», la pestaña «Tu dinero» ya calcula. De momento, sin aportaciones, sin impuestos, con el dinero ocioso en liquidez, sin apalancar y solo con «Capital compartido» o «Capital concentrado». Así acaba con EXACTAMENTE el dinero de «La cartera por dentro»: es la prueba de oro de la fase 6.
+- **El motor** (`lib/planes/plan.js`): la pieza estrategia con `donde: 'lista'` toma del Backtesting solo las DECISIONES y pone el dinero con la lógica del plan.
+  - Las decisiones: los candidatos de cada valor, con su puntuación (`_ps`) y si pasan la puerta, de `/api/multibacktest` con `conCandidatos`. El orden, de `comparadorCandidatos`. El capital de cada entrada, de `techoConcentrado` y `capitalCompartido`, sacadas TAL CUAL de `lib/asignaCartera.js`: mismas cuentas y mismo orden. La batería y R1–R3 siguen idénticas byte a byte.
+  - El dinero: cada día salen primero las abiertas que salen hoy, en el orden en que entraron; luego entran las del día, en su orden. Cada entrada es una compra real del plan (`compra`, comisión por orden, lotes) y cada salida una venta real (`vende`). Una que entra y sale el mismo día se compra y se vende en el acto. El primer día, las entradas van después de que entre el dinero inicial. La venta final, la de siempre.
+  - Las velas de cada valor salen de los candidatos (aperturas y cierres), en las fechas del plan; un día sin vela, su último cierre.
+  - La pieza devuelve sus operaciones (con su capital) y la parte del dinero que está dentro cada día, de 0 a 1 (para la fase 9).
+- **`motivoListaNoCalculable(plan)`** dice por qué no se calcula: Nasdaq-100, otro reparto, o aportaciones / impuestos / ocioso / apalancamiento. **`planListaCalculable(plan)`** devuelve el plan sin todo eso y la lista de lo que se ha dejado fuera.
+- **`/api/plan`**: con lista, la pantalla manda también `cuerpoLista`, la MISMA petición de «La cartera por dentro» (`peticionPorDentro`). Se comprueba que corresponde al plan (estrategia, valores, reparto, dinero, periodo, comisiones, filtros) y se pide a `/api/multibacktest` en el mismo proceso, con la sesión de la persona. La respuesta trae también `finalPorDentro`. Las comparaciones con lista: QQQ, SPY y liquidez (ni «el mismo plan con el ocioso en liquidez», que ya lo es, ni «comprar y mantener la acción»).
+- **La pantalla** (`components/BuilderPlan.js`):
+  - Arriba, en amarillo, lo que todavía no cuenta («De momento, con una lista, se calcula sin tus aportaciones, sin impuestos y con el dinero ocioso en liquidez (no en oro): llegarán en los pasos siguientes.», con «?»).
+  - Una línea gris «Comprobación: «La cartera por dentro» acaba en X € y tu plan, en Y € ✓».
+  - Luego, lo de siempre, sin lo que con lista todavía no sirve: «En el ocioso», la franja dentro/ocioso, el Buy&Hold del valor (en el gráfico, en «Año a año» y en la tabla) y las caídas frente al ocioso. Lo decide la fase 9 (con boceto).
+  - Con «Slots iguales», «Position Sizing», «Pesos» o el Nasdaq-100, el motivo en su caja. La vista de «Tu dinero» es ahora una función (`vistaDinero`) para los dos casos.
+- Arreglado de paso: al quedarse sin nada que calcular (p. ej., al pasar a un reparto que aún no se calcula), «Calculando…» se quedaba fijo; ahora se apaga.
+- El «?» de «La cartera por dentro» ya no dice «sin comisiones» ni «no coincidirá»: dice que coincide con «Tu dinero» mientras no haya aportaciones, impuestos ni ocioso.
+- **Comprobación nueva** `plan-tu-dinero-lista.js` (en `comunes.sh`):
+  1. Cuentas a mano con dos valores inventados: compartido 1.045,90 €; concentrado máx. 1 1.197,80 €; con la puerta cerrada, 898,10 €.
+  2. Qué se calcula y qué se deja fuera.
+  3. La prueba de oro: 18 combinaciones con la foto de Degiro (dos modos; cuatro comisiones; prioridades alfabético, momentum y fuerza relativa, con «Desempate» y con «Filtro»; máx. 1–4; EMA20 y SuperTrend; tres periodos; filtro de mercado; 4 valores). Diferencia máxima 1e-10 €.
+  4. `/api/plan` entero y la pantalla montada.
+- `plan-lista.js` y `plan-por-dentro.js`, al día (con lista, «Tu dinero» ya pide su cálculo).

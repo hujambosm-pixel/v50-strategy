@@ -6,7 +6,7 @@
 //     motivos para no calcular. 1b · El mínimo por orden de lib/comisiones.js, con cuentas hechas a mano.
 // 2 · Con la foto de precios de la lista Degiro (datos/, sin red) y una estrategia de tarjetas, /api/multibacktest responde a esa
 //     petición, y la pestaña (montada con estado en domFalso.js) pinta los paneles del Backtesting con ese resultado.
-// 3 · En el paso 3: con «Una lista» salen las pestañas «Tu dinero» / «La cartera por dentro»; no se calcula nada hasta abrir la segunda;
+// 3 · En el paso 3: con «Una lista» salen las pestañas «Tu dinero» / «La cartera por dentro»; «por dentro» no se calcula hasta abrirla (§89: «Tu dinero», sí);
 //     abierta, una petición ~1 s después; cerrada, los cambios no piden nada; al volver, la petición nueva.
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-del-arnes'
 const path = require('path')
@@ -127,14 +127,14 @@ function antes(st) {
 
   // ── 3 · En el paso 3 ──
   const BP = require(R + '/components/BuilderPlan.js').default
-  pedidas = []
+  pedidas = []; let dineros = 0
   const datosLista = { watchlist: simbolosFoto.map(s => ({ symbol: s, name: s, list_ids: [1] })), wlLists: [{ id: 1, name: 'Degiro' }], rankingData: {} }
-  const props = { estrategias: [est], estrategiaId: est.id, datosLista, deps: { ctx: null, calcula: async () => { throw new Error('no debe calcular «Tu dinero»') }, calculaPorDentro: calcula },
+  const props = { estrategias: [est], estrategiaId: est.id, datosLista, deps: { ctx: null, calcula: async () => { dineros++; throw new Error('sin motor en esta comprobación') }, calculaPorDentro: calcula },
     inicial: { planes: [], pestana: 'n1', simbolos: ['AAPL'], pruebas: [], resultadoPrueba: { periodos: [] }, ajustes: aFoto } }
   const b = D.monta(React.createElement(BP, props), RDC); await D.espera(1300)
   const pest = (id) => b.raiz.busca(n => n.nodeName === 'BUTTON' && n.getAttribute?.('data-vista-der') === id)
   ok(!!pest('dinero') && !!pest('dentro') && pest('dinero').getAttribute('aria-pressed') === 'true', 'con lista: las pestañas «Tu dinero» (abierta) y «La cartera por dentro»')
-  ok(pedidas.length === 0 && b.raiz.conAtributo('data-sin-motor-lista').length === 1, 'con «Tu dinero» abierta no se pide nada')
+  ok(pedidas.length === 0 && dineros === 1, `§89: con «Tu dinero» abierta se calcula «Tu dinero» (${dineros}) y no «La cartera por dentro» (${pedidas.length})`)
   D.pulsa(pest('dentro')); await D.espera(1300)
   ok(pedidas.length === 1 && b.raiz.conAtributo('data-cartera-por-dentro').length === 1 && !b.raiz.conAtributo('data-sin-motor-lista').length, 'al abrir «La cartera por dentro»: una petición y sus paneles')
   D.pulsa(pest('dinero')); await D.espera(30)

@@ -63,7 +63,7 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   ok(Pl.validaPlan(pVacio).some(e => e.includes('al menos un valor')), 'sin valores, el plan no es válido (no se puede guardar)')
   ok(Pl.validaPlan({ ...pL, piezas: [{ ...pL.piezas[0], donde: 'otra' }] }).some(e => e.includes('una acción o una lista')), 'un `donde` desconocido no es válido')
   let lanza = null; try { Pl.ejecutaPlan(pL, { fechas: ['2016-01-04'] }) } catch (e) { lanza = e.message }
-  ok(lanza === Pl.AVISO_LISTA_SIN_MOTOR, `el motor no calcula un plan con lista: «${lanza}»`)
+  ok(lanza === Pl.AVISO_LISTA_MODO, `§89: el motor aún no calcula una lista con «Slots iguales»: «${lanza}»`)
   const textoL = Pa.textoParaClaudePlan({ ajustes: aL, estrategia: est, plan: pL, cifras: null, estado: null, resultadoPrueba: null, version: 'V' })
   ok(textoL.includes('Dónde: una lista, lista manual de 3 valores (AAPL, MSFT, NVDA) · reparto: Slots iguales · filtros: ninguno'), '«Copiar para Claude» dice la lista, el reparto y los filtros')
 
@@ -101,7 +101,7 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   const modo = m.raiz.busca(n => n.nodeName === 'DIV' && n.textContent === 'Slots iguales' && typeof D.propsDe(n).onClick === 'function')
   D.pulsa(modo); await D.espera(10)
   ok(m.raiz.textContent.includes('Slots iguales') && !m.raiz.textContent.includes('Máx. activos simultáneos'), 'elegir «Slots iguales» (sin «Máx. activos simultáneos», que es de concentrado)')
-  ok(calculos === 0 && m.raiz.conAtributo('data-sin-motor-lista').length === 1 && !m.raiz.conAtributo('data-calculando').length, 'con lista no se pide ningún cálculo')
+  ok(m.raiz.conAtributo('data-sin-motor-lista')[0]?.textContent === Pl.AVISO_LISTA_MODO && !m.raiz.conAtributo('data-calculando').length, '§89: con «Slots iguales», «Tu dinero» aún no se calcula y lo dice')
   D.pulsa(boton('Una acción')); await D.espera(700)
   ok(!m.raiz.conAtributo('data-lista').length, 'de vuelta a «Una acción»: sin piezas de lista')
   ok(m.raiz.conAtributo('data-aviso', 'a-mano').length === 1, '§85: y vuelve «⚠ Acción elegida a mano»')

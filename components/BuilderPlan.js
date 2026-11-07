@@ -37,7 +37,7 @@ import BuscadorValor from './BuscadorValor'
 import BotonCopiar from './BotonCopiar'
 import { marcasLog, separaEtiquetas } from '../lib/builder/escalaGrafico'
 import { esDeTarjetas, leerResultado } from '../lib/pruebaAzar'
-import { validaPlan, paraHuellaPlan } from '../lib/planes/plan'
+import { validaPlan, paraHuellaPlan, motivoListaNoCalculable, planListaCalculable } from '../lib/planes/plan'
 import { jsonCanonico } from '../lib/lotesLab'
 import { AVISO_BORRADA, ETIQUETA_BORRADA, AVISO_CAMBIADA, AYUDA_CAMBIADA, borrarPlan, cambiarPlan, comparaEstrategia, crearPlan, fotoDelPlan, guardarPestanas, leerPestanas, listarPlanes, listarPruebasUsuario, nombreLimpio } from '../lib/builder/planesGuardados'
 import { cambiaClave, claveDe, conPestana, eligeEntrada, idDe, idsDe, ordenInicial, sinPestana, trasDe, vecina } from '../lib/builder/pestanasPlan'
@@ -49,12 +49,12 @@ import PanelAsignacion from './backtesting/PanelAsignacion'
 import PanelPesos from './backtesting/PanelPesos'
 import PanelUniverso from './backtesting/PanelUniverso'
 import SelectorValores from './backtesting/SelectorValores'
-import PlanPorDentro from './backtesting/PlanPorDentro'
+import PlanPorDentro, { peticionPorDentro, motivoSinPeticion } from './backtesting/PlanPorDentro'
 import FiltrosPanel from './FiltrosPanel'
 import { mergeFiltros } from '../lib/filtros'
 import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, AVISO_PRUEBA, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
-  ayudaCaida, ayudaPrueba, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
+  ayudaCaida, ayudaPrueba, avisoListaSimple, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS, avisoPruebaLista, ayudaPruebaLista } from '../lib/builder/planPantalla'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0', AZUL = '#58a6ff', GRIS_FRANJA = '#3a4656'
@@ -160,8 +160,8 @@ function Leyenda({ curva, activo = null, visibles = LINEAS_DEFECTO, onMarca = nu
     <div data-leyenda style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: B.secundario, marginTop: 6, alignItems: 'center' }}>
       {LINEAS_PLAN.filter(l => curva[l.k]?.length).map(l => l.k === 'plan' ? <span key={l.k} data-muestra={l.k} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{muestra(l)}{nombreLinea(l, activo)}</span>
         : <label key={l.k} data-muestra={l.k} style={{ display: 'inline-flex', flexDirection: 'row', gap: 6, alignItems: 'center', cursor: 'pointer', margin: 0, padding: 0, fontFamily: B.letra, fontSize: 12, fontWeight: 400, color: B.secundario, letterSpacing: 'normal', textTransform: 'none' }}><input type="checkbox" data-casilla={l.k} checked={!!visibles[l.k]} onChange={e => onMarca?.(l.k, e.target.checked)} style={{ margin: 0, width: 'auto', padding: 0 }}/>{muestra(l)}{nombreLinea(l, activo)}</label>)}
-      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><span style={{ width: 14, height: 10, background: AZUL, display: 'inline-block' }}/>dentro de la acción</span>
-      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><span style={{ width: 14, height: 10, background: GRIS_FRANJA, display: 'inline-block' }}/>en el ocioso</span>
+      {curva.dentro?.length > 0 && <><span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><span style={{ width: 14, height: 10, background: AZUL, display: 'inline-block' }}/>dentro de la acción</span>
+      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><span style={{ width: 14, height: 10, background: GRIS_FRANJA, display: 'inline-block' }}/>en el ocioso</span></>}
     </div>
   )
 }
@@ -269,28 +269,40 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // El plan de los ajustes de ahora; sus errores (los del motor) y, sin errores, la clave que dispara el cálculo.
   const plan = useMemo(() => estrategia ? planDe(a, estrategia) : null, [a, estrategia])
   const errores = useMemo(() => plan ? validaPlan(plan) : [], [plan])
-  // §80: con «Una lista», «Tu dinero» todavía no se calcula (llegará en la fase 6): no se pide nada a /api/plan.
   const enLista = a.donde === 'lista'
-  const clave = actual && plan && !errores.length && !enLista ? JSON.stringify(plan) : null
+  // §84: el motor del Backtesting calcula con la estrategia de AHORA (por su id). Con la versión guardada de un plan, solo si su regla
+  // sigue igual que la de ahora; si no, se dice por qué no se calcula.
+  const estPorDentro = !estrategia ? null : !usaGuardada ? estrategia : (estrategiaActual && cambio && !cambio.cambiada && !cambio.borrada ? estrategiaActual : null)
+  const motivoEstPorDentro = !estrategia || estPorDentro ? null : estBorrada ? 'La estrategia de este plan está borrada: «La cartera por dentro» solo sabe calcular con una estrategia que siga entre las tuyas.'
+    : !cambio ? 'Comprobando la estrategia…' : 'La estrategia ha cambiado desde que guardaste este plan y «La cartera por dentro» solo sabe calcular con la de ahora: pulsa «Usar la versión actual» para verla.'
+  // §89 (fase 6): con «Una lista», «Tu dinero» se calcula con el plan que ya se sabe calcular (sin aportaciones, sin impuestos, ocioso en
+  // liquidez, sin apalancar: planListaCalculable) y con la MISMA petición de «La cartera por dentro» (cuerpoLista), que /api/plan pasa a
+  // /api/multibacktest para sacar los candidatos de cada valor.
+  const calcLista = useMemo(() => enLista && plan ? planListaCalculable(plan) : null, [enLista, plan])
+  const cuerpoLista = useMemo(() => enLista && estPorDentro ? peticionPorDentro({ a, estrategia: estPorDentro, wlData: datosLista?.wlData || {} }) : null, [enLista, a, estPorDentro, datosLista?.wlData])
+  const motivoLista = !enLista ? null : (motivoEstPorDentro || (calcLista && motivoListaNoCalculable(calcLista.plan)) || (!cuerpoLista ? motivoSinPeticion({ a, estrategia: estPorDentro }) : null))
+  const clave = !actual || !plan || errores.length ? null : !enLista ? JSON.stringify(plan) : motivoLista || !cuerpoLista ? null : JSON.stringify({ plan: calcLista.plan, cuerpoLista })
   const api = useRef(apiFetch); api.current = apiFetch
   // Un plan ya calculado (p. ej., al volver a una pestaña) se enseña sin repetir el cálculo.
   const hechos = useRef(new Map())
   const calculador = useRef(null)
   if (!calculador.current) {
-    const pide = deps?.calcula || (async (p) => {
-      const r = await api.current('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: p, curvas: true }) })
+    const pide = deps?.calcula || (async (p, cuerpoLista = null) => {
+      const r = await api.current('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: p, curvas: true, ...(cuerpoLista ? { cuerpoLista } : {}) }) })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
       return j
     })
-    calculador.current = creaCalculador({ calcula: async (p) => ({ respuesta: await pide(p), plan: p }),
+    // §89: con lista, lo que se pide es { plan, cuerpoLista }; el resultado guarda el plan calculado y su clave.
+    calculador.current = creaCalculador({ calcula: async (p) => p?.cuerpoLista ? ({ respuesta: await pide(p.plan, p.cuerpoLista), plan: p.plan, clave: JSON.stringify(p) }) : ({ respuesta: await pide(p), plan: p }),
       alEstado: (e) => {
-        if (e.resultado) { hechos.current.set(JSON.stringify(e.resultado.plan), e.resultado); if (hechos.current.size > 20) hechos.current.delete(hechos.current.keys().next().value) }
+        if (e.resultado) { hechos.current.set(e.resultado.clave || JSON.stringify(e.resultado.plan), e.resultado); if (hechos.current.size > 20) hechos.current.delete(hechos.current.keys().next().value) }
         if (vivo.current) setCalc(c => ({ calculando: e.calculando, resultado: e.resultado || c.resultado, error: e.resultado ? null : e.error ?? c.error }))
       } })
   }
   useEffect(() => {
-    if (!clave) { calculador.current.cancela(); return }
+    // §89: al quedarse sin nada que calcular (p. ej., al pasar a un reparto que con lista aún no se calcula), fuera «Calculando…».
+    if (!clave) { calculador.current.cancela(); setCalc(c => c.calculando ? { ...c, calculando: false } : c); return }
     const ya = hechos.current.get(clave)
     if (ya) { calculador.current.cancela(); setCalc({ calculando: false, resultado: ya, error: null }) } else calculador.current.pide(JSON.parse(clave))
   }, [clave])
@@ -480,7 +492,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const cifras = useMemo(() => { try { return calc.resultado ? cifrasPlan(calc.resultado.respuesta, calc.resultado.plan) : null } catch (_) { return null } }, [calc.resultado])
   const ajustesDelResultado = calc.resultado?.plan?.piezas?.[0] || null
   // Lo que se enseña en «+ Añadir plan»: el final de los planes guardados ya calculados.
-  useEffect(() => { if (fila && cifras && !hayCambios && clave === JSON.stringify(calc.resultado?.plan)) setFinales(x => ({ ...x, [fila.id]: cifras.seis.final })) }, [cifras, fila?.id, hayCambios])
+  useEffect(() => { if (fila && cifras && !hayCambios && clave === (calc.resultado?.clave || JSON.stringify(calc.resultado?.plan))) setFinales(x => ({ ...x, [fila.id]: cifras.seis.final })) }, [cifras, fila?.id, hayCambios])
   const texto = () => textoParaClaudePlan({ ajustes: a, estrategia, plan, cifras: enLista ? null : cifras, estado, resultadoPrueba: resPrueba, version, nombre: fila?.nombre || null })
 
   // ── Avisos (una línea; el detalle, tras «?») ──
@@ -496,7 +508,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       {enlaceTesis?.('plan', fila?.id)}
       {!enLista && <div data-aviso="a-mano" style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>⚠ {AVISO_A_MANO}<Ayuda texto={AYUDA_PLAN.aMano} etiqueta={AVISO_A_MANO}/></div>}
       {nuevaActual && <div data-aviso="sin-guardar" style={{ color: AMARILLO }}>Sin guardar: se perderá al recargar</div>}
-      {calc.calculando && !enLista && <div data-calculando style={{ color: AMARILLO }}>Calculando…</div>}
+      {calc.calculando && (!enLista || vistaDer === 'dinero') && <div data-calculando style={{ color: AMARILLO }}>Calculando…</div>}
       <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         {sinGuardar && <button data-boton="descartar" style={{ ...S.boton, padding: '6px 12px' }} disabled={guardando} onClick={descartaCambios}>Descartar cambios</button>}
         {hayCambios && <button data-boton="guardar-cambios" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={`Guardado por última vez el ${fechaCorta(fila.updated_at)}`} onClick={guardaAbierta}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>}
@@ -650,37 +662,46 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const pestanaDer = (id, texto, ayuda) => <span style={{ display: 'inline-flex', alignItems: 'center', borderBottom: `2px solid ${vistaDer === id ? B.enlace : 'transparent'}`, paddingRight: ayuda ? 8 : 0 }}>
     <button type="button" data-vista-der={id} aria-pressed={vistaDer === id} onClick={() => setVistaDer(id)} style={{ background: 'none', border: 'none', padding: '8px 4px 8px 16px', fontSize: 14, cursor: 'pointer',
       color: vistaDer === id ? B.titulo : B.secundario, fontWeight: vistaDer === id ? 700 : 400, paddingRight: ayuda ? 4 : 16 }}>{texto}</button>{ayuda && <Ayuda texto={ayuda} etiqueta={texto}/>}</span>
-  // §84: el motor del Backtesting calcula con la estrategia de AHORA (por su id). Con la versión guardada de un plan, solo si su regla
-  // sigue igual que la de ahora; si no, se dice por qué no se calcula.
-  const estPorDentro = !estrategia ? null : !usaGuardada ? estrategia : (estrategiaActual && cambio && !cambio.cambiada && !cambio.borrada ? estrategiaActual : null)
-  const motivoEstPorDentro = !estrategia || estPorDentro ? null : estBorrada ? 'La estrategia de este plan está borrada: «La cartera por dentro» solo sabe calcular con una estrategia que siga entre las tuyas.'
-    : !cambio ? 'Comprobando la estrategia…' : 'La estrategia ha cambiado desde que guardaste este plan y «La cartera por dentro» solo sabe calcular con la de ahora: pulsa «Usar la versión actual» para verla.'
+  // §89: el resultado de «Tu dinero» es de una lista solo si el plan calculado la tiene (al cambiar de «Una acción» a «Una lista», hasta
+  // que llega el cálculo nuevo, no se enseña el de antes).
+  const resLista = ajustesDelResultado?.donde === 'lista'
+  const cifrasLista = enLista && resLista && !motivoLista ? cifras : null
   const resultado = enLista ? (<>
     <div data-pestanas-der role="group" aria-label="Qué ver del plan" style={{ display: 'flex', borderBottom: `1px solid ${B.borde}` }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('dentro', 'La cartera por dentro', AYUDA_PLAN.porDentro)}</div>
-    {vistaDer === 'dinero' && <div data-sin-motor-lista style={{ ...S.tarjeta, ...S.cuerpo, color: B.texto }}>{AYUDA_PLAN.listaSinMotor}</div>}
+    {vistaDer === 'dinero' && (motivoLista ? <div data-sin-motor-lista style={{ ...S.tarjeta, ...S.cuerpo, color: B.texto }}>{motivoLista}</div>
+      : !cifrasLista ? <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{calc.error ? '' : 'Calculando tu plan…'}</div>
+      : <>
+        {!!calcLista?.ignorado.length && <div data-aviso-lista-simple style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>{avisoListaSimple(calcLista.ignorado, a.ocioso)}<Ayuda texto={AYUDA_PLAN.listaSimple} etiqueta="Lo que todavía no cuenta con una lista"/></div>}
+        {Number.isFinite(calc.resultado?.respuesta?.finalPorDentro) && <div data-oro style={{ ...S.secundario, fontSize: 13 }}>Comprobación: «La cartera por dentro» acaba en {euros(calc.resultado.respuesta.finalPorDentro, 2)} y tu plan, en {euros(cifrasLista.seis.final, 2)}{Math.abs(calc.resultado.respuesta.finalPorDentro - cifrasLista.seis.final) < 0.005 ? ' ✓' : ' ✕ (deberían coincidir)'}</div>}
+        {vistaDinero(cifrasLista, true)}
+      </>)}
     <PlanPorDentro a={a} estrategia={estPorDentro} motivo={motivoEstPorDentro} estrategias={estrategias} apiFetch={apiFetch} version={version} visible={vistaDer === 'dentro'} onIrAValor={onIrAValor} wlData={datosLista?.wlData || null} calcula={deps?.calculaPorDentro || null}/>
   </>) : !cifras ? (
     <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{!estrategia ? 'Elige una estrategia de tarjetas de velas diarias.' : calc.calculando || clave ? 'Calculando tu plan…' : 'Sin resultado todavía.'}</div>
-  ) : (<>
+  ) : vistaDinero(cifras, false)
+  function vistaDinero(cifras, conLista) {
+  const s = cifras.seis
+  return (<>
     <div data-cifras style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
       <Cifra id="aportado" titulo="Has aportado" ayuda={AYUDA_PLAN.aportado} valor={euros(s.aportado, 0)}/>
       <Cifra id="final" titulo="Tienes al final" ayuda={AYUDA_PLAN.final} valor={euros(s.final, 0)} sub={`ganancia neta ${euros(s.ganancia, 0)}`}/>
       <Cifra id="caida" titulo="Peor caída" ayuda={ayudaCaida(s)} valor={pct(s.caidaPct)} sub={`${fechaCorta(s.caidaPctValle)} · ${euros(s.caidaEuros, 0)}`}/>
       <Cifra id="twr" titulo="CAGR del plan" ayuda={AYUDA_PLAN.twr} valor={pct(s.twr)}/>
       <Cifra id="tir" titulo="Rentabilidad de tu dinero (TIR)" ayuda={AYUDA_PLAN.tir} valor={pct(s.tir)}/>
-      <Cifra id="ocioso" titulo="En el ocioso" ayuda={AYUDA_PLAN.enOcioso} valor={<span style={{ whiteSpace: 'nowrap' }}>{pct(cifras.enOcioso, 1)}<span style={{ fontSize: 13, fontWeight: 400, color: B.secundario }}> del tiempo</span></span>}/>
+      {!conLista && <Cifra id="ocioso" titulo="En el ocioso" ayuda={AYUDA_PLAN.enOcioso} valor={<span style={{ whiteSpace: 'nowrap' }}>{pct(cifras.enOcioso, 1)}<span style={{ fontSize: 13, fontWeight: 400, color: B.secundario }}> del tiempo</span></span>}/>}
       {/* §57: en una línea; el detalle de las órdenes, en su tooltip y en su «?». */}
       <Cifra id="costes" titulo="Impuestos y comisiones" ayuda={`${AYUDA_PLAN.costes} En este plan: ${euros(s.impuestos, 0)} de impuestos y ${euros(s.costes, 0)} de comisiones en ${cifras.ordenes} órdenes.`} valor={<span title={`Impuestos ${euros(s.impuestos, 0)} · Comisiones ${euros(s.costes, 0)} (${cifras.ordenes} órdenes)`} style={{ fontSize: 16, whiteSpace: 'nowrap' }}>
         <span data-impuestos>{euros(s.impuestos, 0)}</span> · <span data-comisiones>{euros(s.costes, 0)}</span></span>}/>
     </div>
-    <Tarjeta id="grafico" titulo="Cómo crece tu dinero" ayuda={`${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franja}`}>
-      <GraficoPlan curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles}/>
-      <Leyenda curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes} visibles={lineasVisibles} onMarca={marcaLinea}/>
+    <Tarjeta id="grafico" titulo="Cómo crece tu dinero" ayuda={conLista ? AYUDA_PLAN.grafico : `${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franja}`}>
+      <GraficoPlan curva={conLista ? { ...cifras.curva, ociosoLiquidez: null, activo: null, dentro: [] } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? null : activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles}/>
+      <Leyenda curva={conLista ? { ...cifras.curva, ociosoLiquidez: null, activo: null, dentro: [] } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? null : activoRes} visibles={lineasVisibles} onMarca={marcaLinea}/>
     </Tarjeta>
     <Tarjeta id="anios" titulo="Año a año" ayuda={AYUDA_PLAN.anios}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="anios" style={{ borderCollapse: 'collapse', width: '100%' }}>
-        <thead><tr>{['Año', 'Rentabilidad del plan', 'Buy&Hold del valor', 'Peor caída del plan en el año', 'Peor caída Buy&Hold', '% del año en el ocioso'].map(h => <th key={h} style={cab}>{h}</th>)}</tr></thead>
-        <tbody>{cifras.anios.map(x => <tr key={x.anio} data-anio={x.anio}><td style={celda}>{x.anio}</td><td style={{ ...celda, color: x.plan < 0 ? ROJO : B.texto, fontWeight: 700 }}>{pct(x.plan)}</td><td style={{ ...celda, color: x.activo < 0 ? ROJO : B.texto }}>{pct(x.activo)}</td><td style={celda}>{pct(x.caidaPlan)}</td><td style={celda}>{pct(x.caidaActivo)}</td><td style={celda}>{pct(x.enOcioso, 1)}</td></tr>)}</tbody>
+        <thead><tr>{(conLista ? ['Año', 'Rentabilidad del plan', 'Peor caída del plan en el año'] : ['Año', 'Rentabilidad del plan', 'Buy&Hold del valor', 'Peor caída del plan en el año', 'Peor caída Buy&Hold', '% del año en el ocioso']).map(h => <th key={h} style={cab}>{h}</th>)}</tr></thead>
+        <tbody>{cifras.anios.map(x => conLista ? <tr key={x.anio} data-anio={x.anio}><td style={celda}>{x.anio}</td><td style={{ ...celda, color: x.plan < 0 ? ROJO : B.texto, fontWeight: 700 }}>{pct(x.plan)}</td><td style={celda}>{pct(x.caidaPlan)}</td></tr>
+          : <tr key={x.anio} data-anio={x.anio}><td style={celda}>{x.anio}</td><td style={{ ...celda, color: x.plan < 0 ? ROJO : B.texto, fontWeight: 700 }}>{pct(x.plan)}</td><td style={{ ...celda, color: x.activo < 0 ? ROJO : B.texto }}>{pct(x.activo)}</td><td style={celda}>{pct(x.caidaPlan)}</td><td style={celda}>{pct(x.caidaActivo)}</td><td style={celda}>{pct(x.enOcioso, 1)}</td></tr>)}</tbody>
       </table></div>
     </Tarjeta>
     <Tarjeta id="alternativas" titulo={TITULO_ALTERNATIVAS} ayuda={AYUDA_PLAN.alternativas}>
@@ -697,15 +718,16 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
         <tbody>{cifras.tramos.map(t => <tr key={t.nombre} data-tramo={t.nombre}><td style={celda}>{t.nombre}</td><td style={celda}>{pct(t.cagr)}</td>{!sinOcioso && <td style={celda}>{t.ocioso == null ? '—' : puntos(t.ocioso)}</td>}</tr>)}</tbody>
       </table></div>
     </Tarjeta>
-    <Tarjeta id="caidas" titulo="Cuando tu estrategia cae, ¿qué hace el ocioso?" ayuda={AYUDA_PLAN.caidas}>
+    {!conLista && <Tarjeta id="caidas" titulo="Cuando tu estrategia cae, ¿qué hace el ocioso?" ayuda={AYUDA_PLAN.caidas}>
       {sinOcioso ? <div data-sin-ocioso style={{ color: B.texto }}>{SIN_OCIOSO}</div> : <div data-frase-caidas style={{ marginBottom: 8, color: B.texto }}>{fraseCaidas(cifras, ociosoRes)}</div>}
       {!sinOcioso && cifras.caidas.length > 0 && <div style={{ overflowX: 'auto' }}><table data-tabla="caidas" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr>{['Desde (pico)', 'Hasta (valle)', 'Tu estrategia', `El ocioso (${ociosoRes === 'LIQUIDEZ' ? 'liquidez' : ociosoRes})`, 'Recupera el pico'].map(h => <th key={h} style={cab}>{h}</th>)}</tr></thead>
         <tbody>{cifras.caidas.map(c => <tr key={c.pico} data-caida={c.pico}><td style={celda}>{fechaCorta(c.pico)}</td><td style={celda}>{fechaCorta(c.valle)}</td><td style={{ ...celda, color: ROJO }}>{pct(c.caida)}</td>
           <td style={{ ...celda, color: c.ocioso > 0 ? VERDE : c.ocioso < 0 ? ROJO : B.texto }}>{c.ocioso > 0 ? '+' : ''}{pct(c.ocioso)}</td><td style={celda}>{c.recuperacion ? fechaCorta(c.recuperacion) : 'todavía no'}</td></tr>)}</tbody>
       </table></div>}
-    </Tarjeta>
+    </Tarjeta>}
   </>)
+  }
 
   return (
     <div ref={pagina} className="bp-pagina" style={{ ...S.pagina, '--bp-arriba': arriba != null ? `${arriba}px` : undefined }} data-pantalla="plan">
