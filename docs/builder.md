@@ -2510,3 +2510,18 @@ Primera vez que el plan con lista calcula algo (boceto `bocetos/plan-con-lista-C
   3. La prueba de oro: 18 combinaciones con la foto de Degiro (dos modos; cuatro comisiones; prioridades alfabético, momentum y fuerza relativa, con «Desempate» y con «Filtro»; máx. 1–4; EMA20 y SuperTrend; tres periodos; filtro de mercado; 4 valores). Diferencia máxima 1e-10 €.
   4. `/api/plan` entero y la pantalla montada.
 - `plan-lista.js` y `plan-por-dentro.js`, al día (con lista, «Tu dinero» ya pide su cálculo).
+
+## 90. Paso 3: colores, orden de las cifras, TIR y letra del bloque con lista
+
+Pedido por Sergi el 07/11, al ver la fase 6. Vale para «Una acción» y para «Una lista».
+
+- **Colores por signo** (`colorSigno`): verde si suma y rojo si resta; 0 o sin número, el color de siempre.
+  - Arriba: «Tienes al final» (por la ganancia neta), CAGR, TIR y peor caída.
+  - En «Año a año»: todas las columnas de %.
+  - En la tabla de comparaciones: el final (frente a lo aportado), CAGR, TIR y peor caída.
+  - En «¿Es estable?»: el CAGR y «El ocioso añadió».
+  - «Has aportado», impuestos y comisiones, en neutro.
+- **Orden de las cifras**: Has aportado · Tienes al final · CAGR · TIR · Peor caída · En el ocioso · Impuestos y comisiones.
+- **Sin aportaciones, ni la cifra «TIR» ni su columna en la tabla**: con solo el dinero inicial, la TIR es el mismo número que el CAGR. Vuelven solas cuando hay aportaciones (las del plan calculado). Con lista, hasta la fase 7, nunca hay.
+- **Letra del bloque con lista**: las piezas del Backtesting (universo, selector, reparto, filtros) llevan letra de 8–12 px. Solo dentro del plan (`[data-lista]`), un estilo las pasa a 12–13 px y aclara `--text2` y `--text3`. Solo se pinta con lista. El Backtesting no cambia (backtesting-panel.js y backtesting-resultados.js idénticos).
+- `planes-pantalla.js`: el orden, la TIR con y sin aportaciones, los colores, y que con «Una acción» no va el estilo de la lista.

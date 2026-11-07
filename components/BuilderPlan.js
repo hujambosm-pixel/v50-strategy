@@ -166,11 +166,13 @@ function Leyenda({ curva, activo = null, visibles = LINEAS_DEFECTO, onMarca = nu
   )
 }
 
-function Cifra({ id, titulo, ayuda, valor, sub }) {
+// §90: el color de una cifra según su signo (verde si suma, rojo si resta; 0 o sin número, el de siempre).
+const colorSigno = (v) => Number.isFinite(v) && v > 0 ? VERDE : Number.isFinite(v) && v < 0 ? ROJO : undefined
+function Cifra({ id, titulo, ayuda, valor, sub, color }) {
   return (
     <div data-cifra={id} style={{ flex: '1 1 165px', border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '10px 12px', background: B.fondo, minWidth: 0 }}>
       <div style={{ ...S.secundario, fontSize: 13, display: 'flex', alignItems: 'center', gap: 2 }}>{titulo}<Ayuda texto={ayuda} etiqueta={titulo}/></div>
-      <div data-valor style={{ fontSize: 20, fontWeight: 700, color: B.titulo, marginTop: 2, overflowWrap: 'anywhere' }}>{valor}</div>
+      <div data-valor style={{ fontSize: 20, fontWeight: 700, color: color || B.titulo, marginTop: 2, overflowWrap: 'anywhere' }}>{valor}</div>
       {sub && <div data-sub style={{ ...S.apagado, marginTop: 2 }}>{sub}</div>}
     </div>
   )
@@ -681,13 +683,15 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   ) : vistaDinero(cifras, false)
   function vistaDinero(cifras, conLista) {
   const s = cifras.seis
+  // §90: sin aportaciones (solo el dinero inicial), la TIR es el mismo número que el CAGR: ni su cifra ni su columna.
+  const dineroRes = calc.resultado?.plan?.dinero, conTir = !!dineroRes && ((dineroRes.aportaciones?.frecuencia || 'ninguna') !== 'ninguna' || (dineroRes.extraordinarias || []).length > 0)
   return (<>
     <div data-cifras style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
       <Cifra id="aportado" titulo="Has aportado" ayuda={AYUDA_PLAN.aportado} valor={euros(s.aportado, 0)}/>
-      <Cifra id="final" titulo="Tienes al final" ayuda={AYUDA_PLAN.final} valor={euros(s.final, 0)} sub={`ganancia neta ${euros(s.ganancia, 0)}`}/>
-      <Cifra id="caida" titulo="Peor caída" ayuda={ayudaCaida(s)} valor={pct(s.caidaPct)} sub={`${fechaCorta(s.caidaPctValle)} · ${euros(s.caidaEuros, 0)}`}/>
-      <Cifra id="twr" titulo="CAGR del plan" ayuda={AYUDA_PLAN.twr} valor={pct(s.twr)}/>
-      <Cifra id="tir" titulo="Rentabilidad de tu dinero (TIR)" ayuda={AYUDA_PLAN.tir} valor={pct(s.tir)}/>
+      <Cifra id="final" color={colorSigno(s.ganancia)} titulo="Tienes al final" ayuda={AYUDA_PLAN.final} valor={euros(s.final, 0)} sub={`ganancia neta ${euros(s.ganancia, 0)}`}/>
+      <Cifra id="twr" color={colorSigno(s.twr)} titulo="CAGR del plan" ayuda={AYUDA_PLAN.twr} valor={pct(s.twr)}/>
+      {conTir && <Cifra id="tir" color={colorSigno(s.tir)} titulo="Rentabilidad de tu dinero (TIR)" ayuda={AYUDA_PLAN.tir} valor={pct(s.tir)}/>}
+      <Cifra id="caida" color={colorSigno(s.caidaPct)} titulo="Peor caída" ayuda={ayudaCaida(s)} valor={pct(s.caidaPct)} sub={`${fechaCorta(s.caidaPctValle)} · ${euros(s.caidaEuros, 0)}`}/>
       {!conLista && <Cifra id="ocioso" titulo="En el ocioso" ayuda={AYUDA_PLAN.enOcioso} valor={<span style={{ whiteSpace: 'nowrap' }}>{pct(cifras.enOcioso, 1)}<span style={{ fontSize: 13, fontWeight: 400, color: B.secundario }}> del tiempo</span></span>}/>}
       {/* §57: en una línea; el detalle de las órdenes, en su tooltip y en su «?». */}
       <Cifra id="costes" titulo="Impuestos y comisiones" ayuda={`${AYUDA_PLAN.costes} En este plan: ${euros(s.impuestos, 0)} de impuestos y ${euros(s.costes, 0)} de comisiones en ${cifras.ordenes} órdenes.`} valor={<span title={`Impuestos ${euros(s.impuestos, 0)} · Comisiones ${euros(s.costes, 0)} (${cifras.ordenes} órdenes)`} style={{ fontSize: 16, whiteSpace: 'nowrap' }}>
@@ -700,22 +704,22 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     <Tarjeta id="anios" titulo="Año a año" ayuda={AYUDA_PLAN.anios}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="anios" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr>{(conLista ? ['Año', 'Rentabilidad del plan', 'Peor caída del plan en el año'] : ['Año', 'Rentabilidad del plan', 'Buy&Hold del valor', 'Peor caída del plan en el año', 'Peor caída Buy&Hold', '% del año en el ocioso']).map(h => <th key={h} style={cab}>{h}</th>)}</tr></thead>
-        <tbody>{cifras.anios.map(x => conLista ? <tr key={x.anio} data-anio={x.anio}><td style={celda}>{x.anio}</td><td style={{ ...celda, color: x.plan < 0 ? ROJO : B.texto, fontWeight: 700 }}>{pct(x.plan)}</td><td style={celda}>{pct(x.caidaPlan)}</td></tr>
-          : <tr key={x.anio} data-anio={x.anio}><td style={celda}>{x.anio}</td><td style={{ ...celda, color: x.plan < 0 ? ROJO : B.texto, fontWeight: 700 }}>{pct(x.plan)}</td><td style={{ ...celda, color: x.activo < 0 ? ROJO : B.texto }}>{pct(x.activo)}</td><td style={celda}>{pct(x.caidaPlan)}</td><td style={celda}>{pct(x.caidaActivo)}</td><td style={celda}>{pct(x.enOcioso, 1)}</td></tr>)}</tbody>
+        <tbody>{cifras.anios.map(x => conLista ? <tr key={x.anio} data-anio={x.anio}><td style={celda}>{x.anio}</td><td style={{ ...celda, color: colorSigno(x.plan) || B.texto, fontWeight: 700 }}>{pct(x.plan)}</td><td style={{ ...celda, color: colorSigno(x.caidaPlan) || B.texto }}>{pct(x.caidaPlan)}</td></tr>
+          : <tr key={x.anio} data-anio={x.anio}><td style={celda}>{x.anio}</td><td style={{ ...celda, color: colorSigno(x.plan) || B.texto, fontWeight: 700 }}>{pct(x.plan)}</td><td style={{ ...celda, color: colorSigno(x.activo) || B.texto }}>{pct(x.activo)}</td><td style={{ ...celda, color: colorSigno(x.caidaPlan) || B.texto }}>{pct(x.caidaPlan)}</td><td style={{ ...celda, color: colorSigno(x.caidaActivo) || B.texto }}>{pct(x.caidaActivo)}</td><td style={celda}>{pct(x.enOcioso, 1)}</td></tr>)}</tbody>
       </table></div>
     </Tarjeta>
     <Tarjeta id="alternativas" titulo={TITULO_ALTERNATIVAS} ayuda={AYUDA_PLAN.alternativas}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="alternativas" style={{ borderCollapse: 'collapse', width: '100%' }}>
-        <thead><tr>{['', 'Final', 'CAGR', 'TIR', 'Peor caída', 'Impuestos', 'Comisiones'].map(h => <th key={h} style={cab}>{h}</th>)}<th style={cab}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>Órdenes<Ayuda texto={AYUDA_PLAN.ordenes} etiqueta="Órdenes"/></span></th></tr></thead>
+        <thead><tr>{['', 'Final', 'CAGR', ...(conTir ? ['TIR'] : []), 'Peor caída', 'Impuestos', 'Comisiones'].map(h => <th key={h} style={cab}>{h}</th>)}<th style={cab}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>Órdenes<Ayuda texto={AYUDA_PLAN.ordenes} etiqueta="Órdenes"/></span></th></tr></thead>
         <tbody>{cifras.alternativas.filter(x => !(sinOcioso && x.id === 'OCIOSO_LIQUIDEZ')).map(x => <tr key={x.id} data-fila={x.id} style={x.id === 'PLAN' ? { fontWeight: 700, color: B.titulo } : undefined}>
-          <td style={celda}>{x.nombre}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.final, 0)}</td><td style={celda}>{pct(x.twr)}</td><td style={celda}>{pct(x.tir)}</td><td style={celda}>{pct(x.caida)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.impuestos, 0)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.costes, 0)}</td><td style={celda}>{x.ordenes}</td>
+          <td style={celda}>{x.nombre}</td><td style={{ ...celda, whiteSpace: 'nowrap', color: colorSigno(x.final - s.aportado) }}>{euros(x.final, 0)}</td><td style={{ ...celda, color: colorSigno(x.twr) }}>{pct(x.twr)}</td>{conTir && <td style={{ ...celda, color: colorSigno(x.tir) }}>{pct(x.tir)}</td>}<td style={{ ...celda, color: colorSigno(x.caida) }}>{pct(x.caida)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.impuestos, 0)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.costes, 0)}</td><td style={celda}>{x.ordenes}</td>
         </tr>)}</tbody>
       </table></div>
     </Tarjeta>
     <Tarjeta id="tramos" titulo="¿Es estable? Por tramos" ayuda={AYUDA_PLAN.tramos}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="tramos" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr>{['Tramo', 'CAGR de tu plan', ...(sinOcioso ? [] : ['El ocioso añadió'])].map(h => <th key={h} style={cab}>{h}</th>)}</tr></thead>
-        <tbody>{cifras.tramos.map(t => <tr key={t.nombre} data-tramo={t.nombre}><td style={celda}>{t.nombre}</td><td style={celda}>{pct(t.cagr)}</td>{!sinOcioso && <td style={celda}>{t.ocioso == null ? '—' : puntos(t.ocioso)}</td>}</tr>)}</tbody>
+        <tbody>{cifras.tramos.map(t => <tr key={t.nombre} data-tramo={t.nombre}><td style={celda}>{t.nombre}</td><td style={{ ...celda, color: colorSigno(t.cagr) || B.texto }}>{pct(t.cagr)}</td>{!sinOcioso && <td style={{ ...celda, color: colorSigno(t.ocioso) || B.texto }}>{t.ocioso == null ? '—' : puntos(t.ocioso)}</td>}</tr>)}</tbody>
       </table></div>
     </Tarjeta>
     {!conLista && <Tarjeta id="caidas" titulo="Cuando tu estrategia cae, ¿qué hace el ocioso?" ayuda={AYUDA_PLAN.caidas}>
@@ -739,6 +743,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       {/* §49 y §50: en escritorio (≥ 1000 px), esta página es la que se desplaza (el alto de la ventana menos lo de encima) y la columna
           de ajustes queda fija al bajar, con su propia barra si no cabe (como mucho, el alto visible de la página menos su relleno); en el
           móvil, nada fijo y se desplaza la ventana, como antes. */}
+      {/* §90: las piezas del Backtesting en el bloque con lista, con letra más grande y más clara SOLO aquí (el Backtesting no cambia). */}
+      {enLista && <style>{[[8, 12], [9, 12], [10, 12], [11, 13], [12, 13]].map(([de, a]) => `[data-lista] [style*="font-size:${de}px"], [data-lista] [style*="font-size: ${de}px"] { font-size: ${a}px !important }`).join(' ') + ' [data-lista] { --text3: #a9c3d6; --text2: #c6dbea }'}</style>}
       <style>{`.bp-avisos { flex-direction: row } @media (max-width: 700px) { .bp-avisos { flex-direction: column; align-items: flex-start !important } }
 /* §80: las piezas del Backtesting, en su caja oscura de siempre. */
 .bp-mc { background: var(--bg, #080c14); border: 1px solid var(--border, #1a2d45); border-radius: 6px; overflow: hidden; color: var(--text, #e2eaf5) }

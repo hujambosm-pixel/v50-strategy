@@ -75,6 +75,16 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   const yEt = Number((h.match(/data-etiqueta="Buy&amp;Hold TEST 11\.134 €" x="[^"]+" y="([0-9.]+)"/) || [])[1])
   ok(Math.abs(yDe(h, 'activo') + 4 - yEt) <= 32, 'gráfico: la línea de Buy&Hold acaba a la altura de su etiqueta (como mucho, lo que la separa de las otras)')
   ok(h.slice(h.indexOf('data-cifra="twr"')).includes(Pa.pct(c.seis.twr)), `la cifra «CAGR del plan», ${Pa.pct(c.seis.twr)}`)
+  // §90: el orden de las cifras (la peor caída, tras la TIR), la TIR solo con aportaciones y los colores por signo.
+  const ids = (html) => [...html.matchAll(/data-cifra="([a-z]+)"/g)].map(m => m[1]).join(',')
+  const conAp = pinta({ resultado: { respuesta: resp, plan: { ...p, dinero: { ...p.dinero, aportaciones: { importe: 300, frecuencia: 'mensual', crecimientoAnual: 0 } } } } })
+  ok(ids(h) === 'aportado,final,twr,caida,ocioso,costes' && !/<th[^>]*>TIR<\/th>/.test(h), `§90: sin aportaciones, sin TIR (ni cifra ni columna): ${ids(h)}`)
+  ok(ids(conAp) === 'aportado,final,twr,tir,caida,ocioso,costes' && /<th[^>]*>TIR<\/th>/.test(conAp), `§90: con aportaciones, la TIR y la peor caída detrás: ${ids(conAp)}`)
+  const colorCifra = (html, id) => (html.slice(html.indexOf(`data-cifra="${id}"`)).match(/data-valor="true" style="[^"]*color:(#[0-9a-f]{6})/) || [])[1] || null
+  const esperado = (v) => v > 0 ? '#7ee2a0' : v < 0 ? '#ff8b8b' : null
+  ok(colorCifra(h, 'final') === esperado(c.seis.ganancia) && colorCifra(h, 'twr') === esperado(c.seis.twr) && colorCifra(h, 'caida') === esperado(c.seis.caidaPct) && !['#7ee2a0', '#ff8b8b'].includes(colorCifra(h, 'aportado')),
+    `§90: colores por signo (final ${colorCifra(h, 'final')}, CAGR ${colorCifra(h, 'twr')}, caída ${colorCifra(h, 'caida')}; «Has aportado», el de siempre)`)
+  ok(!h.includes('[data-lista]'), '§90: con «Una acción», sin el estilo de la letra del bloque con lista')
 
 
   // ── 1b · «Año a año» y el tiempo en el ocioso, a mano (§57) ──
