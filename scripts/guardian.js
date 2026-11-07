@@ -273,8 +273,10 @@ function compruebaRespuesta(R, intervalo, anota) {
     return lista
   }
   const conocidos = JSON.parse(fs.readFileSync(path.join(__dirname, 'guardian', 'conocidos.json'), 'utf8')).conocidos
-    .map(c => ({ ...c, re: new RegExp(c.estrategias) }))
-  const esConocido = (nombre, comp) => conocidos.find(c => c.re.test(nombre) && (c.comprobaciones === '*' || c.comprobaciones.includes(comp)))
+    .map(c => ({ ...c, re: c.estrategias ? new RegExp(c.estrategias) : null }))
+  // Por id (renombrar una estrategia no cambia nada); la expresión regular del nombre solo si la entrada no tiene ids.
+  const casa = (c, id, nombre) => (Array.isArray(c.ids) ? c.ids.includes(id) : !!(c.re && c.re.test(nombre)))
+  const esConocido = (id, nombre, comp) => conocidos.find(c => casa(c, id, nombre) && (c.comprobaciones === '*' || c.comprobaciones.includes(comp)))
 
   const tabla = [], detalles = [], notas = []
   // Conocidos que el guardián HA VISTO fallar: estrategia → { motivo, columnas }. Los demás conocidos
@@ -291,7 +293,7 @@ function compruebaRespuesta(R, intervalo, anota) {
       if (estados[comp] === 'n/a') estados[comp] = 'ok'
       let e = estado
       if (e === 'FALLO') {
-        const k = esConocido(est.name, comp)
+        const k = esConocido(est.id, est.name, comp)
         if (k) {
           e = 'conocido'
           if (!conocidosVistos.has(est.name)) conocidosVistos.set(est.name, { motivo: k.motivo, columnas: new Set() })
@@ -387,7 +389,7 @@ function compruebaRespuesta(R, intervalo, anota) {
       } else anota('a', 'FALLO', t.entryDate, `${texto} con un stop anotado el ${cand[0].date}, que no estaba decidido antes de la entrada`, ctx)
     }
     for (const [comp, n] of Object.entries(porComp)) if (n > MAX_DETALLES) detalles.push(`FALLO · ${est.name} · … y ${n - MAX_DETALLES} más en «${comp}»`)
-    tabla.push({ nombre: est.name, intervalo, estados })
+    tabla.push({ id: est.id, nombre: est.name, intervalo, estados })
     process.stdout.write('.')
   }
   process.stdout.write('\n\n')
@@ -409,7 +411,7 @@ function compruebaRespuesta(R, intervalo, anota) {
   // Conocidos: los detectados (con sus columnas) y los que estas comprobaciones no ven, con su nota.
   const detectados = [], noDetectables = []
   for (const f of tabla) {
-    const k = conocidos.find(c => c.re.test(f.nombre))
+    const k = conocidos.find(c => casa(c, f.id, f.nombre))
     if (!k) continue
     const visto = conocidosVistos.get(f.nombre)
     if (visto) detectados.push(`${f.nombre} — conocido (detectado en ${[...visto.columnas].sort().join(', ')}): ${k.motivo}`)

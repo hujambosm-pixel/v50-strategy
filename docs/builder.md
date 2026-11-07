@@ -2596,3 +2596,12 @@ Visto por Sergi en la app (07/11): tras «Descartar cambios», unos segundos se 
 - `cifrasViejas` (components/BuilderPlan.js): el resultado que se enseña es de otros ajustes (su clave no es la de ahora). Entonces la vista «Tu dinero» (cifras, gráfico y tablas; con y sin lista) se ve con opacidad 0,4 y un tooltip («Calculando con tus ajustes de ahora: estas cifras son del cálculo anterior.»), junto al «Calculando…» de siempre. Al llegar el cálculo nuevo, se ve normal. Vale para cualquier cambio, no solo para «Descartar cambios».
 - Nada cambia en los cálculos ni en lo guardado; «La cartera por dentro» no se toca.
 - `planes-pantalla.js`: el resultado de los ajustes de ahora, sin atenuar; uno de otros ajustes, atenuado.
+
+## 98. Guardián: los avisos conocidos van por id
+
+Renombrar una estrategia daba un FALLO falso en `comunes.sh`: los avisos conocidos de `scripts/guardian/conocidos.json` buscaban la estrategia por su NOMBRE (una expresión regular), y con otro nombre ya no se reconocía (pasó con «Prueba editor EMA20x»).
+
+- Cada entrada lleva ahora `ids` (los id de la tabla `strategies`) y `nombre` (solo para leerlo). `scripts/guardian.js` casa por id (`casa`); la expresión regular `estrategias` solo se usa si una entrada no tiene `ids`.
+- Las 11 entradas, con los mismos id que casaban antes por nombre (16 estrategias, 2 de ellas inactivas: «13 RSI 9 (cruces)» y «22 MACD…»).
+- Ojo: una estrategia NUEVA con un fallo ya conocido (p. ej., una copia) hay que añadirla por su id.
+- Nada cambia en la app ni en las cifras; el informe del guardián sale igual.
