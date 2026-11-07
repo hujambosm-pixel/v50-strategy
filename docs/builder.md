@@ -2480,3 +2480,9 @@ Primera vez que el plan con lista calcula algo (boceto `bocetos/plan-con-lista-C
 - En `components/backtesting/SelectorValores.js` (Backtesting y «Una lista» del plan), el puesto del ranking solo se pinta si el valor TIENE puesto (`rd?.rank!=null`): antes, con una fila del ranking sin número, salía «#undefined».
 - El buscador no distingue acentos (norma de buscadores): usa `sinTildes` de `lib/builder/buscar.js` en el símbolo, el nombre y lo escrito («telefonica» encuentra «Telefónica»). Con textos sin acentos, lo mismo que antes.
 - `backtesting-panel.js`: los 400 estados al azar siguen idénticos a la versión anterior y, a mano, «telefonica» → Telefónica, «ÉLITE» → Elite Corp, y sin «#undefined» ni «#null» (AAPL #7).
+
+## 88. Comisión del plan: se cobra en cada orden (texto)
+
+- Decisión de Sergi (07/11): NO habrá comisión distinta de compra y de venta en el plan. Lo que se pone se cobra en CADA orden (al comprar y al vender), y lo dicen el «?» de «Comisión por operación», el «?» de «€ fijos por operación» y un tooltip en su campo: si el bróker cobra 0,37 € solo al comprar, se pone 0,185 € (0,185 + 0,185 = 0,37 €).
+- `textoComision` (la línea de «La cartera por dentro» y el texto para copiar del plan) muestra 3 decimales si el número los tiene («0,185 € fijos por operación»); con 2 o menos, igual que antes.
+- Nada cambia en las cifras: solo textos.
