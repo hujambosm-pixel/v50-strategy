@@ -93,6 +93,14 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
     ok(cerca(r4.valorNeto, esp4) && r4.costes.ordenes === 8, `compartido vendiendo del ocioso solo lo que falta: ${esp4.toFixed(4)} € con 8 órdenes (${r4.valorNeto}, ${r4.costes.ordenes})`)
     ok(r4.estrategias.e.operaciones.map(o => o.capital.toFixed(3)).join() === '499.500,523.925', `capital de cada entrada: 499,50 € y 523,925 € (${r4.estrategias.e.operaciones.map(o => o.capital).join(', ')})`)
     ok(Pl.motivoListaNoCalculable(plan7('compartido', { ocioso: 'A' })) === Pl.AVISO_LISTA_OCIOSO_EN_LISTA, 'el ocioso no puede ser un valor de la lista, y lo dice')
+    // §95: «Buy&Hold de la lista (a partes iguales)», a mano. 1.000 € el 30/1: 500 € a A (499 / 10 = 49,9) y 500 € a B (499 / 20 = 24,95).
+    // El 3/2 llegan 300 €: 150 € a cada uno (14,9 de A y 7,45 de B). El 4/2, venta final: 64,8 × 12 + 32,4 × 18 − 2 = 1.358,80 €, 6 órdenes.
+    const Bc = act('B', [20, 20, 20, 18], [20, 20, 19, 18], [])
+    const Ev = require(R + '/lib/planes/evalua.js')
+    const refBh = Ev.referenciasDe(plan7('compartido', { aporta: 300 })).find(x => x.id === 'ACTIVO')
+    const rb = Pl.ejecutaPlan(refBh.plan, datos7('compartido', [A1, Bc]))
+    ok(refBh.plan.piezas[0].tipo === 'cesta' && cerca(rb.valorNeto, 64.8 * 12 + 32.4 * 18 - 2) && rb.costes.ordenes === 6 && rb.aportado === 1300,
+      `Buy&Hold de la lista a mano: 1.358,80 € con 6 órdenes (${rb.valorNeto}, ${rb.costes.ordenes})`)
   }
 
   // ── 1c · Impuestos (§92), a mano ──
@@ -197,7 +205,7 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
   const cuerpoP = PD.peticionPorDentro({ a: aP, estrategia: est }), planP = Pl.planListaCalculable(Pa.planDe(aP, est)).plan
   const rp = await E.llama(HP, { plan: planP, curvas: true, cuerpoLista: cuerpoP })
   const jp = rp.status === 200 ? JSON.parse(rp.cuerpo) : null
-  ok(!!jp && Math.abs(jp.evaluacion.plan.medidas.valorNeto - jp.finalPorDentro) < 0.005 && jp.evaluacion.referencias.map(x => x.id).join() === 'QQQ,SPY,LIQUIDEZ,OCIOSO_LIQUIDEZ',
+  ok(!!jp && Math.abs(jp.evaluacion.plan.medidas.valorNeto - jp.finalPorDentro) < 0.005 && jp.evaluacion.referencias.map(x => x.id).join() === 'QQQ,SPY,LIQUIDEZ,OCIOSO_LIQUIDEZ,ACTIVO',
     `/api/plan con lista: ${jp ? jp.evaluacion.plan.medidas.valorNeto.toFixed(2) + ' € y «por dentro» ' + jp.finalPorDentro.toFixed(2) + ' €; comparaciones ' + jp.evaluacion.referencias.map(x => x.id).join(', ') : rp.status + ' ' + String(rp.cuerpo).slice(0, 200)}`)
   const r400 = await E.llama(HP, { plan: Pa.planDe({ ...aP, apalancamiento: 2 }, est), curvas: true, cuerpoLista: cuerpoP }), r400b = await E.llama(HP, { plan: planP, curvas: true, cuerpoLista: { ...cuerpoP, symbols: ['AAPL'] } })
   ok(r400.status === 400 && JSON.parse(r400.cuerpo).error === Pl.AVISO_LISTA_SIMPLE && r400b.status === 400 && /no corresponde/.test(JSON.parse(r400b.cuerpo).error), '/api/plan rechaza un plan apalancado y una petición de lista que no es la del plan')
@@ -249,6 +257,12 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
     const tramos = b.raiz.conAtributo('data-tabla', 'tramos')[0]?.textContent || ''
     ok(tramos.includes('El ocioso añadió') && !/—/.test(tramos) && b.raiz.conAtributo('data-linea', 'ociosoLiquidez').length === 1 && b.raiz.conAtributo('data-muestra', 'ociosoLiquidez').length === 1,
       'con oro: la línea «Ocioso en liquidez» en el gráfico y la leyenda, y «El ocioso añadió» con cifras en los dos tramos')
+  }
+  // §95: la fila y la línea «Buy&Hold de la lista (a partes iguales)».
+  {
+    const ref = m7Ref.find(x => x.id === 'ACTIVO'), fila = b.raiz.conAtributo('data-fila', 'ACTIVO')[0]?.textContent || ''
+    ok(!!ref && fila.startsWith(Pa.NOMBRE_BH_LISTA) && fila.includes(Pa.euros(ref.medidas.valorNeto, 0)) && b.raiz.conAtributo('data-linea', 'activo').length === 1 && txt.includes('Buy&Hold de la lista'),
+      `fila «${Pa.NOMBRE_BH_LISTA}»: ${Pa.euros(ref?.medidas.valorNeto, 0)}, y su línea en el gráfico`)
   }
   b.quita()
 

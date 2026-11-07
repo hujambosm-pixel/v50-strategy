@@ -712,9 +712,9 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       <Cifra id="costes" titulo="Impuestos y comisiones" ayuda={`${AYUDA_PLAN.costes} En este plan: ${euros(s.impuestos, 0)} de impuestos y ${euros(s.costes, 0)} de comisiones en ${cifras.ordenes} órdenes.`} valor={<span title={`Impuestos ${euros(s.impuestos, 0)} · Comisiones ${euros(s.costes, 0)} (${cifras.ordenes} órdenes)`} style={{ fontSize: 16, whiteSpace: 'nowrap' }}>
         <span data-impuestos>{euros(s.impuestos, 0)}</span> · <span data-comisiones>{euros(s.costes, 0)}</span></span>}/>
     </div>
-    <Tarjeta id="grafico" titulo="Cómo crece tu dinero" ayuda={conLista ? `${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franjaLista}` : `${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franja}`}>
-      <GraficoPlan curva={conLista ? { ...cifras.curva, activo: null, ...(sinOcioso ? { ociosoLiquidez: null } : {}) } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? null : activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles} proporcion={conLista}/>
-      <Leyenda curva={conLista ? { ...cifras.curva, activo: null, ...(sinOcioso ? { ociosoLiquidez: null } : {}) } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? null : activoRes} visibles={lineasVisibles} onMarca={marcaLinea} proporcion={conLista}/>
+    <Tarjeta id="grafico" titulo="Cómo crece tu dinero" ayuda={conLista ? `${AYUDA_PLAN.graficoLista} ${AYUDA_PLAN.franjaLista}` : `${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franja}`}>
+      <GraficoPlan curva={conLista ? { ...cifras.curva, ...(sinOcioso ? { ociosoLiquidez: null } : {}) } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? 'de la lista' : activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles} proporcion={conLista}/>
+      <Leyenda curva={conLista ? { ...cifras.curva, ...(sinOcioso ? { ociosoLiquidez: null } : {}) } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? 'de la lista' : activoRes} visibles={lineasVisibles} onMarca={marcaLinea} proporcion={conLista}/>
     </Tarjeta>
     <Tarjeta id="anios" titulo="Año a año" ayuda={AYUDA_PLAN.anios}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="anios" style={{ borderCollapse: 'collapse', width: '100%' }}>
@@ -723,7 +723,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           : <tr key={x.anio} data-anio={x.anio}><td style={celda}>{x.anio}</td><td style={{ ...celda, color: colorSigno(x.plan) || B.texto, fontWeight: 700 }}>{pct(x.plan)}</td><td style={{ ...celda, color: colorSigno(x.activo) || B.texto }}>{pct(x.activo)}</td><td style={{ ...celda, color: colorSigno(x.caidaPlan) || B.texto }}>{pct(x.caidaPlan)}</td><td style={{ ...celda, color: colorSigno(x.caidaActivo) || B.texto }}>{pct(x.caidaActivo)}</td><td style={celda}>{pct(x.enOcioso, 1)}</td></tr>)}</tbody>
       </table></div>
     </Tarjeta>
-    <Tarjeta id="alternativas" titulo={TITULO_ALTERNATIVAS} ayuda={AYUDA_PLAN.alternativas}>
+    <Tarjeta id="alternativas" titulo={TITULO_ALTERNATIVAS} ayuda={conLista ? `${AYUDA_PLAN.alternativas} ${AYUDA_PLAN.bhLista}` : AYUDA_PLAN.alternativas}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="alternativas" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr>{['', 'Final', 'CAGR', ...(conTir ? ['TIR'] : []), 'Peor caída', 'Impuestos', 'Comisiones'].map(h => <th key={h} style={cab}>{h}</th>)}<th style={cab}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>Órdenes<Ayuda texto={AYUDA_PLAN.ordenes} etiqueta="Órdenes"/></span></th></tr></thead>
         <tbody>{cifras.alternativas.filter(x => !(sinOcioso && x.id === 'OCIOSO_LIQUIDEZ')).map(x => <tr key={x.id} data-fila={x.id} style={x.id === 'PLAN' ? { fontWeight: 700, color: B.titulo } : undefined}>

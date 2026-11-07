@@ -2570,3 +2570,11 @@ Boceto `bocetos/plan-lista-ocioso.html`, aprobado por Sergi el 07/11 (las tres r
 - `referenciasDe` (lib/planes/evalua.js) da `OCIOSO_LIQUIDEZ` también con una lista: el mismo plan, con el ocioso en liquidez. Con una acción, mismas referencias y en el mismo orden.
 - En la pantalla, con lista y un ocioso que no es liquidez: su fila en «Sin estrategia: el mismo dinero en…», su línea naranja en el gráfico (con casilla en la leyenda) y la columna «El ocioso añadió» de «¿Es estable?» con cifras. Con el ocioso en liquidez, nada de eso (es el mismo plan), como con una acción.
 - `plan-tu-dinero-lista.js`: con 300 €/mes, oro e impuestos, la fila vale lo mismo que el plan con liquidez calculado aparte en /api/plan (121.907 € con la foto de Degiro), y salen la línea y «El ocioso añadió» en los dos tramos.
+
+## 95. El plan con lista, fase 9 (parte 3): Buy&Hold de la lista a partes iguales
+
+- Pieza nueva del motor `tipo: 'cesta'` (lib/planes/plan.js), solo para esta referencia: los valores de la lista (con las mismas velas que la pieza con lista, `datos.lista`). El dinero que llega (el inicial y cada aportación) se reparte igual entre los valores que cotizan ese día, una orden por valor, a la apertura; no se vende nunca (salvo para pagar impuestos y la venta final). Si un día no cotiza ninguno, espera en liquidez; si alguno aún no cotiza, su parte va a los demás.
+- `referenciasDe` (lib/planes/evalua.js): con lista, la referencia `ACTIVO` es esta cesta («Lo mismo a la lista a partes iguales»). Mismo id que «Buy&Hold de la acción» para que /api/plan (curva y órdenes) y la pantalla la traten igual. Con una acción, nada cambia.
+- Pantalla: fila «Buy&Hold de la lista (a partes iguales)» (`NOMBRE_BH_LISTA`) y línea «Buy&Hold de la lista» en el gráfico, con casilla. El «?» de la tabla añade cómo se calcula (`AYUDA_PLAN.bhLista`, con ejemplo: 12.000 € y 12 valores → 1.000 € en cada uno; 300 € → 25 € en cada uno) y el del gráfico habla de la lista (`AYUDA_PLAN.graficoLista`).
+- Sigue sin salir con lista: la tabla «Caídas frente al ocioso» (decidido en el boceto: más adelante) y las columnas de Buy&Hold de «Año a año».
+- `plan-tu-dinero-lista.js`: a mano, 1.000 € + 300 € entre A y B con 1 € por orden → 1.358,80 € y 6 órdenes; en la pantalla, la fila con el importe de /api/plan y su línea.
