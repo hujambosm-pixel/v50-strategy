@@ -4,7 +4,8 @@
 // (useCarteraPorDentro.js) y los MISMOS paneles (CarteraPorDentro.js). Lo propio del plan:
 //   · la lista, el reparto y los filtros salen del bloque (a.lista, lib/planes/lista.js); el periodo y el dinero inicial, de «Tu dinero»
 //     (× el 100 % del bloque: hoy un plan tiene un solo bloque); sin aportaciones; velas diarias;
-//   · SIN comisiones hasta la fase 5 (decisión de Sergi del 06/11), y lo dice en una línea;
+//   · con las comisiones del plan (fase 5, docs/builder.md §86): su % con el mínimo por orden (lib/comisiones.js, comisionesDePlan), y lo
+//     dice en una línea; los «Comprar y mantener» de aquí siguen sin comisión, como en el Backtesting (excepción temporal de Sergi);
 //   · se calcula SOLA mientras la pestaña está abierta, ~1 s después del último cambio (decisión de Sergi del 06/11);
 //   · los parámetros del panel de «Backtest de un valor» (emaR, stop…) van con sus valores de partida: las estrategias de tarjetas no
 //     los usan, y así la petición es la del Backtesting con la app recién abierta;
@@ -16,11 +17,11 @@ import CarteraPorDentro from './CarteraPorDentro'
 import useCarteraPorDentro from './useCarteraPorDentro'
 import { ALTO_FRANJA_RENDIMIENTO, MC_TODAS, SUELO_EQUITY, apiFetch as apiFetchApp, capitalDeRespuesta, desplazamientoSobre, mcVisibleActivo, scrollerDe } from './comun'
 import { anotaPeticionMc } from '../AzarCarteraPanel'
-import { COMISIONES_CERO } from '../../lib/comisiones'
+import { comisionesDePlan } from '../../lib/comisiones'
 import { cfgBaseMc, cuerpoMc, pesosNormalizadosMc } from '../../lib/peticionMc'
 import { leeRespuestaMc } from '../../lib/respuestaMc'
 import { mergeLista } from '../../lib/planes/lista'
-import { creaCalculador, fechasDe } from '../../lib/builder/planPantalla'
+import { costesDe, creaCalculador, fechasDe, textoComision } from '../../lib/builder/planPantalla'
 const McMonthlyGainsChart = dynamic(() => import('../McMonthlyGainsChart'), { ssr: false })
 
 // Los valores de partida de pages/index.js (los useState del panel de «Backtest de un valor» y del Backtesting).
@@ -40,7 +41,7 @@ export function peticionPorDentro({ a, estrategia, wlData = {} }) {
     momentumN: l.momentumN, rsWindow: l.rsWindow, rsGateThr: l.rsGateThr, momGateThr: l.momGateThr, proxGateThr: l.proxGateThr, calculoPrioridad: l.calculoPrioridad,
     scoreMap: Object.fromEntries(l.simbolos.map(sym => [sym, wlData?.[sym.toUpperCase()]?.active?.scoreMetricas ?? null])) })
   return cuerpoMc({ symbols: l.simbolos, modoAsig: l.modo, weights: pesosNormalizadosMc(l.modo, l.simbolos, l.pesos), cfg, strategyId: estrategia.id,
-    isNoStrategy: (estrategia.name || '').includes('No Strategy'), filtros: l.filtros, intervalo: 'diario', comisiones: { ...COMISIONES_CERO } })
+    isNoStrategy: (estrategia.name || '').includes('No Strategy'), filtros: l.filtros, intervalo: 'diario', comisiones: comisionesDePlan(costesDe(a)) })
 }
 // Por qué no hay petición (para la línea de aviso).
 export function motivoSinPeticion({ a, estrategia }) {
@@ -87,7 +88,8 @@ export default function PlanPorDentro({ a, estrategia, estrategias = VACIO, apiF
   const capital = Number(a?.capital) || 0
   const idEst = estrategia?.id || null
   const mcStratSelected = useMemo(() => idEst ? [idEst] : [], [idEst])
-  const mcComisiones = COMISIONES_CERO
+  const claveCom = JSON.stringify(comisionesDePlan(costesDe(a || {})))
+  const mcComisiones = useMemo(() => JSON.parse(claveCom), [claveCom])
   const anios = per?.desde && per?.hasta ? Math.max(1, Math.round((new Date(per.hasta) - new Date(per.desde)) / (365.25 * 24 * 3600 * 1000))) : 5
   const h = useCarteraPorDentro({ capitalIni: capital, currentStratId: idEst, filtrosBackend: l.filtros, mcCapitalIni: capital, mcComisiones, mcFromDate: per?.desde || null,
     mcIntervalo: 'diario', mcIsModoCompare: false, mcMultiResults: VACIO, mcPeriodMode: 'range', mcResult, mcStratSelected, mcToDate: per?.hasta || null, mcYears: anios, strategies: estrategias })
@@ -213,7 +215,7 @@ export default function PlanPorDentro({ a, estrategia, estrategias = VACIO, apiF
   return (
     <div data-por-dentro style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div data-linea-por-dentro style={{ fontSize: 13, color: 'var(--text2, #8ab8d4)' }}>
-        {motivo || `Calculado como el Backtesting con ${capital.toLocaleString('es-ES')} € (tu dinero inicial), sin aportaciones y todavía sin comisiones: llegan en el paso siguiente.`}
+        {motivo || `Calculado como el Backtesting con ${capital.toLocaleString('es-ES')} € (tu dinero inicial), sin aportaciones y ${costesDe(a || {}) ? `con las comisiones del plan (${textoComision(a)}; «Comprar y mantener», sin comisión)` : 'sin comisiones (el plan no tiene)'}.`}
       </div>
       {calc.error && !calc.calculando && <div data-error-por-dentro style={{ color: '#ff4d6d', fontSize: 13 }}>No se pudo calcular: {calc.error}</div>}
       {mcLoading && <div data-calculando-por-dentro style={{ fontSize: 13, color: 'var(--accent, #00d4ff)' }}>Calculando la cartera por dentro…</div>}

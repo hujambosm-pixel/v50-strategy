@@ -2,7 +2,8 @@
 // Las corre comunes.sh. Termina en 0 si todo va bien.
 // 1 · La petición del plan (peticionPorDentro) es la que haría el Backtesting con los mismos ajustes: el código de runBacktesting de
 //     antes (copiado literal en peticion-mc.js) con los valores de partida del panel, la lista del bloque, el periodo y el dinero
-//     inicial del plan y sin comisiones. 400 listas al azar, JSON idéntico. Y los motivos para no calcular.
+//     inicial del plan y SUS comisiones (fase 5, §86: % con mínimo por orden, escritas a mano). 400 listas al azar, JSON idéntico. Y los
+//     motivos para no calcular. 1b · El mínimo por orden de lib/comisiones.js, con cuentas hechas a mano.
 // 2 · Con la foto de precios de la lista Degiro (datos/, sin red) y una estrategia de tarjetas, /api/multibacktest responde a esa
 //     petición, y la pestaña (montada con estado en domFalso.js) pinta los paneles del Backtesting con ese resultado.
 // 3 · En el paso 3: con «Una lista» salen las pestañas «Tu dinero» / «La cartera por dentro»; no se calcula nada hasta abrir la segunda;
@@ -57,24 +58,37 @@ function antes(st) {
     const sim = SIMB.filter(() => az() < 0.6); if (!sim.length) sim.push('AAPL')
     const lista = Li.mergeLista({ simbolos: sim, modo: uno(['slots', 'compartido', 'concentrado', 'positionsizing']), maxPosiciones: uno([1, 4, 7]), prioridad: uno(['alfabetico', 'momentum', 'fuerza_relativa']),
       criterioUso: uno(['desempate', 'filtro']), momentumN: uno([20, 60]), rsWindow: uno([63, 126]), calculoPrioridad: uno([1, 2]), riskPerTrade: uno([1, 5]), filtros: uno(FILTROS) })
-    const a = { ...Pa.AJUSTES_PLAN, donde: 'lista', lista, capital: uno([10000, 2500, 50000]), periodo: uno(['todo', 'p1', 'p2']) }
+    // La comisión del plan, de sus cuatro formas, y lo que debe llegar al motor (escrito a mano: fijas 0, % y mínimo por orden).
+    const [com, comEsperada] = uno([[{ comisionTipo: 'pct', comision: 0 }, { compra: 0, venta: 0, porcentaje: 0 }], [{ comisionTipo: 'pct', comision: 0.1 }, { compra: 0, venta: 0, porcentaje: 0.1 }],
+      [{ comisionTipo: 'fija', comisionFija: 2 }, { compra: 0, venta: 0, porcentaje: 0, minimo: 2 }], [{ comisionTipo: 'pctMin', comision: 0.25, comisionMin: 1.5 }, { compra: 0, venta: 0, porcentaje: 0.25, minimo: 1.5 }]])
+    const a = { ...Pa.AJUSTES_PLAN, ...com, donde: 'lista', lista, capital: uno([10000, 2500, 50000]), periodo: uno(['todo', 'p1', 'p2']) }
     const wl = Object.fromEntries(SIMB.filter(() => az() < 0.5).map(s => [s, { active: { scoreMetricas: Math.round(az() * 100) } }]))
     const per = Pa.fechasDe(a), l = Li.mergeLista(a.lista), P = PD.PANEL_DEFECTO
     const ref = antes({ mcMode: l.modo, mcSelected: l.simbolos, mcWeights: l.pesos, emaR: P.emaR, emaL: P.emaL, _mcYears: null, mcCapitalIni: a.capital, _mcFrom: per.desde, _mcTo: per.hasta,
       tipoStop: P.tipoStop, atrP: P.atrP, atrM: P.atrM, sinPerdidas: P.sinPerdidas, reentry: P.reentry, tipoFiltro: P.tipoFiltro, sp500EmaR: P.sp500EmaR, sp500EmaL: P.sp500EmaL, mcCapital: P.mcCapital,
       mcRiskPerTrade: l.riskPerTrade, mcMaxPortfolioPct: l.maxPortfolioPct, mcMaxAccumRisk: l.maxAccumRisk, mcAssumedStopPct: l.assumedStopPct, mcMaxPosiciones: l.maxPosiciones, mcPrioridad: l.prioridad,
       mcCriterioUso: l.criterioUso, mcMomentumN: l.momentumN, mcRsWindow: l.rsWindow, mcRsGateThr: l.rsGateThr, mcMomGateThr: l.momGateThr, mcProxGateThr: l.proxGateThr, mcCalculoPrioridad: l.calculoPrioridad,
-      _activosMc: l.simbolos, wlData: wl, modesToRun: [l.modo], stratIds: [est.id], isNoStrategy: false, filtrosBackend: l.filtros, mcIntervalo: 'diario', mcComisiones: { compra: 0, venta: 0, porcentaje: 0 }, _prueba: {} })
+      _activosMc: l.simbolos, wlData: wl, modesToRun: [l.modo], stratIds: [est.id], isNoStrategy: false, filtrosBackend: l.filtros, mcIntervalo: 'diario', mcComisiones: comEsperada, _prueba: {} })
     if (JSON.stringify(ref) === JSON.stringify(PD.peticionPorDentro({ a, estrategia: est, wlData: wl }))) iguales++
   }
-  ok(iguales === 400, `la petición del plan es la del Backtesting con los mismos ajustes, sin comisiones (${iguales}/400 listas al azar)`)
+  ok(iguales === 400, `la petición del plan es la del Backtesting con los mismos ajustes y las comisiones del plan (${iguales}/400 listas al azar)`)
   const aBase = { ...Pa.AJUSTES_PLAN, donde: 'lista', periodo: 'todo', capital: 10000, lista: Li.mergeLista({ simbolos: SIMB, modo: 'compartido' }) }
   ok(PD.peticionPorDentro({ a: { ...aBase, lista: { ...aBase.lista, simbolos: [] } }, estrategia: est }) === null && PD.motivoSinPeticion({ a: { ...aBase, lista: { ...aBase.lista, simbolos: [] } }, estrategia: est }) === 'Elige al menos un valor de la lista.', 'sin valores: no pide nada y lo dice')
   ok(PD.peticionPorDentro({ a: { ...aBase, lista: { ...aBase.lista, universo: 'ndx_vol_10', modo: 'concentrado' } }, estrategia: est }) === null && /Nasdaq-100/.test(PD.motivoSinPeticion({ a: { ...aBase, lista: { ...aBase.lista, universo: 'ndx_vol_10' } }, estrategia: est })), 'con el Nasdaq-100: todavía no, y lo dice')
   ok(PD.peticionPorDentro({ a: { ...aBase, capital: 0 }, estrategia: est }) === null && PD.peticionPorDentro({ a: aBase, estrategia: null }) === null && PD.peticionPorDentro({ a: { ...aBase, donde: 'accion' }, estrategia: est }) === null, 'sin dinero inicial, sin estrategia o con «Una acción»: no pide nada')
   const c0 = PD.peticionPorDentro({ a: aBase, estrategia: est })
-  ok(c0.cfg.capitalIni === 10000 && c0.cfg.fromDate === '2016-01-01' && c0.cfg.toDate === '2025-12-31' && c0.cfg.years === null && c0.intervalo === 'diario' && c0.comisiones.compra === 0 && c0.comisiones.venta === 0 && c0.comisiones.porcentaje === 0,
-    `dinero inicial, periodo del plan (${c0.cfg.fromDate} → ${c0.cfg.toDate}), velas diarias y sin comisiones`)
+  ok(c0.cfg.capitalIni === 10000 && c0.cfg.fromDate === '2016-01-01' && c0.cfg.toDate === '2025-12-31' && c0.cfg.years === null && c0.intervalo === 'diario' && JSON.stringify(c0.comisiones) === JSON.stringify({ compra: 0, venta: 0, porcentaje: 0.1 }),
+    `dinero inicial, periodo del plan (${c0.cfg.fromDate} → ${c0.cfg.toDate}), velas diarias y la comisión del plan por defecto (0,1 %): ${JSON.stringify(c0.comisiones)}`)
+
+  // ── 1b · El mínimo por orden (cuentas a mano) ──
+  const Co = require(R + '/lib/comisiones.js'), cerca = (x, y) => Math.abs(x - y) < 1e-9
+  const m01 = { porcentaje: 0.1, minimo: 1 }
+  ok(cerca(Co.comisionDe({ importeCompra: 500 }, m01).compra, 1) && cerca(Co.comisionDe({ importeCompra: 5000 }, m01).compra, 5) && cerca(Co.comisionDe({ importeVenta: 999 }, m01).venta, 1), '0,1 % con mínimo de 1 €: 500 € pagan 1 €, 5.000 € pagan 5 €, una venta de 999 € paga 1 €')
+  { const n = Co.netoDeOperacion(1000, 10, { porcentaje: 0.1, minimo: 2 }); ok(cerca(n.comisionTotal, 4) && cerca(n.capitalInvertido, 998) && cerca(n.capitalFinal, 1095.8), `1.000 € que suben un 10 % con 0,1 % y mínimo 2 €: compra 2 €, 998 € dentro, salen 1.097,80 €, venta 2 € → 1.095,80 € (${n.capitalFinal})`) }
+  { const n = Co.netoDeOperacion(10000, 10, { porcentaje: 0.1, minimo: 2 }); ok(cerca(n.comisionTotal, 20.989) && cerca(n.capitalFinal, 10978.011), `10.000 € que suben un 10 %: compra 10 €, 9.990 € dentro, salen 10.989 €, venta 10,989 € → 10.978,011 € (${n.capitalFinal})`) }
+  ok(!Co.sinComisiones({ minimo: 2 }) && Co.sinComisiones({ compra: 0, venta: 0, porcentaje: 0 }), 'solo un mínimo ya es «con comisiones»; todo a 0, sin')
+  ok(JSON.stringify(Co.normalizaComisiones({ compra: 0.36, venta: 0, porcentaje: 0 })) === '{"compra":0.36,"venta":0,"porcentaje":0}' && JSON.stringify(Co.normalizaComisiones({ compra: 0.36, minimo: 0 })) === '{"compra":0.36,"venta":0,"porcentaje":0}', 'sin mínimo, las comisiones del Backtesting quedan como antes (tres campos)')
+  ok(Co.comisionesDePlan(null) === Co.COMISIONES_CERO && JSON.stringify(Co.comisionesDePlan({ comisionPct: 0, comisionMinEur: 2 })) === '{"compra":0,"venta":0,"porcentaje":0,"minimo":2}', 'las comisiones de un plan: sin costes, ninguna; «2 € fijos» = mínimo de 2 € sin %')
 
   // ── 2 · El motor y la pestaña ──
   const foto = require(path.join(E.DATOS, 'foto_degiro.json'))
@@ -98,8 +112,18 @@ function antes(st) {
   ok(pedidas.length === 1 && JSON.stringify(pedidas[0]) === JSON.stringify(cuerpo), 'a ~1 s, una petición: la del plan')
   const caja = m.raiz.conAtributo('data-cartera-por-dentro')
   ok(caja.length === 1 && caja[0].textContent.includes('📊 Multicartera') && caja[0].textContent.includes('Capital compartido'), 'pinta los paneles del Backtesting («📊 Multicartera», «Capital compartido»)')
-  ok(m.raiz.conAtributo('data-linea-por-dentro')[0]?.textContent.includes('todavía sin comisiones'), 'la línea dice con qué se calcula y que aún va sin comisiones')
+  ok(m.raiz.conAtributo('data-linea-por-dentro')[0]?.textContent.includes('con las comisiones del plan (0,10 % por operación; «Comprar y mantener», sin comisión)'), `la línea dice con qué se calcula y con qué comisiones: «${m.raiz.conAtributo('data-linea-por-dentro')[0]?.textContent}»`)
   m.quita()
+  { const m0 = D.monta(React.createElement(PD.default, { a: { ...aFoto, comision: 0 }, estrategia: est, estrategias: [est], visible: true, calcula: async () => JSON.parse(r.cuerpo) }), RDC); await D.espera(30)
+    ok((m0.raiz.conAtributo('data-linea-por-dentro')[0]?.textContent || '').includes('sin comisiones (el plan no tiene)'), 'un plan sin comisión: la línea dice «sin comisiones (el plan no tiene)»')
+    m0.quita() }
+  // Con 0,1 % y mínimo de 1 €, cada operación paga a mano max(0,1 % de lo que entra, 1 €) + max(0,1 % de lo que sale, 1 €).
+  { const aMin = { ...aFoto, comisionTipo: 'pctMin', comision: 0.1, comisionMin: 1 }, rm = await E.llama(H, PD.peticionPorDentro({ a: aMin, estrategia: est })), jm = JSON.parse(rm.cuerpo)
+    let bien = 0, conMin = 0
+    for (const t of jm.allTrades) { const cap = t._capitalAtEntry, cc = Math.max(cap * 0.001, 1), sale = (cap - cc) * (1 + t.pnlPct / 100), cv = Math.max(sale * 0.001, 1)
+      if (Math.abs(t.comision - (cc + cv)) < 1e-6) bien++; if (cap * 0.001 < 1 || sale * 0.001 < 1) conMin++ }
+    const f0 = j.compoundCurve[j.compoundCurve.length - 1].value, fm = jm.compoundCurve[jm.compoundCurve.length - 1].value
+    ok(bien === jm.allTrades.length && conMin > 0 && fm < f0, `con 0,1 % y mínimo de 1 €: la comisión de las ${jm.allTrades.length} operaciones cuadra a mano (${bien}); en ${conMin} manda el mínimo; final ${fm.toFixed(2)} € < ${f0.toFixed(2)} € con 0,1 % solo`) }
 
   // ── 3 · En el paso 3 ──
   const BP = require(R + '/components/BuilderPlan.js').default
