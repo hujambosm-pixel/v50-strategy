@@ -3,6 +3,8 @@
 // por props con el mismo nombre que tenía.
 import ConLimpiar from '../LimpiarBusqueda'
 import { MONO } from '../../lib/utils'
+// El buscador no distingue mayúsculas ni acentos (norma de buscadores; V9.1148).
+import { sinTildes } from '../../lib/builder/buscar'
 
 export default function SelectorValores({ mcListFilter, mcOnlyFavs, mcSearch, mcSelected, mcUniverso, rankingData, setMcListFilter, setMcOnlyFavs, setMcSearch, setMcSelected, watchlist, wlLists }) {
   return (
@@ -30,7 +32,7 @@ export default function SelectorValores({ mcListFilter, mcOnlyFavs, mcSearch, mc
         <div style={{display:'flex',gap:4}}>
           <button onClick={()=>{
             const filtered=[...new Map(watchlist.map(w=>[w.symbol,w])).values()].filter(w=>{
-              const matchSearch=!mcSearch||(w.symbol||'').toLowerCase().includes(mcSearch.toLowerCase())||(w.name||'').toLowerCase().includes(mcSearch.toLowerCase())
+              const matchSearch=!mcSearch||sinTildes(w.symbol).includes(sinTildes(mcSearch))||sinTildes(w.name).includes(sinTildes(mcSearch))
               const matchFav=!mcOnlyFavs||w.favorite
               const matchList=!mcListFilter||(w.list_ids||[]).some(lid=>{const l=wlLists.find(x=>x.id===lid);return l&&l.name===mcListFilter})
               return matchSearch&&matchFav&&matchList
@@ -51,7 +53,7 @@ export default function SelectorValores({ mcListFilter, mcOnlyFavs, mcSearch, mc
       </div>
       <div style={{overflowY:'auto',flex:1}}>
       {[...new Map(watchlist.map(w=>[w.symbol,w])).values()].filter(w=>{
-        const matchSearch=!mcSearch||(w.symbol||'').toLowerCase().includes(mcSearch.toLowerCase())||(w.name||'').toLowerCase().includes(mcSearch.toLowerCase())
+        const matchSearch=!mcSearch||sinTildes(w.symbol).includes(sinTildes(mcSearch))||sinTildes(w.name).includes(sinTildes(mcSearch))
         const matchFav=!mcOnlyFavs||w.favorite
         const matchList=!mcListFilter||(w.list_ids||[]).some(lid=>{const l=wlLists.find(x=>x.id===lid);return l&&l.name===mcListFilter})
         return matchSearch&&matchFav&&matchList
@@ -80,7 +82,7 @@ export default function SelectorValores({ mcListFilter, mcOnlyFavs, mcSearch, mc
               <div style={{fontFamily:MONO,fontSize:12,color:sel?'var(--accent)':'#d0e8fa',fontWeight:600}}>{w.symbol}</div>
               <div style={{fontFamily:MONO,fontSize:11,color:'#b0d0e8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.name}</div>
             </div>
-            {rd&&<span style={{fontFamily:MONO,fontSize:9,fontWeight:700,
+            {rd?.rank!=null&&<span style={{fontFamily:MONO,fontSize:9,fontWeight:700,
               color:rd.rank===1?'#ffd700':rd.rank===2?'#c0c0c0':rd.rank===3?'#cd7f32':rd.rank<=10?'#00d4ff':'#4a7a95',
               minWidth:22,textAlign:'right',flexShrink:0}}>
               {rd.rank<=3?['🥇','🥈','🥉'][rd.rank-1]:`#${rd.rank}`}

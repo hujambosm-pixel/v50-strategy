@@ -137,6 +137,17 @@ const pieza = (raiz, nombre) => fs.existsSync(path.join(raiz, 'components/backte
     if (!bien) fallos++
     out(`${bien ? 'OK ' : 'MAL'} «Todos» con una segunda lista: se ven ${vistos.join(', ')} → ${sale} (debe: ${debe})`)
   }
+  // A mano (V9.1148): el buscador no distingue acentos («telefonica» encuentra «Telefónica» y «ÉLITE» encuentra «Elite»), y un valor
+  // sin puesto en el ranking no pinta «#undefined».
+  {
+    const W = [{ symbol: 'TEF', name: 'Telefónica', list_ids: [] }, { symbol: 'ELT', name: 'Elite Corp', list_ids: [] }, { symbol: 'AAPL', name: 'Apple Inc.', list_ids: [] }]
+    const base = { ...estado(), mcSelected: [], mcListFilter: '', mcOnlyFavs: false, mcUniverso: 'manual', watchlist: W }
+    const ve = (busca, ranking = {}) => renderToString(React.createElement(pieza(RAIZ, 'SelectorValores'), conSetters({ ...base, mcSearch: busca, rankingData: ranking }, [])))
+    const a = ve('telefonica'), b = ve('ÉLITE'), c = ve('', { AAPL: { rank: 7 }, TEF: {}, ELT: { rank: null } })
+    const bien = a.includes('Telefónica') && !a.includes('Apple') && b.includes('Elite Corp') && !b.includes('Telefónica') && !c.includes('undefined') && !c.includes('#null') && c.includes('#7')
+    if (!bien) fallos++
+    out(`${bien ? 'OK ' : 'MAL'} buscador sin acentos («telefonica» → Telefónica, «ÉLITE» → Elite Corp) y sin «#undefined» (AAPL #7; TEF y ELT sin puesto)`)
+  }
   out(`backtesting-panel: ${casos} montajes, ${pulsaciones / 2} pulsaciones por versión, fallos: ${fallos}`)
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error('FALLO', e.stack); process.exit(1) })
