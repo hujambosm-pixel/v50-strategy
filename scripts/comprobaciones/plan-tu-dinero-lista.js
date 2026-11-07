@@ -242,7 +242,7 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
   {
     const cif = b.raiz.conAtributo('data-cifra', 'ocioso')[0]?.textContent || '', dentro = m7.ejecucion.estrategias.e.dentro, media = Pa.parteOciosaLista(dentro)
     const esperado = Pa.pct(media, 0)
-    ok(cif.includes(`${esperado} de tu dinero, de media`) && cif.includes(`en valores, el ${Pa.pct(1 - media, 0)}`) && media > 0 && media < 1,
+    ok(cif.includes(`${esperado} de media`) && cif.includes(`de tu dinero · en valores, el ${Pa.pct(1 - media, 0)}`) && media > 0 && media < 1,
       `cifra «En el ocioso»: «${cif}» (media de ${dentro.length} días: ${(media * 100).toFixed(2)} %)`)
     ok(Number(b.raiz.conAtributo('data-franja-proporcion')[0]?.getAttribute('data-franja-proporcion')) === dentro.length && txt.includes('parte en valores') && txt.includes('parte en el ocioso'),
       `franja de altura con ${dentro.length} días y su leyenda`)

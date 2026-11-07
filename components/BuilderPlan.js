@@ -157,7 +157,7 @@ function GraficoPlan({ curva, activo, finales = {}, visibles = LINEAS_DEFECTO, p
           <text x={IZQ - 6} y={yF + 10} textAnchor="end" fontSize={11} fill={B.apagado}>100 %</text>
           <text x={IZQ - 6} y={yF + FR} textAnchor="end" fontSize={11} fill={B.apagado}>0 %</text>
           {hov != null && <><line x1={x(hov)} x2={x(hov)} y1={yF} y2={yF + FR} stroke={B.titulo} strokeWidth={1}/>
-            <text data-franja-dato x={Math.min(Math.max(x(hov), IZQ), W - DER)} y={yF + FR + 15} textAnchor={x(hov) > (W - DER) * 0.7 ? 'end' : 'start'} fontSize={12} fill={B.texto}>{`${fechaCorta(curva.fechas[hov])} · en valores ${pct(curva.dentro[hov], 0)} · en el ocioso ${pct(1 - curva.dentro[hov], 0)}`}</text></>}
+            <text data-franja-dato x={IZQ} y={yF + FR + 15} textAnchor="start" fontSize={12} fill={B.texto}>{`${fechaCorta(curva.fechas[hov])} · en valores ${pct(curva.dentro[hov], 0)} · en el ocioso ${pct(1 - curva.dentro[hov], 0)}`}</text></>}
           <rect x={IZQ} y={yF} width={Math.max(0, W - IZQ - DER)} height={FR} fill="transparent" onMouseLeave={() => setHov(null)} onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); const i = Math.round((e.clientX - r.left) / Math.max(1, r.width) * (n - 1)); setHov(Math.max(0, Math.min(n - 1, i))) }}/>
         </g>
         : <g data-franja={tramos.length}>{tramos.map((t, k) => <rect key={k} data-dentro={t.d} x={x(t.i) - (t.i ? ancho1 / 2 : 0)} width={Math.max(0.5, (t.h - t.i) * ancho1 + (t.i ? ancho1 / 2 : 0) + (t.h < n - 1 ? ancho1 / 2 : 0))} y={yF} height={FR} fill={t.d ? AZUL : GRIS_FRANJA}/>)}</g>}
@@ -707,7 +707,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       <Cifra id="caida" color={colorSigno(s.caidaPct)} titulo="Peor caída" ayuda={ayudaCaida(s)} valor={pct(s.caidaPct)} sub={`${fechaCorta(s.caidaPctValle)} · ${euros(s.caidaEuros, 0)}`}/>
       {!conLista && <Cifra id="ocioso" titulo="En el ocioso" ayuda={AYUDA_PLAN.enOcioso} valor={<span style={{ whiteSpace: 'nowrap' }}>{pct(cifras.enOcioso, 1)}<span style={{ fontSize: 13, fontWeight: 400, color: B.secundario }}> del tiempo</span></span>}/>}
       {/* §93: con una lista, la parte del dinero en el ocioso, de media. */}
-      {conLista && <Cifra id="ocioso" titulo="En el ocioso" ayuda={AYUDA_PLAN.enOciosoLista} valor={<span style={{ whiteSpace: 'nowrap' }}>{pct(cifras.enOcioso, 0)}<span style={{ fontSize: 13, fontWeight: 400, color: B.secundario }}> de tu dinero, de media</span></span>} sub={Number.isFinite(cifras.enOcioso) ? `en valores, el ${pct(1 - cifras.enOcioso, 0)}` : undefined}/>}
+      {conLista && <Cifra id="ocioso" titulo="En el ocioso" ayuda={AYUDA_PLAN.enOciosoLista} valor={<span style={{ whiteSpace: 'nowrap' }}>{pct(cifras.enOcioso, 0)}<span style={{ fontSize: 13, fontWeight: 400, color: B.secundario }}> de media</span></span>} sub={Number.isFinite(cifras.enOcioso) ? `de tu dinero · en valores, el ${pct(1 - cifras.enOcioso, 0)}` : undefined}/>}
       {/* §57: en una línea; el detalle de las órdenes, en su tooltip y en su «?». */}
       <Cifra id="costes" titulo="Impuestos y comisiones" ayuda={`${AYUDA_PLAN.costes} En este plan: ${euros(s.impuestos, 0)} de impuestos y ${euros(s.costes, 0)} de comisiones en ${cifras.ordenes} órdenes.`} valor={<span title={`Impuestos ${euros(s.impuestos, 0)} · Comisiones ${euros(s.costes, 0)} (${cifras.ordenes} órdenes)`} style={{ fontSize: 16, whiteSpace: 'nowrap' }}>
         <span data-impuestos>{euros(s.impuestos, 0)}</span> · <span data-comisiones>{euros(s.costes, 0)}</span></span>}/>
