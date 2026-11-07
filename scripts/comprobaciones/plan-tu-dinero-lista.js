@@ -197,7 +197,7 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
   const cuerpoP = PD.peticionPorDentro({ a: aP, estrategia: est }), planP = Pl.planListaCalculable(Pa.planDe(aP, est)).plan
   const rp = await E.llama(HP, { plan: planP, curvas: true, cuerpoLista: cuerpoP })
   const jp = rp.status === 200 ? JSON.parse(rp.cuerpo) : null
-  ok(!!jp && Math.abs(jp.evaluacion.plan.medidas.valorNeto - jp.finalPorDentro) < 0.005 && jp.evaluacion.referencias.map(x => x.id).join() === 'QQQ,SPY,LIQUIDEZ',
+  ok(!!jp && Math.abs(jp.evaluacion.plan.medidas.valorNeto - jp.finalPorDentro) < 0.005 && jp.evaluacion.referencias.map(x => x.id).join() === 'QQQ,SPY,LIQUIDEZ,OCIOSO_LIQUIDEZ',
     `/api/plan con lista: ${jp ? jp.evaluacion.plan.medidas.valorNeto.toFixed(2) + ' € y «por dentro» ' + jp.finalPorDentro.toFixed(2) + ' €; comparaciones ' + jp.evaluacion.referencias.map(x => x.id).join(', ') : rp.status + ' ' + String(rp.cuerpo).slice(0, 200)}`)
   const r400 = await E.llama(HP, { plan: Pa.planDe({ ...aP, apalancamiento: 2 }, est), curvas: true, cuerpoLista: cuerpoP }), r400b = await E.llama(HP, { plan: planP, curvas: true, cuerpoLista: { ...cuerpoP, symbols: ['AAPL'] } })
   ok(r400.status === 400 && JSON.parse(r400.cuerpo).error === Pl.AVISO_LISTA_SIMPLE && r400b.status === 400 && /no corresponde/.test(JSON.parse(r400b.cuerpo).error), '/api/plan rechaza un plan apalancado y una petición de lista que no es la del plan')
@@ -227,7 +227,7 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
   ok(!txt.includes('dentro de la acción') && !txt.includes('del tiempo') && !b.raiz.conAtributo('data-franja').length && !txt.includes('Buy&Hold del valor') && !b.raiz.conAtributo('data-tabla', 'caidas').length && !txt.includes('¿qué hace el ocioso?') && b.raiz.conAtributo('data-tabla', 'alternativas').length === 1,
     'sin lo que no sirve con una lista («del tiempo», la franja de una acción, Buy&Hold del valor, caídas frente al ocioso); con la tabla de comparaciones')
   const fin = Number((b.raiz.conAtributo('data-cifra', 'final')[0]?.textContent.match(/([\d.]+)\s*€/) || [])[1]?.replace(/\./g, ''))
-  const rp7 = await E.llama(HP, { plan: llamadas[0].p, curvas: true, cuerpoLista: llamadas[0].c }), m7 = JSON.parse(rp7.cuerpo).evaluacion.plan
+  const rp7 = await E.llama(HP, { plan: llamadas[0].p, curvas: true, cuerpoLista: llamadas[0].c }), m7 = JSON.parse(rp7.cuerpo).evaluacion.plan, m7Ref = JSON.parse(rp7.cuerpo).evaluacion.referencias
   ok(fin === Math.round(m7.medidas.valorNeto) && m7.ejecucion.aportado > 10000, `«Tienes al final» ${fin} € = el de /api/plan con 300 €/mes, oro e impuestos (${m7.medidas.valorNeto.toFixed(2)} €, aportado ${m7.ejecucion.aportado} €, impuestos ${m7.ejecucion.impuestos.pagados.toFixed(2)} €, ${m7.ejecucion.costes.ordenes} órdenes)`)
   ok(m7.ejecucion.impuestos.pagados > 0 && m7.ejecucion.impuestos.porAnio.length >= 10, `con lista, los impuestos se calculan año a año (${m7.ejecucion.impuestos.porAnio.length} años)`)
   // §93: la cifra «En el ocioso» con la parte del dinero de media y la franja de altura (un punto por día).
@@ -238,6 +238,17 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
       `cifra «En el ocioso»: «${cif}» (media de ${dentro.length} días: ${(media * 100).toFixed(2)} %)`)
     ok(Number(b.raiz.conAtributo('data-franja-proporcion')[0]?.getAttribute('data-franja-proporcion')) === dentro.length && txt.includes('parte en valores') && txt.includes('parte en el ocioso'),
       `franja de altura con ${dentro.length} días y su leyenda`)
+  }
+  // §94: «El mismo plan con el ocioso en liquidez»: fila, línea y «El ocioso añadió»; su final, el del plan con liquidez en /api/plan.
+  {
+    const pLiq = { ...llamadas[0].p, piezas: llamadas[0].p.piezas.map(x => ({ ...x, ocioso: 'LIQUIDEZ' })) }
+    const rl = await E.llama(HP, { plan: pLiq, curvas: true, cuerpoLista: llamadas[0].c }), finLiq = JSON.parse(rl.cuerpo).evaluacion.plan.medidas.valorNeto
+    const ref = m7Ref.find(x => x.id === 'OCIOSO_LIQUIDEZ')
+    const fila = b.raiz.conAtributo('data-fila', 'OCIOSO_LIQUIDEZ')[0]?.textContent || ''
+    ok(!!ref && Math.abs(ref.medidas.valorNeto - finLiq) < 1e-6 && fila.includes(Pa.euros(finLiq, 0)), `fila «El mismo plan con el ocioso en liquidez»: ${Pa.euros(finLiq, 0)} (= el plan con liquidez: ${finLiq.toFixed(2)} €)`)
+    const tramos = b.raiz.conAtributo('data-tabla', 'tramos')[0]?.textContent || ''
+    ok(tramos.includes('El ocioso añadió') && !/—/.test(tramos) && b.raiz.conAtributo('data-linea', 'ociosoLiquidez').length === 1 && b.raiz.conAtributo('data-muestra', 'ociosoLiquidez').length === 1,
+      'con oro: la línea «Ocioso en liquidez» en el gráfico y la leyenda, y «El ocioso añadió» con cifras en los dos tramos')
   }
   b.quita()
 

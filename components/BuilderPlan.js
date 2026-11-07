@@ -713,8 +713,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
         <span data-impuestos>{euros(s.impuestos, 0)}</span> · <span data-comisiones>{euros(s.costes, 0)}</span></span>}/>
     </div>
     <Tarjeta id="grafico" titulo="Cómo crece tu dinero" ayuda={conLista ? `${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franjaLista}` : `${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franja}`}>
-      <GraficoPlan curva={conLista ? { ...cifras.curva, ociosoLiquidez: null, activo: null } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? null : activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles} proporcion={conLista}/>
-      <Leyenda curva={conLista ? { ...cifras.curva, ociosoLiquidez: null, activo: null } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? null : activoRes} visibles={lineasVisibles} onMarca={marcaLinea} proporcion={conLista}/>
+      <GraficoPlan curva={conLista ? { ...cifras.curva, activo: null, ...(sinOcioso ? { ociosoLiquidez: null } : {}) } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? null : activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles} proporcion={conLista}/>
+      <Leyenda curva={conLista ? { ...cifras.curva, activo: null, ...(sinOcioso ? { ociosoLiquidez: null } : {}) } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? null : activoRes} visibles={lineasVisibles} onMarca={marcaLinea} proporcion={conLista}/>
     </Tarjeta>
     <Tarjeta id="anios" titulo="Año a año" ayuda={AYUDA_PLAN.anios}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="anios" style={{ borderCollapse: 'collapse', width: '100%' }}>

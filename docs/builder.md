@@ -2564,3 +2564,9 @@ Boceto `bocetos/plan-lista-ocioso.html`, aprobado por Sergi el 07/11 (las tres r
 - `anioAnio` sabe de listas (`lista: true`), aunque la tabla «Año a año» con lista sigue sin esa columna.
 - Con una acción, nada cambia.
 - `plan-tu-dinero-lista.js`: `parteOciosaLista([1; 0,5; 0])` = 50 %; en la pantalla, la cifra con la media de los 2.514 días y la franja con un punto por día.
+
+## 94. El plan con lista, fase 9 (parte 2): el mismo plan con el ocioso en liquidez
+
+- `referenciasDe` (lib/planes/evalua.js) da `OCIOSO_LIQUIDEZ` también con una lista: el mismo plan, con el ocioso en liquidez. Con una acción, mismas referencias y en el mismo orden.
+- En la pantalla, con lista y un ocioso que no es liquidez: su fila en «Sin estrategia: el mismo dinero en…», su línea naranja en el gráfico (con casilla en la leyenda) y la columna «El ocioso añadió» de «¿Es estable?» con cifras. Con el ocioso en liquidez, nada de eso (es el mismo plan), como con una acción.
+- `plan-tu-dinero-lista.js`: con 300 €/mes, oro e impuestos, la fila vale lo mismo que el plan con liquidez calculado aparte en /api/plan (121.907 € con la foto de Degiro), y salen la línea y «El ocioso añadió» en los dos tramos.
