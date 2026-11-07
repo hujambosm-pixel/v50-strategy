@@ -120,6 +120,8 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
       `impuesto pagado vendiendo el 10 % del valor abierto: 1.710 € (${r2.valorNeto}; al cierre del 1/7, ${r2.serie[4].patrimonio})`)
   }
 
+  ok(Pa.parteOciosaLista([1, 0.5, 0]) === 0.5 && Pa.parteOciosaLista([]) === null, 'parteOciosaLista: (0 + 0,5 + 1) / 3 = 50 %')
+
   // ── 2 · Qué se calcula ──
   const est = E.FILAS.find(s => s.name === 'Prueba editor EMA20'); if (!est) throw new Error('falta «Prueba editor EMA20»')
   const SIMB = ['AAPL', 'AMZN', 'ASML', 'GOOGL', 'MA', 'META', 'MSFT', 'NFLX', 'NVDA', 'TSLA', 'UNH', 'V']
@@ -222,12 +224,21 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
   ok(!txt.includes('Si llega una aportación con la operación abierta'), 'con lista no sale «Si llega una aportación con la operación abierta» (siempre espera en el ocioso)')
   ok((b.raiz.conAtributo('data-aviso-lista-simple')[0]?.textContent || '').startsWith('De momento, con una lista, se calcula sin apalancar: lo que falta llegará más adelante.'),
     `la línea de lo que todavía no cuenta: «${b.raiz.conAtributo('data-aviso-lista-simple')[0]?.textContent}»`)
-  ok(!b.raiz.conAtributo('data-cifra', 'ocioso').length && !txt.includes('dentro de la acción') && !txt.includes('Buy&Hold del valor') && !b.raiz.conAtributo('data-tabla', 'caidas').length && !txt.includes('¿qué hace el ocioso?') && b.raiz.conAtributo('data-tabla', 'alternativas').length === 1,
-    'sin lo que todavía no sirve con una lista (en el ocioso, franja, Buy&Hold del valor, caídas frente al ocioso); con la tabla de comparaciones')
+  ok(!txt.includes('dentro de la acción') && !txt.includes('del tiempo') && !b.raiz.conAtributo('data-franja').length && !txt.includes('Buy&Hold del valor') && !b.raiz.conAtributo('data-tabla', 'caidas').length && !txt.includes('¿qué hace el ocioso?') && b.raiz.conAtributo('data-tabla', 'alternativas').length === 1,
+    'sin lo que no sirve con una lista («del tiempo», la franja de una acción, Buy&Hold del valor, caídas frente al ocioso); con la tabla de comparaciones')
   const fin = Number((b.raiz.conAtributo('data-cifra', 'final')[0]?.textContent.match(/([\d.]+)\s*€/) || [])[1]?.replace(/\./g, ''))
   const rp7 = await E.llama(HP, { plan: llamadas[0].p, curvas: true, cuerpoLista: llamadas[0].c }), m7 = JSON.parse(rp7.cuerpo).evaluacion.plan
   ok(fin === Math.round(m7.medidas.valorNeto) && m7.ejecucion.aportado > 10000, `«Tienes al final» ${fin} € = el de /api/plan con 300 €/mes, oro e impuestos (${m7.medidas.valorNeto.toFixed(2)} €, aportado ${m7.ejecucion.aportado} €, impuestos ${m7.ejecucion.impuestos.pagados.toFixed(2)} €, ${m7.ejecucion.costes.ordenes} órdenes)`)
   ok(m7.ejecucion.impuestos.pagados > 0 && m7.ejecucion.impuestos.porAnio.length >= 10, `con lista, los impuestos se calculan año a año (${m7.ejecucion.impuestos.porAnio.length} años)`)
+  // §93: la cifra «En el ocioso» con la parte del dinero de media y la franja de altura (un punto por día).
+  {
+    const cif = b.raiz.conAtributo('data-cifra', 'ocioso')[0]?.textContent || '', dentro = m7.ejecucion.estrategias.e.dentro, media = Pa.parteOciosaLista(dentro)
+    const esperado = Pa.pct(media, 0)
+    ok(cif.includes(`${esperado} de tu dinero, de media`) && cif.includes(`en valores, el ${Pa.pct(1 - media, 0)}`) && media > 0 && media < 1,
+      `cifra «En el ocioso»: «${cif}» (media de ${dentro.length} días: ${(media * 100).toFixed(2)} %)`)
+    ok(Number(b.raiz.conAtributo('data-franja-proporcion')[0]?.getAttribute('data-franja-proporcion')) === dentro.length && txt.includes('parte en valores') && txt.includes('parte en el ocioso'),
+      `franja de altura con ${dentro.length} días y su leyenda`)
+  }
   b.quita()
 
   console.log(fallos ? `FALLOS: ${fallos}` : 'plan-tu-dinero-lista: todo bien')

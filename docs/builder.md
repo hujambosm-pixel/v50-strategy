@@ -2554,3 +2554,13 @@ Con una lista, «Tu dinero» ya calcula los impuestos de España igual que con u
 - La línea «Comprobación» solo sale sin aportaciones, sin impuestos y con el ocioso en liquidez («La cartera por dentro» no paga impuestos). El «?» de la línea amarilla y el de «La cartera por dentro», al día.
 - **Ninguna cifra cambia** con «Una acción» ni en la prueba de oro (18/18, que ahora se lanza con «Sin impuestos»).
 - `plan-tu-dinero-lista.js`, 1c · a mano (sin comisión): ganancia de 1.000 € en 2020 → 190 € el 1/7/2021 pagados con el ocioso (de 50 a 60: 3,1667 participaciones) y 76 € al final (400 € de ganancia en 2021) → 2.134 €; sin ocioso ni liquidez, se vende el 10 % del valor abierto (10 × 19 = 190 €) → 1.710 €. Y la pantalla con 300 €/mes, oro e impuestos: «Tienes al final» = /api/plan, con impuestos de los 10 años.
+
+## 93. El plan con lista, fase 9 (parte 1): el ocioso con una lista
+
+Boceto `bocetos/plan-lista-ocioso.html`, aprobado por Sergi el 07/11 (las tres recomendaciones). Parte 1 de 3.
+
+- **Cifra «En el ocioso»** con una lista: «X % de tu dinero, de media», debajo «en valores, el Y %». Es la media, día a día, de la parte del dinero de la pieza que no está en ningún valor de la lista (`parteOciosaLista` de lib/builder/planPantalla.js sobre la franja `dentro` del motor, que con lista ya es una parte de 0 a 1). Su «?» con ejemplo (`AYUDA_PLAN.enOciosoLista`). Con una acción sigue «X % del tiempo».
+- **Franja de altura** bajo «Cómo crece tu dinero» (`GraficoPlan` con `proporcion`): cada día, la altura azul es la parte en valores y la gris, la del ocioso (40 px, con «100 %» y «0 %»). Al pasar el ratón: «fecha · en valores X % · en el ocioso Y %». Leyenda «parte en valores» / «parte en el ocioso». Colores de la app (azul y gris), no los del boceto.
+- `anioAnio` sabe de listas (`lista: true`), aunque la tabla «Año a año» con lista sigue sin esa columna.
+- Con una acción, nada cambia.
+- `plan-tu-dinero-lista.js`: `parteOciosaLista([1; 0,5; 0])` = 50 %; en la pantalla, la cifra con la media de los 2.514 días y la franja con un punto por día.

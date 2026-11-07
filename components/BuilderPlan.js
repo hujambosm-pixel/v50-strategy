@@ -118,9 +118,12 @@ export const LINEAS_PLAN = [
 ]
 const nombreLinea = (l, activo) => l.k === 'activo' && activo ? `${l.t} ${activo}` : l.t
 // finales: { plan, activo, spy, qqq, ociosoLiquidez, aportado } en euros (el texto al final de cada línea; sin él, solo el nombre). §57: visibles: { clave: sí o no } (Tu plan siempre se ve); más alto (375 px, antes 250).
-function GraficoPlan({ curva, activo, finales = {}, visibles = LINEAS_DEFECTO }) {
+// §93: proporcion (con una lista): la franja enseña cada día la parte del dinero en valores (altura azul) y en el ocioso (gris), y al pasar
+// el ratón, la fecha y las dos partes.
+function GraficoPlan({ curva, activo, finales = {}, visibles = LINEAS_DEFECTO, proporcion = false }) {
   const [ref, W] = useAncho()
-  const IZQ = 76, DER = 200, H1 = 375, ARR = 22, FR = 14, n = curva.fechas.length
+  const [hov, setHov] = useState(null)
+  const IZQ = 76, DER = 200, H1 = 375, ARR = 22, FR = proporcion ? 40 : 14, n = curva.fechas.length
   const lineas = LINEAS_PLAN.filter(l => curva[l.k]?.length && (l.k === 'plan' || visibles[l.k])).map(l => ({ ...l, t: `${nombreLinea(l, activo)}${Number.isFinite(finales[l.k]) ? ` ${euros(finales[l.k], 0)}` : ''}`, v: curva[l.k] }))
   const vals = lineas.flatMap(l => l.v).filter(v => Number.isFinite(v) && v > 0)
   if (!vals.length || n < 2) return null
@@ -142,26 +145,35 @@ function GraficoPlan({ curva, activo, finales = {}, visibles = LINEAS_DEFECTO })
   const resumen = `Cómo crece tu dinero, en escala logarítmica, del ${fechaCorta(curva.fechas[0])} al ${fechaCorta(curva.fechas[n - 1])}: ` + lineas.map(l => `${nombreLinea(LINEAS_PLAN.find(x => x.k === l.k), activo)} termina en ${euros(Number.isFinite(finales[l.k]) ? finales[l.k] : l.v[l.v.length - 1], 0)}`).join('; ') + '.'
   return (
     <div ref={ref} style={{ width: '100%', marginTop: 6 }}>
-      <svg data-grafico="plan" width={W} height={yF + FR + 4} role="img" aria-label={resumen} style={{ display: 'block', fontFamily: B.letra }}>
+      <svg data-grafico="plan" width={W} height={yF + FR + (proporcion ? 22 : 4)} role="img" aria-label={resumen} style={{ display: 'block', fontFamily: B.letra }}>
         <text data-escala="log" x={4} y={12} fontSize={12} fill={B.apagado}>escala logarítmica</text>
         {marcasLog(lo, hi).map((t, k) => <g key={k}><line x1={IZQ} x2={W - DER} y1={y(t)} y2={y(t)} stroke="#1b2430"/><text x={IZQ - 6} y={y(t) + 4} textAnchor="end" fontSize={12} fill={B.apagado}>{euros(t, 0)}</text></g>)}
         {anios.filter((_, k) => k % paso === 0).map(([i, a]) => <text key={a} x={x(i)} y={H1 - 6} fontSize={12} fill={B.apagado}>{a}</text>)}
         {[...lineas].reverse().map(l => <polyline key={l.k} data-linea={l.k} points={ruta(l.v, l.escalon)} fill="none" stroke={l.color} strokeWidth={l.ancho} strokeLinejoin="round"/>)}
         {etq.map(e => <text key={e.t} data-etiqueta={e.t} x={W - DER + 8} y={e.y + 4} fontSize={12} fill={e.color} fontWeight={e.color === AZUL ? 700 : 400}>{e.t}</text>)}
-        <g data-franja={tramos.length}>{tramos.map((t, k) => <rect key={k} data-dentro={t.d} x={x(t.i) - (t.i ? ancho1 / 2 : 0)} width={Math.max(0.5, (t.h - t.i) * ancho1 + (t.i ? ancho1 / 2 : 0) + (t.h < n - 1 ? ancho1 / 2 : 0))} y={yF} height={FR} fill={t.d ? AZUL : GRIS_FRANJA}/>)}</g>
+        {proporcion ? <g data-franja-proporcion={n}>
+          <rect x={IZQ} y={yF} width={Math.max(0, W - IZQ - DER)} height={FR} fill={GRIS_FRANJA}/>
+          <polygon points={`${x(0).toFixed(1)},${yF + FR} ${curva.dentro.map((d, i) => `${x(i).toFixed(1)},${(yF + FR - Math.max(0, Math.min(1, d || 0)) * FR).toFixed(1)}`).join(' ')} ${x(n - 1).toFixed(1)},${yF + FR}`} fill={AZUL}/>
+          <text x={IZQ - 6} y={yF + 10} textAnchor="end" fontSize={11} fill={B.apagado}>100 %</text>
+          <text x={IZQ - 6} y={yF + FR} textAnchor="end" fontSize={11} fill={B.apagado}>0 %</text>
+          {hov != null && <><line x1={x(hov)} x2={x(hov)} y1={yF} y2={yF + FR} stroke={B.titulo} strokeWidth={1}/>
+            <text data-franja-dato x={Math.min(Math.max(x(hov), IZQ), W - DER)} y={yF + FR + 15} textAnchor={x(hov) > (W - DER) * 0.7 ? 'end' : 'start'} fontSize={12} fill={B.texto}>{`${fechaCorta(curva.fechas[hov])} · en valores ${pct(curva.dentro[hov], 0)} · en el ocioso ${pct(1 - curva.dentro[hov], 0)}`}</text></>}
+          <rect x={IZQ} y={yF} width={Math.max(0, W - IZQ - DER)} height={FR} fill="transparent" onMouseLeave={() => setHov(null)} onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); const i = Math.round((e.clientX - r.left) / Math.max(1, r.width) * (n - 1)); setHov(Math.max(0, Math.min(n - 1, i))) }}/>
+        </g>
+        : <g data-franja={tramos.length}>{tramos.map((t, k) => <rect key={k} data-dentro={t.d} x={x(t.i) - (t.i ? ancho1 / 2 : 0)} width={Math.max(0.5, (t.h - t.i) * ancho1 + (t.i ? ancho1 / 2 : 0) + (t.h < n - 1 ? ancho1 / 2 : 0))} y={yF} height={FR} fill={t.d ? AZUL : GRIS_FRANJA}/>)}</g>}
       </svg>
     </div>
   )
 }
 // §57: cada línea que se puede ocultar lleva su casilla; Tu plan, no.
-function Leyenda({ curva, activo = null, visibles = LINEAS_DEFECTO, onMarca = null }) {
+function Leyenda({ curva, activo = null, visibles = LINEAS_DEFECTO, onMarca = null, proporcion = false }) {
   const muestra = (l) => <svg width="30" height="10" aria-hidden="true"><line x1="1" x2="29" y1="5" y2="5" stroke={l.color} strokeWidth={l.ancho}/></svg>
   return (
     <div data-leyenda style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 12, color: B.secundario, marginTop: 6, alignItems: 'center' }}>
       {LINEAS_PLAN.filter(l => curva[l.k]?.length).map(l => l.k === 'plan' ? <span key={l.k} data-muestra={l.k} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{muestra(l)}{nombreLinea(l, activo)}</span>
         : <label key={l.k} data-muestra={l.k} style={{ display: 'inline-flex', flexDirection: 'row', gap: 6, alignItems: 'center', cursor: 'pointer', margin: 0, padding: 0, fontFamily: B.letra, fontSize: 12, fontWeight: 400, color: B.secundario, letterSpacing: 'normal', textTransform: 'none' }}><input type="checkbox" data-casilla={l.k} checked={!!visibles[l.k]} onChange={e => onMarca?.(l.k, e.target.checked)} style={{ margin: 0, width: 'auto', padding: 0 }}/>{muestra(l)}{nombreLinea(l, activo)}</label>)}
-      {curva.dentro?.length > 0 && <><span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><span style={{ width: 14, height: 10, background: AZUL, display: 'inline-block' }}/>dentro de la acción</span>
-      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><span style={{ width: 14, height: 10, background: GRIS_FRANJA, display: 'inline-block' }}/>en el ocioso</span></>}
+      {curva.dentro?.length > 0 && <><span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><span style={{ width: 14, height: 10, background: AZUL, display: 'inline-block' }}/>{proporcion ? 'parte en valores' : 'dentro de la acción'}</span>
+      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><span style={{ width: 14, height: 10, background: GRIS_FRANJA, display: 'inline-block' }}/>{proporcion ? 'parte en el ocioso' : 'en el ocioso'}</span></>}
     </div>
   )
 }
@@ -694,13 +706,15 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       {conTir && <Cifra id="tir" color={colorSigno(s.tir)} titulo="Rentabilidad de tu dinero (TIR)" ayuda={AYUDA_PLAN.tir} valor={pct(s.tir)}/>}
       <Cifra id="caida" color={colorSigno(s.caidaPct)} titulo="Peor caída" ayuda={ayudaCaida(s)} valor={pct(s.caidaPct)} sub={`${fechaCorta(s.caidaPctValle)} · ${euros(s.caidaEuros, 0)}`}/>
       {!conLista && <Cifra id="ocioso" titulo="En el ocioso" ayuda={AYUDA_PLAN.enOcioso} valor={<span style={{ whiteSpace: 'nowrap' }}>{pct(cifras.enOcioso, 1)}<span style={{ fontSize: 13, fontWeight: 400, color: B.secundario }}> del tiempo</span></span>}/>}
+      {/* §93: con una lista, la parte del dinero en el ocioso, de media. */}
+      {conLista && <Cifra id="ocioso" titulo="En el ocioso" ayuda={AYUDA_PLAN.enOciosoLista} valor={<span style={{ whiteSpace: 'nowrap' }}>{pct(cifras.enOcioso, 0)}<span style={{ fontSize: 13, fontWeight: 400, color: B.secundario }}> de tu dinero, de media</span></span>} sub={Number.isFinite(cifras.enOcioso) ? `en valores, el ${pct(1 - cifras.enOcioso, 0)}` : undefined}/>}
       {/* §57: en una línea; el detalle de las órdenes, en su tooltip y en su «?». */}
       <Cifra id="costes" titulo="Impuestos y comisiones" ayuda={`${AYUDA_PLAN.costes} En este plan: ${euros(s.impuestos, 0)} de impuestos y ${euros(s.costes, 0)} de comisiones en ${cifras.ordenes} órdenes.`} valor={<span title={`Impuestos ${euros(s.impuestos, 0)} · Comisiones ${euros(s.costes, 0)} (${cifras.ordenes} órdenes)`} style={{ fontSize: 16, whiteSpace: 'nowrap' }}>
         <span data-impuestos>{euros(s.impuestos, 0)}</span> · <span data-comisiones>{euros(s.costes, 0)}</span></span>}/>
     </div>
-    <Tarjeta id="grafico" titulo="Cómo crece tu dinero" ayuda={conLista ? AYUDA_PLAN.grafico : `${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franja}`}>
-      <GraficoPlan curva={conLista ? { ...cifras.curva, ociosoLiquidez: null, activo: null, dentro: [] } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? null : activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles}/>
-      <Leyenda curva={conLista ? { ...cifras.curva, ociosoLiquidez: null, activo: null, dentro: [] } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? null : activoRes} visibles={lineasVisibles} onMarca={marcaLinea}/>
+    <Tarjeta id="grafico" titulo="Cómo crece tu dinero" ayuda={conLista ? `${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franjaLista}` : `${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franja}`}>
+      <GraficoPlan curva={conLista ? { ...cifras.curva, ociosoLiquidez: null, activo: null } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? null : activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles} proporcion={conLista}/>
+      <Leyenda curva={conLista ? { ...cifras.curva, ociosoLiquidez: null, activo: null } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? null : activoRes} visibles={lineasVisibles} onMarca={marcaLinea} proporcion={conLista}/>
     </Tarjeta>
     <Tarjeta id="anios" titulo="Año a año" ayuda={AYUDA_PLAN.anios}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="anios" style={{ borderCollapse: 'collapse', width: '100%' }}>
