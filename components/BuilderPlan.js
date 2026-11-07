@@ -505,6 +505,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const valoresLista = useMemo(() => simbolos.map(s => typeof s === 'string' ? { simbolo: s, nombre: '' } : s), [simbolos])
   const cifras = useMemo(() => { try { return calc.resultado ? cifrasPlan(calc.resultado.respuesta, calc.resultado.plan) : null } catch (_) { return null } }, [calc.resultado])
   const ajustesDelResultado = calc.resultado?.plan?.piezas?.[0] || null
+  // §97: el resultado que se enseña es de OTROS ajustes (aún no ha llegado el cálculo de los de ahora; p. ej., tras «Descartar cambios»):
+  // sus cifras se ven atenuadas hasta que llega el nuevo, para no confundirlas con las buenas.
+  const claveDelResultado = useMemo(() => calc.resultado ? (calc.resultado.clave || JSON.stringify(calc.resultado.plan)) : null, [calc.resultado])
+  const cifrasViejas = !!clave && !!claveDelResultado && clave !== claveDelResultado
   // Lo que se enseña en «+ Añadir plan»: el final de los planes guardados ya calculados.
   useEffect(() => { if (fila && cifras && !hayCambios && clave === (calc.resultado?.clave || JSON.stringify(calc.resultado?.plan))) setFinales(x => ({ ...x, [fila.id]: cifras.seis.final })) }, [cifras, fila?.id, hayCambios])
   const texto = () => textoParaClaudePlan({ ajustes: a, estrategia, plan, cifras: enLista ? null : cifras, estado, resultadoPrueba: resPrueba, version, nombre: fila?.nombre || null })
@@ -698,7 +702,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const s = cifras.seis
   // §90: sin aportaciones (solo el dinero inicial), la TIR es el mismo número que el CAGR: ni su cifra ni su columna.
   const dineroRes = calc.resultado?.plan?.dinero, conTir = !!dineroRes && ((dineroRes.aportaciones?.frecuencia || 'ninguna') !== 'ninguna' || (dineroRes.extraordinarias || []).length > 0)
-  return (<>
+  return (<div data-vista-dinero data-cifras-viejas={cifrasViejas ? 'si' : undefined} title={cifrasViejas ? 'Calculando con tus ajustes de ahora: estas cifras son del cálculo anterior.' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 10, opacity: cifrasViejas ? 0.4 : 1, transition: 'opacity 0.15s' }}>
     <div data-cifras style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
       <Cifra id="aportado" titulo="Has aportado" ayuda={AYUDA_PLAN.aportado} valor={euros(s.aportado, 0)}/>
       <Cifra id="final" color={colorSigno(s.ganancia)} titulo="Tienes al final" ayuda={AYUDA_PLAN.final} valor={euros(s.final, 0)} sub={`ganancia neta ${euros(s.ganancia, 0)}`}/>
@@ -745,7 +749,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           <td style={{ ...celda, color: c.ocioso > 0 ? VERDE : c.ocioso < 0 ? ROJO : B.texto }}>{c.ocioso > 0 ? '+' : ''}{pct(c.ocioso)}</td><td style={celda}>{c.recuperacion ? fechaCorta(c.recuperacion) : 'todavía no'}</td></tr>)}</tbody>
       </table></div>}
     </Tarjeta>}
-  </>)
+  </div>)
   }
 
   return (

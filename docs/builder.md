@@ -2588,3 +2588,11 @@ Decisión de Sergi (07/11): **fase 10 cerrada «sin aval propio del plan»**. Lo
 - Colores como siempre (verde, rojo, amarillo), también con lista. No bloquea nada.
 - Su «?» añade: es solo un dato, no bloquea, es de la estrategia en el valor entre paréntesis y los planes no tienen prueba propia.
 - `plan-lista.js`, `planes-pantalla.js` y `version-paso2.js`, al día con el texto nuevo.
+
+## 97. Paso 3: las cifras de otros ajustes se ven atenuadas hasta que llega el cálculo nuevo
+
+Visto por Sergi en la app (07/11): tras «Descartar cambios», unos segundos se veían las cifras del cálculo anterior (p. ej., las de la lista descartada) como si fueran las buenas. Pasaba porque el plan enseña el último resultado que llegó mientras calcula el de los ajustes de ahora, y el cálculo de lo guardado solo sale al momento si sigue en la memoria de la página (los últimos 20).
+
+- `cifrasViejas` (components/BuilderPlan.js): el resultado que se enseña es de otros ajustes (su clave no es la de ahora). Entonces la vista «Tu dinero» (cifras, gráfico y tablas; con y sin lista) se ve con opacidad 0,4 y un tooltip («Calculando con tus ajustes de ahora: estas cifras son del cálculo anterior.»), junto al «Calculando…» de siempre. Al llegar el cálculo nuevo, se ve normal. Vale para cualquier cambio, no solo para «Descartar cambios».
+- Nada cambia en los cálculos ni en lo guardado; «La cartera por dentro» no se toca.
+- `planes-pantalla.js`: el resultado de los ajustes de ahora, sin atenuar; uno de otros ajustes, atenuado.

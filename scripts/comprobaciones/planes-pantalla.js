@@ -212,6 +212,12 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   v = conEst('noPasa')
   ok(v.includes('Estrategia: prueba del paso 2 ✕ No pasa') && v.includes('Ver la prueba'), 'no pasa: «Estrategia: prueba del paso 2 ✕ No pasa (…) · Ver la prueba»')
 
+  // §97: un resultado de OTROS ajustes (aún no ha llegado el cálculo de los de ahora) se ve atenuado; el de los ajustes de ahora, no.
+  const planAhora = Pa.planDe({ ...Pa.AJUSTES_PLAN, activo: 'TEST', ocioso: 'OCI' }, est)
+  const hAhora = pinta({ resultado: { respuesta: resp, plan: planAhora } })
+  ok(!hAhora.includes('data-cifras-viejas') && hAhora.includes('data-vista-dinero') && !hAhora.includes('opacity:0.4'), 'el resultado de los ajustes de ahora, sin atenuar')
+  const viejo = pinta({ resultado: { respuesta: resp, plan: { ...planAhora, dinero: { ...planAhora.dinero, capitalInicial: 5000 } } } })
+  ok(viejo.includes('data-cifras-viejas="si"') && viejo.includes('opacity:0.4') && viejo.includes('data-cifra="final"'), 'un resultado de otros ajustes (p. ej., tras «Descartar cambios»): se ve, pero atenuado, hasta que llega el nuevo')
   // El menú «+ Añadir plan»
   const menuP = (o) => renderToString(React.createElement(Pest.default, { pestanas: [], planes: tres, abiertas: ['g1'], finales: { 1: 114340.91 }, ancho: 1000, menuInicial: 'anadir', ...o })).split('<!-- -->').join('')
   v = menuP()
