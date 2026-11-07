@@ -2525,3 +2525,21 @@ Pedido por Sergi el 07/11, al ver la fase 6. Vale para «Una acción» y para «
 - **Sin aportaciones, ni la cifra «TIR» ni su columna en la tabla**: con solo el dinero inicial, la TIR es el mismo número que el CAGR. Vuelven solas cuando hay aportaciones (las del plan calculado). Con lista, hasta la fase 7, nunca hay.
 - **Letra del bloque con lista**: las piezas del Backtesting (universo, selector, reparto, filtros) llevan letra de 8–12 px. Solo dentro del plan (`[data-lista]`), un estilo las pasa a 12–13 px y aclara `--text2` y `--text3`. Solo se pinta con lista. El Backtesting no cambia (backtesting-panel.js y backtesting-resultados.js idénticos).
 - `planes-pantalla.js`: el orden, la TIR con y sin aportaciones, los colores, y que con «Una acción» no va el estilo de la lista.
+
+## 91. El plan con lista, fase 7: aportaciones y dinero ocioso
+
+Decisión de Sergi (07/11): con una lista, la aportación **se queda en el ocioso hasta la siguiente compra**. Lo demás lo he decidido yo siguiendo cómo funciona ya el plan con una acción.
+
+- **Lo que entra o sale espera en el ocioso**: la aportación (mensual o extraordinaria) y el dinero de cada venta van a la liquidez de la pieza; al **cierre** de ese día, lo que queda en liquidez pasa al ocioso (oro, QQQ u otro símbolo). El último día no (se vende todo al final).
+- **Para comprar se vende del ocioso solo lo que falta** (a la apertura), con algo más para pagar la comisión de esa venta; si no basta, todo el ocioso.
+- **Capital de cada entrada**: las mismas fórmulas del Backtesting (`techoConcentrado`, `capitalCompartido`) con el dinero libre = liquidez + lo que vale el ocioso a la apertura. Ejemplo: 10.000 € en oro, concentrado máx. 4 → cada entrada hasta 2.500 €; llegan 300 € → hasta 10.300 / 4 = 2.575 €.
+- **Regla del 1 %**: no se mueve al ocioso un importe si la orden cuesta más del 1 % de él (con 0,185 € por orden, menos de 18,50 €): se queda en liquidez. Así no se pagan comisiones por mover céntimos.
+- **El ocioso no puede ser un valor de la lista** (aviso `AVISO_LISTA_OCIOSO_EN_LISTA`).
+- **La franja** (parte del dinero dentro) no cuenta el ocioso como dentro.
+- **Lo que sigue forzado**: sin impuestos (fase 8) y sin apalancar. La línea amarilla dice ahora «se calcula sin impuestos». `planListaCalculable` solo deja fuera `impuestos` y `apalancamiento`.
+- **Pantalla**: con lista no sale «Si llega una aportación con la operación abierta» (siempre espera). La línea «Comprobación» (tu plan = «La cartera por dentro») solo sale sin aportaciones y con el ocioso en liquidez (`oroComparable` de lib/builder/planPantalla.js): con aportaciones u ocioso no tienen por qué coincidir. El «?» de la línea amarilla, al día.
+- **Ninguna cifra cambia** con «Una acción» (planes 4/6/7 idénticos) ni en la prueba de oro (sin aportaciones y en liquidez, el código hace lo mismo que antes).
+- `plan-tu-dinero-lista.js`, ampliada:
+  - 1b · A mano (1 € por orden, ocioso inventado a 50/50/55/60): concentrado máx. 1 con 1.000 € + 300 €/mes en el ocioso → 1.640,46 € y 6 órdenes; con 50 € de aportación (la orden costaría el 2 %) se quedan en liquidez → 1.365,28 €; con el ocioso en liquidez → 1.497,80 €; compartido vendiendo del ocioso solo lo que falta → 1.091,3870 €, entradas de 499,50 y 523,925 €.
+  - 3 · Con comisión 0 y un ocioso de precio fijo (100 €), el plan con 300 €/mes acaba igual que con liquidez en tres repartos (con la foto de Degiro).
+  - 4 · La pantalla con 300 €/mes y oro: sin la línea «Comprobación», sin «Si llega una aportación…», y «Tienes al final» = /api/plan.

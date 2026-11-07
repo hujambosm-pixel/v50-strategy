@@ -344,3 +344,5 @@ La de siempre, «Prueba editor EMA20» · AAPL · 2016–2025 · 10.000 € + 30
 ## 11. La pieza «estrategia» con una lista (fase 3, docs/builder.md §80)
 
 La pieza puede llevar `donde: 'lista'` y `lista` (lib/planes/lista.js): los ajustes del Backtesting guardados con el plan. Sin `donde`, una acción, como siempre (los planes guardados no cambian). Por ahora el motor NO calcula un plan con lista (`ejecutaPlan` lanza `AVISO_LISTA_SIN_MOTOR` y `/api/plan` responde 400): «Tu dinero» con lista llega en la fase 6.
+
+Fase 6 (docs/builder.md §89): el motor ya calcula la lista con las decisiones del Backtesting (`/api/plan` recibe `cuerpoLista`). Fase 7 (§91): las aportaciones y el dinero de las ventas esperan en el ocioso hasta la siguiente compra; para comprar se vende del ocioso solo lo que falta; no se mueve al ocioso un importe cuya orden cueste más del 1 %. Todavía sin impuestos ni apalancamiento, y solo «Capital compartido» o «Capital concentrado».
