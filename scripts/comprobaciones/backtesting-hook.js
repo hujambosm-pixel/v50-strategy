@@ -123,7 +123,8 @@ else {
 if (!yaTenia && mV.join('\n') !== mN.join('\n')) { let k = 0; while (mV[k] === mN[k]) k++; falla(`el resto de pages/index.js no es idéntico (sentencia ${k} de ${mV.length} / ${mN.length}):\n antes: ${String(mV[k]).slice(0, 160)}\n ahora: ${String(mN[k]).slice(0, 160)}`) }
 // 4) Nombres sin declarar.
 const libres = (s) => { const out = new Set(); traverse(parsea(s), { Identifier(p) { if (p.isReferencedIdentifier() && !p.scope.getBinding(p.node.name)) out.add(p.node.name) }, JSXIdentifier(p) { if (/^[A-Z]/.test(p.node.name) && p.parentPath.isJSXOpeningElement() && !p.scope.getBinding(p.node.name)) out.add(p.node.name) } }); return out }
-const libresViejo = new Set([...libres(lee(VIEJO, 'pages/index.js'))])
+// §85: frente a los tres archivos de la versión anterior (desde V9.1145, getComputedStyle está en comun.js y ya no en pages/index.js)
+const libresViejo = new Set(['pages/index.js', 'components/backtesting/useCarteraPorDentro.js', 'components/backtesting/comun.js'].flatMap(f => fs.existsSync(path.join(VIEJO, f)) ? [...libres(lee(VIEJO, f))] : []))
 for (const f of ['pages/index.js', 'components/backtesting/useCarteraPorDentro.js', 'components/backtesting/comun.js'])
   for (const n of libres(lee(RAIZ, f))) if (!libresViejo.has(n)) falla(`${f}: «${n}» sin declarar`)
 console.log(`backtesting-hook: ${nuevo.hook.cuerpo.length} sentencias en el hook (${nuevo.hook.devuelve.length} nombres, ${nuevo.hook.params.length} entradas), ${cComun.length} en comun.js; ${yaTenia ? "la versión anterior ya lo tenía: hook y comun.js comparados con ella" : saltados + " sentencias de Home cambian de lado (" + efectosSaltados + " efectos)"}: ${fallos.length ? fallos.length + ' FALLOS' : 'todo idéntico'}`)
