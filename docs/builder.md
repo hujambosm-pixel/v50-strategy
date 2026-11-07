@@ -2543,3 +2543,14 @@ Decisión de Sergi (07/11): con una lista, la aportación **se queda en el ocios
   - 1b · A mano (1 € por orden, ocioso inventado a 50/50/55/60): concentrado máx. 1 con 1.000 € + 300 €/mes en el ocioso → 1.640,46 € y 6 órdenes; con 50 € de aportación (la orden costaría el 2 %) se quedan en liquidez → 1.365,28 €; con el ocioso en liquidez → 1.497,80 €; compartido vendiendo del ocioso solo lo que falta → 1.091,3870 €, entradas de 499,50 y 523,925 €.
   - 3 · Con comisión 0 y un ocioso de precio fijo (100 €), el plan con 300 €/mes acaba igual que con liquidez en tres repartos (con la foto de Degiro).
   - 4 · La pantalla con 300 €/mes y oro: sin la línea «Comprobación», sin «Si llega una aportación…», y «Tienes al final» = /api/plan.
+
+## 92. El plan con lista, fase 8: impuestos venta a venta
+
+Con una lista, «Tu dinero» ya calcula los impuestos de España igual que con una acción: lotes FIFO, la regla de los dos meses, compensación de pérdidas de 4 años, pago el primer día de bolsa de julio y, al final, lo pendiente y lo latente (la venta final). Lo único que sigue forzado es «sin apalancar».
+
+- **De dónde sale el impuesto de julio** (`pagaImpuestoLista` de lib/planes/plan.js; decidido por mí, como en la vida real): primero la liquidez de la pieza; luego el ocioso (solo lo que falta, con la comisión de esa venta); si no basta, se vende un poco de cada valor abierto, a prorrata de su valor. El capital asignado de cada abierta baja en la misma proporción (es lo que usa el reparto para las siguientes entradas). Con una acción no cambia nada (sigue `pagaImpuesto`).
+- Las ventas del ocioso también hacen ganancias o pérdidas, y tributan.
+- `planListaCalculable` solo deja fuera `apalancamiento`; la línea amarilla dice «se calcula sin apalancar: lo que falta llegará más adelante» y solo sale si se ha pedido ×2 o ×3.
+- La línea «Comprobación» solo sale sin aportaciones, sin impuestos y con el ocioso en liquidez («La cartera por dentro» no paga impuestos). El «?» de la línea amarilla y el de «La cartera por dentro», al día.
+- **Ninguna cifra cambia** con «Una acción» ni en la prueba de oro (18/18, que ahora se lanza con «Sin impuestos»).
+- `plan-tu-dinero-lista.js`, 1c · a mano (sin comisión): ganancia de 1.000 € en 2020 → 190 € el 1/7/2021 pagados con el ocioso (de 50 a 60: 3,1667 participaciones) y 76 € al final (400 € de ganancia en 2021) → 2.134 €; sin ocioso ni liquidez, se vende el 10 % del valor abierto (10 × 19 = 190 €) → 1.710 €. Y la pantalla con 300 €/mes, oro e impuestos: «Tienes al final» = /api/plan, con impuestos de los 10 años.

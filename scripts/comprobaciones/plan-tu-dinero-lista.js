@@ -3,6 +3,8 @@
 // 1 · Cuentas a mano con dos valores inventados (A y B): Capital compartido y Capital concentrado, con 1 € de comisión por orden.
 // 1b · Fase 7 (§91), a mano: las aportaciones y el dinero de las ventas esperan en el ocioso hasta la siguiente compra; para comprar se
 //      vende del ocioso solo lo que falta; lo que sobra con una orden de más del 1 % de coste se queda en liquidez.
+// 1c · Fase 8 (§92), a mano: los impuestos con lista se pagan en julio con la liquidez, luego con el ocioso y, si no basta, vendiendo
+//      a prorrata de los valores abiertos; FIFO y venta final con lo latente.
 // 2 · Qué se puede calcular todavía (motivoListaNoCalculable) y qué se deja fuera (planListaCalculable).
 // 3 · LA PRUEBA DE ORO: con la foto de precios de la lista Degiro (sin red), para muchas combinaciones de reparto, prioridad, puerta,
 //     máximo de posiciones, comisión, periodo y filtros, el plan acaba con el MISMO dinero que «La cartera por dentro» (la curva
@@ -93,6 +95,31 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
     ok(Pl.motivoListaNoCalculable(plan7('compartido', { ocioso: 'A' })) === Pl.AVISO_LISTA_OCIOSO_EN_LISTA, 'el ocioso no puede ser un valor de la lista, y lo dice')
   }
 
+  // ── 1c · Impuestos (§92), a mano ──
+  {
+    const G = ['2020-12-30', '2020-12-31', '2021-01-04', '2021-06-30', '2021-07-01', '2021-07-02']
+    const act = (symbol, abre, cierra, candidatos) => ({ symbol, fechas: G, abre, cierra, candidatos })
+    const plan8 = (modo, ocioso) => ({ ...planA(modo), dinero: { capitalInicial: 1000, aportaciones: { frecuencia: 'ninguna' }, extraordinarias: [] }, impuestos: { regimen: 'ES-ahorro', reglaDosMeses: true },
+      costes: { comisionPct: 0, comisionMinEur: 0, horquillaPct: { QQQ: 0, ETF: 0, SPY: 0 } }, piezas: [{ ...planA(modo).piezas[0], ocioso }], periodo: { desde: G[0], hasta: G[5] } })
+    const datos8 = (modo, activos, O) => ({ fechas: G, qqq: G.map(() => null), etf: G.map(() => null), spy: G.map(() => null), lista: { opciones: { modo, n: 2, maxPosiciones: 1, prioridad: 'alfabetico' }, activos },
+      velas: O ? { O: G.map((date, k) => ({ date, open: O[k], high: O[k], low: O[k], close: O[k], volume: 0 })) } : {} })
+    // Con oro: A entra el 30/12 a 10 con 1.000 € (100 acciones) y sale el 31/12 a 20: 2.000 €, ganancia de 1.000 € en 2020. Al cierre, al
+    // ocioso a 50: 40. El 1/7/2021 (abre a 60) se pagan 1.000 × 19 % = 190 € vendiendo 190 / 60 = 3,1667 del ocioso (ganancia 31,67 € en
+    // 2021). Al final, 36,8333 × 60 = 2.210 €; en 2021, 31,67 + 36,8333 × 10 = 400 € de ganancia → 76 € más. Final 2.210 − 76 = 2.134 €.
+    const A = act('A', [10, 10, 20, 20, 20, 20], [10, 20, 20, 20, 20, 20], [{ symbol: 'A', entryDate: G[0], entryPx: 10, exitDate: G[1], exitPx: 20, pasaPuerta: true }])
+    const r = Pl.ejecutaPlan(plan8('concentrado', 'O'), datos8('concentrado', [A], [50, 50, 50, 50, 60, 60]))
+    const pa = r.impuestos.porAnio
+    ok(cerca(r.valorNeto, 2134, 1e-6) && cerca(pa[0].impuesto, 190) && pa[0].pagadoEl === G[4] && cerca(r.impuestos.final, 76, 1e-6) && cerca(r.impuestos.pagados, 266, 1e-6),
+      `impuesto pagado con el ocioso: 190 € el 1/7/2021, 76 € al final, 2.134 € (${r.valorNeto}, ${pa.map(x => x.anio + ': ' + x.impuesto).join(' · ')})`)
+    // Sin ocioso y sin liquidez: A como antes (2.000 €); B entra el 4/1 a 20 con los 2.000 € (100 acciones). El 1/7 (B abre a 19) hay que
+    // pagar 190 €: se vende el 10 % de B (10 acciones × 19 = 190 €; pérdida de 10 € en 2021) y su capital baja a 1.800 €. El 2/7 sale B a 19:
+    // 90 × 19 = 1.710 €; en 2021, −10 − 90 = −100 € (sin impuesto). Final 1.710 €.
+    const B = act('B', [20, 20, 20, 20, 19, 19], [20, 20, 20, 20, 19, 19], [{ symbol: 'B', entryDate: G[2], entryPx: 20, exitDate: G[5], exitPx: 19, pasaPuerta: true }])
+    const r2 = Pl.ejecutaPlan(plan8('concentrado', 'LIQUIDEZ'), datos8('concentrado', [A, B]))
+    ok(cerca(r2.valorNeto, 1710, 1e-6) && cerca(r2.impuestos.pagados, 190, 1e-6) && cerca(r2.serie[4].patrimonio, 90 * 19, 1e-6),
+      `impuesto pagado vendiendo el 10 % del valor abierto: 1.710 € (${r2.valorNeto}; al cierre del 1/7, ${r2.serie[4].patrimonio})`)
+  }
+
   // ── 2 · Qué se calcula ──
   const est = E.FILAS.find(s => s.name === 'Prueba editor EMA20'); if (!est) throw new Error('falta «Prueba editor EMA20»')
   const SIMB = ['AAPL', 'AMZN', 'ASML', 'GOOGL', 'MA', 'META', 'MSFT', 'NFLX', 'NVDA', 'TSLA', 'UNH', 'V']
@@ -100,10 +127,11 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
   {
     const p = Pa.planDe(aBase, est)   // por defecto: 300 €/mes, impuestos de España, ocioso en liquidez
     const c = Pl.planListaCalculable(p)
-    ok(JSON.stringify(c.ignorado) === '["impuestos"]' && Pl.motivoListaNoCalculable(c.plan) === null && Pl.motivoListaNoCalculable(p) === Pl.AVISO_LISTA_SIMPLE && c.plan.dinero.aportaciones.frecuencia === 'mensual',
-      `por defecto se dejan fuera solo los impuestos (${c.ignorado.join(', ')}; las aportaciones ya cuentan), y así sí se calcula`)
+    ok(c.ignorado.length === 0 && Pl.motivoListaNoCalculable(p) === null && c.plan.dinero.aportaciones.frecuencia === 'mensual' && c.plan.impuestos.regimen === 'ES-ahorro',
+      'por defecto (300 €/mes, impuestos de España) no se deja nada fuera: se calcula tal cual')
     const c2 = Pl.planListaCalculable(Pa.planDe({ ...aBase, ocioso: 'GLD', apalancamiento: 2 }, est))
-    ok(JSON.stringify(c2.ignorado) === '["impuestos","apalancamiento"]' && c2.plan.piezas[0].ocioso === 'GLD' && c2.plan.piezas[0].apalancamiento === 1, 'con oro y ×2: el oro se queda; el apalancamiento, todavía no')
+    ok(JSON.stringify(c2.ignorado) === '["apalancamiento"]' && c2.plan.piezas[0].ocioso === 'GLD' && c2.plan.piezas[0].apalancamiento === 1 && Pl.motivoListaNoCalculable(Pa.planDe({ ...aBase, apalancamiento: 2 }, est)) === Pl.AVISO_LISTA_SIMPLE,
+      'con oro y ×2: el oro se queda; el apalancamiento, todavía no')
     ok(Pl.motivoListaNoCalculable(Pl.planListaCalculable(Pa.planDe({ ...aBase, lista: { ...aBase.lista, modo: 'slots' } }, est)).plan) === Pl.AVISO_LISTA_MODO
       && Pl.motivoListaNoCalculable(Pl.planListaCalculable(Pa.planDe({ ...aBase, lista: { ...aBase.lista, universo: 'ndx_vol_10', modo: 'concentrado' } }, est)).plan) === Pl.AVISO_LISTA_UNIVERSO,
       'con «Slots iguales» o el Nasdaq-100: todavía no, y lo dice')
@@ -134,7 +162,7 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
   CASOS.push({ modo: 'compartido', com: COMS[3], est, filtros: filtroMercado, simbolos: ['AAPL', 'MSFT', 'NVDA', 'TSLA'] })
   let iguales = 0, peor = 0
   for (const [k, cs] of CASOS.entries()) {
-    const a = { ...Pa.AJUSTES_PLAN, ...cs.com, donde: 'lista', periodo: cs.periodo || 'todo', capital: 10000, aportacion: 0,
+    const a = { ...Pa.AJUSTES_PLAN, ...cs.com, donde: 'lista', periodo: cs.periodo || 'todo', capital: 10000, aportacion: 0, impuestos: 'ninguno',
       lista: Li.mergeLista({ simbolos: cs.simbolos || SIMB, modo: cs.modo, filtros: cs.filtros || [], ...(cs.extra || {}) }) }
     const cuerpo = PD.peticionPorDentro({ a, estrategia: cs.est })
     const r = await E.llama(H, { ...cuerpo, conCandidatos: true })
@@ -150,7 +178,7 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
   }
   // §91: con comisión 0, un ocioso de precio fijo es como la liquidez: el plan con 300 €/mes acaba igual con los dos.
   for (const [k, cs] of [{ modo: 'compartido' }, { modo: 'concentrado', extra: { maxPosiciones: 4 } }, { modo: 'concentrado', extra: { prioridad: 'momentum', maxPosiciones: 2 } }].entries()) {
-    const a = { ...Pa.AJUSTES_PLAN, comisionTipo: 'pct', comision: 0, donde: 'lista', periodo: 'todo', capital: 10000, aportacion: 300, lista: Li.mergeLista({ simbolos: SIMB, modo: cs.modo, ...(cs.extra || {}) }) }
+    const a = { ...Pa.AJUSTES_PLAN, comisionTipo: 'pct', comision: 0, donde: 'lista', periodo: 'todo', capital: 10000, aportacion: 300, impuestos: 'ninguno', lista: Li.mergeLista({ simbolos: SIMB, modo: cs.modo, ...(cs.extra || {}) }) }
     const r = await E.llama(H, { ...PD.peticionPorDentro({ a, estrategia: est }), conCandidatos: true }), j = JSON.parse(r.cuerpo)
     const fechas = [...new Set(j.candidatosAzar.activos.flatMap(x => x.fechas))].sort()
     const datos = { fechas, qqq: fechas.map(() => null), etf: fechas.map(() => null), spy: fechas.map(() => null), lista: j.candidatosAzar, velas: { FIJO: fechas.map(date => ({ date, open: 100, high: 100, low: 100, close: 100, volume: 0 })) } }
@@ -163,14 +191,14 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
 
   // ── 4 · /api/plan y la pantalla ──
   const HP = require(R + '/pages/api/plan.js').default
-  const aP = { ...Pa.AJUSTES_PLAN, comisionTipo: 'fija', comisionFija: 0.185, donde: 'lista', periodo: 'todo', capital: 10000, aportacion: 0, lista: Li.mergeLista({ simbolos: SIMB, modo: 'concentrado', maxPosiciones: 4 }) }
+  const aP = { ...Pa.AJUSTES_PLAN, comisionTipo: 'fija', comisionFija: 0.185, donde: 'lista', periodo: 'todo', capital: 10000, aportacion: 0, impuestos: 'ninguno', lista: Li.mergeLista({ simbolos: SIMB, modo: 'concentrado', maxPosiciones: 4 }) }
   const cuerpoP = PD.peticionPorDentro({ a: aP, estrategia: est }), planP = Pl.planListaCalculable(Pa.planDe(aP, est)).plan
   const rp = await E.llama(HP, { plan: planP, curvas: true, cuerpoLista: cuerpoP })
   const jp = rp.status === 200 ? JSON.parse(rp.cuerpo) : null
   ok(!!jp && Math.abs(jp.evaluacion.plan.medidas.valorNeto - jp.finalPorDentro) < 0.005 && jp.evaluacion.referencias.map(x => x.id).join() === 'QQQ,SPY,LIQUIDEZ',
     `/api/plan con lista: ${jp ? jp.evaluacion.plan.medidas.valorNeto.toFixed(2) + ' € y «por dentro» ' + jp.finalPorDentro.toFixed(2) + ' €; comparaciones ' + jp.evaluacion.referencias.map(x => x.id).join(', ') : rp.status + ' ' + String(rp.cuerpo).slice(0, 200)}`)
-  const r400 = await E.llama(HP, { plan: Pa.planDe(aP, est), curvas: true, cuerpoLista: cuerpoP }), r400b = await E.llama(HP, { plan: planP, curvas: true, cuerpoLista: { ...cuerpoP, symbols: ['AAPL'] } })
-  ok(r400.status === 400 && JSON.parse(r400.cuerpo).error === Pl.AVISO_LISTA_SIMPLE && r400b.status === 400 && /no corresponde/.test(JSON.parse(r400b.cuerpo).error), '/api/plan rechaza un plan con impuestos y una petición de lista que no es la del plan')
+  const r400 = await E.llama(HP, { plan: Pa.planDe({ ...aP, apalancamiento: 2 }, est), curvas: true, cuerpoLista: cuerpoP }), r400b = await E.llama(HP, { plan: planP, curvas: true, cuerpoLista: { ...cuerpoP, symbols: ['AAPL'] } })
+  ok(r400.status === 400 && JSON.parse(r400.cuerpo).error === Pl.AVISO_LISTA_SIMPLE && r400b.status === 400 && /no corresponde/.test(JSON.parse(r400b.cuerpo).error), '/api/plan rechaza un plan apalancado y una petición de lista que no es la del plan')
   // La pantalla, con /api/plan de verdad detrás.
   const D = require('./domFalso'); D.pon()
   { const Mod = require('module'), orig = Mod._load; const vacio = new Proxy({}, { get: (_, k) => k === '__esModule' ? true : () => null }); const nada = new Proxy(function () {}, { get: (_, k) => k === '__esModule' ? true : k === Symbol.toPrimitive ? () => 0 : k === 'then' ? undefined : nada, apply: () => nada, construct: () => nada })
@@ -182,23 +210,24 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
   const BP = require(R + '/components/BuilderPlan.js').default
   const llamadas = []
   const calcula = async (p, c) => { llamadas.push({ p, c }); const r = await E.llama(HP, { plan: p, curvas: true, cuerpoLista: c }); const j = JSON.parse(r.cuerpo); if (r.status !== 200) throw new Error(j.error); return j }
-  const aPant = { ...aP, aportacion: 300, impuestos: 'ES-ahorro', ocioso: 'GLD' }   // §91: con aportaciones y oro (GLD = las velas de MA, solo para probar)
+  const aPant = { ...aP, aportacion: 300, impuestos: 'ES-ahorro', ocioso: 'GLD', apalancamiento: 2 }   // §91: con aportaciones y oro (GLD = las velas de MA, solo para probar)
   const datosLista = { watchlist: SIMB.map(s => ({ symbol: s, name: s, list_ids: [1] })), wlLists: [{ id: 1, name: 'Degiro' }], rankingData: {} }
   const b = D.monta(React.createElement(BP, { estrategias: [est], estrategiaId: est.id, datosLista, deps: { ctx: null, calcula, calculaPorDentro: async () => { throw new Error('no') } },
     inicial: { planes: [], pestana: 'n1', simbolos: ['AAPL'], pruebas: [], resultadoPrueba: { periodos: [] }, ajustes: aPant } }), RDC)
   for (let k = 0; k < 120 && !b.raiz.conAtributo('data-cifras').length; k++) await D.espera(250)
   const txt = b.raiz.textContent
-  ok(llamadas.length === 1 && JSON.stringify(llamadas[0].c) === JSON.stringify(PD.peticionPorDentro({ a: aPant, estrategia: est, wlData: {} })) && llamadas[0].p.impuestos.regimen === 'ninguno' && llamadas[0].p.piezas[0].ocioso === 'GLD' && llamadas[0].p.dinero.aportaciones.frecuencia === 'mensual' && llamadas[0].p.dinero.aportaciones.importe === 300,
-    'con «Tu dinero» abierta: una petición, con la misma petición de «La cartera por dentro» y el plan con 300 €/mes y el ocioso en oro, sin impuestos')
+  ok(llamadas.length === 1 && JSON.stringify(llamadas[0].c) === JSON.stringify(PD.peticionPorDentro({ a: aPant, estrategia: est, wlData: {} })) && llamadas[0].p.impuestos.regimen === 'ES-ahorro' && llamadas[0].p.piezas[0].apalancamiento === 1 && llamadas[0].p.piezas[0].ocioso === 'GLD' && llamadas[0].p.dinero.aportaciones.frecuencia === 'mensual' && llamadas[0].p.dinero.aportaciones.importe === 300,
+    'con «Tu dinero» abierta: una petición, con la misma petición de «La cartera por dentro» y el plan con 300 €/mes, el ocioso en oro e impuestos, sin apalancar')
   ok(b.raiz.conAtributo('data-cifras').length === 1 && !b.raiz.conAtributo('data-oro').length, 'pinta el resultado; sin la línea «Comprobación» (con aportaciones no tiene que coincidir con «La cartera por dentro»)')
   ok(!txt.includes('Si llega una aportación con la operación abierta'), 'con lista no sale «Si llega una aportación con la operación abierta» (siempre espera en el ocioso)')
-  ok((b.raiz.conAtributo('data-aviso-lista-simple')[0]?.textContent || '').startsWith('De momento, con una lista, se calcula sin impuestos: llegarán en los pasos siguientes.'),
+  ok((b.raiz.conAtributo('data-aviso-lista-simple')[0]?.textContent || '').startsWith('De momento, con una lista, se calcula sin apalancar: lo que falta llegará más adelante.'),
     `la línea de lo que todavía no cuenta: «${b.raiz.conAtributo('data-aviso-lista-simple')[0]?.textContent}»`)
   ok(!b.raiz.conAtributo('data-cifra', 'ocioso').length && !txt.includes('dentro de la acción') && !txt.includes('Buy&Hold del valor') && !b.raiz.conAtributo('data-tabla', 'caidas').length && !txt.includes('¿qué hace el ocioso?') && b.raiz.conAtributo('data-tabla', 'alternativas').length === 1,
     'sin lo que todavía no sirve con una lista (en el ocioso, franja, Buy&Hold del valor, caídas frente al ocioso); con la tabla de comparaciones')
   const fin = Number((b.raiz.conAtributo('data-cifra', 'final')[0]?.textContent.match(/([\d.]+)\s*€/) || [])[1]?.replace(/\./g, ''))
   const rp7 = await E.llama(HP, { plan: llamadas[0].p, curvas: true, cuerpoLista: llamadas[0].c }), m7 = JSON.parse(rp7.cuerpo).evaluacion.plan
-  ok(fin === Math.round(m7.medidas.valorNeto) && m7.ejecucion.aportado > 10000, `«Tienes al final» ${fin} € = el de /api/plan con 300 €/mes y oro (${m7.medidas.valorNeto.toFixed(2)} €, aportado ${m7.ejecucion.aportado} €, ${m7.ejecucion.costes.ordenes} órdenes)`)
+  ok(fin === Math.round(m7.medidas.valorNeto) && m7.ejecucion.aportado > 10000, `«Tienes al final» ${fin} € = el de /api/plan con 300 €/mes, oro e impuestos (${m7.medidas.valorNeto.toFixed(2)} €, aportado ${m7.ejecucion.aportado} €, impuestos ${m7.ejecucion.impuestos.pagados.toFixed(2)} €, ${m7.ejecucion.costes.ordenes} órdenes)`)
+  ok(m7.ejecucion.impuestos.pagados > 0 && m7.ejecucion.impuestos.porAnio.length >= 10, `con lista, los impuestos se calculan año a año (${m7.ejecucion.impuestos.porAnio.length} años)`)
   b.quita()
 
   console.log(fallos ? `FALLOS: ${fallos}` : 'plan-tu-dinero-lista: todo bien')
