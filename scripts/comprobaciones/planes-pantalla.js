@@ -208,9 +208,9 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   // Los avisos de la línea de debajo
   const conEst = (estado) => plano({ planes: [tres[0]], orden: ['g1'], pestana: 'g1', pruebas: estado === 'sin' ? [] : [{ id: 1, estrategia_id: 'x', estrategia_foto: est, resultado: { veredicto: estado } }], resultadoPrueba: { veredicto: estado } })
   v = conEst('sin')
-  ok(v.includes('Sin prueba') && v.includes('Probarla ahora') && v.includes('Acción elegida a mano'), 'sin prueba: «Sin prueba · Probarla ahora»')
+  ok(v.includes('Estrategia: sin prueba del paso 2') && v.includes('Probarla ahora') && v.includes('Acción elegida a mano'), 'sin prueba: «Estrategia: sin prueba del paso 2 · Probarla ahora»')
   v = conEst('noPasa')
-  ok(v.includes('✕ No pasa el azar') && v.includes('Ver la prueba'), 'no pasa: «✕ No pasa el azar · Ver la prueba»')
+  ok(v.includes('Estrategia: prueba del paso 2 ✕ No pasa') && v.includes('Ver la prueba'), 'no pasa: «Estrategia: prueba del paso 2 ✕ No pasa (…) · Ver la prueba»')
 
   // El menú «+ Añadir plan»
   const menuP = (o) => renderToString(React.createElement(Pest.default, { pestanas: [], planes: tres, abiertas: ['g1'], finales: { 1: 114340.91 }, ancho: 1000, menuInicial: 'anadir', ...o })).split('<!-- -->').join('')

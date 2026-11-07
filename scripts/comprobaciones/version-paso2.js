@@ -157,7 +157,7 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA', stops: [{ id:
   // Montado: «Mi trabajo» y el paso 3, con la estrategia renombrada y la prueba en la base simulada.
   const celdaAzar = (x, id) => x.raiz.busca(n => n.getAttribute('data-fila-estrategia') === id)?.busca(n => n.getAttribute('data-azar') != null)
   const planesVacios = (f0) => async (u, o) => String(u).includes('planes_inversion') ? J([]) : f0(u, o)
-  for (const [t, s, azar, aviso] of [['renombrada', renombrada, 'noPasa', '✕ No pasa el azar'], ['con otra regla', otraRegla, 'sinPrueba', 'Sin prueba']]) {
+  for (const [t, s, azar, aviso] of [['renombrada', renombrada, 'noPasa', 'prueba del paso 2 ✕ No pasa'], ['con otra regla', otraRegla, 'sinPrueba', 'sin prueba del paso 2']]) {
     b = base([conResultado('noPasa')]); globalThis.fetch = planesVacios(globalThis.fetch)
     m = D.monta(h(BP, { estrategias: [s], visible: true, apiFetch: async () => ({ ok: false, status: 500, json: async () => ({}) }), abrir: null }), RDC); await D.espera(LARGO)
     ok(celdaAzar(m, 'e1')?.getAttribute('data-azar') === azar, `Mi trabajo montado, ${t}: ${celdaAzar(m, 'e1')?.textContent}`); m.quita(); await D.espera(5)

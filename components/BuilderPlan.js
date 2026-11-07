@@ -53,9 +53,9 @@ import PlanPorDentro, { peticionPorDentro, motivoSinPeticion } from './backtesti
 import FiltrosPanel from './FiltrosPanel'
 import { mergeFiltros } from '../lib/filtros'
 import { numeroEs } from '../lib/utils'
-import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, AVISO_PRUEBA, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
+import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, avisoPrueba as textoAvisoPrueba, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
   ayudaCaida, ayudaPrueba, avisoListaSimple, oroComparable, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
-  textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS, avisoPruebaLista, ayudaPruebaLista } from '../lib/builder/planPantalla'
+  textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS } from '../lib/builder/planPantalla'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0', AZUL = '#58a6ff', GRIS_FRANJA = '#3a4656'
 const campo = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px' }
@@ -511,8 +511,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
 
   // ── Avisos (una línea; el detalle, tras «?») ──
   const avisoPrueba = estado && (
-    <div data-aviso="prueba" data-estado={estado.clave} data-lista={enLista ? '1' : undefined} style={{ color: estado.clave === 'pasa' && !enLista ? VERDE : estado.clave === 'noPasa' ? ROJO : AMARILLO, fontWeight: estado.clave === 'noPasa' ? 700 : 400, display: 'flex', alignItems: 'center', gap: 2 }}>
-      {enLista ? avisoPruebaLista(estado) : AVISO_PRUEBA[estado.clave]}{enLista && <Ayuda texto={ayudaPruebaLista(estado)} etiqueta="La lista aún no tiene prueba"/>}<span style={S.apagado}>&nbsp;·&nbsp;</span>{!estBorrada && <button data-boton="ver-prueba" style={{ ...S.enlace, fontSize: 13 }} onClick={() => pide({ tipo: 'paso2' })}>{estado.clave === 'sinPrueba' ? 'Probarla ahora' : 'Ver la prueba'}</button>}<Ayuda texto={ayudaPrueba(estado, resPrueba)} etiqueta="La prueba contra el azar"/>
+    <div data-aviso="prueba" data-estado={estado.clave} data-lista={enLista ? '1' : undefined} style={{ color: estado.clave === 'pasa' ? VERDE : estado.clave === 'noPasa' ? ROJO : AMARILLO, fontWeight: estado.clave === 'noPasa' ? 700 : 400, display: 'flex', alignItems: 'center', gap: 2 }}>
+      {textoAvisoPrueba(estado)}<span style={S.apagado}>&nbsp;·&nbsp;</span>{!estBorrada && <button data-boton="ver-prueba" style={{ ...S.enlace, fontSize: 13 }} onClick={() => pide({ tipo: 'paso2' })}>{estado.clave === 'sinPrueba' ? 'Probarla ahora' : 'Ver la prueba'}</button>}<Ayuda texto={ayudaPrueba(estado, resPrueba)} etiqueta="La prueba contra el azar"/>
     </div>
   )
   // §54: una línea bajo las pestañas: los avisos (en el móvil, uno debajo del otro: .bp-avisos), «Calculando…» y, a la derecha, guardar y «Comparar planes».

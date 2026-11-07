@@ -2579,3 +2579,12 @@ Boceto `bocetos/plan-lista-ocioso.html`, aprobado por Sergi el 07/11 (las tres r
 - Sigue sin salir con lista: la tabla «Caídas frente al ocioso» (decidido en el boceto: más adelante) y las columnas de Buy&Hold de «Año a año».
 - `plan-tu-dinero-lista.js`: a mano, 1.000 € + 300 € entre A y B con 1 € por orden → 1.358,80 € y 6 órdenes; en la pantalla, la fila con el importe de /api/plan y su línea.
 - Retoque tras verlo en la app (07/11): la cifra decía «X % de tu dinero, de media» y se cortaba; ahora «X % de media» con «de tu dinero · en valores, el Y %» debajo. El dato de la franja al pasar el ratón va siempre alineado a la izquierda bajo la franja (antes, cerca del final se cortaba por la izquierda).
+
+## 96. Paso 3: la línea de la prueba, igual con o sin lista (fase 10 cerrada)
+
+Decisión de Sergi (07/11): **fase 10 cerrada «sin aval propio del plan»**. Los planes son donde se USAN estrategias (aprobadas, prometedoras o de prueba): no se calcula, guarda ni congela ninguna prueba de la lista. La prueba A/B sigue en «La cartera por dentro», solo informativa. Idea futura: una prueba informativa «estrategia + lista + reparto» en el paso 4.
+
+- La línea de arriba del plan es la misma con «Una acción» y con «Una lista» (`avisoPrueba` de lib/builder/planPantalla.js): «Estrategia: prueba del paso 2 ✓ Pasa (AAPL)», «… ✕ No pasa (AAPL)» o «Estrategia: sin prueba del paso 2». Fuera «la lista aún no tiene prueba» (y `avisoPruebaLista`, `ayudaPruebaLista`, `AVISO_PRUEBA`).
+- Colores como siempre (verde, rojo, amarillo), también con lista. No bloquea nada.
+- Su «?» añade: es solo un dato, no bloquea, es de la estrategia en el valor entre paréntesis y los planes no tienen prueba propia.
+- `plan-lista.js`, `planes-pantalla.js` y `version-paso2.js`, al día con el texto nuevo.
