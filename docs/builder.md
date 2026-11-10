@@ -2631,3 +2631,12 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - La app pone a todo `label` «columna» y letra mono, y a todo `select` el 100 % de ancho: la pantalla lo corrige en sus propios estilos.
 - Comprobación ampliada `screener.js` (60): filtros, vistas y la pantalla montada. Revisado en el navegador de pruebas con una muestra real (104 empresas): «Rentabilidad y poca deuda» deja 13 de 93.
 - Nada cambia en las demás pantallas ni en las cifras.
+
+## 102. Screener (parte 1, commit 4): vistas guardadas
+
+- Las vistas del screener se guardan en `screener_vistas` (`lib/screener/vistasBase.js`). La primera vez se crean las 3 de ejemplo. Cada pestaña lleva «●» si tiene cambios sin guardar; además hay «+ Nueva vista ▾» (desde cero o copia), nombre editable, ⧉, papelera roja con ventana propia, «Descartar cambios» y «Guardar».
+- Guardia de cambios sin guardar al cambiar de vista, al crear una y al salir de la pantalla (`screenerSalida` en `salirDeTesis` de `pages/index.js`: menú, logo y «Salir»).
+- Seguridad comprobada en la base de verdad (`scripts/comprobaciones/screenerSeguridad.js`, 9 de 9, todo con ROLLBACK).
+- `screener.js` (78) con estado sobre el DOM mínimo. Detalle en docs/screener.md §6.
+- Nada cambia en las demás pantallas ni en las cifras.
+- `scripts/comprobaciones/tesis.js`: la guardia `salirDeTesis` que comprueba ahora incluye el screener.

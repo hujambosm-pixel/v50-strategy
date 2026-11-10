@@ -2,7 +2,7 @@
 // tabla»): pestañas de vistas arriba, el embudo, el panel de filtros a la izquierda (como el Backtesting) y la tabla a la
 // derecha. Las cifras de cada empresa vienen ya calculadas de la base (lib/screener/datos.js); aquí solo se filtra y se
 // ordena (lib/screener/filtros.js). No toca el motor ni ninguna cifra del resto de la app.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import Ayuda from './BuilderAyuda'
 import ConLimpiar from './LimpiarBusqueda'
@@ -11,10 +11,17 @@ import { sinTildes } from '../lib/builder/buscar'
 import { empresasDeFilas, fechaDatos, leerFilasEmpresas } from '../lib/screener/datos'
 import { AYUDAS, FILTROS, FILTRO, evaluaVista, fmt, pasa } from '../lib/screener/filtros'
 import { SECTORES_FUERA_POR_DEFECTO } from '../lib/screener/sectores'
-import { VISTAS_EJEMPLO, normalizaVista } from '../lib/screener/vista'
+import { VISTAS_EJEMPLO, normalizaVista, textoVista, vistaNueva } from '../lib/screener/vista'
+import { borrarVista, cambiarVista, creaEjemplos, crearVista, listarVistas, nombreLimpio } from '../lib/screener/vistasBase'
+import { Papelera, Pregunta } from './VentanaPregunta'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b'
 const copia = (x) => JSON.parse(JSON.stringify(x))
+// Una pestaña de vista: { clave (local), id (de la base, null si aún no está guardada), nombre, vista, base: { nombre, vista } | null
+// (lo guardado; null si es nueva) }. Con cambios = nueva, u otro nombre u otra vista que lo guardado.
+let claves = 0
+export const pestanaDe = (fila) => ({ clave: ++claves, id: fila.id ?? null, nombre: fila.nombre, vista: normalizaVista(fila.vista), base: fila.id != null ? { nombre: fila.nombre, vista: normalizaVista(fila.vista) } : null })
+export const conCambiosDe = (p) => !p.base || nombreLimpio(p.nombre) !== p.base.nombre || textoVista(p.vista) !== textoVista(p.base.vista)
 const fechaCorta = (iso) => iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '—'
 
 // Un «?» con título, explicación y ejemplo (los textos del catálogo).
@@ -42,11 +49,16 @@ const valorOrden = (e, col) => {
   const x = f.v(e); return f.bool ? (x === true ? 1 : x === false ? 0 : null) : x
 }
 
-// inicial (para las comprobaciones, scripts/comprobaciones/screener.js): { empresas, vistas, iv, piso, busca, verNo, orden }; con
-// inicial.empresas no se lee la base.
-export default function ScreenerPanel({ inicial = {} }) {
+// inicial (para las comprobaciones, scripts/comprobaciones/screener.js): { empresas, vistas (pestañas), iv, piso, busca, verNo, orden,
+// pregunta }; con inicial.empresas no se lee la base (ni las vistas). salida: la guardia de «cambios sin guardar» al salir de la
+// pantalla (pages/index.js, como en Tesis): salida.current(seguir) → true si ha preguntado.
+export default function ScreenerPanel({ inicial = {}, salida = null }) {
   const [estado, setEstado] = useState(() => inicial.empresas ? { cargando: false, error: null, empresas: inicial.empresas } : { cargando: true, error: null, empresas: [] })
-  const [vistas, setVistas] = useState(() => inicial.vistas || VISTAS_EJEMPLO.map(v => ({ nombre: v.nombre, vista: copia(v.vista) })))
+  const [vistas, setVistas] = useState(() => inicial.vistas || VISTAS_EJEMPLO.map(v => pestanaDe({ nombre: v.nombre, vista: copia(v.vista) })))
+  const [vistasError, setVistasError] = useState(null)
+  const [guardando, setGuardando] = useState(false)
+  const [pregunta, setPregunta] = useState(inicial.pregunta || null)   // { tipo: 'salir', accion } | { tipo: 'borrar' }
+  const [menuNueva, setMenuNueva] = useState(false)
   const [iv, setIv] = useState(inicial.iv || 0)
   const [piso, setPiso] = useState(inicial.piso || 'F')
   const [busca, setBusca] = useState(inicial.busca || '')
@@ -60,10 +72,58 @@ export default function ScreenerPanel({ inicial = {} }) {
     leerFilasEmpresas(ctxConSesion())
       .then(filas => { if (vivo) setEstado({ cargando: false, error: null, empresas: empresasDeFilas(filas) }) })
       .catch(e => { if (vivo) setEstado({ cargando: false, error: e.message, empresas: [] }) })
+    // Las vistas guardadas; la primera vez (ninguna), se crean las 3 de ejemplo.
+    const ctx = ctxConSesion()
+    listarVistas(ctx)
+      .then(l => l && l.length ? l : creaEjemplos(ctx))
+      .then(l => { if (vivo) { setVistas(l.map(pestanaDe)); setIv(0) } })
+      .catch(e => { if (vivo) setVistasError(`${e.message} Las vistas de ejemplo funcionan, pero no se pueden guardar.`) })
     return () => { vivo = false }
   }, [])
 
-  const vista = normalizaVista(vistas[iv].vista)
+  const actual = vistas[Math.min(iv, vistas.length - 1)]
+  const conCambios = conCambiosDe(actual)
+  // Guardia al salir de la pantalla con cambios (como en Tesis).
+  const conCambiosRef = useRef(conCambios); conCambiosRef.current = conCambios
+  useEffect(() => { if (salida) salida.current = (seguir) => { if (!conCambiosRef.current) return false; setPregunta({ tipo: 'salir', accion: seguir }); return true } })
+  useEffect(() => () => { if (salida) salida.current = null }, [])
+
+  const ponPestana = (cambio) => setVistas(vs => vs.map((p, i) => i === iv ? { ...p, ...cambio } : p))
+  const guarda = async () => {
+    if (guardando) return false
+    setGuardando(true); setVistasError(null)
+    try {
+      const ctx = ctxConSesion(), p = actual, posicion = iv
+      const fila = p.id == null ? await crearVista(ctx, { nombre: p.nombre, vista: p.vista, posicion }) : await cambiarVista(ctx, p.id, { nombre: p.nombre, vista: p.vista, posicion })
+      setVistas(vs => vs.map(x => x.clave === p.clave ? { ...pestanaDe(fila), clave: p.clave } : x))
+      return true
+    } catch (e) { setVistasError(e.message); return false } finally { setGuardando(false) }
+  }
+  // Descartar: vuelve a lo guardado; una nueva sin guardar se quita.
+  const descarta = () => {
+    if (!actual.base) {
+      setVistas(vs => { const r = vs.filter(x => x.clave !== actual.clave); return r.length ? r : [pestanaDe({ nombre: 'Vista nueva', vista: vistaNueva() })] })
+      setIv(i => Math.max(0, i - 1)); return
+    }
+    ponPestana({ nombre: actual.base.nombre, vista: copia(actual.base.vista) })
+  }
+  // Pasar a otra pestaña (o crear otra) con la pregunta si hay cambios.
+  const conGuardia = (accion) => { if (conCambios) setPregunta({ tipo: 'salir', accion }); else accion() }
+  const nueva = (desde) => {
+    setMenuNueva(false)
+    const p = desde === 'copia' ? pestanaDe({ nombre: `${nombreLimpio(actual.nombre)} (copia)`, vista: copia(actual.vista) }) : pestanaDe({ nombre: 'Vista nueva', vista: vistaNueva() })
+    conGuardia(() => { setVistas(vs => [...vs, p]); setIv(n => vistas.length) })
+  }
+  const borra = async () => {
+    setPregunta(null)
+    try {
+      if (actual.id != null) await borrarVista(ctxConSesion(), actual.id)
+      setVistas(vs => { const r = vs.filter(x => x.clave !== actual.clave); return r.length ? r : [pestanaDe({ nombre: 'Vista nueva', vista: vistaNueva() })] })
+      setIv(i => Math.max(0, i - 1))
+    } catch (e) { setVistasError(e.message) }
+  }
+
+  const vista = normalizaVista(actual.vista)
   const cambia = (fn) => setVistas(vs => vs.map((v, i) => i === iv ? { ...v, vista: fn(normalizaVista(v.vista)) } : v))
   const cambiaFiltro = (id, cambio) => cambia(v => ({ ...v, filtros: { ...v.filtros, [id]: { ...v.filtros[id], ...cambio } } }))
   const ev = useMemo(() => evaluaVista(estado.empresas, vista), [estado.empresas, JSON.stringify(vista)])
@@ -97,11 +157,30 @@ export default function ScreenerPanel({ inicial = {} }) {
       {/* Pestañas de vistas */}
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'flex-end', borderBottom: `1px solid ${B.borde}` }}>
         {vistas.map((v, i) => (
-          <button key={i} data-pestana-vista={i} onClick={() => setIv(i)}
+          <button key={v.clave} data-pestana-vista={i} onClick={() => { if (i !== iv) conGuardia(() => setIv(i)) }}
             style={{ ...S.boton, padding: '6px 12px', borderRadius: '8px 8px 0 0', borderBottom: 'none', fontWeight: i === iv ? 700 : 400,
-              background: i === iv ? B.tarjeta : 'transparent', color: i === iv ? B.titulo : B.secundario }}>{v.nombre}</button>
+              background: i === iv ? B.tarjeta : 'transparent', color: i === iv ? B.titulo : B.secundario }}>
+            {nombreLimpio(v.nombre) || 'Vista sin nombre'}{conCambiosDe(v) && <span data-punto-cambios title="Cambios sin guardar" style={{ color: AMARILLO, marginLeft: 5 }}>●</span>}</button>
         ))}
-        <span style={{ ...S.apagado, marginLeft: 8, paddingBottom: 6 }}>Vistas de ejemplo: aún no se guardan.</span>
+        <span style={{ position: 'relative' }}>
+          <button data-nueva-vista onClick={() => setMenuNueva(x => !x)} style={{ ...S.boton, padding: '6px 12px', borderRadius: '8px 8px 0 0', borderBottom: 'none', background: 'transparent', color: B.enlace }}>+ Nueva vista ▾</button>
+          {menuNueva && <div data-menu-nueva style={{ position: 'absolute', top: '100%', left: 0, zIndex: 20, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: 8, padding: 4, minWidth: 200, boxShadow: '0 6px 20px rgba(0,0,0,0.45)' }}>
+            {[['cero', 'Desde cero (sin filtros)'], ['copia', 'Copia de esta vista']].map(([k, tx]) => (
+              <button key={k} data-nueva={k} onClick={() => nueva(k)} style={{ ...S.enlace, display: 'block', width: '100%', padding: '6px 10px', color: B.texto, fontSize: 13 }}>{tx}</button>))}
+          </div>}
+        </span>
+      </div>
+
+      {/* La vista: nombre, duplicar, borrar, descartar y guardar */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input data-nombre-vista value={actual.nombre} onChange={e => ponPestana({ nombre: e.target.value })} title="Nombre de la vista (puedes cambiarlo)" maxLength={200}
+          style={{ ...caja, width: 260, fontSize: 14, fontWeight: 700, padding: '5px 8px' }}/>
+        <button data-duplicar onClick={() => nueva('copia')} title="Duplicar esta vista" style={{ ...S.boton, padding: '4px 8px', fontSize: 15 }}>⧉</button>
+        <button data-borrar-vista onClick={() => setPregunta({ tipo: 'borrar' })} title="Borrar esta vista" style={{ ...S.boton, padding: '3px 7px', background: 'transparent' }}><Papelera tamano={17}/></button>
+        <span style={{ flex: 1 }}/>
+        {vistasError && <span data-error-vistas style={{ color: ROJO, fontSize: 13 }}>⚠ {vistasError}</span>}
+        <button data-descartar disabled={!conCambios || guardando} onClick={descarta} style={{ ...S.boton, padding: '5px 12px', opacity: conCambios ? 1 : 0.5, cursor: conCambios ? 'pointer' : 'default' }}>Descartar cambios</button>
+        <button data-guardar disabled={!conCambios || guardando} onClick={guarda} style={{ ...(conCambios ? S.botonVerde : S.botonDesactivado), padding: '5px 14px' }}>{guardando ? 'Guardando…' : 'Guardar'}</button>
       </div>
 
       {/* Universo y fechas de los datos */}
@@ -222,6 +301,17 @@ export default function ScreenerPanel({ inicial = {} }) {
           </div>
         </div>
       </div>
+      {pregunta?.tipo === 'salir' && (
+        <Pregunta id="salir" texto={`Tienes cambios sin guardar en la vista «${nombreLimpio(actual.nombre) || 'Vista sin nombre'}».`}>
+          <button data-p="cancelar" style={S.boton} onClick={() => setPregunta(null)}>Cancelar</button>
+          <button data-p="salir" style={S.boton} onClick={() => { const a = pregunta.accion; setPregunta(null); descarta(); a() }}>Salir sin guardar</button>
+          <button data-p="guardar" style={S.botonVerde} onClick={async () => { const a = pregunta.accion; setPregunta(null); if (await guarda()) a() }}>Guardar</button>
+        </Pregunta>)}
+      {pregunta?.tipo === 'borrar' && (
+        <Pregunta id="borrar" texto={`¿Borrar la vista «${nombreLimpio(actual.nombre) || 'Vista sin nombre'}»?`} aviso="No se puede deshacer.">
+          <button data-p="cancelar" style={S.boton} onClick={() => setPregunta(null)}>Cancelar</button>
+          <button data-p="borrar" style={{ ...S.boton, color: '#f85149', borderColor: '#f85149' }} onClick={borra}>Borrar</button>
+        </Pregunta>)}
     </div>
   )
 }

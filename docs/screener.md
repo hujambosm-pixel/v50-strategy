@@ -79,7 +79,25 @@ Las **vistas** son conjuntos de filtros con nombre, que se guardan como los plan
   - «Ver también los que no pasan (en gris)».
 - **Un dato que falta no pasa el filtro**, salvo «no paga intereses» en la cobertura.
 
-## 6. Comprobación
+## 6. Vistas guardadas (`lib/screener/vistasBase.js`)
+
+- Se guardan en `screener_vistas` (cada usuario, las suyas). La primera vez que se abre el screener sin ninguna, se crean las 3 de ejemplo.
+- **Arriba**:
+  - Pestañas con «●» si tienen cambios sin guardar.
+  - «+ Nueva vista ▾», con «Desde cero (sin filtros)» o «Copia de esta vista».
+  - Nombre editable, ⧉ duplicar, papelera roja (ventana propia, «No se puede deshacer»), «Descartar cambios» y «Guardar».
+- **Con cambios sin guardar**:
+  - Cambiar de pestaña, crear una vista o salir de la pantalla (menú, logo o «Salir»; `screenerSalida` en `pages/index.js`, como en Tesis) pregunta «Guardar / Salir sin guardar / Cancelar».
+  - «Descartar» devuelve lo guardado; en una vista nueva sin guardar, la quita.
+- **Sin sesión** (o si la base falla): las 3 de ejemplo funcionan, con el aviso de que no se pueden guardar.
+- **Pendiente**: enlazar una vista con una tesis («Relacionado» y 🔗). Va después de la parte 1.
+- **Seguridad**: `node scripts/comprobaciones/screenerSeguridad.js` (en la base de verdad, todo con ROLLBACK; la lanza Claude aparte). Comprueba:
+  - Cada usuario ve solo sus vistas y no puede ponerles otro dueño.
+  - Se rechaza un tipo distinto de «vista_screener».
+  - anon no lee nada.
+  - Con sesión se leen empresas y cuentas, pero no se escriben.
+
+## 7. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:
 - Ventas corregidas en un documento posterior.
@@ -89,6 +107,7 @@ Las **vistas** son conjuntos de filtros con nombre, que se guardan como los plan
 - Las medianas por sector.
 - Filtros y vistas: universo, sectores quitados, «−N», ≤ y ≥, apagado, «no paga intereses», vistas viejas completadas y las 3 de ejemplo.
 - La pantalla montada (renderToString): embudo, tabla, «−N», orden con los sin dato al final, buscador con ✕, pestaña Técnico y «Cargando…».
+- Vistas guardadas: cambios (●), ventanas de salir y de borrar, las 3 de ejemplo la primera vez, cambiar y borrar por id. Con estado (DOM mínimo): cambiar el nombre, ir a otra pestaña (Cancelar / Salir sin guardar), nueva vista, descartar, apagar un filtro y descartar (78 en total).
 - Balance anual que no tapa el 10-Q.
 - El universo y los tramos SIC.
 - La tabla de Wikipedia, y que esté vacía si cambia la página.

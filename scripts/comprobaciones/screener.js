@@ -2,12 +2,14 @@
 // lector de EDGAR (lib/screener/edgar.js), universo y sectores, cifras de cada empresa (metricas.js), filtros y vistas
 // (filtros.js, vista.js). No usa la red ni la base. Termina en 0 si todo va bien.
 const { preparaEsm } = require('../guardian/cargaEsm')
+const D = require('./domFalso')
 
 let fallos = 0, n = 0
 const ok = (c, msg) => { n++; if (!c) { fallos++; console.log('✗ ' + msg) } }
 const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <= tol
 
 ;(async () => {
+  D.pon()
   await preparaEsm()
   const { filasDeEmpresa } = require('../../lib/screener/edgar')
   const { universoDe, sp500DeWikipedia, aYahoo } = require('../../lib/screener/universo')
@@ -144,13 +146,37 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
   // ── La pantalla montada (components/ScreenerPanel.js) ─────────────────────────────────────────────────────────────────
   const React = require('react'), { renderToString } = require('react-dom/server')
   const P = require('../../components/ScreenerPanel').default
-  const monta = (inicial) => renderToString(React.createElement(P, { inicial: { empresas: E, vistas: [{ nombre: 'Prueba', vista: v1 }], ...inicial } })).split('<!-- -->').join('')
+  const { pestanaDe, conCambiosDe } = require('../../components/ScreenerPanel')
+  const guardada = (extra = {}) => pestanaDe({ id: 7, nombre: 'Prueba', vista: v1, ...extra })
+  const monta = (inicial) => renderToString(React.createElement(P, { inicial: { empresas: E, vistas: [guardada()], ...inicial } })).split('<!-- -->').join('')
   let hp = monta({})
   ok(hp.includes('1 · pasan Fundamentales') && hp.includes('data-embudo-n="1"') && hp.slice(hp.indexOf('data-embudo-n="1"')).startsWith('data-embudo-n="1" style="font-size:20px;font-weight:700;color:#ffffff">1<'), 'embudo: pasan Fundamentales 1')
   ok(hp.includes('data-fila="AAA"') && !hp.includes('data-fila="BBB"'), 'tabla: AAA sí, BBB no')
   ok(hp.includes('data-cuenta="roce"') && hp.includes('−2'), 'el ROCE dice «−2»')
   ok(hp.includes('data-celda="roce"') && hp.includes('30,0 %'), 'celda del ROCE: 30,0 %')
-  ok(hp.includes('Vistas de ejemplo: aún no se guardan.'), 'aviso de que las vistas aún no se guardan')
+  ok(!hp.includes('data-punto-cambios') && /data-guardar="true"[^>]*disabled=""|disabled=""[^>]*data-guardar/.test(hp), 'vista guardada sin cambios: sin «●» y «Guardar» desactivado')
+
+  // ── Vistas guardadas (vistasBase.js y la pantalla) ────────────────────────────────────────────────────────────────────
+  const g = guardada()
+  ok(!conCambiosDe(g) && conCambiosDe({ ...g, nombre: 'Otra' }) && !conCambiosDe({ ...g, nombre: '  Prueba  ' }), 'cambios: otro nombre sí; espacios de más no')
+  ok(conCambiosDe({ ...g, vista: { ...v1, pegRazonable: 3 } }) && conCambiosDe(pestanaDe({ nombre: 'Nueva', vista: v1 })), 'cambios: otra vista, o una nueva sin guardar')
+  hp = monta({ vistas: [{ ...guardada(), nombre: 'Otra' }] })
+  ok(hp.includes('data-punto-cambios') && !/data-guardar="true"[^>]*disabled=""/.test(hp), 'con cambios: «●» en la pestaña y «Guardar» activo')
+  ok(hp.includes('+ Nueva vista ▾') && hp.includes('data-duplicar') && hp.includes('data-borrar-vista') && hp.includes('Descartar cambios'), 'nueva, duplicar, papelera y descartar')
+  hp = monta({ pregunta: { tipo: 'salir', accion: () => {} } })
+  ok(hp.includes('Tienes cambios sin guardar en la vista «Prueba».') && hp.includes('Salir sin guardar') && hp.includes('data-p="cancelar"'), 'ventana propia «Guardar / Salir sin guardar / Cancelar»')
+  hp = monta({ pregunta: { tipo: 'borrar' } })
+  ok(hp.includes('¿Borrar la vista «Prueba»?') && hp.includes('No se puede deshacer.'), 'ventana propia para borrar, con aviso')
+  const VB = require('../../lib/screener/vistasBase')
+  ok(VB.camposVista({ nombre: '  Mi   vista ', vista: { filtros: { roce: { on: true } } } }).nombre === 'Mi vista' && VB.camposVista({ nombre: ' ', vista: {} }).nombre === 'Vista sin nombre', 'nombre limpio, o «Vista sin nombre»')
+  ok(VB.camposVista({ nombre: 'x', vista: { filtros: { roce: { on: true } } } }).vista.filtros.roe.on === false, 'se guarda la vista completa')
+  const llamadas = []
+  const ctxF = { url: 'https://base', headers: { apikey: 'k' }, fetch: async (u, o = {}) => { llamadas.push({ u, m: o.method || 'GET', b: o.body ? JSON.parse(o.body) : null }); return { ok: true, status: 201, json: async () => [{ id: llamadas.length, ...(o.body ? JSON.parse(o.body) : {}) }] } } }
+  const hechas = await VB.creaEjemplos(ctxF)
+  ok(hechas.length === 3 && llamadas.every(l => l.m === 'POST' && l.u.startsWith('https://base/rest/v1/screener_vistas')) && llamadas.map(l => l.b.posicion).join() === '0,1,2' && llamadas[2].b.nombre === 'Alerta de precio caro', 'la primera vez: las 3 de ejemplo, en su orden')
+  llamadas.length = 0
+  await VB.cambiarVista(ctxF, 5, { nombre: 'Y', vista: v1, posicion: 2 }); await VB.borrarVista(ctxF, 5)
+  ok(llamadas[0].m === 'PATCH' && llamadas[0].u.includes('id=eq.5') && llamadas[1].m === 'DELETE' && llamadas[1].u.includes('id=eq.5'), 'cambiar y borrar por id')
   hp = monta({ verNo: true, orden: { col: 'roce', dir: -1 } })
   const pos = (s) => hp.indexOf('data-fila="' + s + '"')
   ok(pos('AAA') > 0 && pos('BBB') > pos('AAA') && pos('DDD') > pos('BBB') && pos('CCC') < 0, 'ver también los que no pasan, por ROCE de mayor a menor: AAA, BBB, DDD (sin dato al final); CCC quitada')
@@ -162,6 +188,35 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
   ok(hp.includes('Estos filtros llegan en la parte 2 del screener.') && hp.includes('data-filtro="ema200"'), 'pestaña Técnico: filtros que llegan más adelante')
   hp = renderToString(React.createElement(P, {}))
   ok(hp.includes('Cargando las empresas…'), 'sin datos: «Cargando las empresas…»')
+
+  // ── Con estado (DOM mínimo): cambiar el nombre, ir a otra pestaña con cambios, cancelar, salir sin guardar, nueva vista ────
+  {
+    const RDC = require('react-dom/client')
+    const A = pestanaDe({ id: 1, nombre: 'Uno', vista: v1 }), Bv = pestanaDe({ id: 2, nombre: 'Dos', vista: vistaNueva() })
+    const m = D.monta(React.createElement(P, { inicial: { empresas: E, vistas: [A, Bv] } }), RDC); await D.espera(30)
+    const uno = (k, v) => m.raiz.conAtributo(k, v)[0]
+    D.escribe(uno('data-nombre-vista'), 'Uno bis'); await D.espera(10)
+    ok(m.raiz.conAtributo('data-punto-cambios').length === 1, 'al cambiar el nombre: «●» en la pestaña')
+    D.pulsa(uno('data-pestana-vista', 1)); await D.espera(10)
+    ok(!!uno('data-pregunta', 'salir'), 'ir a otra pestaña con cambios: pregunta')
+    D.pulsa(uno('data-p', 'cancelar')); await D.espera(10)
+    ok(!uno('data-pregunta', 'salir') && uno('data-nombre-vista').value === 'Uno bis', 'Cancelar: se queda, con su cambio')
+    D.pulsa(uno('data-pestana-vista', 1)); await D.espera(10)
+    D.pulsa(uno('data-p', 'salir')); await D.espera(10)
+    ok(uno('data-nombre-vista').value === 'Dos' && !m.raiz.conAtributo('data-punto-cambios').length, '«Salir sin guardar»: pasa a «Dos» y «Uno» vuelve a lo guardado')
+    D.pulsa(uno('data-nueva-vista')); await D.espera(10)
+    D.pulsa(uno('data-nueva', 'cero')); await D.espera(10)
+    ok(m.raiz.conAtributo('data-pestana-vista').length === 3 && uno('data-nombre-vista').value === 'Vista nueva' && m.raiz.conAtributo('data-punto-cambios').length === 1, '«+ Nueva vista › Desde cero»: tercera pestaña, sin guardar')
+    D.pulsa(uno('data-descartar')); await D.espera(10)
+    ok(m.raiz.conAtributo('data-pestana-vista').length === 2, 'descartar una nueva sin guardar la quita')
+    const roce = () => uno('data-on', 'roce')
+    D.pulsa(uno('data-pestana-vista', 0)); await D.espera(10)
+    D.propsDe(roce()).onChange({ target: { checked: false } }); await D.espera(10)
+    ok(m.raiz.conAtributo('data-punto-cambios').length === 1 && uno('data-embudo-n', 1).textContent === '3', 'apagar el ROCE: pasan los 3 del universo, con «●»')
+    D.pulsa(uno('data-descartar')); await D.espera(10)
+    ok(!m.raiz.conAtributo('data-punto-cambios').length && uno('data-embudo-n', 1).textContent === '1', '«Descartar cambios»: vuelve a pasar 1')
+    m.quita()
+  }
 
   console.log(`screener: ${fallos ? fallos + ' fallos de ' + n : 'todas bien (' + n + ')'}`)
   process.exit(fallos ? 1 : 0)

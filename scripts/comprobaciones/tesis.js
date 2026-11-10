@@ -313,7 +313,7 @@ const cuenta = (html, s) => html.split(s).length - 1
   ok(leer('pages', 'index.js').includes(`e.target.tagName==='SELECT'||e.target.isContentEditable) return`), 'escribir en el editor no abre el buscador de símbolos')
   // Las salidas desde fuera de la pantalla: pages/index.js es demasiado grande para montarlo aquí, así que se mira su código (y se probó con clics en el navegador).
   const fuenteIndex = leer('pages', 'index.js')
-  ok(fuenteIndex.includes(`if(sidePanel==='tesis'&&tesisSalida.current?.(seguir)) return; if(sidePanel==='builder'&&builderSalida.current?.(seguir)) return; seguir()`), 'salirDeTesis: en Tesis o en el Builder y con cambios pregunta y sigue al responder; si no, sigue sin más')
+  ok(fuenteIndex.includes(`if(sidePanel==='tesis'&&tesisSalida.current?.(seguir)) return; if(sidePanel==='builder'&&builderSalida.current?.(seguir)) return; if(sidePanel==='screener'&&screenerSalida.current?.(seguir)) return; seguir()`), 'salirDeTesis: en Tesis, en el Builder o en el Screener y con cambios pregunta y sigue al responder; si no, sigue sin más')
   ok(fuenteIndex.includes(`else salirDeTesis(()=>setSidePanel(item.id))`) && fuenteIndex.includes(`className="header-logo" onClick={()=>salirDeTesis(()=>{`) && fuenteIndex.includes(`onClick={()=>salirDeTesis(handleLogout)}`), 'también preguntan el menú, el logo y «Cerrar sesión»')
   // V9.1139: los dos «↗ Watchlist» de la tabla del Backtesting se fueron con los resultados a components/backtesting/CarteraPorDentro.js (§78): se cuentan también.
   const llamadasPanel = [fuenteIndex, leer('components', 'backtesting', 'CarteraPorDentro.js')].join('\n').split('\n').filter(x => /setSidePanel\(/.test(x)).length
