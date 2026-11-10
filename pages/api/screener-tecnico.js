@@ -34,7 +34,9 @@ async function guarda(simbolo, tecnico, jwt) {
   return (await r.json()) === true
 }
 
-async function unSimbolo(simbolo, jwt) {
+// Las velas DIARIAS CERRADAS de los últimos ANIOS_TECNICO años de un símbolo (pasos 1 y 2 de arriba). También las usa
+// pages/api/screener-senales.js. Devuelve [] si no hay velas.
+export async function velasCerradasDe(simbolo, jwt) {
   const urlRango = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(simbolo)}?interval=1d&range=${ANIOS_TECNICO}y`
   let r = null
   try {
@@ -44,8 +46,13 @@ async function unSimbolo(simbolo, jwt) {
     r = null
   }
   if (!r?.rawData?.length) r = await descargaYahoo(urlRango)
-  if (!r?.rawData?.length) return { simbolo, tecnico: null, guardado: false, error: 'sin velas' }
-  const velas = soloCerradas(marcaDiariaEnCurso(ordenaUnicas(r.rawData), r.tsUltima, r.metaSesion).barras)
+  if (!r?.rawData?.length) return []
+  return soloCerradas(marcaDiariaEnCurso(ordenaUnicas(r.rawData), r.tsUltima, r.metaSesion).barras)
+}
+
+async function unSimbolo(simbolo, jwt) {
+  const velas = await velasCerradasDe(simbolo, jwt)
+  if (!velas.length) return { simbolo, tecnico: null, guardado: false, error: 'sin velas' }
   const tecnico = tecnicoDe(velas)
   if (!tecnico) return { simbolo, tecnico: null, guardado: false, error: 'sin velas cerradas' }
   return { simbolo, tecnico, guardado: await guarda(simbolo, tecnico, jwt) }

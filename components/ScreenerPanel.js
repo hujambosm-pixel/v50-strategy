@@ -16,6 +16,7 @@ import { VISTAS_EJEMPLO, normalizaVista, textoVista, vistaNueva } from '../lib/s
 import { borrarVista, cambiarVista, creaEjemplos, crearVista, listarVistas, nombreLimpio } from '../lib/screener/vistasBase'
 import { Papelera, Pregunta } from './VentanaPregunta'
 import { guardarComoLista, nombrePropuesto } from '../lib/screener/lista'
+import { esDeTarjetas, fotoDe } from '../lib/pruebaAzar'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#56d364'
 const copia = (x) => JSON.parse(JSON.stringify(x))
@@ -35,6 +36,20 @@ export async function pideTecnicoDeVerdad(simbolos) {
   return r.json()
 }
 
+// «Da señal de compra con…» (§11): una tanda de símbolos a /api/screener-senales (como mucho 10) con la estrategia { definition,
+// params }. Devuelve { resultados: [{ simbolo, senal, error }] }.
+export const TANDA_SENALES = 10, TANDAS_SENALES_A_LA_VEZ = 2
+export async function pideSenalesDeVerdad(estrategia, simbolos) {
+  const r = await fetchConSesion('/api/screener-senales', { method: 'POST', body: JSON.stringify({ estrategia, simbolos }) },
+    (jwt) => ({ 'Content-Type': 'application/json', ...(jwt ? { 'x-supa-jwt': jwt } : {}) }))
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return r.json()
+}
+// Las estrategias que sirven: de tarjetas y de velas diarias (fotoDe: { id, name, definition, params }).
+export const estrategiasSenal = (lista) => (lista || []).filter(esDeTarjetas).map(fotoDe).filter(x => x.params.intervalo !== 'semanal')
+// La clave de los resultados: el id y la regla (si se cambia la estrategia, se calcula otra vez).
+export const claveSenal = (x) => x ? `${x.id}|${JSON.stringify([x.definition, x.params])}` : null
+
 // Un «?» con título, explicación y ejemplo (los textos del catálogo).
 export const AyudaFiltro = ({ a, etiqueta }) => !a ? null : (
   <Ayuda etiqueta={etiqueta || a[0]} texto={<><b>{a[0]}</b><br/>{a[1]}{a[2] ? <><br/><span style={{ color: B.secundario }}>Ejemplo: {a[2]}</span></> : null}{a[3] ? <><br/><span data-recomendado style={{ color: '#56d364' }}>Recomendado: {a[3]}</span></> : null}</>}/>)
@@ -47,6 +62,7 @@ const Fuente = ({ f }) => (
 // El valor de una celda de la tabla para el filtro f.
 export function textoCelda(e, f) {
   const x = f.v(e)
+  if (f.texto) return f.texto(x)
   if (x == null) return (f.sinDato && f.sinDato(e)) || '—'
   return (f.signo && x > 0 ? '+' : '') + fmt(x, f.dec ?? 1) + (f.unidad === '%' ? ' %' : f.unidad === 'M' ? ' M' : f.unidad === 'puntos' ? ' pt' : '')
 }
@@ -67,11 +83,16 @@ const valorOrden = (e, col) => {
 // visible: la app la deja montada al ir a otra pantalla (pages/index.js) y la oculta; oculta, Esc no cierra el cajón.
 // refs (inicial.refs): el técnico de SPY y de los ETF de sectores. pideTecnico(símbolos): una tanda de «Actualizar precios» (en las
 // comprobaciones, una falsa).
-export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor = null, onListaGuardada = null, visible = true, pideTecnico = pideTecnicoDeVerdad }) {
+export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor = null, onListaGuardada = null, visible = true, pideTecnico = pideTecnicoDeVerdad, estrategias = [], pideSenales = pideSenalesDeVerdad }) {
   const [estado, setEstado] = useState(() => inicial.empresas ? { cargando: false, error: null, empresas: inicial.empresas } : { cargando: true, error: null, empresas: [] })
   const [refs, setRefs] = useState(inicial.refs || {})
   const [act, setAct] = useState(inicial.act || null)   // «Actualizar precios»: { hechos, total, fallos: [símbolo], fin, parado }
   const paraRef = useRef(false)
+  // «Da señal de compra con…»: senales = { clave de la estrategia: { símbolo: { senal, error } } } (en memoria; se vacía al actualizar
+  // los precios). calcSenal: { clave, hechos, total } mientras se calcula.
+  const [senales, setSenales] = useState(inicial.senales || {})
+  const [calcSenal, setCalcSenal] = useState(null)
+  const enCursoSenal = useRef(new Set())
   const [vistas, setVistas] = useState(() => inicial.vistas || VISTAS_EJEMPLO.map(v => pestanaDe({ nombre: v.nombre, vista: copia(v.vista) })))
   const [vistasError, setVistasError] = useState(null)
   const [guardando, setGuardando] = useState(false)
@@ -166,8 +187,49 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
   const vista = normalizaVista(actual.vista)
   const cambia = (fn) => setVistas(vs => vs.map((v, i) => i === iv ? { ...v, vista: fn(normalizaVista(v.vista)) } : v))
   const cambiaFiltro = (id, cambio) => cambia(v => ({ ...v, filtros: { ...v.filtros, [id]: { ...v.filtros[id], ...cambio } } }))
-  const empresas = useMemo(() => conTecnico(estado.empresas, refs), [estado.empresas, refs])
+  const conSenal = vista.filtros.senal
+  const estSenales = useMemo(() => estrategiasSenal(estrategias), [estrategias])
+  const estSenal = conSenal?.estrategia != null ? estSenales.find(x => String(x.id) === String(conSenal.estrategia)) || null : null
+  const clave = claveSenal(estSenal)
+  const mapa = clave ? senales[clave] : null
+  const tecnicas = useMemo(() => conTecnico(estado.empresas, refs), [estado.empresas, refs])
+  const empresas = useMemo(() => tecnicas.map(e => { const x = mapa?.[e.simbolo]; return x ? { ...e, senal: x.senal || null, senalError: x.error || null } : e }), [tecnicas, mapa])
   const ev = useMemo(() => evaluaVista(empresas, vista), [empresas, JSON.stringify(vista)])
+  // Se calcula sola, solo para los que pasan los fundamentales y aún no tienen resultado con esta estrategia, con el filtro
+  // encendido y la pantalla visible (medio segundo después del último cambio). Al cambiar de estrategia, las tandas pendientes
+  // de la anterior no se piden.
+  const faltanSenal = conSenal?.on && clave && visible ? ev.f1.map(e => e.simbolo).filter(sy => !(mapa && sy in mapa)) : []
+  const claveFaltan = faltanSenal.join(',')
+  const claveRef = useRef(clave); claveRef.current = clave
+  useEffect(() => {
+    if (!faltanSenal.length || !estSenal) return
+    const t = setTimeout(async () => {
+      const k = clave, est = { definition: estSenal.definition, params: estSenal.params }
+      const lista = faltanSenal.filter(sy => !enCursoSenal.current.has(k + '|' + sy))
+      if (!lista.length) return
+      lista.forEach(sy => enCursoSenal.current.add(k + '|' + sy))
+      const tandas = []; for (let i = 0; i < lista.length; i += TANDA_SENALES) tandas.push(lista.slice(i, i + TANDA_SENALES))
+      let hechos = 0
+      setCalcSenal({ clave: k, hechos: 0, total: lista.length })
+      const una = async (tanda) => {
+        let res
+        try { res = (await pideSenales(est, tanda)).resultados || [] } catch (e) { res = tanda.map(simbolo => ({ simbolo, senal: null, error: e?.message || 'fallo' })) }
+        const nuevos = Object.fromEntries(res.map(x => [x.simbolo, { senal: x.senal || null, error: x.error || null }]))
+        setSenales(sn => ({ ...sn, [k]: { ...(sn[k] || {}), ...nuevos } }))
+        hechos += tanda.length
+        setCalcSenal(c => c && c.clave === k ? { ...c, hechos } : c)
+      }
+      let i = 0
+      const hilo = async () => { while (i < tandas.length && claveRef.current === k) await una(tandas[i++]) }
+      await Promise.all(Array.from({ length: TANDAS_SENALES_A_LA_VEZ }, hilo))
+      lista.forEach(sy => enCursoSenal.current.delete(k + '|' + sy))
+      setCalcSenal(c => c && c.clave === k ? null : c)
+    }, 500)
+    return () => clearTimeout(t)
+  }, [clave, claveFaltan])
+  const mapaVals = mapa ? Object.values(mapa) : []
+  const ultimaSenal = mapaVals.reduce((m, x) => x.senal?.ultima && (!m || x.senal.ultima > m) ? x.senal.ultima : m, null)
+  const sinCalcularSenal = mapaVals.filter(x => x.error).length
   const encendidos = FILTROS.filter(f => !f.proximamente && vista.filtros[f.id]?.on)
   const fecha = fechaDatos(estado.empresas)
   const fechaPrecios = fechaTecnico(estado.empresas)
@@ -198,6 +260,7 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
     const hilo = async () => { while (i < tandas.length && !paraRef.current) { const t = tandas[i++]; await una(t) } }
     await Promise.all(Array.from({ length: TANDAS_A_LA_VEZ }, hilo))
     setAct(a => ({ ...a, fin: true, parado: paraRef.current }))
+    setSenales({})   // con precios nuevos, las señales se calculan otra vez
   }
 
   const filas = useMemo(() => {
@@ -337,7 +400,12 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
                   <div data-filtro={f.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', opacity: f.proximamente ? 0.45 : on ? 1 : 0.7 }}>
                     <input type="checkbox" data-on={f.id} checked={on} disabled={!!f.proximamente} onChange={e => cambiaFiltro(f.id, { on: e.target.checked })}/>
                     <span style={{ flex: 1, minWidth: 0 }}>{f.nombre}{f.fuente && <Fuente f={f.fuente}/>}</span>
-                    {!f.proximamente && <>
+                    {f.conEstrategia && <>
+                      <input data-valor={f.id} type="number" min="1" max="20" step="1" value={c.valor ?? ''} title="1 = solo la última vela; como mucho 20" style={{ ...caja, width: 48, flex: '0 0 auto' }}
+                        onChange={e => cambiaFiltro(f.id, { valor: e.target.value === '' ? null : Math.max(1, Math.min(20, Math.round(Number(e.target.value)))) })}/>
+                      <span style={{ ...S.apagado, width: 36 }}>{f.unidad}</span>
+                    </>}
+                    {!f.proximamente && !f.conEstrategia && <>
                       <select data-op={f.id} value={c.op} onChange={e => cambiaFiltro(f.id, { op: e.target.value })} style={{ ...caja, padding: '2px 2px', width: 42, flex: '0 0 auto' }}>
                         <option>≥</option><option>≤</option></select>
                       <input data-valor={f.id} type="number" step="any" value={c.valor ?? ''} style={{ ...caja, width: 62, flex: '0 0 auto' }}
@@ -347,6 +415,20 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
                     {f.ayuda && <AyudaFiltro a={f.ayuda}/>}
                     <span data-cuenta={f.id} title="Valores que quita este filtro (de los que llegan a su piso)" style={{ width: 40, textAlign: 'right', color: ROJO, fontWeight: 700 }}>{on && n ? '−' + n : ''}</span>
                   </div>
+                  {f.conEstrategia && <div data-senal-estrategia style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 0 4px 22px', flexWrap: 'wrap', opacity: on ? 1 : 0.7 }}>
+                    <span style={S.apagado}>con</span>
+                    {estSenales.length
+                      ? <select data-estrategia-senal value={c.estrategia ?? ''} onChange={e => cambiaFiltro(f.id, { estrategia: e.target.value === '' ? null : e.target.value })} style={{ ...caja, flex: 1, minWidth: 0 }}>
+                          <option value="">Elige una estrategia…</option>
+                          {estSenales.map(x => <option key={x.id} value={String(x.id)}>{x.name}</option>)}
+                        </select>
+                      : <span style={S.apagado}>(no tienes estrategias de tarjetas de velas diarias)</span>}
+                    {on && c.estrategia != null && !estSenal && estSenales.length > 0 && <span data-senal-sin style={{ color: AMARILLO, width: '100%' }}>⚠ Esa estrategia ya no está (o es de velas semanales): elige otra.</span>}
+                    {on && c.estrategia == null && estSenales.length > 0 && <span data-senal-elige style={{ ...S.apagado, width: '100%' }}>Sin estrategia elegida, el filtro no quita nada.</span>}
+                    {on && estSenal && <span data-senal-estado style={{ ...S.apagado, width: '100%' }}>
+                      {calcSenal && calcSenal.clave === clave ? `Calculando ${calcSenal.hechos} de ${calcSenal.total}…`
+                        : mapaVals.length ? `Calculado para ${mapaVals.length}${ultimaSenal ? ` · última vela del ${fechaCorta(ultimaSenal)}` : ''}${sinCalcularSenal ? ` · ${sinCalcularSenal} sin calcular` : ''}` : ''}</span>}
+                  </div>}
                 </div>)
             })}
             <div style={{ ...S.apagado, marginTop: 10, display: 'flex', alignItems: 'center' }}>«−N»: cuántos quita cada filtro<AyudaFiltro a={AYUDAS.cuenta}/></div>
@@ -376,7 +458,7 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
             {estado.cargando ? <div style={{ ...S.apagado, padding: 20 }}>Cargando las empresas…</div> : (
               <table data-tabla style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>
                 <thead><tr>
-                  {[['simbolo', 'Valor'], ['sector', 'Sector'], ['precio', 'Precio $'], ...encendidos.map(f => [f.id, f.nombre]), ...(vista.verExigido ? [['exigido', 'Crec. exigido'], ['esperado', 'Crec. esperado']] : [])].map(([k, t], i) => (
+                  {[['simbolo', 'Valor'], ['sector', 'Sector'], ['precio', 'Precio $'], ...encendidos.map(f => [f.id, f.columna || f.nombre]), ...(vista.verExigido ? [['exigido', 'Crec. exigido'], ['esperado', 'Crec. esperado']] : [])].map(([k, t], i) => (
                     <th key={k} data-col={k} onClick={() => ordena(k)} title="Pulsa para ordenar"
                       style={{ ...cel, position: 'sticky', top: 0, background: B.cabecera, color: B.titulo, cursor: 'pointer', textAlign: i < 2 ? 'left' : 'right', fontWeight: 600, zIndex: 1 }}>
                       {t}{orden.col === k ? (orden.dir > 0 ? ' ▲' : ' ▼') : ''}</th>))}

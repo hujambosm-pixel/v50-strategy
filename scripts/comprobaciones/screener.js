@@ -185,7 +185,7 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
   hp = monta({ busca: 'SALUD', verNo: true })
   ok(hp.includes('data-fila="BBB"') && !hp.includes('data-fila="AAA"'), 'buscar por sector sin distinguir mayúsculas')
   hp = monta({ piso: 'T' })
-  ok(hp.includes('Con velas diarias, cierre del') && hp.includes('data-on="ema200"') && !/data-on="ema200"[^>]*disabled/.test(hp) && /data-on="senal"[^>]*disabled/.test(hp), 'pestaña Técnico: EMA 200 se puede encender; «Da señal de compra hoy con…» aún no')
+  ok(hp.includes('Con velas diarias, cierre del') && hp.includes('data-on="ema200"') && !/data-on="ema200"[^>]*disabled/.test(hp) && !/data-on="senal"[^>]*disabled/.test(hp) && /data-on="nivel"[^>]*disabled/.test(hp), 'pestaña Técnico: EMA 200 y «Da señal de compra…» se pueden encender; los niveles aún no')
   hp = renderToString(React.createElement(P, {}))
   ok(hp.includes('Cargando las empresas…'), 'sin datos: «Cargando las empresas…»')
 
@@ -345,6 +345,49 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     ok(pedidas.length === 2 && pedidas.flat().length === 16 && pedidas[0].slice(0, 2).join() === 'SPY,XLK', `se pide en tandas de 10: primero SPY y los ETF, luego las 4 empresas (16; sale ${pedidas.flat().length})`)
     ok(uno('data-act-fin') && uno('data-act-fin').textContent.includes('✓ Hecho · 1 sin precios'), '«✓ Hecho · 1 sin precios» (DDD)')
     ok(uno('data-mercado').textContent.includes('por debajo de su EMA 200 ✗ (-5,0 %)') && uno('data-embudo-n', 2).textContent === '2', 'tras actualizar: SPY por debajo; AAA (90) ya no pasa y sí BBB y CCC (101)')
+    m.quita()
+  }
+
+  // ── Parte 2 · «Da señal de compra con…» (fase 2b, §11; el cálculo, en screener-senales.js) ─────────────────────────────────
+  {
+    const { estrategiasSenal, claveSenal } = require('../../components/ScreenerPanel')
+    const DEF = { tipo: 'editor', formato: 1, motor: 1, nombre: 'x', parametros: { version: 1, lista: [] },
+      entrada: { senal: { c: 'nuevoMaximo', p: { n: 2 } }, orden: { tipo: 'apertura' } }, stops: [], salidas: [{ tipo: 'tope', velas: 3, motivo: 'tiempo' }] }
+    const ESTR = [{ id: 5, name: 'Cruce de medias 50/200', definition: DEF, params: '{}' }, { id: 6, name: 'Semanal', definition: DEF, params: { intervalo: 'semanal' } },
+      { id: 7, name: 'De código', definition: null, code_js: 'x', params: {} }]
+    const es = estrategiasSenal(ESTR)
+    ok(es.length === 1 && es[0].id === 5 && es[0].name === 'Cruce de medias 50/200' && claveSenal(es[0]).startsWith('5|') && claveSenal(null) === null, 'solo las de tarjetas y de velas diarias (1 de 3)')
+    // Vistas: el id de la estrategia se guarda; una vista vieja (sin «senal») lo completa con null.
+    const v9 = vistaNueva({ on: ['senal'], valores: { senal: 3 }, sectoresFuera: [] }); v9.filtros.senal.estrategia = '5'
+    ok(normalizaVista(v9).filtros.senal.estrategia === '5' && normalizaVista({ filtros: { roce: { on: true } } }).filtros.senal.estrategia === null, 'la vista guarda la estrategia (las viejas, null)')
+    ok(textoVista(v9) === textoVista(JSON.parse(JSON.stringify(v9))) && textoVista(v9) !== textoVista({ ...v9, filtros: { ...v9.filtros, senal: { ...v9.filtros.senal, estrategia: '6' } } }), 'cambiar la estrategia cuenta como cambio sin guardar')
+    // Filtro: AAA señal en la última, BBB hace 2 (compró a 12,5 en el nivel), CCC hace 5, DDD sin calcular.
+    const sen = (hace, extra = {}) => ({ hace, fecha: '2026-11-0' + (9 - (hace || 0)), tipo: 'cierre', precio: null, ultima: '2026-11-09', velas: 1260, ...extra })
+    const E9 = [{ ...E[0], senal: sen(0) }, { ...E[1], senal: sen(2, { tipo: 'nivel', precio: 12.5 }) }, { ...E[2], senal: sen(5) }, { ...E[3], senal: null, senalError: 'sin velas' }]
+    let r9 = evaluaVista(E9, v9)
+    ok(r9.f2.map(e => e.simbolo).join() === 'AAA,BBB' && r9.cuantos.senal === 2, 'en las últimas 3 velas: pasan AAA (la última) y BBB (hace 2); quita 2 (CCC hace 5; DDD sin calcular)')
+    r9 = evaluaVista(E9, { ...v9, filtros: { ...v9.filtros, senal: { ...v9.filtros.senal, valor: 1 } } })
+    ok(r9.f2.map(e => e.simbolo).join() === 'AAA', 'en la última vela (N = 1): solo AAA')
+    r9 = evaluaVista(E9, { ...v9, filtros: { ...v9.filtros, senal: { ...v9.filtros.senal, estrategia: null } } })
+    ok(r9.f2.length === 4 && !r9.cuantos.senal, 'sin estrategia elegida, el filtro no quita nada')
+    ok(FILTRO.senal.titulo(E9[1]).includes('Compró el 07/11/2026 a 12,50') && FILTRO.senal.titulo(E9[3]).includes('No se ha podido calcular: sin velas') && FILTRO.senal.formula(E9[1]) === 'hace 2 velas · compró a 12,50', 'tooltip y cuenta del cajón')
+    ok(FILTRO.senal.ayuda[3] && FILTRO.senal.ayuda[2].includes('Cruce de medias 50/200'), '«?» con ejemplo inventado y recomendado')
+    // La pantalla con estado: la estrategia elegida y una petición falsa. Se pide solo para los 4 que pasan los fundamentales.
+    const RDC = require('react-dom/client')
+    const pedidas = []
+    const falsa = async (est, simbolos) => { pedidas.push({ est, simbolos }); return { resultados: simbolos.map(s => {
+      const x = E9.find(e => e.simbolo === s); return x.senal ? { simbolo: s, senal: x.senal } : { simbolo: s, senal: null, error: 'sin velas' } }) } }
+    const m = D.monta(React.createElement(P, { inicial: { empresas: E, vistas: [pestanaDe({ id: 1, nombre: 'S', vista: v9 })], piso: 'T' }, estrategias: ESTR, pideSenales: falsa }), RDC)
+    await D.espera(700)
+    const uno = (k, v) => m.raiz.conAtributo(k, v)[0]
+    ok(pedidas.length === 1 && pedidas[0].simbolos.join() === 'AAA,BBB,CCC,DDD' && JSON.stringify(pedidas[0].est.definition) === JSON.stringify(DEF) && Object.keys(pedidas[0].est).join() === 'definition,params', `se piden los 4 que pasan los fundamentales, con la regla (${pedidas.length} peticiones)`)
+    ok(uno('data-senal-estado')?.textContent === 'Calculado para 4 · última vela del 09/11/2026 · 1 sin calcular', `estado: «${uno('data-senal-estado')?.textContent}»`)
+    ok(uno('data-embudo-n', 2)?.textContent === '2' && uno('data-cuenta', 'senal')?.textContent === '−2', 'pasan 2; el filtro quita 2')
+    const celdas = m.raiz.conAtributo('data-celda', 'senal').map(n => n.textContent).join('|')
+    ok(celdas === 'la última|hace 2 velas', `celdas: ${celdas}`)
+    ok(m.raiz.conAtributo('data-estrategia-senal')[0] && m.raiz.conAtributo('data-col', 'senal')[0]?.textContent.startsWith('Señal de compra'), 'selector de estrategia y columna «Señal de compra»')
+    await D.espera(700)
+    ok(pedidas.length === 1, 'no se vuelve a pedir lo ya calculado')
     m.quita()
   }
 

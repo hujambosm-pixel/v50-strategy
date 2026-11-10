@@ -2676,3 +2676,14 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - Detalle en docs/screener.md §9.
 - Nada cambia en las demás pantallas ni en las cifras: la caché de precios solo gana valores, y los fundamentales del screener no cambian.
 - `screener.js` pasa de 112 a 133 pruebas.
+
+## 107. Screener (parte 2, fase 2b): «Da señal de compra en las últimas N velas con…»
+
+- Decidido con Sergi el 10/11: opción B, «en las últimas N velas» (1 = solo la última; como mucho 20).
+- Con una de sus estrategias de tarjetas (velas diarias) y el MISMO motor que el paso 1. Pasa si da señal de compra sin tener ya la operación abierta. Con una orden en un nivel (ruptura…), cuenta la vela en que compró.
+- Solo se calcula para los valores que pasan los fundamentales, sin guardar nada en la base (`pages/api/screener-senales.js`, `lib/screener/senales.js`). No hay cambios en la base.
+- Motor: `interpreta` devuelve la serie `senalCompra` solo si se le pide (`ctx.senalCompra`); sin pedirla, nada cambia.
+- `pages/api/screener-tecnico.js`: la lectura de velas pasa tal cual a `velasCerradasDe` (exportada), que usan las dos rutas.
+- Detalle en docs/screener.md §11.
+- Comprobaciones: `screener-senales.js` (27, nueva en `comunes.sh`) y `screener.js` (de 133 a 147). Cruce con AAPL real y «Prueba editor EMA20»: 300 de 300 iguales al paso 1.
+- Nada cambia en las demás pantallas ni en las cifras.

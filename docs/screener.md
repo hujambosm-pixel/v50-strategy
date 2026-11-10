@@ -3,7 +3,7 @@
 Buscador de valores en dos pisos (decidido con Sergi el 07–08/11; boceto `bocetos/screener.html`, diseño A «Panel + tabla»):
 
 1. **Fundamentales**: «¿qué empresas son buenas?», con las cuentas que presentan a la SEC (EDGAR).
-2. **Técnico**: «¿cuáles están hoy en buen momento?» (parte 2, más adelante).
+2. **Técnico**: «¿cuáles están hoy en buen momento?» (parte 2: §9 y §11).
 
 Las **vistas** son conjuntos de filtros con nombre, que se guardan como los planes. «Guardar como lista» crea una lista de la Watchlist, que se puede usar en «Una lista» del plan.
 
@@ -155,11 +155,35 @@ Las **vistas** son conjuntos de filtros con nombre, que se guardan como los plan
   - Diferencia conocida: la caché no guarda la vela de «hoy» (UTC). Por eso, entre el cierre de NY y la medianoche UTC, el script usa el cierre anterior y el botón ya el de hoy.
 - **Pantalla.**
   - La línea «Precios: cierre del dd/mm · N sin precios» va junto al botón.
-  - La pestaña «2 · Técnico» deja encender los cuatro filtros. «Da señal de compra hoy con…» (fase 2b) y los niveles y figuras siguen en gris.
+  - La pestaña «2 · Técnico» deja encender los cuatro filtros. «Da señal de compra…» llegó en la fase 2b (§11); los niveles y figuras siguen en gris.
   - El cajón de un valor tiene un apartado «2 · Técnico» con la cuenta de cada filtro.
   - La vista de ejemplo «Rentabilidad y poca deuda» lleva ahora la EMA 200 (≥ 0 %), como en el boceto. Solo afecta a las que se creen a partir de ahora.
   - Un valor sin precios no pasa un filtro técnico encendido.
 - **El precio de la columna «Precio $»** y el PER siguen saliendo de la carga semanal: «Actualizar precios» no cambia ninguna cifra de los fundamentales.
+
+## 11. Parte 2 · Técnico, fase 2b: «Da señal de compra en las últimas N velas con…»
+
+Decidido con Sergi el 10/11 (opción B): «en las últimas N velas», N = 1 por defecto (1 = solo la última) y como mucho 20.
+
+- **Qué cuenta como señal** (`lib/screener/senales.js`, lógica pura, con el MISMO motor que el paso 1, `lib/editor/interprete.js`):
+  - Órdenes que se deciden al cierre (a la apertura siguiente, al cierre, stop o límite): la vela da señal si al cierre se cumplen la señal de compra y el filtro de mercado de la estrategia, y la estrategia no tiene ya la operación abierta. Con la compra a la apertura siguiente, una señal en la última vela = comprar mañana.
+  - Órdenes en un nivel dentro de la vela (ruptura del máximo, último máximo de swing, línea del SuperTrend, línea bajista): sin la vela de mañana no se sabe si se tocará el nivel, así que cuenta la vela en que la estrategia COMPRÓ. El tooltip dice a qué precio.
+  - «Operación abierta en la vela k»: comprada en k o antes (con la orden al cierre, antes de k) y sin vender al terminar k.
+  - El motor solo da la serie de la señal si se le pide (`ctx.senalCompra`); sin pedirla, su resultado es el de siempre.
+- **Precios**: las velas diarias cerradas de los últimos 5 años por el MISMO camino que «Actualizar precios» y el paso 1 (`velasCerradasDe`, sacada tal cual de `pages/api/screener-tecnico.js`: la caché más lo último de Yahoo, con la vela de hoy si la sesión de Nueva York ya cerró). Diferencia posible con el gráfico del paso 1: el motor empieza 5 años atrás (el paso 1, en el periodo elegido); que una operación siga abierta puede depender de dónde empiece. Con 5 años casi nunca pasa.
+- **Ruta** `pages/api/screener-senales.js`: POST `{ estrategia: { definition, params }, simbolos }`, como mucho 10 símbolos, con sesión. Solo estrategias de tarjetas y de velas diarias. No guarda nada en la base.
+- **Pantalla**:
+  - La fila «Da señal de compra en las últimas [N] velas», debajo «con [estrategia]» (solo tus estrategias de tarjetas de velas diarias).
+  - Sin estrategia elegida no quita nada.
+  - La vista guarda N y el id de la estrategia (`filtros.senal.estrategia`). Las vistas viejas lo completan con null.
+  - Se calcula sola, medio segundo después del último cambio, SOLO para los valores que pasan los fundamentales (los únicos a los que se aplica) y que aún no tienen resultado con esa estrategia: unos segundos. Va por tandas de 10, dos a la vez.
+  - Debajo dice «Calculando N de M…» o «Calculado para N · última vela del dd/mm · X sin calcular».
+  - Los resultados se quedan en memoria por estrategia y regla. Se vacían al terminar «Actualizar precios».
+  - Columna «Señal de compra»: «la última» / «hace N velas» (ordenable). Tooltip: la fecha de la señal o de la compra.
+- **Comprobaciones**:
+  - `screener-senales.js` (27 pruebas): velas inventadas con las señales calculadas a mano, incluidos operación abierta, filtro de mercado, ruptura, orden al cierre y pocas velas. Además, en 400 velas al azar, las señales sin operación abierta son justo las compras del motor, y la validación de la ruta.
+  - `screener.js` (147): estrategias que sirven, vistas, filtro, celdas y la pantalla con estado y una petición falsa.
+  - Cruce con precios reales (fuera de `comunes.sh`): AAPL de la prueba congelada con «Prueba editor EMA20», en los 300 últimos cortes de la serie. «Señal en la última» coincide con «el paso 1 compra al día siguiente» en 300 de 300 (18 señales).
 
 ## 10. Comprobación
 
