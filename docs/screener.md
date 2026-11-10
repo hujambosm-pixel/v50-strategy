@@ -60,7 +60,26 @@ Las **vistas** son conjuntos de filtros con nombre, que se guardan como los plan
 - **Fuente**: GICS (oficial) para los miembros del S&P 500; para el resto, los tramos SIC agrupados en los mismos 11 sectores (una aproximación). La pantalla dice de cuál sale.
 - **Quitados por defecto**: Financieras, Energía, Utilities, Materiales e Inmobiliario.
 
-## 5. Comprobación
+## 5. Pantalla (`components/ScreenerPanel.js`, menú 🔎 Screener)
+
+- Lee las empresas con su columna `metricas` (`lib/screener/datos.js`, por páginas de 1.000) y filtra y ordena en el navegador (`lib/screener/filtros.js`).
+- **Arriba**:
+  - Las pestañas de las vistas. En la parte 1, las 3 de ejemplo (`lib/screener/vista.js`), sin guardar todavía.
+  - El universo (S&P 500 · Nasdaq-100 · Tus listas) y la fecha de los datos.
+  - El embudo: Universo (sin los sectores quitados) → 1 · pasan Fundamentales → 2 · pasan también Técnico. Hoy el 2 es igual al 1.
+- **Panel izquierdo** (como el Backtesting), con las pestañas «1 · Fundamentales» / «2 · Técnico»:
+  - Sectores que se quitan, en chips.
+  - Los grupos Rentabilidad / Deuda / Crecimiento / Precio.
+  - Cada filtro tiene casilla, ≥/≤, valor, unidad, fuente (Yahoo en amarillo), «?» (título, explicación y ejemplo inventado que cuadra) y «−N»: cuántos de los que llegan a su piso no pasan ese filtro, mirado solo.
+  - El piso técnico enseña sus filtros sin poder encenderlos.
+- **Tabla**:
+  - Columnas: valor, sector (`*` si es aproximado por SIC), precio, una columna por filtro encendido (en rojo la cifra que no pasa) y «Crec. exigido» = PER ÷ PEG razonable (editable, 2 por defecto).
+  - Se ordena pulsando la cabecera; las celdas sin dato van siempre al final.
+  - Buscador con ✕, sin distinguir mayúsculas ni acentos.
+  - «Ver también los que no pasan (en gris)».
+- **Un dato que falta no pasa el filtro**, salvo «no paga intereses» en la cobertura.
+
+## 6. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:
 - Ventas corregidas en un documento posterior.
@@ -68,6 +87,8 @@ Las **vistas** son conjuntos de filtros con nombre, que se guardan como los plan
 - TTM = 120 + 100 − 85 = 135.
 - Una empresa inventada con todas sus cifras hechas a mano (ROCE 25 %, PER 33,33, PEG pasado 2,24…), sin intereses, con cuentas en euros y con patrimonio negativo.
 - Las medianas por sector.
+- Filtros y vistas: universo, sectores quitados, «−N», ≤ y ≥, apagado, «no paga intereses», vistas viejas completadas y las 3 de ejemplo.
+- La pantalla montada (renderToString): embudo, tabla, «−N», orden con los sin dato al final, buscador con ✕, pestaña Técnico y «Cargando…».
 - Balance anual que no tapa el 10-Q.
 - El universo y los tramos SIC.
 - La tabla de Wikipedia, y que esté vacía si cambia la página.

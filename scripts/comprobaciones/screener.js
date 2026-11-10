@@ -111,6 +111,58 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
   const med = medianasPorSector(tres)
   ok(med.A === 3 && med.B === 3 && tres[5].m.psSector === 3, 'mediana del P/S por sector: A (1, 3, 10) = 3 · B (2, 4) = 3')
 
+  // ── Filtros y vistas (filtros.js, vista.js) ───────────────────────────────────────────────────────────────────────────
+  const { evaluaVista, pasa, FILTRO } = require('../../lib/screener/filtros')
+  const { vistaNueva, normalizaVista, textoVista, VISTAS_EJEMPLO } = require('../../lib/screener/vista')
+  const emp = (simbolo, sector, m, extra = {}) => ({ simbolo, nombre: simbolo + ' Inc', sector, en_sp500: true, en_ndx: false, en_listas: false, precio: 10, piezas: {}, m: { ...m }, ...extra })
+  const E = [
+    emp('AAA', 'Tecnología', { roce: 30, cobInt: 12, sinIntereses: false }),
+    emp('BBB', 'Salud', { roce: 20, cobInt: null, sinIntereses: true }, { en_sp500: false, en_listas: true }),
+    emp('CCC', 'Financieras', { roce: 40 }),
+    emp('DDD', 'Industria', { roce: null, cobInt: 2, sinIntereses: false }),
+  ]
+  const v1 = vistaNueva({ on: ['roce'] })
+  const r1 = evaluaVista(E, v1)
+  ok(r1.universo.length === 3 && r1.quitadosSector === 1, 'universo: 4 − 1 financiera = 3')
+  ok(r1.f1.map(e => e.simbolo).join() === 'AAA' && r1.cuantos.roce === 2, 'ROCE ≥ 25: pasa AAA; quita 2 (BBB con 20 y DDD sin dato)')
+  ok(r1.f2.length === 1 && r1.pasaTodo.has('AAA'), 'sin filtros técnicos, el piso 2 = el 1')
+  const r2 = evaluaVista(E, { ...v1, universo: { sp500: true, ndx: true, listas: false } })
+  ok(r2.universo.length === 2 && !r2.universo.some(e => e.simbolo === 'BBB'), 'sin «Tus listas», BBB (solo de listas) sale del universo')
+  const r3 = evaluaVista(E, { ...v1, sectoresFuera: [] })
+  ok(r3.universo.length === 4 && r3.f1.map(e => e.simbolo).join() === 'AAA,CCC', 'sin quitar sectores, CCC (40 %) también pasa')
+  const v4 = vistaNueva({ on: ['cobInt'] })
+  ok(evaluaVista(E, v4).f1.map(e => e.simbolo).join() === 'AAA,BBB', 'cobertura ≥ 3: pasa AAA (12) y BBB (no paga intereses); no DDD (2)')
+  ok(pasa(E[0], FILTRO.roce, { on: true, op: '≤', valor: 30 }) && !pasa(E[0], FILTRO.roce, { on: true, op: '≤', valor: 29.9 }), 'operador ≤ (30 ≤ 30 sí, 30 ≤ 29,9 no)')
+  ok(pasa(E[3], FILTRO.roce, { on: false }), 'un filtro apagado pasa siempre')
+  const vieja = { tipo: 'vista_screener', version: 1, filtros: { roce: { on: true, op: '≥', valor: 28 } } }
+  const nv = normalizaVista(vieja)
+  ok(nv.filtros.roce.valor === 28 && nv.filtros.roe.on === false && nv.filtros.roe.valor === 15 && nv.pegRazonable === 2 && nv.sectoresFuera.length === 5, 'una vista vieja se completa sin cambiar lo que tenía')
+  ok(textoVista({ ...vieja, pegRazonable: 2 }) === textoVista({ pegRazonable: 2, filtros: vieja.filtros, version: 1, tipo: 'vista_screener' }), 'texto canónico: el orden de las claves no cuenta')
+  ok(VISTAS_EJEMPLO.map(v => v.nombre).join(' | ') === 'Rentabilidad y poca deuda | Crecer a buen precio | Alerta de precio caro', 'las tres vistas de ejemplo')
+  ok(VISTAS_EJEMPLO[2].vista.filtros.per.op === '≥' && VISTAS_EJEMPLO[2].vista.filtros.pegEsp.valor === 3 && VISTAS_EJEMPLO[2].vista.sectoresFuera.length === 0, '«Alerta de precio caro»: PER ≥ 30, PEG esperado ≥ 3, sin quitar sectores')
+
+  // ── La pantalla montada (components/ScreenerPanel.js) ─────────────────────────────────────────────────────────────────
+  const React = require('react'), { renderToString } = require('react-dom/server')
+  const P = require('../../components/ScreenerPanel').default
+  const monta = (inicial) => renderToString(React.createElement(P, { inicial: { empresas: E, vistas: [{ nombre: 'Prueba', vista: v1 }], ...inicial } })).split('<!-- -->').join('')
+  let hp = monta({})
+  ok(hp.includes('1 · pasan Fundamentales') && hp.includes('data-embudo-n="1"') && hp.slice(hp.indexOf('data-embudo-n="1"')).startsWith('data-embudo-n="1" style="font-size:20px;font-weight:700;color:#ffffff">1<'), 'embudo: pasan Fundamentales 1')
+  ok(hp.includes('data-fila="AAA"') && !hp.includes('data-fila="BBB"'), 'tabla: AAA sí, BBB no')
+  ok(hp.includes('data-cuenta="roce"') && hp.includes('−2'), 'el ROCE dice «−2»')
+  ok(hp.includes('data-celda="roce"') && hp.includes('30,0 %'), 'celda del ROCE: 30,0 %')
+  ok(hp.includes('Vistas de ejemplo: aún no se guardan.'), 'aviso de que las vistas aún no se guardan')
+  hp = monta({ verNo: true, orden: { col: 'roce', dir: -1 } })
+  const pos = (s) => hp.indexOf('data-fila="' + s + '"')
+  ok(pos('AAA') > 0 && pos('BBB') > pos('AAA') && pos('DDD') > pos('BBB') && pos('CCC') < 0, 'ver también los que no pasan, por ROCE de mayor a menor: AAA, BBB, DDD (sin dato al final); CCC quitada')
+  hp = monta({ busca: 'zzz' })
+  ok(hp.includes('Ningún valor coincide con la búsqueda.') && hp.includes('data-limpiar-busqueda'), 'buscar sin resultados, con la ✕ de limpiar')
+  hp = monta({ busca: 'SALUD', verNo: true })
+  ok(hp.includes('data-fila="BBB"') && !hp.includes('data-fila="AAA"'), 'buscar por sector sin distinguir mayúsculas')
+  hp = monta({ piso: 'T' })
+  ok(hp.includes('Estos filtros llegan en la parte 2 del screener.') && hp.includes('data-filtro="ema200"'), 'pestaña Técnico: filtros que llegan más adelante')
+  hp = renderToString(React.createElement(P, {}))
+  ok(hp.includes('Cargando las empresas…'), 'sin datos: «Cargando las empresas…»')
+
   console.log(`screener: ${fallos ? fallos + ' fallos de ' + n : 'todas bien (' + n + ')'}`)
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(1) })

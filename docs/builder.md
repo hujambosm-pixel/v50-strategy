@@ -2622,3 +2622,12 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - Primera carga hecha (10/11): 599 empresas (S&P 500 503, Nasdaq-100 101, listas 147).
 - Comprobación nueva `scripts/comprobaciones/screener.js` en `comunes.sh`.
 - Nada cambia en la app (aún no hay pantalla) ni en las cifras.
+
+## 101. Screener (parte 1, commit 3): la pantalla
+
+- Menú nuevo «🔎 Screener» (pages/index.js: entrada del menú, el panel lateral a 0 como en Tesis y el bloque `sidePanel==='screener'`), con la pantalla `components/ScreenerPanel.js` (diseño A del boceto). Detalle en docs/screener.md §5.
+- Piezas puras: `lib/screener/filtros.js` (catálogo de 14 filtros fundamentales y 7 técnicos «más adelante», con sus «?»; `pasa`, `evaluaVista`), `lib/screener/vista.js` (formato de la vista, las 3 de ejemplo, `normalizaVista`, `textoVista`) y `lib/screener/datos.js` (lectura por páginas).
+- Las vistas aún no se guardan (commit 4); «Guardar como lista» y el cajón del valor, en el commit 5.
+- La app pone a todo `label` «columna» y letra mono, y a todo `select` el 100 % de ancho: la pantalla lo corrige en sus propios estilos.
+- Comprobación ampliada `screener.js` (60): filtros, vistas y la pantalla montada. Revisado en el navegador de pruebas con una muestra real (104 empresas): «Rentabilidad y poca deuda» deja 13 de 93.
+- Nada cambia en las demás pantallas ni en las cifras.
