@@ -1,4 +1,4 @@
-// scripts/informeMomentum.js — informe breve de la regla «momentum» del screener (lib/screener.js), frente a la de
+// scripts/informeMomentum.js — informe breve de la regla «momentum» del screener (lib/universoDinamico.js), frente a la de
 // volatilidad. SOLO LECTURA (Management API, BEGIN READ ONLY … ROLLBACK).
 //
 //   node scripts/informeMomentum.js            universo NDX, años 2016–2026, N = 20 en detalle (10 y 30 de contraste)
@@ -20,7 +20,7 @@ const lit = (s) => s == null ? 'NULL' : "'" + String(s).replace(/'/g, "''") + "'
   const UNIVERSO = opcion('--universo', 'NDX')
   const DESDE = Number(opcion('--desde', 2016)), HASTA = Number(opcion('--hasta', 2026)), N = Number(opcion('--n', 20))
   await preparaEsm()
-  const { seleccion, seleccionMomentum } = require('../lib/screener')
+  const { seleccion, seleccionMomentum } = require('../lib/universoDinamico')
   const miembros = await lee(`SELECT simbolo, simbolo_yahoo, nombre, desde::text, hasta::text, motivo_salida, excluido_motivo
     FROM public.universo_miembros WHERE indice = ${lit(UNIVERSO)} ORDER BY desde, simbolo;`)
   const simbolos = [...new Set(miembros.map(t => t.simbolo_yahoo).filter(Boolean))].sort()

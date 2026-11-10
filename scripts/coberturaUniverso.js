@@ -12,7 +12,7 @@
 //     con el porqué (sin símbolo, Yahoo no lo tiene —404—, el historial empieza después o termina antes, excluido).
 //   · los 20 más volátiles del año anterior: volatilidad = desviación típica de los rendimientos logarítmicos diarios del
 //     cierre en el año natural anterior, anualizada (× √252), de los miembros con precios a ese 1 de enero con al menos 120
-//     rendimientos ese año. La calcula lib/screener.js (estadisticasAnuales), la misma función que usa el screener. Los miembros SIN precios no tienen volatilidad medible (justo es lo que falta), así que no se
+//     rendimientos ese año. La calcula lib/universoDinamico.js (estadisticasAnuales), la misma función que usa el screener. Los miembros SIN precios no tienen volatilidad medible (justo es lo que falta), así que no se
 //     pueden ordenar: el hueco entre los 20 más volátiles va de 0 (si los que faltan fueran tranquilos) a min(faltan, 20) / 20
 //     (si todos estuvieran entre los más volátiles). Se da esa cota superior y el umbral de volatilidad del puesto 20.
 //   · velas anómalas: el criterio de lib/cachePrecios.js (esAnomala, el mismo con el que guardar_velas cuenta
@@ -140,7 +140,7 @@ if (require.main === module) (async () => {
   const anio0 = Number(primerDia.slice(0, 4)) + (primerDia.slice(5) === '01-01' ? 0 : 1)
   const desdeVelas = `${anio0 - 1}-01-01`
   await preparaEsm()
-  const { estadisticasAnuales } = require('../lib/screener')
+  const { estadisticasAnuales } = require('../lib/universoDinamico')
   const velas = await leeCierres(lee, simbolos, desdeVelas)
   const anual = {}
   for (const [s, vs] of Object.entries(velas)) anual[s] = estadisticasAnuales(vs)

@@ -2605,3 +2605,11 @@ Renombrar una estrategia daba un FALLO falso en `comunes.sh`: los avisos conocid
 - Las 11 entradas, con los mismos id que casaban antes por nombre (16 estrategias, 2 de ellas inactivas: «13 RSI 9 (cruces)» y «22 MACD…»).
 - Ojo: una estrategia NUEVA con un fallo ya conocido (p. ej., una copia) hay que añadirla por su id.
 - Nada cambia en la app ni en las cifras; el informe del guardián sale igual.
+
+## 99. Screener (parte 1, commit 1): `lib/screener.js` pasa a llamarse `lib/universoDinamico.js`
+
+El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screener/`, pestaña «Fundamentales»). El archivo viejo no es un screener para Sergi: elige cada 1 de enero los N miembros del Nasdaq-100 con más volatilidad o más momentum del año anterior (el universo dinámico «ndx_vol_N» / «ndx_mom_N» del Backtesting).
+
+- Solo cambia el nombre (`git mv`) y sus 7 importaciones (`lib/regeneraUniverso.js`, `lib/universoMc.js`, `pages/api/multibacktest.js`, `scripts/coberturaUniverso.js`, `scripts/generaScreener.js`, `scripts/informeMomentum.js`, `scripts/informeScreener.js`), más los comentarios que lo nombraban y `docs/catalogo-condiciones.md` y `docs/planes-inversion.md`. El contenido del archivo es el mismo salvo la primera línea.
+- Se quedan con su nombre, a propósito: la tabla `public.universo_screener` (y `universo_screener_escrituras`), `scripts/generaScreener.js` y `scripts/informeScreener.js` (renombrar tablas de la base no aporta nada y tiene riesgo).
+- Nada cambia en la app ni en las cifras.

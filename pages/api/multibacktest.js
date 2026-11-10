@@ -21,7 +21,7 @@ import { normalizaPeriodo, velasCalentamiento, recortaConCalentamiento, recortaI
          posicionesHeredadas } from '../../lib/periodo'
 import { COMISIONES_CERO, comisionDe, netoDeOperacion, normalizaComisiones,
          sinComisiones } from '../../lib/comisiones'
-import { admiteEntrada, bhUniverso } from '../../lib/screener'
+import { admiteEntrada, bhUniverso } from '../../lib/universoDinamico'
 import { buildAlignedCloses, buildAlignedWeekly } from '../../lib/alineaSeries'
 import { usaFuerzaRelativa, percentilesParaBarras } from '../../lib/fuerzaRelativa'
 import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
@@ -1634,7 +1634,7 @@ function _ejecucionesPorActivoSlots(assetResults) {
 // velas del S&P 500 en la temporalidad del activo, para la fuerza relativa. Solo se calcula con conCandidatos.
 // ── Universo dinámico (Fase 8a) ─────────────────────────────────────────────────────────────────────────────────────
 // Campo `universo` de la petición: { regla, n, mascara: { símbolo: [[desde, hasta), …] }, elegidos: { año: [símbolo] } }
-// (lo arma el cliente con universoDePeriodo de lib/screener.js a partir de public.universo_screener). La máscara solo
+// (lo arma el cliente con universoDePeriodo de lib/universoDinamico.js a partir de public.universo_screener). La máscara solo
 // limita ENTRADAS, en la fecha de ejecución de la entrada (entryDate: la vela en la que se llena la orden, igual en diario
 // y en semanal), después de los filtros; las posiciones abiertas siguen hasta su salida normal. Solo con capital
 // concentrado. Sin el campo, nada de esto se ejecuta y la respuesta es la de siempre.
@@ -1721,7 +1721,7 @@ function _curvaBHSobre(serie, fechas, startD, capitalIni) {
     return j >= 0 ? { date, value: capitalIni * (serie[j].close / v0.close) } : null
   }).filter(Boolean)
 }
-// Las referencias y recuentos del universo para la respuesta: B&H de QQQ, B&H del universo (lib/screener.js: reparto
+// Las referencias y recuentos del universo para la respuesta: B&H de QQQ, B&H del universo (lib/universoDinamico.js: reparto
 // igual entre los elegidos de cada año, rebalanceo cada 1 de enero, calculado en el eje completo y leído en las fechas
 // de las curvas) y cuántas posiciones ejecutadas se cerraron en la última vela de un activo que deja de cotizar antes del
 // final del periodo.

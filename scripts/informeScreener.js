@@ -1,4 +1,4 @@
-// scripts/informeScreener.js — qué seleccionaría el screener por volatilidad (lib/screener.js) en el universo histórico.
+// scripts/informeScreener.js — qué seleccionaría el screener por volatilidad (lib/universoDinamico.js) en el universo histórico.
 // SOLO LECTURA.
 //
 //   node scripts/informeScreener.js                    universo NDX, N = 10, 20 y 30, años 2016 a 2026
@@ -35,7 +35,7 @@ const BLOQUES = [[2016, 2020], [2021, 2025], [2016, 2025]]
   const N_MASCARA = Number(opcion('--mascara', 20))
   const t0 = Date.now()
   await preparaEsm()
-  const { seleccion, mascaraUniverso, MIN_RENDIMIENTOS } = require('../lib/screener')
+  const { seleccion, mascaraUniverso, MIN_RENDIMIENTOS } = require('../lib/universoDinamico')
 
   const miembros = await lee(`SELECT simbolo, simbolo_yahoo, nombre, desde::text, hasta::text, motivo_salida, excluido_motivo
     FROM public.universo_miembros WHERE indice = ${lit(UNIVERSO)} ORDER BY desde, simbolo;`)

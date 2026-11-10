@@ -25,7 +25,7 @@ Regla que manda en todo el plan: los lotes congelados (LOTE_1–3, CARTERA_1–3
 | E | `evalCondition` del cliente | `pages/index.js:3958` | **Nadie** (código muerto: no hay ninguna llamada) | — |
 | F | Esquema de bloques `definition` (setup / trigger / abort / exit / stop) | `components/StrategyBuilder.js` y `pages/api/strategy-ai.js` (retirados en V9.1019, E11 del editor), prompts de Groq en `pages/api/conditions.js` | **Nadie lo evalúa**: las estrategias corren por `code_js`. Solo rellena parámetros heredados (`loadStrategyLegacy`, `buildCfgFromStrat`) y una rama de dibujo que no se activa (`CandleChart.js:35`) | — |
 | G | Condiciones dentro del `code_js` de cada estrategia | tabla `strategies`; ayudantes inyectados `calcEMA`, `calcSMA`, `calcRSI`, `calcATR`, `calcMACD` (`lib/backtester.js`, `lib/validaCodeJs.js:20`) | Motor principal | El de la ejecución |
-| H | Screener del universo | `lib/screener.js` (`seleccion`, `seleccionMomentum`, `mascaraUniverso`, `admiteEntrada`) | Multibacktest con universo dinámico, laboratorio (miembros) | Anual (1 de enero), con velas diarias |
+| H | Screener del universo | `lib/universoDinamico.js` (`seleccion`, `seleccionMomentum`, `mascaraUniverso`, `admiteEntrada`) | Multibacktest con universo dinámico, laboratorio (miembros) | Anual (1 de enero), con velas diarias |
 | I | Prioridad y puerta de la multicartera | `lib/prioridadCartera.js` (`creaPuntuador`: momentum, fuerza relativa, max52), `lib/asignaCartera.js` (`bloqueaPuerta`) | Multibacktest (Concentrado), `lib/azarCartera.js` | La de la ejecución |
 | J | Indicadores del usuario (solo dibujo) | `lib/indicadores.js` (metadatos), `components/CandleChart.js` (`TIPOS_INDICADOR`) | Gráfico | El del gráfico |
 
@@ -104,7 +104,7 @@ filtros se fuerzan a semanal (`fuerzaFiltrosSemanales`).
 Se evalúa sobre los últimos `max(400, 4 × periodo)` cierres, con los nulos **quitados** de la serie.
 
 **H, I · screener y prioridad** no son condiciones por vela, pero el editor querrá usarlas:
-- `lib/screener.js`: cada 1 de enero, los N con más volatilidad (o momentum de 12 meses) del año anterior → máscara
+- `lib/universoDinamico.js`: cada 1 de enero, los N con más volatilidad (o momentum de 12 meses) del año anterior → máscara
   de entradas `admiteEntrada(mascara, simbolo, fecha)`. Pertenencia al índice: `esMiembroEn` (`lib/laboratorio.js`).
 - `lib/prioridadCartera.js`: momentum de N velas, fuerza relativa frente al S&P 500 (ventana 63), cercanía al máximo
   de 252 velas; la «puerta» del modo Filtro (`bloqueaPuerta`) ya es una condición de nivel sobre esas medidas.

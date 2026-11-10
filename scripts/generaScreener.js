@@ -1,4 +1,4 @@
-// scripts/generaScreener.js — rellena public.universo_screener (sql/universo_screener.sql) con lib/screener.js.
+// scripts/generaScreener.js — rellena public.universo_screener (sql/universo_screener.sql) con lib/universoDinamico.js.
 //
 //   node scripts/generaScreener.js --ensayo        hace la escritura entera y termina en ROLLBACK: dice qué cambiaría
 //   node scripts/generaScreener.js                 escribe (una transacción) y comprueba lo escrito leyéndolo de vuelta
@@ -7,7 +7,7 @@
 //   opciones: --regla volatilidad|momentum (por defecto volatilidad) · --universo NDX · --n 10,20,30 · --desde 2016 ·
 //             --hasta 2026
 //
-// Reglas (REGLAS de lib/screener.js, sobre universo_miembros y los cierres de precios_diarios):
+// Reglas (REGLAS de lib/universoDinamico.js, sobre universo_miembros y los cierres de precios_diarios):
 //   · «volatilidad»: las mismas selecciones que scripts/informeScreener.js;
 //   · «momentum» (Fase 8a, paso 4): rentabilidad de 12 meses completos hasta el último día de bolsa del año anterior.
 // La columna «volatilidad» guarda la MEDIDA de la regla (la volatilidad o el momentum). Reescribe TODAS las filas de esa
@@ -57,7 +57,7 @@ const HUELLA_OTRAS = `SELECT md5(coalesce(string_agg(regla || '|' || n || '|' ||
   const DESDE = Number(opcion('--desde', 2016)), HASTA = Number(opcion('--hasta', 2026))
   const ENSAYO = args.includes('--ensayo')
   await preparaEsm()
-  const { REGLAS } = require('../lib/screener')
+  const { REGLAS } = require('../lib/universoDinamico')
   const regla = REGLAS[REGLA]
   if (!regla) { console.error(`Regla desconocida: «${REGLA}» (hay: ${Object.keys(REGLAS).join(', ')}).`); process.exit(1) }
 
