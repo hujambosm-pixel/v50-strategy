@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1165'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1166'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -903,6 +903,10 @@ export default function Home() {
   // Y la sección Builder (components/BuilderPanel.js, docs/builder.md): montada desde la primera visita.
   const [builderVisitado,setBuilderVisitado]=useState(false)
   useEffect(()=>{ if(sidePanel==='builder') setBuilderVisitado(true) },[sidePanel])
+  // Y el Screener (components/ScreenerPanel.js, docs/screener.md): montado desde la primera visita, para que al ir a una ficha o a un
+  // gráfico y volver siga la misma vista, con sus filtros sin guardar, el orden, la búsqueda y el cajón.
+  const [screenerVisitado,setScreenerVisitado]=useState(false)
+  useEffect(()=>{ if(sidePanel==='screener') setScreenerVisitado(true) },[sidePanel])
   // builderAbrir (V9.1048): la estrategia que el Builder tiene que abrir (al pulsar su nombre en «Backtest de un valor»). { fila, n }
   const [builderAbrir,setBuilderAbrir]=useState(null)
   const abrirEnBuilder=(s)=>{ setBuilderAbrir({fila:s?{...s}:null,n:Date.now()}); setSidePanel('builder') }
@@ -5630,7 +5634,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1165</title>
+        <title>Trading Simulator V9.1166</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5719,7 +5723,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1165
+            <span className="dot"/>Trading Simulator V9.1166
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8298,8 +8302,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
             )}
             {/* ══ SCREENER (docs/screener.md, components/ScreenerPanel.js): buscador de valores por sus cuentas de la SEC, a ancho completo.
                 Aislado: no toca el motor ni ninguna cifra del resto de la app. ══ */}
-            {sidePanel==='screener'&&(
-              <ProteccionPanel nombre="Screener"><ScreenerPanel salida={screenerSalida} onListaGuardada={()=>reloadWatchlist()} onIrAValor={(sym,panel)=>salirDeTesis(()=>{setSimbolo(sym);setSidePanel(panel)})}/></ProteccionPanel>
+            {(screenerVisitado||sidePanel==='screener')&&(
+              <div style={{display:sidePanel==='screener'?'contents':'none'}}>
+                <ProteccionPanel nombre="Screener"><ScreenerPanel visible={sidePanel==='screener'} salida={screenerSalida} onListaGuardada={()=>reloadWatchlist()} onIrAValor={(sym,panel)=>salirDeTesis(()=>{setSimbolo(sym);setSidePanel(panel)})}/></ProteccionPanel>
+              </div>
             )}
 
             {sidePanel==='multi'&&mcPrueba&&(

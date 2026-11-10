@@ -54,7 +54,8 @@ const valorOrden = (e, col) => {
 // pregunta }; con inicial.empresas no se lee la base (ni las vistas). salida: la guardia de «cambios sin guardar» al salir de la
 // pantalla (pages/index.js, como en Tesis): salida.current(seguir) → true si ha preguntado. onIrAValor(símbolo, pantalla): abre la ficha
 // de Fundamentals ('fundamentals') o el gráfico ('watchlist') de un valor. onListaGuardada(): avisa a la app para releer la Watchlist.
-export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor = null, onListaGuardada = null }) {
+// visible: la app la deja montada al ir a otra pantalla (pages/index.js) y la oculta; oculta, Esc no cierra el cajón.
+export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor = null, onListaGuardada = null, visible = true }) {
   const [estado, setEstado] = useState(() => inicial.empresas ? { cargando: false, error: null, empresas: inicial.empresas } : { cargando: true, error: null, empresas: [] })
   const [vistas, setVistas] = useState(() => inicial.vistas || VISTAS_EJEMPLO.map(v => pestanaDe({ nombre: v.nombre, vista: copia(v.vista) })))
   const [vistasError, setVistasError] = useState(null)
@@ -95,10 +96,10 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
 
   // Esc cierra el cajón.
   useEffect(() => {
-    if (!detalle || typeof window === 'undefined') return
+    if (!detalle || !visible || typeof window === 'undefined') return
     const k = (e) => { if (e.key === 'Escape') setDetalle(null) }
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
-  }, [detalle])
+  }, [detalle, visible])
   const guardaLista = async () => {
     setLista(l => ({ ...l, guardando: true, error: null }))
     try {

@@ -261,6 +261,10 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     m.quita()
   }
 
+  // La app deja el screener montado tras la primera visita (como el Builder): al volver de una ficha o un gráfico sigue igual.
+  const fuenteIndex = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'pages', 'index.js'), 'utf8')
+  ok(fuenteIndex.includes("{(screenerVisitado||sidePanel==='screener')&&(") && fuenteIndex.includes("<div style={{display:sidePanel==='screener'?'contents':'none'}}>") && fuenteIndex.includes("useEffect(()=>{ if(sidePanel==='screener') setScreenerVisitado(true) },[sidePanel])"), 'el screener sigue montado (oculto) al ir a otra pantalla')
+
   console.log(`screener: ${fallos ? fallos + ' fallos de ' + n : 'todas bien (' + n + ')'}`)
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(1) })

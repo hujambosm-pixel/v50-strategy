@@ -2648,3 +2648,9 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - `screener.js` (93). Detalle en docs/screener.md §7. Con esto queda hecha la PARTE 1 del screener.
 - Nada cambia en las demás pantallas ni en las cifras.
 - `scripts/comprobaciones/tesis.js`: 19 sitios que cambian de pestaña (el nuevo, los enlaces del cajón, pasa por `salirDeTesis`).
+
+## 104. Screener: la vista no se pierde al ir a una ficha o a un gráfico y volver
+
+- Antes, al pulsar «🏦 Ficha de Fundamentals ↗» o «📈 Gráfico ↗» en el cajón y volver al screener, la pantalla se montaba de nuevo y se perdían la pestaña de la vista, los filtros sin guardar, el orden, la búsqueda y el cajón (lo vio Sergi el 10/11).
+- Ahora el screener queda montado desde la primera visita y solo se oculta, como el Builder y el Editor (`screenerVisitado` en pages/index.js). Oculto, Esc no cierra su cajón (`visible`).
+- `screener.js` (94) lo comprueba en el código de pages/index.js. Nada cambia en las demás pantallas ni en las cifras.

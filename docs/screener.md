@@ -111,6 +111,7 @@ Las **vistas** son conjuntos de filtros con nombre, que se guardan como los plan
   - «Crecimiento que exige el precio» (PER ÷ PEG razonable) frente al esperado (PER ÷ PEG esperado de Yahoo).
   - Cada filtro fundamental con ✓/✗ (solo los encendidos), su fuente, la cuenta con sus cifras y el valor.
   - Las fechas de las cuentas, del precio y del PEG.
+- Al ir a la ficha o al gráfico y volver, todo sigue igual: el screener queda montado y oculto (docs/builder.md §104).
 - **Pendiente** (más adelante): «Añadir a una lista» desde el cajón, la lista VIVA (que cambie sola) y «🔔 Avísame si entra o sale un valor» (con las Alertas).
 
 ## 8. Comprobación
