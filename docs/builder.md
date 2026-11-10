@@ -2613,3 +2613,12 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - Solo cambia el nombre (`git mv`) y sus 7 importaciones (`lib/regeneraUniverso.js`, `lib/universoMc.js`, `pages/api/multibacktest.js`, `scripts/coberturaUniverso.js`, `scripts/generaScreener.js`, `scripts/informeMomentum.js`, `scripts/informeScreener.js`), más los comentarios que lo nombraban y `docs/catalogo-condiciones.md` y `docs/planes-inversion.md`. El contenido del archivo es el mismo salvo la primera línea.
 - Se quedan con su nombre, a propósito: la tabla `public.universo_screener` (y `universo_screener_escrituras`), `scripts/generaScreener.js` y `scripts/informeScreener.js` (renombrar tablas de la base no aporta nada y tiene riesgo).
 - Nada cambia en la app ni en las cifras.
+
+## 100. Screener (parte 1, commit 2): datos de la SEC y de Yahoo en la base
+
+- Tablas nuevas `screener_empresas`, `screener_cuentas` y `screener_vistas` (`sql/screener.sql`, con REVERSIÓN), aplicadas el 10/11 por la Management API. Permisos: anon, nada; cualquier usuario con sesión lee empresas y cuentas (nadie las escribe desde la app); las vistas, solo su dueño.
+- Columna `metricas` (jsonb) en `screener_empresas`: las cifras de los filtros ya calculadas (`lib/screener/metricas.js`), para que la pantalla no lea todas las cuentas. Se añadió el mismo día con `ALTER TABLE … ADD COLUMN metricas jsonb` (reversión: `DROP COLUMN metricas`).
+- Lector de EDGAR, universo, sectores y cifras en `lib/screener/` (`edgar.js`, `universo.js`, `sectores.js`, `metricas.js`); carga semanal con `scripts/cargaScreener.js` (necesita `SEC_UA` en `.env.local`). Todo en `docs/screener.md`.
+- Primera carga hecha (10/11): 599 empresas (S&P 500 503, Nasdaq-100 101, listas 147).
+- Comprobación nueva `scripts/comprobaciones/screener.js` en `comunes.sh`.
+- Nada cambia en la app (aún no hay pantalla) ni en las cifras.
