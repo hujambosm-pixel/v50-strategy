@@ -114,7 +114,19 @@ Las **vistas** son conjuntos de filtros con nombre, que se guardan como los plan
 - Al ir a la ficha o al gráfico y volver, todo sigue igual: el screener queda montado y oculto (docs/builder.md §104).
 - **Pendiente** (más adelante): «Añadir a una lista» desde el cajón, la lista VIVA (que cambie sola) y «🔔 Avísame si entra o sale un valor» (con las Alertas).
 
-## 8. Comprobación
+## 8. Cambios del 10/11 tras verlo Sergi (V9.1167)
+
+- **Columnas numéricas.** Los tres filtros que eran de sí o no pasan a ser números que se pueden ordenar. Conservan su id, así que las vistas guardadas siguen con ellos encendidos: `normalizaVista` pone el op y el valor por defecto si estaban vacíos.
+  - «Cambio del ROE en 3 años», en puntos (`roeMejora`): ROE del último ejercicio − ROE de 3 ejercicios antes. Solo cuenta si el ROE de ahora es positivo. Filtro por defecto: ≥ 0.
+  - «Caja / deuda a corto plazo», en veces (`cajaCubre`): sin deuda a corto, «sin deuda a corto» (pasa y se ordena como la mejor). Filtro por defecto: ≥ 1.
+  - «Precio/ventas frente a su sector», en % (`psSector`): P/S ÷ mediana del sector − 1. Filtro por defecto: ≤ 0.
+- **Tabla.** Ya no lleva ✓ ni ✗: en rojo lo que no pasa. Cada celda tiene un tooltip con de dónde sale la cifra (por ejemplo, «ROE 117,9 % (2026) frente a 156,1 % (2023)»). El cajón conserva ✓ y ✗.
+- **«Recomendado»** en el «?» de cada filtro (`RECOMENDADO` en filtros.js): referencias habituales y los umbrales de las tesis de Sergi, no recomendaciones de inversión.
+- **Crecimiento exigido: opción B.** Casilla «ver crecimiento exigido» guardada con la vista (`verExigido`, apagada por defecto). Encendida, aparecen el «PEG razonable» y dos columnas: «Crec. exigido» (PER ÷ PEG razonable), en rojo si es mayor que «Crec. esperado» (PER ÷ PEG esperado de Yahoo).
+  - Ojo: el esperado es una aproximación, porque mezcla nuestro PER con el PEG de Yahoo, que usa el suyo. A veces sale raro; por ejemplo, ADI con PER 46 y PEG esperado 0,54 da un 85,6 %.
+- **Panel de filtros.** Ahora mide 440 px y se puede ocultar (◀ / «▶ Filtros»). La app recuerda si estaba oculto en el navegador (`screener.panelOculto`).
+
+## 9. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:
 - Ventas corregidas en un documento posterior.
@@ -126,6 +138,11 @@ Las **vistas** son conjuntos de filtros con nombre, que se guardan como los plan
 - La pantalla montada (renderToString): embudo, tabla, «−N», orden con los sin dato al final, buscador con ✕, pestaña Técnico y «Cargando…».
 - Vistas guardadas: cambios (●), ventanas de salir y de borrar, las 3 de ejemplo la primera vez, cambiar y borrar por id. Con estado (DOM mínimo): cambiar el nombre, ir a otra pestaña (Cancelar / Salir sin guardar), nueva vista, descartar, apagar un filtro y descartar (78 en total).
 - «Guardar como lista»: nombre propuesto, usuario del token, valores ya en la Watchlist frente a nuevos, nombre repetido, borrado si falla a mitad, sin sesión. El cajón: «crecimiento exigido» 40 ÷ 2 = 20 % frente a 12 %, la cuenta del ROCE, y abrir y cerrar con estado (93 en total).
+- V9.1167, con las cifras de la captura de Sergi:
+  - ROE de AAPL 117,9 − 156,1 = −38,2 pt; el de AAOI, negativo, no cuenta.
+  - Caja / deuda: 56.722 ÷ 11.903 = 4,77 (AAPL) y 218 ÷ 338 = 0,64 (FICO); sin deuda a corto, la mejor.
+  - P/S frente al sector: +71,3 %, +4,7 % y −5,1 %.
+  - Además: los tooltips, los 14 «Recomendado», una vista vieja completada, el crecimiento exigido apagado y encendido (en rojo 20 % > 12 %) y el panel oculto (112 en total).
 - Balance anual que no tapa el 10-Q.
 - El universo y los tramos SIC.
 - La tabla de Wikipedia, y que esté vacía si cambia la página.

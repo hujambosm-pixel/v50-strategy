@@ -114,7 +114,7 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
   ok(med.A === 3 && med.B === 3 && tres[5].m.psSector === 3, 'mediana del P/S por sector: A (1, 3, 10) = 3 · B (2, 4) = 3')
 
   // ── Filtros y vistas (filtros.js, vista.js) ───────────────────────────────────────────────────────────────────────────
-  const { evaluaVista, pasa, FILTRO } = require('../../lib/screener/filtros')
+  const { evaluaVista, pasa, FILTRO, FILTROS } = require('../../lib/screener/filtros')
   const { vistaNueva, normalizaVista, textoVista, VISTAS_EJEMPLO } = require('../../lib/screener/vista')
   const emp = (simbolo, sector, m, extra = {}) => ({ simbolo, nombre: simbolo + ' Inc', sector, en_sp500: true, en_ndx: false, en_listas: false, precio: 10, piezas: {}, m: { ...m }, ...extra })
   const E = [
@@ -259,6 +259,43 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     D.pulsa(uno('data-cierra-cajon')); await D.espera(10)
     ok(!uno('data-cajon', 'AAA'), '✕ cierra el cajón')
     m.quita()
+  }
+
+  // ── V9.1167: las tres columnas de sí o no, ahora números; recomendados; crecimiento exigido; panel ocultable ──────────────
+  {
+    const { textoCelda } = require('../../components/ScreenerPanel')
+    // Cifras de la captura de Sergi (10/11): AAPL, FICO y AAOI.
+    const aapl = emp('AAPL', 'Tecnología', { roeFy: 117.9, roe3: 156.1, roeFyAnio: 2026, roe3Anio: 2023, ps: 10.67, psSector: 6.23 }, { piezas: { caja: 56722, deudaCorto: 11903 } })
+    const fico = emp('FICO', 'Tecnología', { roeFy: null, roe3: null, ps: 6.52, psSector: 6.23 }, { piezas: { caja: 218, deudaCorto: 338 } })
+    const aaoi = emp('AAOI', 'Tecnología', { roeFy: -5.2, roe3: -36.0, ps: 5.91, psSector: 6.23 }, { piezas: { caja: 605, deudaCorto: 60 } })
+    const sinDeuda = emp('SND', 'Tecnología', { roeFy: 20, roe3: 16 }, { piezas: { caja: 100, deudaCorto: 0 } })
+    ok(cerca(FILTRO.roeMejora.v(aapl), 117.9 - 156.1) && textoCelda(aapl, FILTRO.roeMejora) === '-38,2 pt', `ROE: 117,9 − 156,1 = −38,2 puntos (sale «${textoCelda(aapl, FILTRO.roeMejora)}»)`)
+    ok(textoCelda(sinDeuda, FILTRO.roeMejora) === '+4,0 pt', 'ROE: 20 − 16 = +4,0 puntos, con signo')
+    ok(FILTRO.roeMejora.v(aaoi) === null && /no es positivo/.test(FILTRO.roeMejora.titulo(aaoi)), 'ROE de ahora negativo (AAOI): no cuenta, y el tooltip dice por qué')
+    ok(!pasa(aaoi, FILTRO.roeMejora, { on: true, op: '≥', valor: 0 }) && pasa(sinDeuda, FILTRO.roeMejora, { on: true, op: '≥', valor: 0 }), 'AAOI no pasa «≥ 0 puntos»; +4 sí')
+    ok(cerca(FILTRO.cajaCubre.v(aapl), 56722 / 11903) && textoCelda(aapl, FILTRO.cajaCubre) === '4,77', 'caja / deuda a corto: 56.722 ÷ 11.903 = 4,77')
+    ok(textoCelda(fico, FILTRO.cajaCubre) === '0,64' && !pasa(fico, FILTRO.cajaCubre, { on: true, op: '≥', valor: 1 }), 'FICO: 218 ÷ 338 = 0,64 → no pasa ≥ 1')
+    ok(textoCelda(sinDeuda, FILTRO.cajaCubre) === 'sin deuda a corto' && pasa(sinDeuda, FILTRO.cajaCubre, { on: true, op: '≥', valor: 1 }) && FILTRO.cajaCubre.orden(sinDeuda) === Infinity, 'sin deuda a corto: pasa y se ordena como la mejor')
+    ok(textoCelda(aapl, FILTRO.psSector) === '+71,3 %' && textoCelda(fico, FILTRO.psSector) === '+4,7 %' && textoCelda(aaoi, FILTRO.psSector) === '-5,1 %', 'P/S frente al sector: +71,3 % · +4,7 % · −5,1 %')
+    ok(FILTRO.cajaCubre.titulo(aapl) === 'Caja 56.722 M frente a deuda a corto 11.903 M' && FILTRO.roeMejora.titulo(aapl) === 'ROE 117,9 % (2026) frente a 156,1 % (2023)', 'el texto de antes pasa al tooltip')
+    ok(FILTROS.filter(x => !x.proximamente && x.piso === 'F').every(x => x.ayuda.length === 4 && x.ayuda[3]), 'los 14 filtros llevan «Recomendado»')
+    ok(FILTRO.roce.ayuda[3] === '≥ 25 % (30 % = muy exigente).' && FILTRO.cajaCubre.ayuda[3] === '≥ 1 vez (1,5 si quieres margen).', 'recomendados del ROCE y de caja / deuda')
+    // Una vista guardada con los filtros viejos (op y valor vacíos) sigue con ellos encendidos, con su valor por defecto.
+    const viejaSN = normalizaVista({ tipo: 'vista_screener', version: 1, filtros: { roeMejora: { on: true, op: null, valor: null }, cajaCubre: { on: true, op: '≥', valor: null }, roce: { on: true, op: '≥', valor: 30 } } })
+    ok(viejaSN.filtros.roeMejora.on && viejaSN.filtros.roeMejora.op === '≥' && viejaSN.filtros.roeMejora.valor === 0 && viejaSN.filtros.cajaCubre.valor === 1 && viejaSN.filtros.roce.valor === 30 && viejaSN.verExigido === false, 'vista vieja: ROE ≥ 0 puntos y caja ≥ 1, encendidos; ROCE 30 se queda')
+    // La pantalla: crecimiento exigido apagado por defecto; encendido, dos columnas y en rojo si el exigido supera al esperado.
+    const caro = emp('CARO', 'Tecnología', { roce: 30, per: 40, crecEsperado: 12, pegEsp: 3.33 })
+    const v6 = vistaNueva({ on: ['roce'] })
+    let h6 = renderToString(React.createElement(P, { inicial: { empresas: [caro], vistas: [pestanaDe({ id: 1, nombre: 'X', vista: v6 })] } })).split('<!-- -->').join('')
+    ok(!h6.includes('data-col="exigido"') && !h6.includes('data-peg') && h6.includes('data-ver-exigido'), 'crecimiento exigido apagado: sin columnas ni PEG razonable, con su casilla')
+    h6 = renderToString(React.createElement(P, { inicial: { empresas: [caro], vistas: [pestanaDe({ id: 1, nombre: 'X', vista: { ...v6, verExigido: true } })] } })).split('<!-- -->').join('')
+    ok(h6.includes('data-col="exigido"') && h6.includes('data-col="esperado"') && h6.includes('data-peg') && h6.includes('20,0 %') && h6.includes('12,0 %'), 'encendido: «Crec. exigido» 40 ÷ 2 = 20 % y «Crec. esperado» 12 %')
+    ok(/data-celda="exigido"[^>]*color:#ff8b8b/.test(h6), 'exigido (20 %) mayor que esperado (12 %): en rojo')
+    ok(!h6.includes('✓ ') && !h6.includes('✗ ') || h6.includes('data-cajon'), 'la tabla ya no lleva ✓ ni ✗')
+    h6 = renderToString(React.createElement(P, { inicial: { empresas: [caro], vistas: [pestanaDe({ id: 1, nombre: 'X', vista: v6 })], panelOculto: true } })).split('<!-- -->').join('')
+    ok(h6.includes('data-mostrar-panel') && !h6.includes('data-panel-filtros'), 'panel oculto: solo el botón «▶ Filtros»')
+    h6 = renderToString(React.createElement(P, { inicial: { empresas: [caro], vistas: [pestanaDe({ id: 1, nombre: 'X', vista: v6 })] } })).split('<!-- -->').join('')
+    ok(h6.includes('data-ocultar-panel') && h6.includes('data-panel-filtros') && h6.includes('width:440px'), 'panel visible, de 440 px, con su botón «◀»')
   }
 
   // La app deja el screener montado tras la primera visita (como el Builder): al volver de una ficha o un gráfico sigue igual.

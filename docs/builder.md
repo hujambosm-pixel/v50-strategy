@@ -2654,3 +2654,10 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - Antes, al pulsar «🏦 Ficha de Fundamentals ↗» o «📈 Gráfico ↗» en el cajón y volver al screener, la pantalla se montaba de nuevo y se perdían la pestaña de la vista, los filtros sin guardar, el orden, la búsqueda y el cajón (lo vio Sergi el 10/11).
 - Ahora el screener queda montado desde la primera visita y solo se oculta, como el Builder y el Editor (`screenerVisitado` en pages/index.js). Oculto, Esc no cierra su cajón (`visible`).
 - `screener.js` (94) lo comprueba en el código de pages/index.js. Nada cambia en las demás pantallas ni en las cifras.
+
+## 105. Screener: columnas numéricas, recomendados, crecimiento exigido y panel ocultable
+
+- Pedido por Sergi tras verlo (10/11). Los tres filtros de sí o no pasan a ser números ordenables: cambio del ROE en puntos (solo con el ROE de ahora positivo), caja ÷ deuda a corto en veces, y P/S frente al sector en %. Mantienen su id, así que sus vistas guardadas siguen con ellos encendidos.
+- La tabla queda sin ✓ ni ✗ (en rojo lo que no pasa), con un tooltip por celda. Cada «?» lleva «Recomendado». El crecimiento exigido va detrás de una casilla y se muestra junto al esperado. El panel mide 440 px y se puede ocultar.
+- Detalle en docs/screener.md §8. Las cifras de la base no cambian: lo nuevo se calcula en la pantalla con lo que ya trae `metricas`.
+- `screener.js` (112). Nada cambia en las demás pantallas ni en las cifras.

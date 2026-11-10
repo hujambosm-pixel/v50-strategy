@@ -27,7 +27,7 @@ const fechaCorta = (iso) => iso ? String(iso).slice(0, 10).split('-').reverse().
 
 // Un «?» con título, explicación y ejemplo (los textos del catálogo).
 export const AyudaFiltro = ({ a, etiqueta }) => !a ? null : (
-  <Ayuda etiqueta={etiqueta || a[0]} texto={<><b>{a[0]}</b><br/>{a[1]}{a[2] ? <><br/><span style={{ color: B.secundario }}>Ejemplo: {a[2]}</span></> : null}</>}/>)
+  <Ayuda etiqueta={etiqueta || a[0]} texto={<><b>{a[0]}</b><br/>{a[1]}{a[2] ? <><br/><span style={{ color: B.secundario }}>Ejemplo: {a[2]}</span></> : null}{a[3] ? <><br/><span data-recomendado style={{ color: '#56d364' }}>Recomendado: {a[3]}</span></> : null}</>}/>)
 
 const Fuente = ({ f }) => (
   <span title={f.startsWith('Yahoo') ? 'Dato de Yahoo: solo existe el de hoy (no sirve para probar en el pasado).' : 'De dónde sale el dato'}
@@ -36,18 +36,18 @@ const Fuente = ({ f }) => (
 
 // El valor de una celda de la tabla para el filtro f.
 export function textoCelda(e, f) {
-  if (f.bool) { const x = f.v(e); return (x === true ? '✓ ' : x === false ? '✗ ' : '') + f.mostrar(e) }
   const x = f.v(e)
   if (x == null) return (f.sinDato && f.sinDato(e)) || '—'
-  return fmt(x, f.dec ?? 1) + (f.unidad === '%' ? ' %' : f.unidad === 'M' ? ' M' : '')
+  return (f.signo && x > 0 ? '+' : '') + fmt(x, f.dec ?? 1) + (f.unidad === '%' ? ' %' : f.unidad === 'M' ? ' M' : f.unidad === 'puntos' ? ' pt' : '')
 }
 // El valor por el que se ordena una columna (los null, siempre al final).
 const valorOrden = (e, col) => {
   if (col === 'simbolo' || col === 'sector') return e[col] || ''
   if (col === 'precio') return e.precio
   if (col === 'exigido') return e.m.per
+  if (col === 'esperado') return e.m.crecEsperado
   const f = FILTRO[col]; if (!f) return null
-  const x = f.v(e); return f.bool ? (x === true ? 1 : x === false ? 0 : null) : x
+  const x = f.v(e); return x != null ? x : (f.orden ? f.orden(e) : null)
 }
 
 // inicial (para las comprobaciones, scripts/comprobaciones/screener.js): { empresas, vistas (pestañas), iv, piso, busca, verNo, orden,
@@ -65,6 +65,9 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
   const [detalle, setDetalle] = useState(inicial.detalle || null)   // símbolo del cajón abierto
   const [lista, setLista] = useState(inicial.lista || null)   // ventana «Guardar como lista»: { nombre, error, guardando }
   const [hecho, setHecho] = useState(null)   // texto tras guardar una lista
+  const [panelOculto, setPanelOculto] = useState(!!inicial.panelOculto)
+  useEffect(() => { try { if (!inicial.empresas && localStorage.getItem('screener.panelOculto') === '1') setPanelOculto(true) } catch (_) {} }, [])
+  const ponPanelOculto = (x) => { setPanelOculto(x); try { localStorage.setItem('screener.panelOculto', x ? '1' : '0') } catch (_) {} }
   const [iv, setIv] = useState(inicial.iv || 0)
   const [piso, setPiso] = useState(inicial.piso || 'F')
   const [busca, setBusca] = useState(inicial.busca || '')
@@ -238,9 +241,15 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
       {estado.error && <div style={{ color: ROJO }}>⚠ {estado.error}</div>}
 
       <div style={{ display: 'flex', gap: 12, flex: 1, minHeight: 0 }}>
-        {/* Panel de filtros */}
-        <div style={{ ...S.tarjeta, width: 380, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {/* Panel de filtros (se puede ocultar; se recuerda en el navegador) */}
+        {panelOculto ? (
+          <button data-mostrar-panel onClick={() => ponPanelOculto(false)} title="Mostrar los filtros"
+            style={{ ...S.boton, padding: '8px 6px', writingMode: 'vertical-rl', fontSize: 13, flexShrink: 0 }}>▶ Filtros</button>
+        ) : (
+        <div data-panel-filtros style={{ ...S.tarjeta, width: 440, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div style={{ display: 'flex', borderBottom: `1px solid ${B.borde}` }}>
+            <button data-ocultar-panel onClick={() => ponPanelOculto(true)} title="Ocultar los filtros (la tabla usa todo el ancho)"
+              style={{ padding: '8px 10px', border: 'none', borderRight: `1px solid ${B.borde}`, cursor: 'pointer', background: 'transparent', color: B.secundario, fontFamily: B.letra, fontSize: 13 }}>◀</button>
             {[['F', '1 · Fundamentales'], ['T', '2 · Técnico']].map(([p, t]) => (
               <button key={p} data-piso={p} onClick={() => setPiso(p)}
                 style={{ flex: 1, padding: '8px 0', border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: 13, fontWeight: piso === p ? 700 : 400,
@@ -265,12 +274,12 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
                   <div data-filtro={f.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', opacity: f.proximamente ? 0.45 : on ? 1 : 0.7 }}>
                     <input type="checkbox" data-on={f.id} checked={on} disabled={!!f.proximamente} onChange={e => cambiaFiltro(f.id, { on: e.target.checked })}/>
                     <span style={{ flex: 1, minWidth: 0 }}>{f.nombre}{f.fuente && <Fuente f={f.fuente}/>}</span>
-                    {!f.bool && !f.proximamente && <>
+                    {!f.proximamente && <>
                       <select data-op={f.id} value={c.op} onChange={e => cambiaFiltro(f.id, { op: e.target.value })} style={{ ...caja, padding: '2px 2px', width: 42, flex: '0 0 auto' }}>
                         <option>≥</option><option>≤</option></select>
                       <input data-valor={f.id} type="number" step="any" value={c.valor ?? ''} style={{ ...caja, width: 62, flex: '0 0 auto' }}
                         onChange={e => cambiaFiltro(f.id, { valor: e.target.value === '' ? null : Number(e.target.value) })}/>
-                      <span style={{ ...S.apagado, width: 34 }}>{f.unidad}</span>
+                      <span style={{ ...S.apagado, width: 44 }}>{f.unidad}</span>
                     </>}
                     {f.ayuda && <AyudaFiltro a={f.ayuda}/>}
                     <span data-cuenta={f.id} title="Valores que quita este filtro (de los que llegan a su piso)" style={{ width: 40, textAlign: 'right', color: ROJO, fontWeight: 700 }}>{on && n ? '−' + n : ''}</span>
@@ -279,7 +288,7 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
             })}
             <div style={{ ...S.apagado, marginTop: 10, display: 'flex', alignItems: 'center' }}>«−N»: cuántos quita cada filtro<AyudaFiltro a={AYUDAS.cuenta}/></div>
           </div>
-        </div>
+        </div>)}
 
         {/* Resultados */}
         <div style={{ ...S.tarjeta, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -291,16 +300,20 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
             <label style={{ ...etiqueta, display: 'inline-flex', gap: 5, alignItems: 'center', cursor: 'pointer', color: B.secundario }}>
               <input type="checkbox" data-ver-no checked={verNo} onChange={e => setVerNo(e.target.checked)}/>ver también los que no pasan (en gris)</label>
             <span style={{ flex: 1 }}/>
-            <span style={{ color: B.secundario }}>PEG razonable para «crec. exigido»</span>
-            <input data-peg type="number" step="0.1" min="0.1" value={vista.pegRazonable} style={{ ...caja, width: 56 }}
-              onChange={e => cambia(v => ({ ...v, pegRazonable: Number(e.target.value) > 0 ? Number(e.target.value) : v.pegRazonable }))}/>
+            <label style={{ ...etiqueta, display: 'inline-flex', gap: 5, alignItems: 'center', cursor: 'pointer', color: B.secundario }}>
+              <input type="checkbox" data-ver-exigido checked={!!vista.verExigido} onChange={e => cambia(v => ({ ...v, verExigido: e.target.checked }))}/>ver crecimiento exigido</label>
+            {vista.verExigido && <>
+              <span style={{ color: B.secundario }}>con PEG razonable</span>
+              <input data-peg type="number" step="0.1" min="0.1" value={vista.pegRazonable} style={{ ...caja, width: 56 }}
+                onChange={e => cambia(v => ({ ...v, pegRazonable: Number(e.target.value) > 0 ? Number(e.target.value) : v.pegRazonable }))}/>
+            </>}
             <AyudaFiltro a={AYUDAS.exigido}/>
           </div>
           <div style={{ overflow: 'auto', flex: 1 }}>
             {estado.cargando ? <div style={{ ...S.apagado, padding: 20 }}>Cargando las empresas…</div> : (
               <table data-tabla style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>
                 <thead><tr>
-                  {[['simbolo', 'Valor'], ['sector', 'Sector'], ['precio', 'Precio $'], ...encendidos.map(f => [f.id, f.nombre]), ['exigido', 'Crec. exigido']].map(([k, t], i) => (
+                  {[['simbolo', 'Valor'], ['sector', 'Sector'], ['precio', 'Precio $'], ...encendidos.map(f => [f.id, f.nombre]), ...(vista.verExigido ? [['exigido', 'Crec. exigido'], ['esperado', 'Crec. esperado']] : [])].map(([k, t], i) => (
                     <th key={k} data-col={k} onClick={() => ordena(k)} title="Pulsa para ordenar"
                       style={{ ...cel, position: 'sticky', top: 0, background: B.cabecera, color: B.titulo, cursor: 'pointer', textAlign: i < 2 ? 'left' : 'right', fontWeight: 600, zIndex: 1 }}>
                       {t}{orden.col === k ? (orden.dir > 0 ? ' ▲' : ' ▼') : ''}</th>))}
@@ -313,16 +326,19 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
                         <td style={{ ...cel, textAlign: 'left', color: B.secundario }} title={e.sectorFuente === 'SIC' ? 'Sector aproximado con el código de actividad que declara a la SEC (SIC)' : 'Sector oficial del S&P 500 (GICS)'}>{e.sector || '—'}{e.sectorFuente === 'SIC' ? '*' : ''}</td>
                         <td style={cel}>{fmt(e.precio, 2)}</td>
                         {encendidos.map(f => { const bien = pasa(e, f, vista.filtros[f.id])
-                          return <td key={f.id} data-celda={f.id} style={{ ...cel, color: bien ? B.texto : ROJO }}>{textoCelda(e, f)}</td> })}
-                        <td style={{ ...cel, color: B.secundario }}>{x == null ? '—' : fmt(x) + ' %'}</td>
+                          return <td key={f.id} data-celda={f.id} title={f.titulo ? f.titulo(e) : undefined} style={{ ...cel, color: bien ? B.texto : ROJO }}>{textoCelda(e, f)}</td> })}
+                        {vista.verExigido && <>
+                          <td data-celda="exigido" title={x == null ? undefined : `PER ${fmt(e.m.per)} ÷ PEG ${fmt(vista.pegRazonable)}`} style={{ ...cel, color: x != null && e.m.crecEsperado != null && x > e.m.crecEsperado ? ROJO : B.texto }}>{x == null ? '—' : fmt(x) + ' %'}</td>
+                          <td data-celda="esperado" title={e.m.crecEsperado == null ? 'Yahoo no da el PEG esperado (o no hay PER)' : `PER ${fmt(e.m.per)} ÷ PEG esperado ${fmt(e.m.pegEsp, 2)} (Yahoo)`} style={{ ...cel, color: B.secundario }}>{e.m.crecEsperado == null ? '—' : fmt(e.m.crecEsperado) + ' %'}</td>
+                        </>}
                       </tr>) })}
-                  {!filas.length && <tr><td colSpan={encendidos.length + 4} style={{ ...cel, textAlign: 'center', color: B.secundario, padding: 20 }}>
+                  {!filas.length && <tr><td colSpan={encendidos.length + 3 + (vista.verExigido ? 2 : 0)} style={{ ...cel, textAlign: 'center', color: B.secundario, padding: 20 }}>
                     {busca ? 'Ningún valor coincide con la búsqueda.' : 'Ningún valor pasa todos los filtros. Prueba a quitar alguno (el número rojo «−N» dice cuántos quita cada uno).'}</td></tr>}
                 </tbody>
               </table>)}
           </div>
           <div style={{ ...S.apagado, padding: '4px 12px', borderTop: `1px solid ${B.borde}` }}>
-            Importes en millones de la moneda de sus cuentas · * sector aproximado (código SIC) · en <span style={{ color: ROJO }}>rojo</span>, la cifra que no pasa ese filtro
+            Importes en millones de la moneda de sus cuentas · * sector aproximado (código SIC) · en <span style={{ color: ROJO }}>rojo</span>, la cifra que no pasa ese filtro (o el crecimiento exigido mayor que el esperado) · pasa el ratón por una cifra para ver de dónde sale
           </div>
         </div>
       </div>
