@@ -14,8 +14,9 @@ import { SECTORES_FUERA_POR_DEFECTO } from '../lib/screener/sectores'
 import { VISTAS_EJEMPLO, normalizaVista, textoVista, vistaNueva } from '../lib/screener/vista'
 import { borrarVista, cambiarVista, creaEjemplos, crearVista, listarVistas, nombreLimpio } from '../lib/screener/vistasBase'
 import { Papelera, Pregunta } from './VentanaPregunta'
+import { guardarComoLista, nombrePropuesto } from '../lib/screener/lista'
 
-const AMARILLO = '#f2cc60', ROJO = '#ff8b8b'
+const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#56d364'
 const copia = (x) => JSON.parse(JSON.stringify(x))
 // Una pestaña de vista: { clave (local), id (de la base, null si aún no está guardada), nombre, vista, base: { nombre, vista } | null
 // (lo guardado; null si es nueva) }. Con cambios = nueva, u otro nombre u otra vista que lo guardado.
@@ -51,14 +52,18 @@ const valorOrden = (e, col) => {
 
 // inicial (para las comprobaciones, scripts/comprobaciones/screener.js): { empresas, vistas (pestañas), iv, piso, busca, verNo, orden,
 // pregunta }; con inicial.empresas no se lee la base (ni las vistas). salida: la guardia de «cambios sin guardar» al salir de la
-// pantalla (pages/index.js, como en Tesis): salida.current(seguir) → true si ha preguntado.
-export default function ScreenerPanel({ inicial = {}, salida = null }) {
+// pantalla (pages/index.js, como en Tesis): salida.current(seguir) → true si ha preguntado. onIrAValor(símbolo, pantalla): abre la ficha
+// de Fundamentals ('fundamentals') o el gráfico ('watchlist') de un valor. onListaGuardada(): avisa a la app para releer la Watchlist.
+export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor = null, onListaGuardada = null }) {
   const [estado, setEstado] = useState(() => inicial.empresas ? { cargando: false, error: null, empresas: inicial.empresas } : { cargando: true, error: null, empresas: [] })
   const [vistas, setVistas] = useState(() => inicial.vistas || VISTAS_EJEMPLO.map(v => pestanaDe({ nombre: v.nombre, vista: copia(v.vista) })))
   const [vistasError, setVistasError] = useState(null)
   const [guardando, setGuardando] = useState(false)
   const [pregunta, setPregunta] = useState(inicial.pregunta || null)   // { tipo: 'salir', accion } | { tipo: 'borrar' }
   const [menuNueva, setMenuNueva] = useState(false)
+  const [detalle, setDetalle] = useState(inicial.detalle || null)   // símbolo del cajón abierto
+  const [lista, setLista] = useState(inicial.lista || null)   // ventana «Guardar como lista»: { nombre, error, guardando }
+  const [hecho, setHecho] = useState(null)   // texto tras guardar una lista
   const [iv, setIv] = useState(inicial.iv || 0)
   const [piso, setPiso] = useState(inicial.piso || 'F')
   const [busca, setBusca] = useState(inicial.busca || '')
@@ -88,6 +93,21 @@ export default function ScreenerPanel({ inicial = {}, salida = null }) {
   useEffect(() => { if (salida) salida.current = (seguir) => { if (!conCambiosRef.current) return false; setPregunta({ tipo: 'salir', accion: seguir }); return true } })
   useEffect(() => () => { if (salida) salida.current = null }, [])
 
+  // Esc cierra el cajón.
+  useEffect(() => {
+    if (!detalle || typeof window === 'undefined') return
+    const k = (e) => { if (e.key === 'Escape') setDetalle(null) }
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
+  }, [detalle])
+  const guardaLista = async () => {
+    setLista(l => ({ ...l, guardando: true, error: null }))
+    try {
+      const r = await guardarComoLista(ctxConSesion(), { nombre: lista.nombre, empresas: ev.f2 })
+      setLista(null)
+      setHecho(`✓ Lista «${r.lista.name}» guardada con ${r.total} valores${r.nuevos ? ` (${r.nuevos} nuevos en la Watchlist, en el grupo «Screener»)` : ''}. Ya la puedes usar en «Una lista» del plan.`)
+      onListaGuardada?.()
+    } catch (e) { setLista(l => ({ ...l, guardando: false, error: e.message })) }
+  }
   const ponPestana = (cambio) => setVistas(vs => vs.map((p, i) => i === iv ? { ...p, ...cambio } : p))
   const guarda = async () => {
     if (guardando) return false
@@ -208,6 +228,10 @@ export default function ScreenerPanel({ inicial = {}, salida = null }) {
             </span>
           </span>))}
         <span style={S.apagado}>El piso técnico llega más adelante: hoy pasan los mismos que en el 1.</span>
+        <span style={{ flex: 1 }}/>
+        <button data-guardar-lista disabled={!ev.f2.length} onClick={() => { setHecho(null); setLista({ nombre: nombrePropuesto(nombreLimpio(actual.nombre)), error: null, guardando: false }) }}
+          title="Crea una lista de la Watchlist con los valores que pasan (fija: no cambia sola)" style={{ ...S.boton, padding: '6px 12px', opacity: ev.f2.length ? 1 : 0.5 }}>☰ Guardar como lista ({ev.f2.length})</button>
+        {hecho && <div data-lista-hecha style={{ flexBasis: '100%', color: VERDE, fontSize: 13 }}>{hecho}</div>}
       </div>
 
       {estado.error && <div style={{ color: ROJO }}>⚠ {estado.error}</div>}
@@ -283,7 +307,7 @@ export default function ScreenerPanel({ inicial = {}, salida = null }) {
                 <tbody>
                   {filas.map(e => { const dentro = ev.pasaTodo.has(e.simbolo), x = exigido(e)
                     return (
-                      <tr key={e.simbolo} data-fila={e.simbolo} style={{ opacity: dentro ? 1 : 0.5 }}>
+                      <tr key={e.simbolo} data-fila={e.simbolo} onClick={() => setDetalle(e.simbolo)} title="Pulsa para ver el detalle" style={{ opacity: dentro ? 1 : 0.5, cursor: 'pointer', background: detalle === e.simbolo ? B.cabecera : undefined }}>
                         <td style={{ ...cel, textAlign: 'left' }} title={e.aviso || undefined}><b>{e.simbolo}</b> <span style={{ color: B.secundario }}>{e.nombre}</span></td>
                         <td style={{ ...cel, textAlign: 'left', color: B.secundario }} title={e.sectorFuente === 'SIC' ? 'Sector aproximado con el código de actividad que declara a la SEC (SIC)' : 'Sector oficial del S&P 500 (GICS)'}>{e.sector || '—'}{e.sectorFuente === 'SIC' ? '*' : ''}</td>
                         <td style={cel}>{fmt(e.precio, 2)}</td>
@@ -301,6 +325,15 @@ export default function ScreenerPanel({ inicial = {}, salida = null }) {
           </div>
         </div>
       </div>
+      {lista && (
+        <Pregunta id="lista" texto={`Guardar los ${ev.f2.length} valores que pasan como una lista de la Watchlist`} aviso={lista.error}
+          detalle="La lista es FIJA: guarda los valores de hoy y no cambia sola. Los que no estén en tu Watchlist se añaden en el grupo «Screener»."
+          extra={<input data-nombre-lista autoFocus value={lista.nombre} maxLength={120} onChange={e => setLista(l => ({ ...l, nombre: e.target.value, error: null }))}
+            onKeyDown={e => { if (e.key === 'Enter' && !lista.guardando) guardaLista() }} style={{ ...caja, width: '100%', boxSizing: 'border-box', marginBottom: 16, fontSize: 14, padding: '6px 8px' }}/>}>
+          <button data-p="cancelar" style={S.boton} onClick={() => setLista(null)}>Cancelar</button>
+          <button data-p="guardar-lista" disabled={lista.guardando || !lista.nombre.trim()} style={lista.guardando || !lista.nombre.trim() ? S.botonDesactivado : S.botonVerde} onClick={guardaLista}>{lista.guardando ? 'Guardando…' : 'Guardar lista'}</button>
+        </Pregunta>)}
+      {detalle && (() => { const e = estado.empresas.find(x => x.simbolo === detalle); return e ? <Cajon e={e} vista={vista} dentro={ev.pasaTodo.has(e.simbolo)} nombreVista={nombreLimpio(actual.nombre)} onCierra={() => setDetalle(null)} onIrAValor={onIrAValor}/> : null })()}
       {pregunta?.tipo === 'salir' && (
         <Pregunta id="salir" texto={`Tienes cambios sin guardar en la vista «${nombreLimpio(actual.nombre) || 'Vista sin nombre'}».`}>
           <button data-p="cancelar" style={S.boton} onClick={() => setPregunta(null)}>Cancelar</button>
@@ -314,5 +347,47 @@ export default function ScreenerPanel({ inicial = {}, salida = null }) {
         </Pregunta>)}
     </div>
   )
+}
+// El CAJÓN de un valor (a la derecha, por encima): ✓/✗ de cada filtro de la vista con su cuenta y su fuente, el crecimiento que
+// exige el precio frente al esperado, y enlaces a su ficha de Fundamentals y a su gráfico.
+export function Cajon({ e, vista, dentro, nombreVista, onCierra, onIrAValor }) {
+  const ex = e.m.per == null ? null : e.m.per / vista.pegRazonable
+  const fila = (f) => {
+    const c = vista.filtros[f.id], on = !!c?.on, bien = pasa(e, f, c)
+    return (
+      <tr key={f.id} data-cajon-filtro={f.id}>
+        <td style={{ padding: '5px 0', verticalAlign: 'top' }}>
+          {on ? (bien ? <span style={{ color: VERDE }}>✓</span> : <span style={{ color: ROJO }}>✗</span>) : <span style={{ color: B.apagado }}>·</span>} {f.nombre}<Fuente f={f.fuente}/>
+          {f.formula && <div style={{ color: B.apagado, fontSize: 12, marginLeft: 14 }}>{f.formula(e)}</div>}
+        </td>
+        <td style={{ padding: '5px 0 5px 10px', textAlign: 'right', verticalAlign: 'top', whiteSpace: 'nowrap', color: on && !bien ? ROJO : B.texto }}>{textoCelda(e, f)}</td>
+      </tr>)
+  }
+  const enlace = { ...S.boton, padding: '5px 10px', fontSize: 13 }
+  return (
+    <div data-cajon={e.simbolo} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 440, maxWidth: '100%', zIndex: 2500, background: B.tarjeta, borderLeft: `1px solid ${B.borde}`,
+      boxShadow: '-8px 0 24px rgba(0,0,0,0.5)', padding: 16, overflowY: 'auto', boxSizing: 'border-box', fontFamily: B.letra, fontSize: 13, color: B.texto }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: B.titulo, flex: 1 }}>{e.simbolo} · {e.nombre}</div>
+        <button data-cierra-cajon onClick={onCierra} title="Cerrar (Esc)" style={{ ...S.boton, padding: '2px 9px' }}>✕</button>
+      </div>
+      <div style={{ color: B.secundario, margin: '4px 0 10px' }}>
+        {e.sector || 'sin sector'}{e.sectorFuente === 'SIC' ? ' (aprox.)' : ''} · {fmt(e.precio, 2)} $ · {dentro ? <span style={{ color: VERDE }}>pasa la vista «{nombreVista}»</span> : <span style={{ color: ROJO }}>no pasa la vista «{nombreVista}»</span>}
+      </div>
+      {onIrAValor && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <button data-ir="fundamentals" style={enlace} onClick={() => onIrAValor(e.simbolo, 'fundamentals')}>🏦 Ficha de Fundamentals ↗</button>
+        <button data-ir="watchlist" style={enlace} onClick={() => onIrAValor(e.simbolo, 'watchlist')}>📈 Gráfico ↗</button>
+      </div>}
+      {e.aviso && <div style={{ color: AMARILLO, marginBottom: 10 }}>⚠ {e.aviso}</div>}
+      <div data-exigido style={{ background: '#13283f', border: '1px solid #2d5b8c', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>
+        <b>Crecimiento que exige el precio:</b>{' '}
+        {ex == null ? (e.moneda && e.moneda !== 'USD' ? `cuentas en ${e.moneda}: no se calcula.` : 'sin beneficio, no se calcula.')
+          : <>PER {fmt(e.m.per)} ÷ PEG {fmt(vista.pegRazonable)} = <b>{fmt(ex)} % al año</b>.{' '}
+            {e.m.crecEsperado != null ? <>Los analistas esperan {fmt(e.m.crecEsperado)} % (PER ÷ PEG esperado de Yahoo) → {ex > e.m.crecEsperado ? <b style={{ color: ROJO }}>el precio pide más de lo esperado</b> : <b style={{ color: VERDE }}>el precio pide menos de lo esperado</b>}.</> : 'Yahoo no da el crecimiento esperado.'}</>}
+      </div>
+      <div style={{ ...grupoEst, marginTop: 0 }}>1 · Fundamentales</div>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>{FILTROS.filter(f => f.piso === 'F').map(fila)}</tbody></table>
+      <p style={{ color: B.apagado, fontSize: 12 }}>✓/✗ solo en los filtros encendidos de la vista; «·» = apagado (se ve el dato igualmente). Cuentas hasta el {fechaCorta(e.cuentasHasta)}{e.moneda && e.moneda !== 'USD' ? `, en ${e.moneda}` : ''}; precio del {fechaCorta(e.precioFecha)}{e.pegFecha ? `; PEG esperado del ${fechaCorta(e.pegFecha)}` : ''}.</p>
+    </div>)
 }
 const grupoEst = { display: 'flex', alignItems: 'center', margin: '12px 0 4px', fontSize: 12, fontWeight: 700, color: B.secundario, textTransform: 'uppercase', letterSpacing: '0.04em' }

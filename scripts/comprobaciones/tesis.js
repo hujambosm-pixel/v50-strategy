@@ -320,7 +320,9 @@ const cuenta = (html, s) => html.split(s).length - 1
   ok(fuenteIndex.includes(), 'abrir una tesis desde el Builder también pregunta')
   // V9.1145: el 18.º es el «↗ Watchlist» de «La cartera por dentro» del plan (onIrAValor del Builder, §84), que pasa por salirDeTesis.
   ok(fuenteIndex.includes(`onIrAValor={(sym)=>salirDeTesis(()=>{setSimbolo(sym);setSidePanel('watchlist')})}`), 'el «↗» de «La cartera por dentro» del plan también pregunta')
-  ok(llamadasPanel === 18, `los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
+  // V9.1165: el 19.º son los enlaces del cajón del screener (Fundamentals y gráfico, onIrAValor de ScreenerPanel), que pasan por salirDeTesis.
+  ok(fuenteIndex.includes(`onIrAValor={(sym,panel)=>salirDeTesis(()=>{setSimbolo(sym);setSidePanel(panel)})}`), 'los enlaces del cajón del screener también preguntan')
+  ok(llamadasPanel === 19, `los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
 
   // El buscador.
   const tres2 = [

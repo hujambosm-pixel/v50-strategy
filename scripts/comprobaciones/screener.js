@@ -189,6 +189,45 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
   hp = renderToString(React.createElement(P, {}))
   ok(hp.includes('Cargando las empresas…'), 'sin datos: «Cargando las empresas…»')
 
+  // ── «Guardar como lista» (lista.js) y el cajón ─────────────────────────────────────────────────────────────────────────
+  const L = require('../../lib/screener/lista')
+  ok(L.nombrePropuesto('Mi vista', new Date(2026, 10, 7)) === 'Mi vista · 07/11/2026', 'nombre propuesto: «Mi vista · 07/11/2026»')
+  const jwt = 'x.' + Buffer.from(JSON.stringify({ sub: 'u-1' })).toString('base64').replace(/=+$/, '') + '.y'
+  ok(L.usuarioDe({ Authorization: 'Bearer ' + jwt }) === 'u-1' && L.usuarioDe({}) === null, 'el usuario sale del token')
+  const pl = L.planDeLista([{ simbolo: 'AAA', nombre: 'Aaa' }, { simbolo: 'BBB', nombre: 'Bbb' }, { simbolo: 'AAA' }], [{ id: 'w1', symbol: 'aaa' }, { id: 'w2', symbol: 'ZZZ' }])
+  ok(pl.existentes.join() === 'w1' && pl.nuevos.length === 1 && pl.nuevos[0].symbol === 'BBB' && pl.nuevos[0].group_name === 'Screener', 'AAA ya está (se reutiliza); BBB se añade en el grupo «Screener»; sin repetir')
+  const pasos = []
+  const fl = (opciones = {}) => ({ url: 'https://base', headers: { Authorization: 'Bearer ' + jwt }, fetch: async (u, o = {}) => {
+    const m = o.method || 'GET', b = o.body ? JSON.parse(o.body) : null; pasos.push({ u, m, b })
+    const r = (status, j) => ({ ok: status < 300, status, json: async () => j })
+    if (u.includes('watchlist_lists?select')) return r(200, opciones.listas || [{ id: 'l0', name: 'Degiro' }])
+    if (u.includes('watchlist?select')) return r(200, [{ id: 'w1', symbol: 'AAA' }])
+    if (u.endsWith('/watchlist_lists') && m === 'POST') return r(201, [{ id: 'l9', name: b.name, user_id: b.user_id }])
+    if (u.endsWith('/watchlist') && m === 'POST') return r(201, b.map((x, i) => ({ id: 'n' + i, ...x })))
+    if (u.endsWith('/watchlist_list_members')) return opciones.fallaMiembros ? r(500, { message: 'caída' }) : r(201, null)
+    if (m === 'DELETE') return r(204, null)
+    return r(404, {})
+  } })
+  const res = await L.guardarComoLista(fl(), { nombre: '  Buenas  hoy ', empresas: [{ simbolo: 'AAA' }, { simbolo: 'BBB', nombre: 'Bbb' }] })
+  const crea = pasos.find(p => p.u.endsWith('/watchlist_lists') && p.m === 'POST'), miembros = pasos.find(p => p.u.endsWith('/watchlist_list_members'))
+  ok(res.total === 2 && res.nuevos === 1 && crea.b.name === 'Buenas hoy' && crea.b.user_id === 'u-1', 'crea la lista «Buenas hoy» con tu usuario: 2 valores, 1 nuevo')
+  ok(miembros.b.map(x => x.watchlist_id).sort().join() === 'n0,w1' && miembros.b.every(x => x.list_id === 'l9'), 'mete en la lista el que ya estaba y el nuevo')
+  let e5 = null; try { await L.guardarComoLista(fl(), { nombre: 'degiro', empresas: [{ simbolo: 'AAA' }] }) } catch (e) { e5 = e.message }
+  ok(e5 === 'Ya tienes una lista que se llama «degiro». Ponle otro nombre.', 'nombre repetido (sin distinguir mayúsculas): no crea nada')
+  pasos.length = 0; let e6 = null
+  try { await L.guardarComoLista(fl({ fallaMiembros: true }), { nombre: 'Otra', empresas: [{ simbolo: 'AAA' }] }) } catch (e) { e6 = e.message }
+  ok(e6 && e6.includes('caída') && pasos.some(p => p.m === 'DELETE' && p.u.includes('watchlist_lists?id=eq.l9')), 'si falla a mitad, la lista creada se borra')
+  let e7 = null; try { await L.guardarComoLista({ ...fl(), headers: {} }, { nombre: 'X', empresas: [{ simbolo: 'AAA' }] }) } catch (e) { e7 = e.message }
+  ok(e7 === 'Para guardar listas hay que haber iniciado sesión.', 'sin sesión no se guarda')
+  hp = monta({ lista: { nombre: 'Prueba · 10/11/2026', error: null, guardando: false } })
+  ok(hp.includes('Guardar los 1 valores que pasan como una lista de la Watchlist') && hp.includes('La lista es FIJA') && hp.includes('value="Prueba · 10/11/2026"'), 'ventana «Guardar como lista» con el nombre propuesto')
+  ok(hp.includes('☰ Guardar como lista (1)'), 'botón con cuántos valores')
+  const conCuentas = { ...E[0], m: { ...E[0].m, per: 40, crecEsperado: 12 }, piezas: { ebit: 300, activos: 1500, pasivoCorto: 300 }, cuentasHasta: '2025-12-31', precioFecha: '2026-11-06', moneda: 'USD' }
+  hp = renderToString(React.createElement(P, { inicial: { empresas: [conCuentas, ...E.slice(1)], vistas: [guardada()], detalle: 'AAA' }, onIrAValor: () => {} })).split('<!-- -->').join('')
+  ok(hp.includes('data-cajon="AAA"') && hp.includes('pasa la vista «Prueba»') && hp.includes('data-ir="fundamentals"'), 'cajón de AAA: pasa la vista, con enlaces')
+  ok(hp.includes('PER 40,0 ÷ PEG 2,0 = ') && hp.includes('20,0 % al año') && hp.includes('el precio pide más de lo esperado'), 'crecimiento exigido: 40 ÷ 2 = 20 % frente a 12 % esperado → pide más')
+  ok(hp.includes('300 M ÷ (1.500 M − 300 M)') && hp.includes('data-cajon-filtro="roce"'), 'cuenta del ROCE con sus cifras')
+
   // ── Con estado (DOM mínimo): cambiar el nombre, ir a otra pestaña con cambios, cancelar, salir sin guardar, nueva vista ────
   {
     const RDC = require('react-dom/client')
@@ -215,6 +254,10 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     ok(m.raiz.conAtributo('data-punto-cambios').length === 1 && uno('data-embudo-n', 1).textContent === '3', 'apagar el ROCE: pasan los 3 del universo, con «●»')
     D.pulsa(uno('data-descartar')); await D.espera(10)
     ok(!m.raiz.conAtributo('data-punto-cambios').length && uno('data-embudo-n', 1).textContent === '1', '«Descartar cambios»: vuelve a pasar 1')
+    D.pulsa(uno('data-fila', 'AAA')); await D.espera(10)
+    ok(!!uno('data-cajon', 'AAA'), 'pulsar una fila abre su cajón')
+    D.pulsa(uno('data-cierra-cajon')); await D.espera(10)
+    ok(!uno('data-cajon', 'AAA'), '✕ cierra el cajón')
     m.quita()
   }
 

@@ -97,7 +97,23 @@ Las **vistas** son conjuntos de filtros con nombre, que se guardan como los plan
   - anon no lee nada.
   - Con sesión se leen empresas y cuentas, pero no se escriben.
 
-## 7. Comprobación
+## 7. «Guardar como lista» y el cajón de un valor
+
+- **«☰ Guardar como lista (N)»** (`lib/screener/lista.js`), junto al embudo:
+  - Guarda los N que pasan como una lista FIJA de la Watchlist, con el nombre propuesto «<vista> · dd/mm/aaaa» (editable).
+  - Se hace igual que la Watchlist: una fila en `watchlist_lists` con `user_id`; los valores que faltan se añaden a `watchlist` en el grupo «Screener» (los que ya estaban se reutilizan); y una fila en `watchlist_list_members` por valor.
+  - Un nombre repetido (sin distinguir mayúsculas) no se guarda y lo dice.
+  - Si algo falla a mitad, la lista creada se borra.
+  - Al terminar, la app relee la Watchlist, así la lista sale enseguida en «Una lista» del plan y en el Backtesting.
+- **El cajón de un valor**: se abre al pulsar una fila; Esc o ✕ lo cierran. Lleva:
+  - Si pasa la vista.
+  - Enlaces a su ficha de Fundamentals y a su gráfico (con la guardia de cambios sin guardar).
+  - «Crecimiento que exige el precio» (PER ÷ PEG razonable) frente al esperado (PER ÷ PEG esperado de Yahoo).
+  - Cada filtro fundamental con ✓/✗ (solo los encendidos), su fuente, la cuenta con sus cifras y el valor.
+  - Las fechas de las cuentas, del precio y del PEG.
+- **Pendiente** (más adelante): «Añadir a una lista» desde el cajón, la lista VIVA (que cambie sola) y «🔔 Avísame si entra o sale un valor» (con las Alertas).
+
+## 8. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:
 - Ventas corregidas en un documento posterior.
@@ -108,6 +124,7 @@ Las **vistas** son conjuntos de filtros con nombre, que se guardan como los plan
 - Filtros y vistas: universo, sectores quitados, «−N», ≤ y ≥, apagado, «no paga intereses», vistas viejas completadas y las 3 de ejemplo.
 - La pantalla montada (renderToString): embudo, tabla, «−N», orden con los sin dato al final, buscador con ✕, pestaña Técnico y «Cargando…».
 - Vistas guardadas: cambios (●), ventanas de salir y de borrar, las 3 de ejemplo la primera vez, cambiar y borrar por id. Con estado (DOM mínimo): cambiar el nombre, ir a otra pestaña (Cancelar / Salir sin guardar), nueva vista, descartar, apagar un filtro y descartar (78 en total).
+- «Guardar como lista»: nombre propuesto, usuario del token, valores ya en la Watchlist frente a nuevos, nombre repetido, borrado si falla a mitad, sin sesión. El cajón: «crecimiento exigido» 40 ÷ 2 = 20 % frente a 12 %, la cuenta del ROCE, y abrir y cerrar con estado (93 en total).
 - Balance anual que no tapa el 10-Q.
 - El universo y los tramos SIC.
 - La tabla de Wikipedia, y que esté vacía si cambia la página.

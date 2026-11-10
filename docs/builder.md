@@ -2640,3 +2640,11 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - `screener.js` (78) con estado sobre el DOM mínimo. Detalle en docs/screener.md §6.
 - Nada cambia en las demás pantallas ni en las cifras.
 - `scripts/comprobaciones/tesis.js`: la guardia `salirDeTesis` que comprueba ahora incluye el screener.
+
+## 103. Screener (parte 1, commit 5): «Guardar como lista» y el cajón de un valor
+
+- «☰ Guardar como lista (N)» crea una lista FIJA de la Watchlist con los que pasan (`lib/screener/lista.js`). Los valores nuevos entran en el grupo «Screener»; con un nombre repetido no se guarda, y si falla a mitad se borra la lista. Al terminar, la app relee la Watchlist (`onListaGuardada` → `reloadWatchlist` en pages/index.js).
+- Cajón de un valor (al pulsar una fila): ✓/✗ y la cuenta de cada filtro, crecimiento exigido frente al esperado, y enlaces a Fundamentals y al gráfico (`onIrAValor` → `setSimbolo` + `setSidePanel`, con la guardia).
+- `screener.js` (93). Detalle en docs/screener.md §7. Con esto queda hecha la PARTE 1 del screener.
+- Nada cambia en las demás pantallas ni en las cifras.
+- `scripts/comprobaciones/tesis.js`: 19 sitios que cambian de pestaña (el nuevo, los enlaces del cajón, pasa por `salirDeTesis`).
