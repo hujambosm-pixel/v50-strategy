@@ -189,6 +189,24 @@ Decidido con Sergi el 10/11 (opción B): «en las últimas N velas», N = 1 por 
 
 Sin la línea ««−N»: cuántos quita cada filtro» debajo del panel: su explicación y su ejemplo están en el tooltip del número rojo de cada filtro (solo cuando quita alguno).
 
+## 13. Vista ↔ tesis (V9.1171)
+
+Sin cambios en la base: la columna `relacionados` de `tesis_inversion` ya admite cualquier tipo (solo exige un array de 20 KB como mucho). La app acepta ahora un tercer tipo, `{ tipo: 'vista', id }` (`TIPOS_ENLACE` en `lib/tesis.js`).
+- **En la tesis**, «Relacionado»:
+  - Ficha «Screener · <nombre de la vista>», con «Abrir» y ×. Si la vista se ha borrado, «Screener · (borrado)».
+  - «+ Añadir estrategia, plan o vista»: debajo de los planes, «Vistas del screener». Son las vistas GUARDADAS (`listarNombresVistas`), en el orden de sus pestañas.
+  - El contador de la lista cuenta también las vistas («1 vista relacionada»; con varios tipos, «1 estrategia, 1 plan y 1 vista relacionados»).
+- **«Abrir»** pasa por la guardia de la tesis, como el de un plan. Va al Screener con esa vista como pestaña activa (`abrirVistaEnScreener` en `pages/index.js`, prop `abrirVista`).
+  - Si en el screener hay cambios sin guardar en otra vista, sale la ventana de siempre.
+  - Si la vista ya no existe: «⚠ Esa vista del screener ya no existe (se ha borrado).».
+- **En el screener**, junto a la papelera de la vista: «💡 <título> ›» o «💡 Tesis (N) ▾» (`TesisEnlace`, el mismo del Builder). Abre la tesis, con la guardia de cambios sin guardar del screener.
+  - Una vista sin guardar no tiene tesis.
+  - Las tesis se leen (solo lectura) cada vez que se entra en el Screener.
+- **Comprobaciones**:
+  - `tesis-enlaces.js`: cuentas con vistas, la ficha, lo que se guarda y la lista de elegir.
+  - `tesis.js`: el sitio nuevo que cambia de pantalla (20) pasa por la guardia de la tesis.
+  - `screener.js` (153): el «💡» de la vista, abrir por id, vista borrada y con cambios sin guardar.
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:

@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1170'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1171'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -912,6 +912,9 @@ export default function Home() {
   const abrirEnBuilder=(s)=>{ setBuilderAbrir({fila:s?{...s}:null,n:Date.now()}); setSidePanel('builder') }
   // §55: un plan guardado, por su id, en el paso 3 (desde «Relacionado» de una tesis). { planId, n }
   const abrirPlanEnBuilder=(id)=>{ setBuilderAbrir({planId:Number(id),n:Date.now()}); setSidePanel('builder') }
+  // docs/screener.md §13: una vista guardada del screener, por su id (desde «Relacionado» de una tesis). { id, n }
+  const [screenerAbrir,setScreenerAbrir]=useState(null)
+  const abrirVistaEnScreener=(id)=>{ setScreenerAbrir({id:Number(id),n:Date.now()}); setSidePanel('screener') }
   // V9.1092: la pantalla «Tesis» (components/TesisPanel.js, docs/tesis.md) deja aquí su pregunta de «cambios sin guardar»: antes de
   // salir de la pestaña se le pregunta; devuelve true si ha abierto la pregunta (y seguirá ella al responder). Todo lo que saca de «Tesis»
   // desde fuera de la pantalla (menú, logo, cerrar sesión) pasa por salirDeTesis.
@@ -5634,7 +5637,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1170</title>
+        <title>Trading Simulator V9.1171</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5723,7 +5726,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1170
+            <span className="dot"/>Trading Simulator V9.1171
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8298,13 +8301,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
             {/* ══ TESIS (V9.1092, components/TesisPanel.js, docs/tesis.md): mis tesis de inversión en texto libre, a ancho completo.
                 Aislada: no toca el motor ni el Builder. «Abrir» de una estrategia enlazada la abre en el paso 1 del Builder. ══ */}
             {sidePanel==='tesis'&&(
-              <ProteccionPanel nombre="Tesis"><TesisPanel estrategias={strategies} salida={tesisSalida} abrirId={tesisAbrir?.id??null} onAbierta={()=>setTesisAbrir(null)} onAbrirEstrategia={(s)=>abrirEnBuilder(s)} onAbrirPlan={abrirPlanEnBuilder}/></ProteccionPanel>
+              <ProteccionPanel nombre="Tesis"><TesisPanel estrategias={strategies} salida={tesisSalida} abrirId={tesisAbrir?.id??null} onAbierta={()=>setTesisAbrir(null)} onAbrirEstrategia={(s)=>abrirEnBuilder(s)} onAbrirPlan={abrirPlanEnBuilder} onAbrirVista={abrirVistaEnScreener}/></ProteccionPanel>
             )}
             {/* ══ SCREENER (docs/screener.md, components/ScreenerPanel.js): buscador de valores por sus cuentas de la SEC, a ancho completo.
                 Aislado: no toca el motor ni ninguna cifra del resto de la app. ══ */}
             {(screenerVisitado||sidePanel==='screener')&&(
               <div style={{display:sidePanel==='screener'?'contents':'none'}}>
-                <ProteccionPanel nombre="Screener"><ScreenerPanel visible={sidePanel==='screener'} salida={screenerSalida} onListaGuardada={()=>reloadWatchlist()} onIrAValor={(sym,panel)=>salirDeTesis(()=>{setSimbolo(sym);setSidePanel(panel)})} estrategias={strategies}/></ProteccionPanel>
+                <ProteccionPanel nombre="Screener"><ScreenerPanel visible={sidePanel==='screener'} salida={screenerSalida} onListaGuardada={()=>reloadWatchlist()} onIrAValor={(sym,panel)=>salirDeTesis(()=>{setSimbolo(sym);setSidePanel(panel)})} estrategias={strategies} onAbrirTesis={abrirTesis} abrirVista={screenerAbrir} onVistaAbierta={()=>setScreenerAbrir(null)}/></ProteccionPanel>
               </div>
             )}
 

@@ -194,6 +194,10 @@ texto con visor a pantalla completa, más un botón para leerlos al lado del tex
 - **Pulsar** abre la pestaña Tesis con esa tesis (`abrirTesis` de la página, que pasa por `salirDeTesis`): con cambios sin guardar en un plan, sale la ventana de siempre. **El paso 1 no tiene esa guardia, hoy tampoco para los otros caminos**: el Builder sigue montado y oculto mientras se está en Tesis, así que lo escrito sigue ahí al volver. Si la tesis ya no existe al abrirla, lo dice y abre la más reciente.
 - Comprobado: `scripts/comprobaciones/tesis-enlaces.js` (en `comunes.sh`), con estado y efectos: 0, 1 y varias tesis en los tres pasos y en «Mi trabajo»; tesis borrada; plan sin guardar; la guardia con «Cancelar» y «Salir sin guardar»; mirar no escribe en la base.
 
+## Vistas del screener en «Relacionado» (V9.1171)
+
+La tesis enlaza también vistas guardadas del screener: ficha «Screener · <nombre>» con «Abrir», «Vistas del screener» en la lista de elegir y el contador con «vista(s)». Desde el screener, «💡 …» junto al nombre de la vista. Sin cambios en la base. Detalle en docs/screener.md §13.
+
 ## «Relacionado» a la derecha y contador en la lista
 
 `components/TesisPanel.js`, `TesisAdjuntos.js` (`IconoEnlace`), `TesisEditor.js`, `TesisEnlace.js` y `lib/tesis.js` (`cuentaRelacionados`). Sin cambios en la base. Ninguna cifra cambia. Cambia lo escrito en «Relacionado en los dos sentidos» sobre dónde va y cómo se llama el enlace.

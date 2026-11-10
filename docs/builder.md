@@ -2692,3 +2692,11 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 
 - Pedido por Sergi al ver V9.1169 (10/11): fuera la línea ««−N»: cuántos quita cada filtro» de debajo del panel; su explicación y su ejemplo pasan al tooltip del número rojo de cada filtro.
 - screener.js: de 147 a 148. Nada más cambia.
+
+## 109. Screener: vista ↔ tesis
+
+- Una tesis enlaza también vistas guardadas del screener: tipo `vista` en `relacionados`, sin cambios en la base.
+- En la tesis: ficha «Screener · nombre» con «Abrir», que abre la vista en el Screener. En el screener: «💡 …» junto al nombre de la vista, que abre la tesis.
+- Detalle en docs/screener.md §13 y docs/tesis.md.
+- Comprobaciones: `tesis-enlaces.js`, `tesis.js` (20 sitios que cambian de pantalla) y `screener.js` (153).
+- Nada cambia en las cifras. Las tesis guardadas no cambian: `camposDe` da lo mismo para las que no enlazan vistas.

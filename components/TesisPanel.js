@@ -16,7 +16,7 @@ import { esDeTarjetas } from '../lib/pruebaAzar'
 import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
 import { trozosResaltados } from '../lib/builder/buscar'
 import { AYUDA_RELACIONADO, AYUDA_TESIS, COLORES_RESALTE, ESTADOS_TESIS, HOJA, TITULO_NUEVA, borrarTesis, buscaTesis, cambiarTesis, crearTesis, cuentaRelacionados, cuentasTesis, estadoTesis, fechaCorta, fechaHora,
-  fichaDe, guardaBuscarEnTexto, haceTexto, igualesTesis, imagenesSobrantes, leeBuscarEnTexto, lineaCoincidencia, listarNombresPlanes, listarTesis, marcarRevisada, ordenTesis, problemaDe, respondeSalida } from '../lib/tesis'
+  fichaDe, guardaBuscarEnTexto, haceTexto, igualesTesis, imagenesSobrantes, leeBuscarEnTexto, lineaCoincidencia, listarNombresPlanes, listarNombresVistas, listarTesis, marcarRevisada, ordenTesis, problemaDe, respondeSalida } from '../lib/tesis'
 import { ANCHO_MIN_LADO, AVISO_SIN_GUARDAR, avisoBorrarTesis, avisoDe, borrar, borrarTodoDeTesis, colorEspacio, descargar, espacioUsado, filasDeTodas, listaPlegadaDe, listar, olvidaAlLadoViejo, porcentajeEspacio, resumenArchivos, subir, tamanoLegible, urlsFirmadas } from '../lib/tesisArchivos'
 import { BotonLado, BotonLista, IconoClip, IconoEnlace, PanelLado, Visor, ZonaAdjuntos } from './TesisAdjuntos'
 import { Papelera, Pregunta } from './VentanaPregunta'
@@ -29,7 +29,7 @@ const EditorTesis = dynamic(() => import('./TesisEditor'), { ssr: false, loading
 
 const Etiqueta = ({ estado }) => { const e = estadoTesis(estado); return <span data-estado={e.id} style={{ display: 'inline-block', padding: '1px 9px', borderRadius: 999, background: e.fondo, color: e.color, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>{e.nombre}</span> }
 // Las estrategias y los planes enlazados que aún existen, junto al clip; sin ninguno, nada.
-const ContadorEnlaces = ({ relacionados, estrategias, planes }) => { const c = cuentaRelacionados(relacionados, estrategias, planes); return !!c.total && <span data-enlaces={c.total} title={c.pista} style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 2, color: B.secundario, fontSize: 12 }}><IconoEnlace/>{c.total}</span> }
+const ContadorEnlaces = ({ relacionados, estrategias, planes, vistas }) => { const c = cuentaRelacionados(relacionados, estrategias, planes, vistas); return !!c.total && <span data-enlaces={c.total} title={c.pista} style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 2, color: B.secundario, fontSize: 12 }}><IconoEnlace/>{c.total}</span> }
 const HojaLineas = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/>
@@ -38,11 +38,12 @@ const HojaLineas = () => (
 const Resaltado = ({ trozos }) => trozos.map((x, k) => x.marca ? <mark key={k} data-marca style={{ background: COLORES_RESALTE[0].color, color: B.titulo, borderRadius: 2 }}>{x.t}</mark> : <span key={k}>{x.t}</span>)
 
 // abrirId: la tesis que se pide abrir al entrar (desde «💡 …» del Builder); onAbierta: ya se ha atendido, para no repetirlo la próxima vez que se entre.
-export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbrirPlan, salida = null, abrirId = null, onAbierta = null, deps = null, inicial = null }) {
+export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbrirPlan, onAbrirVista = null, salida = null, abrirId = null, onAbierta = null, deps = null, inicial = null }) {
   // El ctx en cada llamada: ctxConSesion() pone el token vigente y renueva la sesión ante 401 (nada congelado al montar).
   const ctx = () => deps?.ctx || (hayConfigSupabase() ? ctxConSesion() : null)
   const [tesis, setTesis] = useState(inicial?.tesis || null)
   const [planes, setPlanes] = useState(inicial?.planes || [])
+  const [vistasScr, setVistasScr] = useState(inicial?.vistas || [])   // las vistas guardadas del screener (id, nombre), para «Relacionado»
   const [fallo, setFallo] = useState(inicial?.fallo || null)
   const [abierta, setAbierta] = useState(inicial?.abierta ?? null)   // id de la tesis abierta (null: ninguna o la nueva)
   const [nueva, setNueva] = useState(!!inicial?.nueva)   // la abierta es una nueva sin guardar
@@ -82,6 +83,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbri
     let v = true
     listarTesis(c).then(xs => { if (v) setTesis(xs) }).catch(e => { if (v) { setTesis([]); setFallo(e.message) } })
     listarNombresPlanes(c).then(xs => { if (v) setPlanes(xs) }).catch(() => {})
+    listarNombresVistas(c).then(xs => { if (v) setVistasScr(xs) }).catch(() => {})
     return () => { v = false }
   }, [])
   const ordenadas = useMemo(() => ordenTesis(tesis || []), [tesis])
@@ -241,7 +243,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbri
   const cambiaEnTexto = () => { const v = !enTexto; setEnTexto(v); guardaBuscarEnTexto(v) }
 
   const tarjetas = useMemo(() => estrategias.filter(esDeTarjetas).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
-  const fichas = (borr?.relacionados || []).map(r => fichaDe(r, estrategias, planes))
+  const fichas = (borr?.relacionados || []).map(r => fichaDe(r, estrategias, planes, vistasScr))
   const yaEsta = (tipo, id) => (borr?.relacionados || []).some(r => r.tipo === tipo && String(r.id) === String(id))
   const enlaza = (tipo, id) => { cambia('relacionados', [...(borr.relacionados || []), { tipo, id: String(id) }]); setAnadiendo(false) }
   const quita = (k) => cambia('relacionados', borr.relacionados.filter((_, i) => i !== k))
@@ -306,7 +308,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbri
           <div className="ts-lista-filas" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {nueva && (
               <div data-item="nueva" aria-current="true" style={{ padding: '8px 10px', borderRadius: B.radioBoton, background: B.siguienteFondo, border: `1px solid ${B.siguienteBorde}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ flex: 1, minWidth: 0, fontWeight: 600, color: B.titulo }}>{(borr?.titulo || '').trim() || TITULO_NUEVA}</div><ContadorEnlaces relacionados={borr?.relacionados} estrategias={estrategias} planes={planes}/></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ flex: 1, minWidth: 0, fontWeight: 600, color: B.titulo }}>{(borr?.titulo || '').trim() || TITULO_NUEVA}</div><ContadorEnlaces relacionados={borr?.relacionados} estrategias={estrategias} planes={planes} vistas={vistasScr}/></div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}><Etiqueta estado={borr?.estado}/><span style={{ ...S.apagado, color: AMARILLO }}>sin guardar</span></div>
               </div>)}
             {lista.map(t => { const on = !nueva && t.id === abierta, linea = lineas.get(t.id), nAdjuntos = resumen.porTesis[t.id]?.adjuntos || 0; return (
@@ -316,7 +318,7 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbri
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <div style={{ flex: 1, minWidth: 0, fontWeight: 600, color: B.titulo, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><Resaltado trozos={trozosResaltados(t.titulo, busca)}/></div>
                   {!!nAdjuntos && <span data-clip={nAdjuntos} title={`${nAdjuntos} ${nAdjuntos === 1 ? 'adjunto' : 'adjuntos'}`} style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 2, color: B.secundario, fontSize: 12 }}><IconoClip/>{nAdjuntos}</span>}
-                  <ContadorEnlaces relacionados={on ? borr?.relacionados : t.relacionados} estrategias={estrategias} planes={planes}/>
+                  <ContadorEnlaces relacionados={on ? borr?.relacionados : t.relacionados} estrategias={estrategias} planes={planes} vistas={vistasScr}/>
                 </div>
                 {linea && <div data-linea-texto style={{ ...S.apagado, fontSize: 12, lineHeight: 1.35, marginTop: 3, overflowWrap: 'anywhere' }}><Resaltado trozos={linea}/></div>}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}><Etiqueta estado={t.estado}/><span style={S.apagado}>{haceTexto(t)}</span></div>
@@ -367,9 +369,10 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbri
                         : <span>{f.etiqueta} · {f.nombre}</span>}
                       {!f.borrado && f.tipo === 'estrategia' && onAbrirEstrategia && <button data-abrir onClick={() => conGuardia(() => onAbrirEstrategia(f.fila))} style={{ ...S.enlace, fontSize: 13 }}>Abrir</button>}
                       {!f.borrado && f.tipo === 'plan' && onAbrirPlan && <button data-abrir data-abrir-plan={f.id} onClick={() => conGuardia(() => onAbrirPlan(f.id))} style={{ ...S.enlace, fontSize: 13 }}>Abrir</button>}
+                      {!f.borrado && f.tipo === 'vista' && onAbrirVista && <button data-abrir data-abrir-vista={f.id} onClick={() => conGuardia(() => onAbrirVista(f.id))} style={{ ...S.enlace, fontSize: 13 }}>Abrir</button>}
                       <button aria-label={`Quitar ${f.etiqueta.toLowerCase()}`} onClick={() => quita(k)} style={{ ...S.enlace, color: B.apagado, fontSize: 16, padding: '0 4px' }}>×</button>
                     </span>))}
-                  <button data-anadir aria-expanded={anadiendo} onClick={() => setAnadiendo(a => !a)} style={{ ...S.boton, padding: '2px 10px', fontSize: 13 }}>+ Añadir estrategia o plan</button>
+                  <button data-anadir aria-expanded={anadiendo} onClick={() => setAnadiendo(a => !a)} style={{ ...S.boton, padding: '2px 10px', fontSize: 13 }}>+ Añadir estrategia, plan o vista</button>
                 </div>
                 {anadiendo && (
                   <div data-elegir style={{ position: 'absolute', top: '100%', right: 0, zIndex: 30, width: 420, maxWidth: '86vw', marginTop: 4, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, maxHeight: 260, overflowY: 'auto', padding: 8, background: B.fondo, boxShadow: '0 8px 24px rgba(0,0,0,0.45)' }}>
@@ -379,6 +382,9 @@ export default function TesisPanel({ estrategias = [], onAbrirEstrategia, onAbri
                     <div style={{ ...S.apagado, margin: '8px 4px 4px' }}>Planes guardados</div>
                     {!planes.length && <div style={{ ...S.apagado, margin: '0 4px 6px' }}>No tienes planes guardados.</div>}
                     {planes.map(p => <button key={`p${p.id}`} disabled={yaEsta('plan', p.id)} onClick={() => enlaza('plan', p.id)} style={{ ...S.enlace, display: 'block', padding: '4px', opacity: yaEsta('plan', p.id) ? 0.45 : 1 }}>{p.nombre}</button>)}
+                    <div style={{ ...S.apagado, margin: '8px 4px 4px' }}>Vistas del screener</div>
+                    {!vistasScr.length && <div style={{ ...S.apagado, margin: '0 4px 6px' }}>No tienes vistas guardadas del screener.</div>}
+                    {vistasScr.map(x => <button key={`v${x.id}`} data-elegir-vista={x.id} disabled={yaEsta('vista', x.id)} onClick={() => enlaza('vista', x.id)} style={{ ...S.enlace, display: 'block', padding: '4px', opacity: yaEsta('vista', x.id) ? 0.45 : 1 }}>{x.nombre}</button>)}
                   </div>)}
               </div>
             </div>

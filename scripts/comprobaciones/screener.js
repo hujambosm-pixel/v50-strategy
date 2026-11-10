@@ -392,6 +392,32 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     m.quita()
   }
 
+  // ── §13 · Vista ↔ tesis: «💡 …» junto al nombre y abrir una vista por su id ──────────────────────────────────────────────
+  {
+    const tesisE = [{ id: 31, titulo: 'Empresas con poca deuda', relacionados: [{ tipo: 'vista', id: '7' }], revisada_en: '2026-11-01' },
+      { id: 32, titulo: 'Otra', relacionados: [{ tipo: 'plan', id: '7' }], revisada_en: '2026-11-02' }]
+    let h = renderToString(React.createElement(P, { inicial: { empresas: E, vistas: [guardada()], tesis: tesisE }, onAbrirTesis: () => {} })).split('<!-- -->').join('')
+    ok(h.includes('data-enlace-tesis="31"') && h.includes('💡 Empresas con poca deuda ›') && !h.includes('data-enlace-tesis="32"'), 'la vista 7 enseña su tesis (y no la del plan 7)')
+    h = renderToString(React.createElement(P, { inicial: { empresas: E, vistas: [pestanaDe({ nombre: 'Sin guardar', vista: v1 })], tesis: tesisE } })).split('<!-- -->').join('')
+    ok(!h.includes('data-enlace-tesis'), 'una vista sin guardar no tiene tesis')
+    const RDC = require('react-dom/client')
+    const dos = [pestanaDe({ id: 7, nombre: 'Siete', vista: v1 }), pestanaDe({ id: 8, nombre: 'Ocho', vista: v1 })]
+    let abiertas = 0
+    const m = D.monta(React.createElement(P, { inicial: { empresas: E, vistas: dos, tesis: [] }, abrirVista: { id: 8, n: 1 }, onVistaAbierta: () => { abiertas++ } }), RDC)
+    await D.espera(40)
+    ok(m.raiz.conAtributo('data-nombre-vista')[0]?.value === 'Ocho' && abiertas === 1, `abrir la vista 8 desde una tesis: se ve «Ocho» (${m.raiz.conAtributo('data-nombre-vista')[0]?.value})`)
+    m.quita()
+    const m2 = D.monta(React.createElement(P, { inicial: { empresas: E, vistas: dos, tesis: [] }, abrirVista: { id: 99, n: 2 }, onVistaAbierta: () => {} }), RDC)
+    await D.espera(40)
+    ok(m2.raiz.conAtributo('data-aviso-vista')[0]?.textContent.includes('ya no existe') && m2.raiz.conAtributo('data-nombre-vista')[0]?.value === 'Siete', 'una vista borrada: lo dice y se queda en la que estaba')
+    m2.quita()
+    // Con cambios sin guardar en la vista de ahora, la ventana de siempre antes de cambiar.
+    const m3 = D.monta(React.createElement(P, { inicial: { empresas: E, vistas: [{ ...dos[0], nombre: 'Siete cambiada' }, dos[1]], tesis: [] }, abrirVista: { id: 8, n: 3 }, onVistaAbierta: () => {} }), RDC)
+    await D.espera(40)
+    ok(m3.raiz.conAtributo('data-p', 'salir')[0] && m3.raiz.conAtributo('data-nombre-vista')[0]?.value === 'Siete cambiada', 'con cambios sin guardar, pregunta antes de abrir la otra')
+    m3.quita()
+  }
+
   // La app deja el screener montado tras la primera visita (como el Builder): al volver de una ficha o un gráfico sigue igual.
   const fuenteIndex = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'pages', 'index.js'), 'utf8')
   ok(fuenteIndex.includes("{(screenerVisitado||sidePanel==='screener')&&(") && fuenteIndex.includes("<div style={{display:sidePanel==='screener'?'contents':'none'}}>") && fuenteIndex.includes("useEffect(()=>{ if(sidePanel==='screener') setScreenerVisitado(true) },[sidePanel])"), 'el screener sigue montado (oculto) al ir a otra pantalla')

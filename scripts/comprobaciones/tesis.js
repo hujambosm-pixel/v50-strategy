@@ -322,7 +322,10 @@ const cuenta = (html, s) => html.split(s).length - 1
   ok(fuenteIndex.includes(`onIrAValor={(sym)=>salirDeTesis(()=>{setSimbolo(sym);setSidePanel('watchlist')})}`), 'el «↗» de «La cartera por dentro» del plan también pregunta')
   // V9.1165: el 19.º son los enlaces del cajón del screener (Fundamentals y gráfico, onIrAValor de ScreenerPanel), que pasan por salirDeTesis.
   ok(fuenteIndex.includes(`onIrAValor={(sym,panel)=>salirDeTesis(()=>{setSimbolo(sym);setSidePanel(panel)})}`), 'los enlaces del cajón del screener también preguntan')
-  ok(llamadasPanel === 19, `los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
+  // §13 (docs/screener.md): el 20.º es abrir una vista del screener desde «Relacionado» de una tesis (abrirVistaEnScreener): como
+  // «Abrir» de un plan, la tesis pregunta antes con su propia guardia (conGuardia de TesisPanel).
+  ok(fuenteIndex.includes(`const abrirVistaEnScreener=(id)=>{ setScreenerAbrir({id:Number(id),n:Date.now()}); setSidePanel('screener') }`) && leer('components', 'TesisPanel.js').includes('onClick={() => conGuardia(() => onAbrirVista(f.id))}'), 'abrir una vista desde una tesis pasa por la guardia de la tesis')
+  ok(llamadasPanel === 20,`los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
 
   // El buscador.
   const tres2 = [

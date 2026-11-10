@@ -162,6 +162,22 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
     [[{ tipo: 'estrategia', id: 'borrada' }, { tipo: 'plan', id: 9999 }, { tipo: 'otro', id: 'e1' }, null], 0, ''], [[{ tipo: 'estrategia', id: 'borrada' }, { tipo: 'plan', id: 10 }], 1, '1 plan relacionado']]) {
     const c = CR(rel); ok(c.total === n && c.pista === pista, `${JSON.stringify(rel)}: ${n}, «${pista}» (${c.total}, «${c.pista}»)`)
   }
+  // §13 (docs/screener.md): vistas del screener en «Relacionado».
+  const VISTAS = [{ id: 7, nombre: 'Empresas con poca deuda' }, { id: 8, nombre: 'Crecer barato' }]
+  for (const [rel, n, pista] of [
+    [[{ tipo: 'vista', id: '7' }], 1, '1 vista relacionada'], [[{ tipo: 'vista', id: 7 }, { tipo: 'vista', id: 8 }], 2, '2 vistas relacionadas'],
+    [[{ tipo: 'estrategia', id: 'e1' }, { tipo: 'plan', id: 10 }, { tipo: 'vista', id: 8 }], 3, '1 estrategia, 1 plan y 1 vista relacionados'],
+    [[{ tipo: 'plan', id: 10 }, { tipo: 'vista', id: 7 }, { tipo: 'vista', id: 99 }], 2, '1 plan y 1 vista relacionados']]) {
+    const c = T.cuentaRelacionados(rel, ests, PLANES, VISTAS); ok(c.total === n && c.pista === pista, `vistas · ${JSON.stringify(rel)}: ${n}, «${pista}» (${c.total}, «${c.pista}»)`)
+  }
+  ok(T.cuentaRelacionados([{ tipo: 'vista', id: 7 }], ests, PLANES).total === 0, 'sin la lista de vistas, una vista cuenta como borrada')
+  const fv = T.fichaDe({ tipo: 'vista', id: '8' }, ests, PLANES, VISTAS)
+  ok(fv.etiqueta === 'Screener' && fv.nombre === 'Crecer barato' && !fv.borrado && T.fichaDe({ tipo: 'vista', id: '99' }, ests, PLANES, VISTAS).borrado, 'ficha «Screener · Crecer barato»; una vista borrada sale «(borrado)»')
+  ok(JSON.stringify(T.camposDe({ titulo: 'x', relacionados: [{ tipo: 'vista', id: 7 }, { tipo: 'otro', id: 1 }, { tipo: 'plan', id: 10 }] }).relacionados) === '[{"tipo":"vista","id":"7"},{"tipo":"plan","id":"10"}]', 'se guarda el enlace a una vista (y no un tipo desconocido)')
+  const conVista = renderToString(h(TP, { estrategias: ests, onAbrirEstrategia: () => {}, onAbrirPlan: () => {}, onAbrirVista: () => {}, deps: { ctx: null, Editor: Sustituto }, inicial: { tesis: [{ ...t1, relacionados: [{ tipo: 'vista', id: '7' }] }], planes: PLANES, vistas: VISTAS, abierta: 1, borrador: { titulo: t1.titulo, texto: 'hola', estado: 'idea', relacionados: [{ tipo: 'vista', id: '7' }] }, anadiendo: true } })).split('<!-- -->').join('')
+  ok(conVista.includes('data-ficha="vista-7"') && conVista.includes('Screener · Empresas con poca deuda') && conVista.includes('data-abrir-vista="7"'), 'la ficha de la vista con «Abrir»')
+  ok(conVista.includes('Vistas del screener') && /data-elegir-vista="7"[^>]*disabled=""|disabled=""[^>]*data-elegir-vista="7"/.test(conVista) && conVista.includes('data-elegir-vista="8"') && conVista.includes('+ Añadir estrategia, plan o vista'), 'la lista de elegir trae las vistas (la ya enlazada, desactivada)')
+
   const tesisL = [tesis(1, 'Sin', []), tesis(2, 'Una', [{ tipo: 'plan', id: '10' }]), tesis(3, 'Varias', [{ tipo: 'estrategia', id: 'e1' }, { tipo: 'estrategia', id: 'e2' }, { tipo: 'plan', id: '10' }]), tesis(4, 'Borrado', [{ tipo: 'plan', id: '9999' }])]
   const conta = (x, id) => x.raiz.busca(n => n.getAttribute('data-item') === String(id))?.todos(n => n.getAttribute('data-enlaces') != null)[0] || null
   const clipYEnlace = renderToString(h(TP, { estrategias: ests, deps: { ctx: null, Editor: Sustituto }, inicial: { tesis: tesisL, planes: PLANES, resumen: { bytes: 0, porTesis: { 2: { adjuntos: 1, imagenes: 0, bytes: 1 } } } } }))

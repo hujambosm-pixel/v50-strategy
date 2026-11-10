@@ -17,6 +17,8 @@ import { borrarVista, cambiarVista, creaEjemplos, crearVista, listarVistas, nomb
 import { Papelera, Pregunta } from './VentanaPregunta'
 import { guardarComoLista, nombrePropuesto } from '../lib/screener/lista'
 import { esDeTarjetas, fotoDe } from '../lib/pruebaAzar'
+import TesisEnlace from './TesisEnlace'
+import { listarEnlacesTesis, tesisDe } from '../lib/tesis'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#56d364'
 const copia = (x) => JSON.parse(JSON.stringify(x))
@@ -83,7 +85,7 @@ const valorOrden = (e, col) => {
 // visible: la app la deja montada al ir a otra pantalla (pages/index.js) y la oculta; oculta, Esc no cierra el cajón.
 // refs (inicial.refs): el técnico de SPY y de los ETF de sectores. pideTecnico(símbolos): una tanda de «Actualizar precios» (en las
 // comprobaciones, una falsa).
-export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor = null, onListaGuardada = null, visible = true, pideTecnico = pideTecnicoDeVerdad, estrategias = [], pideSenales = pideSenalesDeVerdad }) {
+export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor = null, onListaGuardada = null, visible = true, pideTecnico = pideTecnicoDeVerdad, estrategias = [], pideSenales = pideSenalesDeVerdad, onAbrirTesis = null, abrirVista = null, onVistaAbierta = null }) {
   const [estado, setEstado] = useState(() => inicial.empresas ? { cargando: false, error: null, empresas: inicial.empresas } : { cargando: true, error: null, empresas: [] })
   const [refs, setRefs] = useState(inicial.refs || {})
   const [act, setAct] = useState(inicial.act || null)   // «Actualizar precios»: { hechos, total, fallos: [símbolo], fin, parado }
@@ -93,6 +95,9 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
   const [senales, setSenales] = useState(inicial.senales || {})
   const [calcSenal, setCalcSenal] = useState(null)
   const enCursoSenal = useRef(new Set())
+  const [vistasLeidas, setVistasLeidas] = useState(!!inicial.vistas || !!inicial.empresas)
+  const [enlacesTesis, setEnlacesTesis] = useState(inicial.tesis || [])
+  const [avisoVista, setAvisoVista] = useState(null)
   const [vistas, setVistas] = useState(() => inicial.vistas || VISTAS_EJEMPLO.map(v => pestanaDe({ nombre: v.nombre, vista: copia(v.vista) })))
   const [vistasError, setVistasError] = useState(null)
   const [guardando, setGuardando] = useState(false)
@@ -122,10 +127,28 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
     const ctx = ctxConSesion()
     listarVistas(ctx)
       .then(l => l && l.length ? l : creaEjemplos(ctx))
-      .then(l => { if (vivo) { setVistas(l.map(pestanaDe)); setIv(0) } })
-      .catch(e => { if (vivo) setVistasError(`${e.message} Las vistas de ejemplo funcionan, pero no se pueden guardar.`) })
+      .then(l => { if (vivo) { setVistas(l.map(pestanaDe)); setIv(0); setVistasLeidas(true) } })
+      .catch(e => { if (vivo) { setVistasError(`${e.message} Las vistas de ejemplo funcionan, pero no se pueden guardar.`); setVistasLeidas(true) } })
     return () => { vivo = false }
   }, [])
+  // §13: las tesis que enlazan cada vista («💡 …» junto al nombre). Se leen cada vez que se entra en la pantalla (una tesis puede
+  // haber cambiado mientras tanto). Solo se lee.
+  useEffect(() => {
+    if (inicial.empresas || !visible || !hayConfigSupabase()) return
+    let vivo = true
+    listarEnlacesTesis(ctxConSesion()).then(xs => { if (vivo) setEnlacesTesis(xs || []) }).catch(() => {})
+    return () => { vivo = false }
+  }, [visible])
+  // §13: abrir una vista por su id (desde «Relacionado» de una tesis), cuando ya están leídas. Con cambios sin guardar en otra
+  // vista, la ventana de siempre. Si ya no existe, lo dice.
+  useEffect(() => {
+    if (!abrirVista || !vistasLeidas) return
+    onVistaAbierta?.()
+    const i = vistas.findIndex(v => v.id != null && String(v.id) === String(abrirVista.id))
+    if (i < 0) { setAvisoVista('Esa vista del screener ya no existe (se ha borrado).'); return }
+    setAvisoVista(null)
+    if (i !== iv) conGuardia(() => setIv(i))
+  }, [abrirVista?.n, vistasLeidas])
 
   const actual = vistas[Math.min(iv, vistas.length - 1)]
   const conCambios = conCambiosDe(actual)
@@ -310,6 +333,8 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
           style={{ ...caja, width: 260, fontSize: 14, fontWeight: 700, padding: '5px 8px' }}/>
         <button data-duplicar onClick={() => nueva('copia')} title="Duplicar esta vista" style={{ ...S.boton, padding: '4px 8px', fontSize: 15 }}>⧉</button>
         <button data-borrar-vista onClick={() => setPregunta({ tipo: 'borrar' })} title="Borrar esta vista" style={{ ...S.boton, padding: '3px 7px', background: 'transparent' }}><Papelera tamano={17}/></button>
+        {actual.id != null && <TesisEnlace lista={tesisDe(enlacesTesis, 'vista', actual.id)} onAbrir={onAbrirTesis}/>}
+        {avisoVista && <span data-aviso-vista style={{ color: AMARILLO, fontSize: 13 }}>⚠ {avisoVista}</span>}
         <span style={{ flex: 1 }}/>
         {vistasError && <span data-error-vistas style={{ color: ROJO, fontSize: 13 }}>⚠ {vistasError}</span>}
         <button data-descartar disabled={!conCambios || guardando} onClick={descarta} style={{ ...S.boton, padding: '5px 12px', opacity: conCambios ? 1 : 0.5, cursor: conCambios ? 'pointer' : 'default' }}>Descartar cambios</button>
