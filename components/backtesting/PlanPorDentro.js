@@ -10,7 +10,9 @@
 //   · los parámetros del panel de «Backtest de un valor» (emaR, stop…) van con sus valores de partida: las estrategias de tarjetas no
 //     los usan, y así la petición es la del Backtesting con la app recién abierta;
 //   · el «↗» de un valor abre la Watchlist preguntando antes si hay cambios sin guardar (onIrAValor).
-// Con el universo dinámico (Nasdaq-100) todavía no se calcula: lo dice en una línea.
+// Con el universo dinámico (Nasdaq-100 · N más volátiles o con más momentum; docs/builder.md §111) pide lo MISMO que el Backtesting
+// (runBacktesting, pages/index.js): los activos y la máscara salen de estadoUniversoMc con lo leído de la base (universoDatos, que carga
+// BuilderPlan), reparto «Capital concentrado», sin pesos y con el campo universo. Mientras se lee la base o si el periodo no vale, lo dice.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import CarteraPorDentro from './CarteraPorDentro'
@@ -21,6 +23,7 @@ import { comisionesDePlan } from '../../lib/comisiones'
 import { cfgBaseMc, cuerpoMc, pesosNormalizadosMc } from '../../lib/peticionMc'
 import { leeRespuestaMc } from '../../lib/respuestaMc'
 import { mergeLista } from '../../lib/planes/lista'
+import { estadoUniversoMc, nDeUniverso, nombreUniverso, reglaDeUniverso } from '../../lib/universoMc'
 import { costesDe, creaCalculador, fechasDe, textoComision } from '../../lib/builder/planPantalla'
 const McMonthlyGainsChart = dynamic(() => import('../McMonthlyGainsChart'), { ssr: false })
 
@@ -30,32 +33,54 @@ export const ESPERA_POR_DENTRO = 1000
 const VACIO = Object.freeze([])
 
 // La petición del bloque: la misma que haría el Backtesting con estos ajustes («Single mode run» de runBacktesting). null si falta algo.
-export function peticionPorDentro({ a, estrategia, wlData = {} }) {
+// §111: con el Nasdaq-100, el estado del universo en el periodo del plan (estadoUniversoMc: activo, motivo, universo); null con «Lista manual».
+export function estadoUniversoPlan({ a, estrategia, universoDatos = {} }) {
+  const l = mergeLista(a?.lista)
+  if (!nDeUniverso(l.universo)) return null
+  const per = fechasDe(a || {})
+  return estadoUniversoMc({ universo: l.universo, datos: universoDatos?.[l.universo], fromDate: per?.desde || null, toDate: per?.hasta || null, estrategias: estrategia?.id ? [estrategia.id] : [] })
+}
+export function peticionPorDentro({ a, estrategia, wlData = {}, universoDatos = {} }) {
   if (!estrategia?.id || a?.donde !== 'lista') return null
   const l = mergeLista(a.lista), per = fechasDe(a), capital = Number(a.capital) || 0
-  if (l.universo !== 'manual' || !l.simbolos.length || !per?.desde || !per?.hasta || !(capital > 0)) return null
+  const estU = estadoUniversoPlan({ a, estrategia, universoDatos })
+  if (estU && !estU.activo) return null
+  const simbolos = estU ? estU.universo.simbolos : l.simbolos
+  if (!simbolos.length || !per?.desde || !per?.hasta || !(capital > 0)) return null
   const P = PANEL_DEFECTO
   const cfg = cfgBaseMc({ emaR: P.emaR, emaL: P.emaL, years: null, capitalIni: capital, fromDate: per.desde, toDate: per.hasta,
     tipoStop: P.tipoStop, atrP: P.atrP, atrM: P.atrM, sinPerdidas: P.sinPerdidas, reentry: P.reentry, tipoFiltro: P.tipoFiltro, sp500EmaR: P.sp500EmaR, sp500EmaL: P.sp500EmaL, tipoCapital: P.mcCapital,
     riskPerTrade: l.riskPerTrade, maxPortfolioPct: l.maxPortfolioPct, maxAccumRisk: l.maxAccumRisk, assumedStopPct: l.assumedStopPct, maxPosiciones: l.maxPosiciones, prioridad: l.prioridad, criterioUso: l.criterioUso,
     momentumN: l.momentumN, rsWindow: l.rsWindow, rsGateThr: l.rsGateThr, momGateThr: l.momGateThr, proxGateThr: l.proxGateThr, calculoPrioridad: l.calculoPrioridad,
-    scoreMap: Object.fromEntries(l.simbolos.map(sym => [sym, wlData?.[sym.toUpperCase()]?.active?.scoreMetricas ?? null])) })
+    scoreMap: Object.fromEntries(simbolos.map(sym => [sym, wlData?.[sym.toUpperCase()]?.active?.scoreMetricas ?? null])) })
+  const isNoStrategy = (estrategia.name || '').includes('No Strategy'), comisiones = comisionesDePlan(costesDe(a))
+  if (estU) {   // §111: el cuerpo del universo dinámico de runBacktesting, con las claves en su orden
+    const u = estU.universo
+    return { ...cuerpoMc({ symbols: u.simbolos, modoAsig: 'concentrado', weights: {}, cfg, strategyId: estrategia.id, isNoStrategy, filtros: l.filtros, intervalo: 'diario', comisiones }),
+      universo: { regla: reglaDeUniverso(l.universo), n: nDeUniverso(l.universo), mascara: u.mascara, elegidos: u.elegidos } }
+  }
   return cuerpoMc({ symbols: l.simbolos, modoAsig: l.modo, weights: pesosNormalizadosMc(l.modo, l.simbolos, l.pesos), cfg, strategyId: estrategia.id,
-    isNoStrategy: (estrategia.name || '').includes('No Strategy'), filtros: l.filtros, intervalo: 'diario', comisiones: comisionesDePlan(costesDe(a)) })
+    isNoStrategy, filtros: l.filtros, intervalo: 'diario', comisiones })
 }
 // Por qué no hay petición (para la línea de aviso).
-export function motivoSinPeticion({ a, estrategia }) {
+export function motivoSinPeticion({ a, estrategia, universoDatos = {} }) {
   const l = mergeLista(a?.lista), per = fechasDe(a || {})
   if (!estrategia?.id) return 'Elige una estrategia de tarjetas.'
-  if (l.universo !== 'manual') return 'Con el Nasdaq-100 «La cartera por dentro» todavía no se calcula: de momento, solo con «Lista manual».'
-  if (!l.simbolos.length) return 'Elige al menos un valor de la lista.'
+  const estU = estadoUniversoPlan({ a, estrategia, universoDatos })
+  if (estU && !estU.activo) {
+    const datos = universoDatos?.[l.universo]
+    if (datos?.error) return datos.error
+    if (!datos) return `Leyendo de la base el universo (${nombreUniverso(nDeUniverso(l.universo), reglaDeUniverso(l.universo))})…`
+    return `Con el Nasdaq-100 no se calcula: ${estU.motivo}.`
+  }
+  if (!estU && !l.simbolos.length) return 'Elige al menos un valor de la lista.'
   if (!per?.desde || !per?.hasta) return 'Elige el periodo en «Tu dinero».'
   if (!(Number(a?.capital) > 0)) return 'Pon el dinero inicial en «Tu dinero».'
   return null
 }
 
-export default function PlanPorDentro({ a, estrategia, estrategias = VACIO, apiFetch = apiFetchApp, version = null, visible = true, onIrAValor = null, wlData = null, calcula = null, motivo: motivoFuera = null }) {
-  const cuerpo = useMemo(() => motivoFuera ? null : peticionPorDentro({ a, estrategia, wlData: wlData || {} }), [a, estrategia, wlData, motivoFuera])
+export default function PlanPorDentro({ a, estrategia, estrategias = VACIO, apiFetch = apiFetchApp, version = null, visible = true, onIrAValor = null, wlData = null, calcula = null, motivo: motivoFuera = null, universoDatos = null }) {
+  const cuerpo = useMemo(() => motivoFuera ? null : peticionPorDentro({ a, estrategia, wlData: wlData || {}, universoDatos: universoDatos || {} }), [a, estrategia, wlData, motivoFuera, universoDatos])
   const clave = cuerpo ? JSON.stringify(cuerpo) : null
   const [calc, setCalc] = useState({ calculando: false, resultado: null, error: null, clave: null })
   const vivo = useRef(true)
@@ -210,7 +235,7 @@ export default function PlanPorDentro({ a, estrategia, estrategias = VACIO, apiF
 
 
   if (!visible) return null
-  const motivo = motivoFuera || (cuerpo ? null : motivoSinPeticion({ a, estrategia }))
+  const motivo = motivoFuera || (cuerpo ? null : motivoSinPeticion({ a, estrategia, universoDatos: universoDatos || {} }))
   const P = PANEL_DEFECTO
   return (
     <div data-por-dentro style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

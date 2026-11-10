@@ -50,6 +50,7 @@ import PanelPesos from './backtesting/PanelPesos'
 import PanelUniverso from './backtesting/PanelUniverso'
 import SelectorValores from './backtesting/SelectorValores'
 import PlanPorDentro, { peticionPorDentro, motivoSinPeticion } from './backtesting/PlanPorDentro'
+import { cargaUniversoMc, nDeUniverso, reglaDeUniverso } from '../lib/universoMc'
 import FiltrosPanel from './FiltrosPanel'
 import { mergeFiltros } from '../lib/filtros'
 import { numeroEs } from '../lib/utils'
@@ -293,8 +294,22 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // liquidez, sin apalancar: planListaCalculable) y con la MISMA petición de «La cartera por dentro» (cuerpoLista), que /api/plan pasa a
   // /api/multibacktest para sacar los candidatos de cada valor.
   const calcLista = useMemo(() => enLista && plan ? planListaCalculable(plan) : null, [enLista, plan])
-  const cuerpoLista = useMemo(() => enLista && estPorDentro ? peticionPorDentro({ a, estrategia: estPorDentro, wlData: datosLista?.wlData || {} }) : null, [enLista, a, estPorDentro, datosLista?.wlData])
-  const motivoLista = !enLista ? null : (motivoEstPorDentro || (calcLista && motivoListaNoCalculable(calcLista.plan)) || (!cuerpoLista ? motivoSinPeticion({ a, estrategia: estPorDentro }) : null))
+  // §111: con el Nasdaq-100, lo que hay en la base (universo_screener y universo_miembros), leído al elegirlo, como en el Backtesting (una
+  // vez por universo; si falló, o tras «Regenerar universo», que lo vacía, se vuelve a leer).
+  const universoLista = enLista ? (a.lista?.universo || 'manual') : 'manual'
+  const universoDatos = vistaLista.universoDatos
+  const hayDatosUniverso = !!universoDatos[universoLista] && !universoDatos[universoLista].error
+  useEffect(() => {
+    const n = nDeUniverso(universoLista), u = universoLista
+    if (!n || hayDatosUniverso || !ctx) return
+    let v = true
+    cargaUniversoMc(n, { url: ctx.url, headers: ctx.headers, fetch: ctx.fetch, regla: reglaDeUniverso(u) })
+      .then(d => { if (v) setVistaLista(x => ({ ...x, universoDatos: { ...x.universoDatos, [u]: d } })) })
+      .catch(e => { if (v) setVistaLista(x => ({ ...x, universoDatos: { ...x.universoDatos, [u]: { error: e.message || 'No se pudo leer el universo.' } } })) })
+    return () => { v = false }
+  }, [universoLista, hayDatosUniverso, ctx])
+  const cuerpoLista = useMemo(() => enLista && estPorDentro ? peticionPorDentro({ a, estrategia: estPorDentro, wlData: datosLista?.wlData || {}, universoDatos }) : null, [enLista, a, estPorDentro, datosLista?.wlData, universoDatos])
+  const motivoLista = !enLista ? null : (motivoEstPorDentro || (calcLista && motivoListaNoCalculable(calcLista.plan)) || (!cuerpoLista ? motivoSinPeticion({ a, estrategia: estPorDentro, universoDatos }) : null))
   const clave = !actual || !plan || errores.length ? null : !enLista ? JSON.stringify(plan) : motivoLista || !cuerpoLista ? null : JSON.stringify({ plan: calcLista.plan, cuerpoLista })
   const api = useRef(apiFetch); api.current = apiFetch
   // Un plan ya calculado (p. ej., al volver a una pestaña) se enseña sin repetir el cálculo.
@@ -694,7 +709,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
         {Number.isFinite(calc.resultado?.respuesta?.finalPorDentro) && oroComparable(calc.resultado?.plan) && <div data-oro style={{ ...S.secundario, fontSize: 13 }}>Comprobación: «La cartera por dentro» acaba en {euros(calc.resultado.respuesta.finalPorDentro, 2)} y tu plan, en {euros(cifrasLista.seis.final, 2)}{Math.abs(calc.resultado.respuesta.finalPorDentro - cifrasLista.seis.final) < 0.005 ? ' ✓' : ' ✕ (deberían coincidir)'}</div>}
         {vistaDinero(cifrasLista, true)}
       </>)}
-    <PlanPorDentro a={a} estrategia={estPorDentro} motivo={motivoEstPorDentro} estrategias={estrategias} apiFetch={apiFetch} version={version} visible={vistaDer === 'dentro'} onIrAValor={onIrAValor} wlData={datosLista?.wlData || null} calcula={deps?.calculaPorDentro || null}/>
+    <PlanPorDentro a={a} estrategia={estPorDentro} motivo={motivoEstPorDentro} estrategias={estrategias} apiFetch={apiFetch} version={version} visible={vistaDer === 'dentro'} onIrAValor={onIrAValor} wlData={datosLista?.wlData || null} calcula={deps?.calculaPorDentro || null} universoDatos={universoDatos}/>
   </>) : !cifras ? (
     <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{!estrategia ? 'Elige una estrategia de tarjetas de velas diarias.' : calc.calculando || clave ? 'Calculando tu plan…' : 'Sin resultado todavía.'}</div>
   ) : vistaDinero(cifras, false)

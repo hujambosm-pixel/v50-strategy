@@ -2706,3 +2706,12 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - La comprobación «§89: con «Slots iguales», «Tu dinero» aún no se calcula y lo dice» a veces fallaba con el equipo cargado: esperaba 10 ms fijos.
 - Ahora cada paso de la parte montada espera a lo que busca (20 s como mucho), como los arreglos de V9.1127.
 - Solo cambia scripts/comprobaciones/plan-lista.js. Pasó 3 de 3 suelto y en comunes.sh.
+
+## 111. El plan con lista: el Nasdaq-100 en «La cartera por dentro»
+
+- Primera parte del Nasdaq-100 en el plan (elemento 13 del inventario del Backtesting). Con el universo «Nasdaq-100 · N más volátiles» o «N con más momentum» en el bloque «Una lista», «La cartera por dentro» ya calcula.
+- Pide lo MISMO que el Backtesting con universo dinámico (`runBacktesting` de pages/index.js): los valores y la máscara salen de `estadoUniversoMc` con lo leído de la base (universo_screener y universo_miembros), reparto «Capital concentrado», sin pesos y con el campo `universo`. El motor no cambia. La pestaña enseña, como el Backtesting, la línea del universo y las curvas B&H QQQ y B&H universo.
+- `BuilderPlan` lee la base al elegir el universo (`cargaUniversoMc`, como pages/index.js), una vez por universo; si falla o tras «Regenerar universo», se vuelve a leer. `peticionPorDentro` y `motivoSinPeticion` reciben `universoDatos`. Mientras se lee: «Leyendo de la base el universo (…)…»; con un periodo anterior a 2016: «Con el Nasdaq-100 no se calcula: el universo empieza el 01/01/2016.».
+- «Tu dinero» con el Nasdaq-100 sigue diciendo «todavía no»: es la segunda parte.
+- Comprobación `plan-por-dentro.js`: con el Nasdaq-100, la petición es la del Backtesting (copia literal del código de runBacktesting) en 18/18 casos; los motivos; y, con un universo de prueba sobre la foto de Degiro, el motor responde con el universo y la pestaña pinta su línea.
+- No cambian ni las cifras ni los planes guardados: con «Lista manual» la petición es la de antes (400/400).

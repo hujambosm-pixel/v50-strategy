@@ -6,6 +6,8 @@
 //     motivos para no calcular. 1b · El mínimo por orden de lib/comisiones.js, con cuentas hechas a mano.
 // 2 · Con la foto de precios de la lista Degiro (datos/, sin red) y una estrategia de tarjetas, /api/multibacktest responde a esa
 //     petición, y la pestaña (montada con estado en domFalso.js) pinta los paneles del Backtesting con ese resultado.
+// 1c · §111: con el Nasdaq-100, la petición es la del universo dinámico de runBacktesting (copiado literal abajo, antesUniverso), con un
+//     universo de prueba (filas y miembros escritos aquí); y los motivos (leyendo la base, error, periodo antes de 2016).
 // 3 · En el paso 3: con «Una lista» salen las pestañas «Tu dinero» / «La cartera por dentro»; «por dentro» no se calcula hasta abrirla (§89: «Tu dinero», sí);
 //     abierta, una petición ~1 s después; cerrada, los cambios no piden nada; al volver, la petición nueva.
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-del-arnes'
@@ -34,6 +36,21 @@ function antes(st) {
         scoreMap:Object.fromEntries(_activosMc.map(sym=>[sym,wlData[sym.toUpperCase()]?.active?.scoreMetricas??null]))}}
           const _cuerpoMc={symbols:mcSelected,modoAsig:modesToRun[0],weights:weightsNorm,cfg:baseCfg,strategyId:stratIds[0]||null,isNoStrategy,filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones,..._prueba}
   return _cuerpoMc
+}
+
+// El cuerpo del universo dinámico de runBacktesting (pages/index.js), literal, con los nombres de allí.
+function antesUniverso({ _estU, baseCfg, stratIds, _strat1, filtrosBackend, mcIntervalo, mcComisiones, _prueba, mcUniverso, _nUniv, reglaDeUniverso }) {
+        const u=_estU.universo
+        const _cuerpoMc={symbols:u.simbolos,modoAsig:'concentrado',weights:{},cfg:baseCfg,strategyId:stratIds[0],isNoStrategy:(_strat1?.name||'').includes('No Strategy'),filtros:filtrosBackend,intervalo:mcIntervalo,comisiones:mcComisiones,..._prueba,
+          universo:{regla:reglaDeUniverso(mcUniverso),n:_nUniv,mascara:u.mascara,elegidos:u.elegidos}}
+  return _cuerpoMc
+}
+// Un universo de prueba: los 12 de Degiro, miembros desde 2000; cada año, N elegidos que van rotando.
+function universoPrueba(SIMB, regla, n) {
+  const miembros = SIMB.map(s => ({ simbolo: s, simbolo_yahoo: s, nombre: s, desde: '2000-01-01', hasta: null, excluido_motivo: null }))
+  const filas = []
+  for (let anio = 2016; anio <= 2026; anio++) for (let k = 0; k < n; k++) filas.push({ regla, n, anio, simbolo_yahoo: SIMB[(anio + k) % SIMB.length], posicion: k + 1, volatilidad: 50 - k })
+  return { filas, miembros }
 }
 
 ;(async () => {
@@ -74,7 +91,33 @@ function antes(st) {
   ok(iguales === 400, `la petición del plan es la del Backtesting con los mismos ajustes y las comisiones del plan (${iguales}/400 listas al azar)`)
   const aBase = { ...Pa.AJUSTES_PLAN, donde: 'lista', periodo: 'todo', capital: 10000, lista: Li.mergeLista({ simbolos: SIMB, modo: 'compartido' }) }
   ok(PD.peticionPorDentro({ a: { ...aBase, lista: { ...aBase.lista, simbolos: [] } }, estrategia: est }) === null && PD.motivoSinPeticion({ a: { ...aBase, lista: { ...aBase.lista, simbolos: [] } }, estrategia: est }) === 'Elige al menos un valor de la lista.', 'sin valores: no pide nada y lo dice')
-  ok(PD.peticionPorDentro({ a: { ...aBase, lista: { ...aBase.lista, universo: 'ndx_vol_10', modo: 'concentrado' } }, estrategia: est }) === null && /Nasdaq-100/.test(PD.motivoSinPeticion({ a: { ...aBase, lista: { ...aBase.lista, universo: 'ndx_vol_10' } }, estrategia: est })), 'con el Nasdaq-100: todavía no, y lo dice')
+  // ── 1c · §111: el Nasdaq-100 ──
+  { const UM = require(R + '/lib/universoMc.js'); let igualesU = 0, casosU = 0
+    for (const univ of ['ndx_vol_10', 'ndx_mom_20', 'ndx_vol_30']) for (const periodo of ['todo', 'p1', 'p2']) for (const filtros of FILTROS) {
+      const n = UM.nDeUniverso(univ), datosU = universoPrueba(SIMB, UM.reglaDeUniverso(univ), Math.min(n, 5))
+      const a = { ...Pa.AJUSTES_PLAN, donde: 'lista', periodo, capital: 10000, lista: Li.mergeLista({ universo: univ, modo: 'concentrado', simbolos: ['AAPL'], maxPosiciones: 4, prioridad: 'momentum', filtros }) }
+      const per = Pa.fechasDe(a), l = Li.mergeLista(a.lista), P = PD.PANEL_DEFECTO
+      const _estU = UM.estadoUniversoMc({ universo: univ, datos: datosU, fromDate: per.desde, toDate: per.hasta, estrategias: [est.id] })
+      const _activosMc = _estU.universo.simbolos
+      const ref = antes({ mcMode: l.modo, mcSelected: l.simbolos, mcWeights: l.pesos, emaR: P.emaR, emaL: P.emaL, _mcYears: null, mcCapitalIni: a.capital, _mcFrom: per.desde, _mcTo: per.hasta,
+        tipoStop: P.tipoStop, atrP: P.atrP, atrM: P.atrM, sinPerdidas: P.sinPerdidas, reentry: P.reentry, tipoFiltro: P.tipoFiltro, sp500EmaR: P.sp500EmaR, sp500EmaL: P.sp500EmaL, mcCapital: P.mcCapital,
+        mcRiskPerTrade: l.riskPerTrade, mcMaxPortfolioPct: l.maxPortfolioPct, mcMaxAccumRisk: l.maxAccumRisk, mcAssumedStopPct: l.assumedStopPct, mcMaxPosiciones: l.maxPosiciones, mcPrioridad: l.prioridad,
+        mcCriterioUso: l.criterioUso, mcMomentumN: l.momentumN, mcRsWindow: l.rsWindow, mcRsGateThr: l.rsGateThr, mcMomGateThr: l.momGateThr, mcProxGateThr: l.proxGateThr, mcCalculoPrioridad: l.calculoPrioridad,
+        _activosMc, wlData: {}, modesToRun: [l.modo], stratIds: [est.id], isNoStrategy: false, filtrosBackend: l.filtros, mcIntervalo: 'diario', mcComisiones: { compra: 0, venta: 0, porcentaje: 0.1 }, _prueba: {} })
+      const refU = antesUniverso({ _estU, baseCfg: ref.cfg, stratIds: [est.id], _strat1: est, filtrosBackend: l.filtros, mcIntervalo: 'diario', mcComisiones: { compra: 0, venta: 0, porcentaje: 0.1 }, _prueba: {}, mcUniverso: univ, _nUniv: n, reglaDeUniverso: UM.reglaDeUniverso })
+      casosU++
+      if (JSON.stringify(refU) === JSON.stringify(PD.peticionPorDentro({ a, estrategia: est, wlData: {}, universoDatos: { [univ]: datosU } }))) igualesU++
+    }
+    ok(igualesU === casosU && casosU === 18, `con el Nasdaq-100, la petición del plan es la del Backtesting con universo dinámico (${igualesU}/${casosU}: 3 universos × 3 periodos × con y sin filtro)`)
+    const aU = { ...aBase, lista: Li.mergeLista({ universo: 'ndx_vol_10', modo: 'concentrado' }) }, dU = universoPrueba(SIMB, 'volatilidad', 5)
+    const cU = PD.peticionPorDentro({ a: aU, estrategia: est, universoDatos: { ndx_vol_10: dU } })
+    ok(!!cU && cU.modoAsig === 'concentrado' && cU.universo.regla === 'volatilidad' && cU.universo.n === 10 && cU.symbols.length === 12 && Object.keys(cU.universo.elegidos).join() === '2016,2017,2018,2019,2020,2021,2022,2023,2024,2025',
+      `con el Nasdaq-100 los valores son los del universo, no los marcados (${cU?.symbols.length}), y van los elegidos de cada año del periodo (${Object.keys(cU?.universo.elegidos || {}).join(', ')})`)
+    ok(PD.peticionPorDentro({ a: aU, estrategia: est }) === null && PD.motivoSinPeticion({ a: aU, estrategia: est }) === 'Leyendo de la base el universo (Nasdaq-100 · 10 más volátiles)…', 'sin lo de la base aún: no pide nada y dice que lo está leyendo')
+    ok(PD.motivoSinPeticion({ a: aU, estrategia: est, universoDatos: { ndx_vol_10: { error: 'No se pudo leer el universo de la base de datos.' } } }) === 'No se pudo leer el universo de la base de datos.', 'si la base falla, su error')
+    const aEns = { ...aU, periodo: 'otras', desde: '2012-01-01', hasta: '2015-12-31' }
+    ok(PD.peticionPorDentro({ a: aEns, estrategia: est, universoDatos: { ndx_vol_10: dU } }) === null && PD.motivoSinPeticion({ a: aEns, estrategia: est, universoDatos: { ndx_vol_10: dU } }) === 'Con el Nasdaq-100 no se calcula: el universo empieza el 01/01/2016.',
+      `con un periodo antes de 2016 (2012–2015): no pide nada y lo dice («${PD.motivoSinPeticion({ a: aEns, estrategia: est, universoDatos: { ndx_vol_10: dU } })}»)`) }
   ok(PD.peticionPorDentro({ a: { ...aBase, capital: 0 }, estrategia: est }) === null && PD.peticionPorDentro({ a: aBase, estrategia: null }) === null && PD.peticionPorDentro({ a: { ...aBase, donde: 'accion' }, estrategia: est }) === null, 'sin dinero inicial, sin estrategia o con «Una acción»: no pide nada')
   const c0 = PD.peticionPorDentro({ a: aBase, estrategia: est })
   ok(c0.cfg.capitalIni === 10000 && c0.cfg.fromDate === '2016-01-01' && c0.cfg.toDate === '2025-12-31' && c0.cfg.years === null && c0.intervalo === 'diario' && JSON.stringify(c0.comisiones) === JSON.stringify({ compra: 0, venta: 0, porcentaje: 0.1 }),
@@ -124,6 +167,22 @@ function antes(st) {
       if (Math.abs(t.comision - (cc + cv)) < 1e-6) bien++; if (cap * 0.001 < 1 || sale * 0.001 < 1) conMin++ }
     const f0 = j.compoundCurve[j.compoundCurve.length - 1].value, fm = jm.compoundCurve[jm.compoundCurve.length - 1].value
     ok(bien === jm.allTrades.length && conMin > 0 && fm < f0, `con 0,1 % y mínimo de 1 €: la comisión de las ${jm.allTrades.length} operaciones cuadra a mano (${bien}); en ${conMin} manda el mínimo; final ${fm.toFixed(2)} € < ${f0.toFixed(2)} € con 0,1 % solo`) }
+
+  // §111: con el Nasdaq-100 (universo de prueba sobre la foto; QQQ = las velas de AAPL con su nombre), el motor responde con el universo
+  // y sus dos referencias, y la pestaña pinta la línea del universo.
+  { if (!foto.QQQ) { foto.QQQ = foto.AAPL; E.llenaCache('QQQ', { desde: '2006-01-01' }) }
+    const dU = universoPrueba(simbolosFoto, 'volatilidad', 5), uD = { ndx_vol_10: dU }
+    const aU = { ...aFoto, lista: Li.mergeLista({ universo: 'ndx_vol_10', modo: 'concentrado', maxPosiciones: 4 }) }
+    const cU = PD.peticionPorDentro({ a: aU, estrategia: est, universoDatos: uD })
+    const rU = await E.llama(H, cU), jU = rU.status === 200 ? JSON.parse(rU.cuerpo) : null
+    ok(!!jU?.universo && jU.universo.n === 10 && jU.universo.bhUniversoCurve?.length > 1000 && jU.universo.qqqBHCurve?.length > 1000 && jU.universo.descartadasPorUniverso > 0,
+      `con el Nasdaq-100, /api/multibacktest responde con el universo (${rU.status}; ${jU?.allTrades?.length} operaciones, ${jU?.universo?.descartadasPorUniverso} entradas descartadas por universo, B&H universo y B&H QQQ)`)
+    const pedU = []
+    const bU = D.monta(React.createElement(PD.default, { a: aU, estrategia: est, estrategias: [est], universoDatos: uD, calcula: async (c) => { pedU.push(c); return jU } }), RDC); await D.espera(1300)
+    const txtU = bU.raiz.textContent || ''
+    ok(pedU.length === 1 && JSON.stringify(pedU[0]) === JSON.stringify(cU) && txtU.includes('Universo: Nasdaq-100 · 10 más volátiles') && txtU.includes('B&H universo') && txtU.includes('B&H QQQ'),
+      'la pestaña pide la petición del universo y pinta su línea (universo, B&H universo, B&H QQQ)')
+    bU.quita() }
 
   // ── 3 · En el paso 3 ──
   const BP = require(R + '/components/BuilderPlan.js').default
