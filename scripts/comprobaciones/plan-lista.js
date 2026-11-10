@@ -10,6 +10,9 @@ if (!process.env.VIEJO) { console.error('Falta VIEJO: la carpeta con la copia de
 const V = path.resolve(process.env.VIEJO)
 let fallos = 0
 const ok = (c, t) => { console.log(`${c ? 'OK  ' : 'MAL '} ${t}`); if (!c) fallos++ }
+// Espera a que se cumpla cond (20 s como mucho), en vez de un tiempo fijo: con el equipo cargado, 10 ms no bastaban (fallo
+// intermitente del 10/11, como los de V9.1127). Si no llega, la comprobación de después lo dice.
+const hasta = async (cond, max = 20000) => { const t0 = Date.now(); do { await D.espera(5); try { if (cond()) { await D.espera(5); return true } } catch (_) {} } while (Date.now() - t0 < max); return false }
 const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id: 'inicial', pct: 8, tipo: 'porcentaje', motivo: 'stop' }],
   entrada: { orden: { tipo: 'apertura' }, senal: { c: 'cruza', de: { c: 'precioVsMedia', p: { lado: 'encima', tipo: 'EMA', periodo: '$ema' } } } },
   salidas: [{ si: { c: 'cruza', de: { c: 'precioVsMedia', p: { lado: 'debajo', tipo: 'EMA', periodo: '$ema' } } }, tipo: 'condicion', motivo: 'cruce_bajista', precio: 'apertura' }],
@@ -92,21 +95,21 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   // Montada, con estado: de «Una acción» a «Una lista», marcar valores, cambiar el reparto, añadir un filtro, y volver.
   const m = D.monta(React.createElement(BP, props({}, { ajustes: { activo: 'AAPL' } })), RDC); await D.espera(60)
   const boton = (t) => m.raiz.busca(n => n.nodeName === 'BUTTON' && n.textContent === t)
-  D.pulsa(boton('Una lista')); await D.espera(30)
+  D.pulsa(boton('Una lista')); await hasta(() => m.raiz.conAtributo('data-lista', 'valores').length === 1 && m.raiz.textContent.includes('0 seleccionados'))
   ok(m.raiz.conAtributo('data-lista', 'valores').length === 1 && m.raiz.textContent.includes('0 seleccionados'), 'al pulsar «Una lista»: el selector, con 0 seleccionados')
   ok(!m.raiz.conAtributo('data-aviso', 'a-mano').length, '§85: al pulsar «Una lista» se va «⚠ Acción elegida a mano»')
   const fila = (sim) => m.raiz.busca(n => n.nodeName === 'DIV' && typeof D.propsDe(n)?.onMouseOver === 'function' && n.todos(c => c.textContent === sim && c.childNodes.length === 1 && c.childNodes[0].nodeType === 3).length > 0)
-  D.pulsa(fila('MSFT')); await D.espera(10); D.pulsa(fila('NVDA')); await D.espera(10)
+  D.pulsa(fila('MSFT')); await hasta(() => /\b1 seleccionad/.test(m.raiz.textContent)); D.pulsa(fila('NVDA')); await hasta(() => m.raiz.textContent.includes('2 seleccionados'))
   ok(m.raiz.textContent.includes('2 seleccionados'), `marcar MSFT y NVDA: 2 seleccionados`)
   const modo = m.raiz.busca(n => n.nodeName === 'DIV' && n.textContent === 'Slots iguales' && typeof D.propsDe(n).onClick === 'function')
-  D.pulsa(modo); await D.espera(10)
+  D.pulsa(modo); await hasta(() => m.raiz.conAtributo('data-sin-motor-lista')[0]?.textContent === Pl.AVISO_LISTA_MODO && !m.raiz.conAtributo('data-calculando').length && !m.raiz.textContent.includes('Máx. activos simultáneos'))
   ok(m.raiz.textContent.includes('Slots iguales') && !m.raiz.textContent.includes('Máx. activos simultáneos'), 'elegir «Slots iguales» (sin «Máx. activos simultáneos», que es de concentrado)')
   ok(m.raiz.conAtributo('data-sin-motor-lista')[0]?.textContent === Pl.AVISO_LISTA_MODO && !m.raiz.conAtributo('data-calculando').length, '§89: con «Slots iguales», «Tu dinero» aún no se calcula y lo dice')
-  D.pulsa(boton('Una acción')); await D.espera(700)
+  D.pulsa(boton('Una acción')); await hasta(() => !m.raiz.conAtributo('data-lista').length && m.raiz.conAtributo('data-aviso', 'a-mano').length === 1 && calculos >= 1)
   ok(!m.raiz.conAtributo('data-lista').length, 'de vuelta a «Una acción»: sin piezas de lista')
   ok(m.raiz.conAtributo('data-aviso', 'a-mano').length === 1, '§85: y vuelve «⚠ Acción elegida a mano»')
   ok(calculos >= 1, 'y vuelve a calcular el plan de siempre')
-  D.pulsa(boton('Una lista')); await D.espera(10)
+  D.pulsa(boton('Una lista')); await hasta(() => m.raiz.textContent.includes('2 seleccionados'))
   ok(m.raiz.textContent.includes('2 seleccionados'), 'y al volver a «Una lista», la lista sigue ahí (2 seleccionados)')
   m.quita()
 

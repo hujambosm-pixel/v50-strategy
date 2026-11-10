@@ -2700,3 +2700,9 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - Detalle en docs/screener.md §13 y docs/tesis.md.
 - Comprobaciones: `tesis-enlaces.js`, `tesis.js` (20 sitios que cambian de pantalla) y `screener.js` (153).
 - Nada cambia en las cifras. Las tesis guardadas no cambian: `camposDe` da lo mismo para las que no enlazan vistas.
+
+## 110. plan-lista.js: sin el fallo intermitente
+
+- La comprobación «§89: con «Slots iguales», «Tu dinero» aún no se calcula y lo dice» a veces fallaba con el equipo cargado: esperaba 10 ms fijos.
+- Ahora cada paso de la parte montada espera a lo que busca (20 s como mucho), como los arreglos de V9.1127.
+- Solo cambia scripts/comprobaciones/plan-lista.js. Pasó 3 de 3 suelto y en comunes.sh.
