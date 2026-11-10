@@ -185,6 +185,10 @@ Decidido con Sergi el 10/11 (opción B): «en las últimas N velas», N = 1 por 
   - `screener.js` (147): estrategias que sirven, vistas, filtro, celdas y la pantalla con estado y una petición falsa.
   - Cruce con precios reales (fuera de `comunes.sh`): AAPL de la prueba congelada con «Prueba editor EMA20», en los 300 últimos cortes de la serie. «Señal en la última» coincide con «el paso 1 compra al día siguiente» en 300 de 300 (18 señales).
 
+## 12. La explicación del «−N» (V9.1170)
+
+Sin la línea ««−N»: cuántos quita cada filtro» debajo del panel: su explicación y su ejemplo están en el tooltip del número rojo de cada filtro (solo cuando quita alguno).
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:

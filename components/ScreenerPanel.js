@@ -413,7 +413,7 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
                       <span style={{ ...S.apagado, width: 44 }}>{f.unidad}</span>
                     </>}
                     {f.ayuda && <AyudaFiltro a={f.ayuda}/>}
-                    <span data-cuenta={f.id} title="Valores que quita este filtro (de los que llegan a su piso)" style={{ width: 40, textAlign: 'right', color: ROJO, fontWeight: 700 }}>{on && n ? '−' + n : ''}</span>
+                    <span data-cuenta={f.id} title={on && n ? `${AYUDAS.cuenta[1]} Ejemplo: ${AYUDAS.cuenta[2]}` : undefined} style={{ width: 40, textAlign: 'right', color: ROJO, fontWeight: 700 }}>{on && n ? '−' + n : ''}</span>
                   </div>
                   {f.conEstrategia && <div data-senal-estrategia style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 0 4px 22px', flexWrap: 'wrap', opacity: on ? 1 : 0.7 }}>
                     <span style={S.apagado}>con</span>
@@ -431,7 +431,6 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
                   </div>}
                 </div>)
             })}
-            <div style={{ ...S.apagado, marginTop: 10, display: 'flex', alignItems: 'center' }}>«−N»: cuántos quita cada filtro<AyudaFiltro a={AYUDAS.cuenta}/></div>
           </div>
         </div>)}
 

@@ -2687,3 +2687,8 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - Detalle en docs/screener.md §11.
 - Comprobaciones: `screener-senales.js` (27, nueva en `comunes.sh`) y `screener.js` (de 133 a 147). Cruce con AAPL real y «Prueba editor EMA20»: 300 de 300 iguales al paso 1.
 - Nada cambia en las demás pantallas ni en las cifras.
+
+## 108. Screener: la explicación del «−N», en su tooltip
+
+- Pedido por Sergi al ver V9.1169 (10/11): fuera la línea ««−N»: cuántos quita cada filtro» de debajo del panel; su explicación y su ejemplo pasan al tooltip del número rojo de cada filtro.
+- screener.js: de 147 a 148. Nada más cambia.

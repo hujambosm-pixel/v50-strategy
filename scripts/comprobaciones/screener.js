@@ -153,6 +153,7 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
   ok(hp.includes('1 · pasan Fundamentales') && hp.includes('data-embudo-n="1"') && hp.slice(hp.indexOf('data-embudo-n="1"')).startsWith('data-embudo-n="1" style="font-size:20px;font-weight:700;color:#ffffff">1<'), 'embudo: pasan Fundamentales 1')
   ok(hp.includes('data-fila="AAA"') && !hp.includes('data-fila="BBB"'), 'tabla: AAA sí, BBB no')
   ok(hp.includes('data-cuenta="roce"') && hp.includes('−2'), 'el ROCE dice «−2»')
+  ok(/data-cuenta="roce" title="El número rojo dice cuántos valores[^"]*Ejemplo: Llegan 300 valores/.test(hp) && !hp.includes('cuántos quita cada filtro'), 'la explicación del «−N» va en su tooltip (sin la línea de abajo)')
   ok(hp.includes('data-celda="roce"') && hp.includes('30,0 %'), 'celda del ROCE: 30,0 %')
   ok(!hp.includes('data-punto-cambios') && /data-guardar="true"[^>]*disabled=""|disabled=""[^>]*data-guardar/.test(hp), 'vista guardada sin cambios: sin «●» y «Guardar» desactivado')
 
