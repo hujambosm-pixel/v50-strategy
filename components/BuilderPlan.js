@@ -309,7 +309,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     return () => { v = false }
   }, [universoLista, hayDatosUniverso, ctx])
   const cuerpoLista = useMemo(() => enLista && estPorDentro ? peticionPorDentro({ a, estrategia: estPorDentro, wlData: datosLista?.wlData || {}, universoDatos }) : null, [enLista, a, estPorDentro, datosLista?.wlData, universoDatos])
-  const motivoLista = !enLista ? null : (motivoEstPorDentro || (calcLista && motivoListaNoCalculable(calcLista.plan)) || (!cuerpoLista ? motivoSinPeticion({ a, estrategia: estPorDentro, universoDatos }) : null))
+  const motivoLista = !enLista ? null : (motivoEstPorDentro || (calcLista && motivoListaNoCalculable(calcLista.plan, cuerpoLista?.symbols || null)) || (!cuerpoLista ? motivoSinPeticion({ a, estrategia: estPorDentro, universoDatos }) : null))
   const clave = !actual || !plan || errores.length ? null : !enLista ? JSON.stringify(plan) : motivoLista || !cuerpoLista ? null : JSON.stringify({ plan: calcLista.plan, cuerpoLista })
   const api = useRef(apiFetch); api.current = apiFetch
   // Un plan ya calculado (p. ej., al volver a una pestaña) se enseña sin repetir el cálculo.

@@ -25,9 +25,14 @@ export const config = { maxDuration: 60 }
 // §89: con «Una lista», la pantalla manda también cuerpoLista, la MISMA petición de «La cartera por dentro» (peticionPorDentro). Aquí se
 // comprueba que corresponde a este plan y se pide a /api/multibacktest (en este mismo proceso, con la sesión de la persona) con
 // conCandidatos: los candidatos de cada valor, que el motor del plan reparte con su dinero.
+// §112: con el Nasdaq-100, los valores son los del universo en el periodo (las claves de la máscara, en orden) y el universo es el del bloque.
 export function errorCuerpoLista(plan, pieza, c) {
   if (!c || typeof c !== 'object' || !c.cfg) return 'Falta la petición de la lista (cuerpoLista).'
-  const igual = String(c.strategyId) === String(pieza.estrategia?.id) && JSON.stringify(c.symbols) === JSON.stringify(pieza.lista?.simbolos) && c.modoAsig === pieza.lista?.modo
+  const univ = pieza.lista?.universo && pieza.lista.universo !== 'manual' ? pieza.lista.universo : null
+  const valores = univ
+    ? !!c.universo?.mascara && typeof c.universo.mascara === 'object' && `ndx_${c.universo.regla === 'momentum' ? 'mom' : 'vol'}_${c.universo.n}` === univ && Array.isArray(c.symbols) && JSON.stringify(c.symbols) === JSON.stringify(Object.keys(c.universo.mascara).sort())
+    : c.universo == null && JSON.stringify(c.symbols) === JSON.stringify(pieza.lista?.simbolos)
+  const igual = String(c.strategyId) === String(pieza.estrategia?.id) && valores && c.modoAsig === pieza.lista?.modo
     && c.cfg.capitalIni === plan.dinero.capitalInicial * pieza.peso && c.cfg.fromDate === plan.periodo.desde && c.cfg.toDate === plan.periodo.hasta && c.intervalo === 'diario'
     && JSON.stringify(normalizaComisiones(c.comisiones)) === JSON.stringify(comisionesDePlan(plan.costes)) && JSON.stringify(c.filtros || []) === JSON.stringify(pieza.lista?.filtros || [])
   return igual ? null : 'La petición de la lista no corresponde a este plan.'
@@ -51,7 +56,7 @@ export default async function handler(req, res) {
   if (errores.length) return res.status(400).json({ error: errores.join(' '), errores })
   const pLista = plan.piezas.find(x => x.tipo === 'estrategia' && x.donde === 'lista')
   if (pLista) {   // §89
-    const motivo = motivoListaNoCalculable(plan) || errorCuerpoLista(plan, pLista, req.body?.cuerpoLista)
+    const motivo = errorCuerpoLista(plan, pLista, req.body?.cuerpoLista) || motivoListaNoCalculable(plan, req.body.cuerpoLista.symbols)
     if (motivo) return res.status(400).json({ error: motivo })
   }
   const t0 = Date.now()

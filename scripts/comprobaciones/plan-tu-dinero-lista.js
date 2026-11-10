@@ -142,9 +142,14 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
     const c2 = Pl.planListaCalculable(Pa.planDe({ ...aBase, ocioso: 'GLD', apalancamiento: 2 }, est))
     ok(JSON.stringify(c2.ignorado) === '["apalancamiento"]' && c2.plan.piezas[0].ocioso === 'GLD' && c2.plan.piezas[0].apalancamiento === 1 && Pl.motivoListaNoCalculable(Pa.planDe({ ...aBase, apalancamiento: 2 }, est)) === Pl.AVISO_LISTA_SIMPLE,
       'con oro y ×2: el oro se queda; el apalancamiento, todavía no')
-    ok(Pl.motivoListaNoCalculable(Pl.planListaCalculable(Pa.planDe({ ...aBase, lista: { ...aBase.lista, modo: 'slots' } }, est)).plan) === Pl.AVISO_LISTA_MODO
-      && Pl.motivoListaNoCalculable(Pl.planListaCalculable(Pa.planDe({ ...aBase, lista: { ...aBase.lista, universo: 'ndx_vol_10', modo: 'concentrado' } }, est)).plan) === Pl.AVISO_LISTA_UNIVERSO,
-      'con «Slots iguales» o el Nasdaq-100: todavía no, y lo dice')
+    ok(Pl.motivoListaNoCalculable(Pl.planListaCalculable(Pa.planDe({ ...aBase, lista: { ...aBase.lista, modo: 'slots' } }, est)).plan) === Pl.AVISO_LISTA_MODO, 'con «Slots iguales»: todavía no, y lo dice')
+    // §112: con el Nasdaq-100, sí; el ocioso no puede ser un valor del universo (los de la petición), aunque no esté entre los marcados.
+    const pU = Pl.planListaCalculable(Pa.planDe({ ...aBase, ocioso: 'AAPL', lista: { ...aBase.lista, simbolos: ['MSFT'], universo: 'ndx_vol_10', modo: 'concentrado' } }, est)).plan
+    ok(Pl.motivoListaNoCalculable(pU) === null && Pl.motivoListaNoCalculable(pU, ['AAPL', 'NVDA']) === Pl.AVISO_LISTA_OCIOSO_EN_LISTA && Pl.motivoListaNoCalculable(pU, ['NVDA']) === null,
+      'con el Nasdaq-100 se calcula; el ocioso no puede ser un valor del universo (AAPL), aunque no esté marcado')
+    const ER = require(R + '/lib/planes/evalua.js')
+    ok(ER.referenciasDe(pU).map(x => x.id).join() === 'QQQ,SPY,LIQUIDEZ,OCIOSO_LIQUIDEZ' && ER.referenciasDe(Pa.planDe(aBase, est)).map(x => x.id).join() === 'QQQ,SPY,LIQUIDEZ,OCIOSO_LIQUIDEZ,ACTIVO',
+      'con el Nasdaq-100, sin «Buy&Hold de la lista (a partes iguales)»; con «Lista manual», como antes')
     ok(Pl.planListaCalculable(Pa.planDe({ ...aBase, donde: 'accion' }, est)).ignorado.length === 0 && Pl.motivoListaNoCalculable(Pa.planDe({ ...aBase, donde: 'accion' }, est)) === null, 'con «Una acción», nada cambia')
   }
 
@@ -197,6 +202,26 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
     ok(Math.abs(rl.valorNeto - rf.valorNeto) < 1e-6 && rl.aportado > 10000 && rl.estrategias.e.operaciones.length === rf.estrategias.e.operaciones.length,
       `ocioso fijo ${k} · ${cs.modo}: con liquidez ${rl.valorNeto.toFixed(2)} € · con ocioso fijo ${rf.valorNeto.toFixed(2)} € · aportado ${rl.aportado} € · ${rl.estrategias.e.operaciones.length} operaciones`)
   }
+  // §112: la prueba de oro con el Nasdaq-100 (un universo de prueba sobre la foto: cada año, 5 de los 12, rotando).
+  const universoPrueba = (regla, n) => ({ miembros: SIMB.map(s => ({ indice: 'NDX', simbolo: s, simbolo_yahoo: s, nombre: s, desde: '2000-01-01', hasta: null, excluido_motivo: null })),
+    filas: Array.from({ length: 11 }, (_, k) => 2016 + k).flatMap(anio => Array.from({ length: n }, (_, k) => ({ regla, n: 10, anio, simbolo_yahoo: SIMB[(anio + k) % SIMB.length], posicion: k + 1, volatilidad: 50 - k }))) })
+  const UD = { ndx_vol_10: universoPrueba('volatilidad', 5), ndx_mom_10: universoPrueba('momentum', 4) }
+  let igualesU = 0
+  const CASOS_U = [{ u: 'ndx_vol_10', com: COMS[2], extra: { maxPosiciones: 4, prioridad: 'momentum', criterioUso: 'desempate' } }, { u: 'ndx_mom_10', com: COMS[1], extra: { maxPosiciones: 2 } },
+    { u: 'ndx_vol_10', com: COMS[3], extra: { maxPosiciones: 3 }, filtros: filtroMercado, periodo: 'p2' }]
+  for (const [k, cs] of CASOS_U.entries()) {
+    const a = { ...Pa.AJUSTES_PLAN, ...cs.com, donde: 'lista', periodo: cs.periodo || 'todo', capital: 10000, aportacion: 0, impuestos: 'ninguno', lista: Li.mergeLista({ universo: cs.u, modo: 'concentrado', filtros: cs.filtros || [], ...cs.extra }) }
+    const cuerpo = PD.peticionPorDentro({ a, estrategia: est, universoDatos: UD })
+    const r = await E.llama(H, { ...cuerpo, conCandidatos: true })
+    if (r.status !== 200) { ok(false, `Nasdaq-100 ${k}: /api/multibacktest ${r.status} ${String(r.cuerpo).slice(0, 200)}`); continue }
+    const j = JSON.parse(r.cuerpo), finalMc = j.compoundCurve[j.compoundCurve.length - 1].value
+    const fechas = [...new Set(j.candidatosAzar.activos.flatMap(x => x.fechas))].sort()
+    const res = Pl.ejecutaPlan(Pl.planListaCalculable(Pa.planDe(a, est)).plan, { fechas, qqq: fechas.map(() => null), etf: fechas.map(() => null), spy: fechas.map(() => null), lista: j.candidatosAzar })
+    const dif = Math.abs(res.valorNeto - finalMc), bien = dif < 0.005
+    if (bien) igualesU++
+    console.log(`${bien ? 'OK  ' : 'MAL '}   Nasdaq-100 ${k} · ${cs.u} · ${Pa.textoComision(a)}: por dentro ${finalMc.toFixed(2)} € · tu dinero ${res.valorNeto.toFixed(2)} € · ${res.estrategias.e.operaciones.length} operaciones · ${cuerpo.symbols.length} valores`)
+  }
+  ok(igualesU === CASOS_U.length, `LA PRUEBA DE ORO con el Nasdaq-100: «Tu dinero» = «La cartera por dentro» en ${igualesU}/${CASOS_U.length} casos`)
   ok(iguales === CASOS.length, `LA PRUEBA DE ORO: «Tu dinero» acaba con el mismo dinero que «La cartera por dentro» en ${iguales}/${CASOS.length} casos (la mayor diferencia, ${peor.toExponential(2)} €)`)
 
   // ── 4 · /api/plan y la pantalla ──
@@ -209,6 +234,20 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
     `/api/plan con lista: ${jp ? jp.evaluacion.plan.medidas.valorNeto.toFixed(2) + ' € y «por dentro» ' + jp.finalPorDentro.toFixed(2) + ' €; comparaciones ' + jp.evaluacion.referencias.map(x => x.id).join(', ') : rp.status + ' ' + String(rp.cuerpo).slice(0, 200)}`)
   const r400 = await E.llama(HP, { plan: Pa.planDe({ ...aP, apalancamiento: 2 }, est), curvas: true, cuerpoLista: cuerpoP }), r400b = await E.llama(HP, { plan: planP, curvas: true, cuerpoLista: { ...cuerpoP, symbols: ['AAPL'] } })
   ok(r400.status === 400 && JSON.parse(r400.cuerpo).error === Pl.AVISO_LISTA_SIMPLE && r400b.status === 400 && /no corresponde/.test(JSON.parse(r400b.cuerpo).error), '/api/plan rechaza un plan apalancado y una petición de lista que no es la del plan')
+  // §112: /api/plan con el Nasdaq-100: calcula (y cuadra con «por dentro»), sin la fila de la lista a partes iguales; rechaza otra petición
+  // (otro universo o una lista manual) y un ocioso que es un valor del universo.
+  {
+    const aN = { ...aP, lista: Li.mergeLista({ universo: 'ndx_vol_10', modo: 'concentrado', maxPosiciones: 4 }) }
+    const cN = PD.peticionPorDentro({ a: aN, estrategia: est, universoDatos: UD }), pN = Pl.planListaCalculable(Pa.planDe(aN, est)).plan
+    const rN = await E.llama(HP, { plan: pN, curvas: true, cuerpoLista: cN }), jN = rN.status === 200 ? JSON.parse(rN.cuerpo) : null
+    ok(!!jN && Math.abs(jN.evaluacion.plan.medidas.valorNeto - jN.finalPorDentro) < 0.005 && jN.evaluacion.referencias.map(x => x.id).join() === 'QQQ,SPY,LIQUIDEZ,OCIOSO_LIQUIDEZ' && !jN.curvas.ACTIVO,
+      `/api/plan con el Nasdaq-100: ${jN ? jN.evaluacion.plan.medidas.valorNeto.toFixed(2) + ' € y «por dentro» ' + jN.finalPorDentro.toFixed(2) + ' €; comparaciones ' + jN.evaluacion.referencias.map(x => x.id).join(', ') : rN.status + ' ' + String(rN.cuerpo).slice(0, 200)}`)
+    const cOtro = PD.peticionPorDentro({ a: { ...aN, lista: { ...aN.lista, universo: 'ndx_mom_10' } }, estrategia: est, universoDatos: UD })
+    const rO = await E.llama(HP, { plan: pN, curvas: true, cuerpoLista: cOtro }), rM = await E.llama(HP, { plan: pN, curvas: true, cuerpoLista: cuerpoP })
+    const ocU = cN.symbols.find(x => x !== Pa.planDe(aN, est).piezas[0].activo), pOc = Pl.planListaCalculable(Pa.planDe({ ...aN, ocioso: ocU }, est)).plan, rOc = await E.llama(HP, { plan: pOc, curvas: true, cuerpoLista: cN })
+    ok(rO.status === 400 && /no corresponde/.test(JSON.parse(rO.cuerpo).error) && rM.status === 400 && /no corresponde/.test(JSON.parse(rM.cuerpo).error) && rOc.status === 400 && JSON.parse(rOc.cuerpo).error === Pl.AVISO_LISTA_OCIOSO_EN_LISTA,
+      `/api/plan rechaza la petición de otro universo, la de una lista manual y un ocioso que está en el universo (${ocU})`)
+  }
   // La pantalla, con /api/plan de verdad detrás.
   const D = require('./domFalso'); D.pon()
   { const Mod = require('module'), orig = Mod._load; const vacio = new Proxy({}, { get: (_, k) => k === '__esModule' ? true : () => null }); const nada = new Proxy(function () {}, { get: (_, k) => k === '__esModule' ? true : k === Symbol.toPrimitive ? () => 0 : k === 'then' ? undefined : nada, apply: () => nada, construct: () => nada })
@@ -265,6 +304,26 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
       `fila «${Pa.NOMBRE_BH_LISTA}»: ${Pa.euros(ref?.medidas.valorNeto, 0)}, y su línea en el gráfico`)
   }
   b.quita()
+  // §112: la pantalla con el Nasdaq-100: lee el universo de la base (ctx de prueba), calcula «Tu dinero» con la petición del universo y
+  // no enseña la fila de la lista a partes iguales.
+  {
+    const leidas = []
+    const ctxU = { url: 'https://arnes.invalid', headers: {}, fetch: async (url) => { leidas.push(String(url)); const u = String(url), d = UD.ndx_vol_10
+      const filas = /universo_screener/.test(u) ? d.filas : /universo_miembros/.test(u) ? d.miembros : []
+      return { ok: true, status: 200, json: async () => filas, text: async () => JSON.stringify(filas) } } }
+    const llamadasU = []
+    const calculaU = async (p, c) => { llamadasU.push({ p, c }); const r = await E.llama(HP, { plan: p, curvas: true, cuerpoLista: c }); const j = JSON.parse(r.cuerpo); if (r.status !== 200) throw new Error(j.error); return j }
+    const aU = { ...aP, lista: Li.mergeLista({ universo: 'ndx_vol_10', modo: 'concentrado', maxPosiciones: 4 }) }
+    const bU = D.monta(React.createElement(BP, { estrategias: [est], estrategiaId: est.id, datosLista, deps: { ctx: ctxU, calcula: calculaU, calculaPorDentro: async () => { throw new Error('no') } },
+      inicial: { planes: [], pestana: 'n1', simbolos: ['AAPL'], pruebas: [], resultadoPrueba: { periodos: [] }, ajustes: aU } }), RDC)
+    for (let k = 0; k < 120 && !bU.raiz.conAtributo('data-cifras').length; k++) await D.espera(250)
+    const txtU = bU.raiz.textContent
+    ok(leidas.filter(x => /universo_screener/.test(x)).length === 1 && llamadasU.length === 1 && JSON.stringify(llamadasU[0].c) === JSON.stringify(PD.peticionPorDentro({ a: aU, estrategia: est, universoDatos: UD })) && !!llamadasU[0].c.universo,
+      `con el Nasdaq-100: lee el universo una vez y calcula «Tu dinero» con su petición (${llamadasU.length} cálculo, ${llamadasU[0]?.c.symbols.length} valores)`)
+    ok(bU.raiz.conAtributo('data-cifras').length === 1 && !bU.raiz.conAtributo('data-fila', 'ACTIVO').length && !txtU.includes('Buy&Hold de la lista') && bU.raiz.conAtributo('data-fila', 'QQQ').length === 1 && !txtU.includes('todavía no se calcula'),
+      'pinta el resultado, con Buy&Hold QQQ y sin «Buy&Hold de la lista (a partes iguales)»')
+    bU.quita()
+  }
 
   console.log(fallos ? `FALLOS: ${fallos}` : 'plan-tu-dinero-lista: todo bien')
   process.exit(fallos ? 1 : 0)

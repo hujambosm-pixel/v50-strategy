@@ -2715,3 +2715,13 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - «Tu dinero» con el Nasdaq-100 sigue diciendo «todavía no»: es la segunda parte.
 - Comprobación `plan-por-dentro.js`: con el Nasdaq-100, la petición es la del Backtesting (copia literal del código de runBacktesting) en 18/18 casos; los motivos; y, con un universo de prueba sobre la foto de Degiro, el motor responde con el universo y la pestaña pinta su línea.
 - No cambian ni las cifras ni los planes guardados: con «Lista manual» la petición es la de antes (400/400).
+
+## 112. El plan con lista: el Nasdaq-100 en «Tu dinero»
+
+- Segunda parte del Nasdaq-100 en el plan: «Tu dinero» ya se calcula con el universo dinámico (antes: «todavía no»). Fuera `AVISO_LISTA_UNIVERSO`.
+- `/api/plan` (`errorCuerpoLista`): con el Nasdaq-100, la petición tiene que ser la del universo del bloque (misma regla y N) y sus valores, las claves de la máscara; con «Lista manual», sin universo y los valores marcados, como antes.
+- El ocioso no puede ser un valor del universo del periodo: `motivoListaNoCalculable(plan, simbolosLista)` con los valores de la petición (pantalla y /api/plan) o de los candidatos (motor).
+- Sin la fila y la línea «Buy&Hold de la lista (a partes iguales)»: con un universo que cambia cada año no es una alternativa con sentido. Queda Buy&Hold QQQ (y en «La cartera por dentro», el B&H del universo). Decidido por mí; dicho a Sergi.
+- Prueba de oro con precios reales (solo lectura, fuera del repo; Capital concentrado, máx. 4, 10.000 €, 2016–2025, sin aportaciones ni impuestos, ocioso en liquidez): EMA20 · ndx_vol_10 (53 valores) 9.672,03 €; EMA20 · ndx_mom_20 (108) 5.109,43 €; SuperTrend 10/3 · ndx_vol_20 (79) 8.858,52 €; SuperTrend 10/3 · ndx_mom_10 (68) 14.332,65 €. «Tu dinero» = «por dentro» en los cuatro (diferencia < 1e-10 €). El cálculo del motor tarda 10–22 s en este equipo (como el Backtesting con el mismo universo).
+- Comprobación `plan-tu-dinero-lista.js`: prueba de oro con un universo de prueba sobre la foto (3/3), /api/plan con el Nasdaq-100 (cuadra, sin `ACTIVO`) y sus rechazos, el ocioso dentro del universo, y la pantalla (lee el universo una vez, calcula con su petición y no enseña la lista a partes iguales).
+- Con «Lista manual» y con «Una acción» no cambia nada: los planes guardados (4, 6 y 7) dan las mismas cifras.
