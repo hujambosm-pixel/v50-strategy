@@ -9,6 +9,9 @@
 //                                                           los símbolos de Yahoo de public.universo_miembros (ese índice)
 //                                                           que AÚN NO están en la caché (nunca toca los que ya están),
 //                                                           desde esa fecha (o desde su salida a bolsa); sin benchmarks
+//   node scripts/llenaCachePrecios.js --screener            las empresas del screener (public.screener_empresas) + SPY y los
+//                                                           11 ETF de sectores (lib/screener/tecnico.js); salta los que
+//                                                           están al día y pone al día los demás; sin benchmarks
 //
 // DESCARGA ROBUSTA (descargaConReintentos, exportada y probada sin red):
 //   · un error de red o de Yahoo se reintenta 3 veces, esperando 2 s, 5 s y 15 s;
@@ -116,6 +119,7 @@ const DESDE = opcion('--desde')
 const PAUSA = Number(opcion('--pausa', 1000))
 const DIAS_AL_DIA = Number(opcion('--dias-al-dia', 4))
 const FORZAR = args.includes('--forzar')
+const SCREENER = args.includes('--screener')
 // El usuario de Sergi: guardar_velas exige un usuario autenticado.
 const USUARIO = 'c006506d-084b-4c2e-a458-70c5caa35d3a'
 
@@ -218,6 +222,12 @@ if (require.main === module) (async () => {
   // Símbolos: activos (watchlist o una lista) + ^GSPC + benchmarks.
   let activos
   if (SIMBOLO) activos = [SIMBOLO]
+  else if (SCREENER) {
+    const [r] = await lee(`SELECT coalesce(json_agg(simbolo ORDER BY simbolo), '[]') AS d FROM screener_empresas;`)
+    const { REFERENCIAS_TECNICO } = require(path.join(RAIZ, 'lib', 'screener', 'tecnico.js'))
+    activos = [...new Set([...r.d, ...REFERENCIAS_TECNICO])]
+    if (!r.d.length) { console.error('El screener no tiene empresas.'); process.exit(1) }
+  }
   else if (UNIVERSO) {
     const [r] = await lee(`SELECT coalesce(json_agg(DISTINCT simbolo_yahoo ORDER BY simbolo_yahoo), '[]') AS d FROM universo_miembros
       WHERE indice = ${lit(UNIVERSO)} AND simbolo_yahoo IS NOT NULL;`)
@@ -238,13 +248,13 @@ if (require.main === module) (async () => {
     const t = def?.params?.mercado?.ticker
     if (t) benchmarks.add(t)
   }
-  if (!SIMBOLO && !UNIVERSO) {
+  if (!SIMBOLO && !UNIVERSO && !SCREENER) {
     const [r] = await lee(`SELECT coalesce(json_agg(DISTINCT t #>> '{}'), '[]') AS d FROM user_settings,
       jsonb_path_query(settings::jsonb, 'strict $.**.ticker') AS t;`)
     for (const t of r.d) if (t) benchmarks.add(t)
   }
-  const simbolos = SIMBOLO ? activos : UNIVERSO ? activos : [...new Set([...activos.sort(), ...benchmarks])]
-  console.log(`Caché de precios: ${simbolos.length} símbolos (${activos.length} activos${LISTA ? ` de la lista «${LISTA}»` : ''}${UNIVERSO ? ` del universo ${UNIVERSO}` : ` + benchmarks ${[...benchmarks].join(', ')}`}), ${DESDE ? `desde ${DESDE}` : `${ANIOS} años`}, pausa ${PAUSA} ms`)
+  const simbolos = SIMBOLO || UNIVERSO || SCREENER ? activos : [...new Set([...activos.sort(), ...benchmarks])]
+  console.log(`Caché de precios: ${simbolos.length} símbolos (${activos.length} activos${LISTA ? ` de la lista «${LISTA}»` : ''}${SCREENER ? ' del screener + SPY y ETF de sectores' : UNIVERSO ? ` del universo ${UNIVERSO}` : ` + benchmarks ${[...benchmarks].join(', ')}`}), ${DESDE ? `desde ${DESDE}` : `${ANIOS} años`}, pausa ${PAUSA} ms`)
 
   // Estado actual, para saltar los que están al día.
   const [est] = await lee(`SELECT coalesce(json_object_agg(simbolo, json_build_object('ultima', ultima_fecha, 'motivo', motivo_recarga)), '{}') AS d FROM precios_simbolos;`)

@@ -20,5 +20,20 @@ const prueba = async (nombre, sql, espera) => {
   await prueba('con sesión lee empresas', `${como(A)} SELECT count(*) AS empresas FROM public.screener_empresas;`)
   await prueba('con sesión no escribe empresas', `${como(A)} UPDATE public.screener_empresas SET precio = 1 WHERE simbolo = 'AAPL';`, 'error')
   await prueba('con sesión no escribe cuentas', `${como(A)} DELETE FROM public.screener_cuentas WHERE cik = 320193;`, 'error')
+  // Parte 2 (sql/screener_tecnico.sql): la columna `tecnico` solo se escribe con guardar_tecnico_screener.
+  const t = `'{"fecha":"2026-11-06","cierre":200.5,"ema200":180.25,"max52":210,"volUlt":1000,"volMedio50":900,"cierre3m":190,"velas":1260}'`
+  await prueba('con sesión no escribe tecnico directamente', `${como(A)} UPDATE public.screener_empresas SET tecnico = '{}' WHERE simbolo = 'AAPL';`, 'error')
+  await prueba('guardar_tecnico_screener escribe SOLO tecnico', `${como(A)} SELECT public.guardar_tecnico_screener('AAPL', ${t}) AS ok; RESET ROLE;
+    SELECT tecnico->>'cierre' AS cierre, tecnico ? 'en' AS con_hora, precio IS NOT DISTINCT FROM (SELECT precio FROM public.screener_empresas WHERE simbolo='AAPL') AS precio_igual FROM public.screener_empresas WHERE simbolo = 'AAPL';`)
+  await prueba('guardar_tecnico_screener: claves de más se quitan', `${como(A)} SELECT public.guardar_tecnico_screener('AAPL', '{"fecha":"2026-11-06","cierre":1,"precio":5}'); RESET ROLE;
+    DO $$ BEGIN IF (SELECT tecnico ? 'precio' FROM public.screener_empresas WHERE simbolo='AAPL') THEN RAISE EXCEPTION 'guardó una clave de más'; END IF; END $$;`)
+  await prueba('guardar_tecnico_screener: símbolo fuera del screener → false', `${como(A)} DO $$ BEGIN IF public.guardar_tecnico_screener('ZZZZ9', '{"fecha":"2026-11-06","cierre":1}') THEN RAISE EXCEPTION 'ZZZZ9 no debería estar'; END IF; END $$;`)
+  await prueba('anon no puede llamar a guardar_tecnico_screener', `SET LOCAL ROLE anon; SELECT public.guardar_tecnico_screener('AAPL', ${t});`, 'error')
+  await prueba('sin usuario, rechazado', `SET LOCAL ROLE authenticated; SELECT public.guardar_tecnico_screener('AAPL', ${t});`, 'error')
+  await prueba('fecha futura, rechazada', `${como(A)} SELECT public.guardar_tecnico_screener('AAPL', '{"fecha":"2099-01-01","cierre":1}');`, 'error')
+  await prueba('cierre 0, rechazado', `${como(A)} SELECT public.guardar_tecnico_screener('AAPL', '{"fecha":"2026-11-06","cierre":0}');`, 'error')
+  await prueba('número negativo, rechazado', `${como(A)} SELECT public.guardar_tecnico_screener('AAPL', '{"fecha":"2026-11-06","cierre":1,"ema200":-3}');`, 'error')
+  await prueba('texto en un número, rechazado', `${como(A)} SELECT public.guardar_tecnico_screener('AAPL', '{"fecha":"2026-11-06","cierre":1,"max52":"x"}');`, 'error')
+  await prueba('más de 2 KB, rechazado', `${como(A)} SELECT public.guardar_tecnico_screener('AAPL', jsonb_build_object('fecha','2026-11-06','cierre',1,'relleno',repeat('x',3000)));`, 'error')
   console.log(`screenerSeguridad: ${fallos ? fallos + ' fallos' : 'todo bien'}`); process.exit(fallos ? 1 : 0)
 })()

@@ -6,9 +6,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import Ayuda from './BuilderAyuda'
 import ConLimpiar from './LimpiarBusqueda'
-import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
+import { ctxConSesion, fetchConSesion, hayConfigSupabase } from '../lib/supabase'
 import { sinTildes } from '../lib/builder/buscar'
-import { empresasDeFilas, fechaDatos, leerFilasEmpresas } from '../lib/screener/datos'
+import { conTecnico, empresasDeFilas, fechaDatos, fechaTecnico, leerFilasEmpresas, leerReferencias } from '../lib/screener/datos'
+import { MERCADO, REFERENCIAS_TECNICO, cifrasTecnicas } from '../lib/screener/tecnico'
 import { AYUDAS, FILTROS, FILTRO, evaluaVista, fmt, pasa } from '../lib/screener/filtros'
 import { SECTORES_FUERA_POR_DEFECTO } from '../lib/screener/sectores'
 import { VISTAS_EJEMPLO, normalizaVista, textoVista, vistaNueva } from '../lib/screener/vista'
@@ -24,6 +25,15 @@ let claves = 0
 export const pestanaDe = (fila) => ({ clave: ++claves, id: fila.id ?? null, nombre: fila.nombre, vista: normalizaVista(fila.vista), base: fila.id != null ? { nombre: fila.nombre, vista: normalizaVista(fila.vista) } : null })
 export const conCambiosDe = (p) => !p.base || nombreLimpio(p.nombre) !== p.base.nombre || textoVista(p.vista) !== textoVista(p.base.vista)
 const fechaCorta = (iso) => iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '—'
+// «Actualizar precios»: una tanda de símbolos a /api/screener-tecnico (como mucho 10; pages/api/screener-tecnico.js), con el token
+// vigente. Devuelve { resultados: [{ simbolo, tecnico, guardado, error }] }.
+export const TANDA_PRECIOS = 10, TANDAS_A_LA_VEZ = 2
+export async function pideTecnicoDeVerdad(simbolos) {
+  const r = await fetchConSesion('/api/screener-tecnico', { method: 'POST', body: JSON.stringify({ simbolos }) },
+    (jwt) => ({ 'Content-Type': 'application/json', ...(jwt ? { 'x-supa-jwt': jwt } : {}) }))
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return r.json()
+}
 
 // Un «?» con título, explicación y ejemplo (los textos del catálogo).
 export const AyudaFiltro = ({ a, etiqueta }) => !a ? null : (
@@ -55,8 +65,13 @@ const valorOrden = (e, col) => {
 // pantalla (pages/index.js, como en Tesis): salida.current(seguir) → true si ha preguntado. onIrAValor(símbolo, pantalla): abre la ficha
 // de Fundamentals ('fundamentals') o el gráfico ('watchlist') de un valor. onListaGuardada(): avisa a la app para releer la Watchlist.
 // visible: la app la deja montada al ir a otra pantalla (pages/index.js) y la oculta; oculta, Esc no cierra el cajón.
-export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor = null, onListaGuardada = null, visible = true }) {
+// refs (inicial.refs): el técnico de SPY y de los ETF de sectores. pideTecnico(símbolos): una tanda de «Actualizar precios» (en las
+// comprobaciones, una falsa).
+export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor = null, onListaGuardada = null, visible = true, pideTecnico = pideTecnicoDeVerdad }) {
   const [estado, setEstado] = useState(() => inicial.empresas ? { cargando: false, error: null, empresas: inicial.empresas } : { cargando: true, error: null, empresas: [] })
+  const [refs, setRefs] = useState(inicial.refs || {})
+  const [act, setAct] = useState(inicial.act || null)   // «Actualizar precios»: { hechos, total, fallos: [símbolo], fin, parado }
+  const paraRef = useRef(false)
   const [vistas, setVistas] = useState(() => inicial.vistas || VISTAS_EJEMPLO.map(v => pestanaDe({ nombre: v.nombre, vista: copia(v.vista) })))
   const [vistasError, setVistasError] = useState(null)
   const [guardando, setGuardando] = useState(false)
@@ -81,6 +96,7 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
     leerFilasEmpresas(ctxConSesion())
       .then(filas => { if (vivo) setEstado({ cargando: false, error: null, empresas: empresasDeFilas(filas) }) })
       .catch(e => { if (vivo) setEstado({ cargando: false, error: e.message, empresas: [] }) })
+    leerReferencias(ctxConSesion()).then(r => { if (vivo) setRefs(r) }).catch(() => {})
     // Las vistas guardadas; la primera vez (ninguna), se crean las 3 de ejemplo.
     const ctx = ctxConSesion()
     listarVistas(ctx)
@@ -150,9 +166,39 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
   const vista = normalizaVista(actual.vista)
   const cambia = (fn) => setVistas(vs => vs.map((v, i) => i === iv ? { ...v, vista: fn(normalizaVista(v.vista)) } : v))
   const cambiaFiltro = (id, cambio) => cambia(v => ({ ...v, filtros: { ...v.filtros, [id]: { ...v.filtros[id], ...cambio } } }))
-  const ev = useMemo(() => evaluaVista(estado.empresas, vista), [estado.empresas, JSON.stringify(vista)])
+  const empresas = useMemo(() => conTecnico(estado.empresas, refs), [estado.empresas, refs])
+  const ev = useMemo(() => evaluaVista(empresas, vista), [empresas, JSON.stringify(vista)])
   const encendidos = FILTROS.filter(f => !f.proximamente && vista.filtros[f.id]?.on)
   const fecha = fechaDatos(estado.empresas)
+  const fechaPrecios = fechaTecnico(estado.empresas)
+  const sinPrecios = estado.empresas.filter(e => !e.tecnico).length
+  const mercado = refs[MERCADO] ? cifrasTecnicas(refs[MERCADO]).emaDist : null
+
+  // «Actualizar precios»: primero el SPY y los ETF de sectores, luego todas las empresas, por tandas (TANDAS_A_LA_VEZ a la vez).
+  // Cada tanda que llega se aplica ya (la tabla cambia mientras tanto). «Parar» deja de pedir tandas nuevas.
+  const actualizaPrecios = async () => {
+    if (act && !act.fin) return
+    paraRef.current = false
+    const todos = [...new Set([...REFERENCIAS_TECNICO, ...estado.empresas.map(e => e.simbolo)])]
+    const tandas = []; for (let i = 0; i < todos.length; i += TANDA_PRECIOS) tandas.push(todos.slice(i, i + TANDA_PRECIOS))
+    let hechos = 0; const fallos = []
+    setAct({ hechos: 0, total: todos.length, fallos: [], fin: false, parado: false })
+    const una = async (tanda) => {
+      let res
+      try { res = (await pideTecnico(tanda)).resultados || [] } catch (_) { res = tanda.map(simbolo => ({ simbolo, tecnico: null, error: 'fallo' })) }
+      const nuevos = {}
+      for (const x of res) { if (x.tecnico) nuevos[x.simbolo] = x.tecnico; else fallos.push(x.simbolo) }
+      const deRef = Object.fromEntries(Object.entries(nuevos).filter(([k]) => REFERENCIAS_TECNICO.includes(k)))
+      if (Object.keys(deRef).length) setRefs(r => ({ ...r, ...deRef }))
+      setEstado(st => ({ ...st, empresas: st.empresas.map(e => nuevos[e.simbolo] ? { ...e, tecnico: nuevos[e.simbolo] } : e) }))
+      hechos += tanda.length
+      setAct(a => ({ ...a, hechos, fallos: [...fallos] }))
+    }
+    let i = 0
+    const hilo = async () => { while (i < tandas.length && !paraRef.current) { const t = tandas[i++]; await una(t) } }
+    await Promise.all(Array.from({ length: TANDAS_A_LA_VEZ }, hilo))
+    setAct(a => ({ ...a, fin: true, parado: paraRef.current }))
+  }
 
   const filas = useMemo(() => {
     const q = sinTildes(busca.trim().toLowerCase())
@@ -214,7 +260,25 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
           <label key={k} style={{ ...etiqueta, display: 'inline-flex', gap: 5, alignItems: 'center', cursor: 'pointer' }}>
             <input type="checkbox" data-universo={k} checked={!!vista.universo[k]} onChange={e => cambia(v => ({ ...v, universo: { ...v.universo, [k]: e.target.checked } }))}/>{t}
           </label>))}
-        <span style={S.apagado}>Cuentas de la SEC (EDGAR) y precios del {fechaCorta(fecha)} · el PEG esperado es de Yahoo, solo de hoy</span>
+        <span style={S.apagado}>Cuentas de la SEC (EDGAR) del {fechaCorta(fecha)} · el PEG esperado es de Yahoo, solo de hoy</span>
+        <span style={{ flex: 1 }}/>
+        <span data-mercado style={{ display: 'inline-flex', alignItems: 'center' }} title={refs[MERCADO] ? `SPY ${fmt(refs[MERCADO].cierre, 2)} frente a EMA 200 ${fmt(refs[MERCADO].ema200, 2)} (cierre del ${fechaCorta(refs[MERCADO].fecha)})` : undefined}>
+          <span style={S.secundario}>Mercado (SPY):&nbsp;</span>
+          {mercado == null ? <span style={S.apagado}>sin precios</span>
+            : mercado >= 0 ? <span style={{ color: VERDE }}>por encima de su EMA 200 ✓ ({mercado > 0 ? '+' : ''}{fmt(mercado)} %)</span>
+            : <span style={{ color: ROJO }}>por debajo de su EMA 200 ✗ ({fmt(mercado)} %)</span>}
+          <AyudaFiltro a={AYUDAS.mercado}/>
+        </span>
+        <span data-precios style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={S.apagado}>Precios: {fechaPrecios ? `cierre del ${fechaCorta(fechaPrecios)}` : 'sin cargar'}{sinPrecios && fechaPrecios ? ` · ${sinPrecios} sin precios` : ''}</span>
+          {act && !act.fin
+            ? <><span data-progreso style={{ color: B.secundario }}>Actualizando {act.hechos} de {act.total}…</span>
+                <button data-parar onClick={() => { paraRef.current = true }} style={{ ...S.boton, padding: '3px 10px' }}>Parar</button></>
+            : <button data-actualizar onClick={actualizaPrecios} disabled={estado.cargando || !!estado.error} title="Descarga el último cierre de todos los valores (unos 2–3 minutos)" style={{ ...S.boton, padding: '3px 10px' }}>⟳ Actualizar precios</button>}
+          {act?.fin && <span data-act-fin style={{ color: act.fallos.length ? AMARILLO : VERDE }} title={act.fallos.length ? 'Sin precios: ' + act.fallos.join(', ') : undefined}>
+            {act.parado ? `Parado: ${act.hechos} de ${act.total}` : '✓ Hecho'}{act.fallos.length ? ` · ${act.fallos.length} sin precios` : ''}</span>}
+          <AyudaFiltro a={AYUDAS.precios}/>
+        </span>
       </div>
 
       {/* Embudo */}
@@ -231,7 +295,6 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
               <div data-embudo-n={i} style={{ fontSize: 20, fontWeight: 700, color: B.titulo }}>{estado.cargando ? '…' : n}</div>
             </span>
           </span>))}
-        <span style={S.apagado}>El piso técnico llega más adelante: hoy pasan los mismos que en el 1.</span>
         <span style={{ flex: 1 }}/>
         <button data-guardar-lista disabled={!ev.f2.length} onClick={() => { setHecho(null); setLista({ nombre: nombrePropuesto(nombreLimpio(actual.nombre)), error: null, guardando: false }) }}
           title="Crea una lista de la Watchlist con los valores que pasan (fija: no cambia sola)" style={{ ...S.boton, padding: '6px 12px', opacity: ev.f2.length ? 1 : 0.5 }}>☰ Guardar como lista ({ev.f2.length})</button>
@@ -265,7 +328,7 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
                       onChange={e => cambia(v => ({ ...v, sectoresFuera: e.target.checked ? [...v.sectoresFuera, s] : v.sectoresFuera.filter(x => x !== s) }))}/>{s}</label> })}
               </div>
             </>}
-            {piso === 'T' && <div style={{ ...S.apagado, margin: '8px 0' }}>Estos filtros llegan en la parte 2 del screener.</div>}
+            {piso === 'T' && <div style={{ ...S.apagado, margin: '8px 0' }}>Con velas diarias, cierre del {fechaCorta(fechaPrecios)}. Un valor sin precios no pasa un filtro encendido.</div>}
             {FILTROS.filter(f => f.piso === piso).map((f, i, l) => {
               const c = vista.filtros[f.id], on = !!c?.on, n = ev.cuantos[f.id]
               return (
@@ -350,7 +413,7 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
           <button data-p="cancelar" style={S.boton} onClick={() => setLista(null)}>Cancelar</button>
           <button data-p="guardar-lista" disabled={lista.guardando || !lista.nombre.trim()} style={lista.guardando || !lista.nombre.trim() ? S.botonDesactivado : S.botonVerde} onClick={guardaLista}>{lista.guardando ? 'Guardando…' : 'Guardar lista'}</button>
         </Pregunta>)}
-      {detalle && (() => { const e = estado.empresas.find(x => x.simbolo === detalle); return e ? <Cajon e={e} vista={vista} dentro={ev.pasaTodo.has(e.simbolo)} nombreVista={nombreLimpio(actual.nombre)} onCierra={() => setDetalle(null)} onIrAValor={onIrAValor}/> : null })()}
+      {detalle && (() => { const e = empresas.find(x => x.simbolo === detalle); return e ? <Cajon e={e} vista={vista} dentro={ev.pasaTodo.has(e.simbolo)} nombreVista={nombreLimpio(actual.nombre)} onCierra={() => setDetalle(null)} onIrAValor={onIrAValor}/> : null })()}
       {pregunta?.tipo === 'salir' && (
         <Pregunta id="salir" texto={`Tienes cambios sin guardar en la vista «${nombreLimpio(actual.nombre) || 'Vista sin nombre'}».`}>
           <button data-p="cancelar" style={S.boton} onClick={() => setPregunta(null)}>Cancelar</button>
@@ -404,7 +467,9 @@ export function Cajon({ e, vista, dentro, nombreVista, onCierra, onIrAValor }) {
       </div>
       <div style={{ ...grupoEst, marginTop: 0 }}>1 · Fundamentales</div>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>{FILTROS.filter(f => f.piso === 'F').map(fila)}</tbody></table>
-      <p style={{ color: B.apagado, fontSize: 12 }}>✓/✗ solo en los filtros encendidos de la vista; «·» = apagado (se ve el dato igualmente). Cuentas hasta el {fechaCorta(e.cuentasHasta)}{e.moneda && e.moneda !== 'USD' ? `, en ${e.moneda}` : ''}; precio del {fechaCorta(e.precioFecha)}{e.pegFecha ? `; PEG esperado del ${fechaCorta(e.pegFecha)}` : ''}.</p>
+      <div style={grupoEst}>2 · Técnico</div>
+      <table data-cajon-tecnico style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>{FILTROS.filter(f => f.piso === 'T' && !f.proximamente).map(fila)}</tbody></table>
+      <p style={{ color: B.apagado, fontSize: 12 }}>✓/✗ solo en los filtros encendidos de la vista; «·» = apagado (se ve el dato igualmente). Cuentas hasta el {fechaCorta(e.cuentasHasta)}{e.moneda && e.moneda !== 'USD' ? `, en ${e.moneda}` : ''}; precio del {fechaCorta(e.precioFecha)}{e.tecnico ? `; técnico con el cierre del ${fechaCorta(e.tecnico.fecha)}` : '; sin precios para el técnico'}{e.pegFecha ? `; PEG esperado del ${fechaCorta(e.pegFecha)}` : ''}.</p>
     </div>)
 }
 const grupoEst = { display: 'flex', alignItems: 'center', margin: '12px 0 4px', fontSize: 12, fontWeight: 700, color: B.secundario, textTransform: 'uppercase', letterSpacing: '0.04em' }

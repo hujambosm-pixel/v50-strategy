@@ -126,7 +126,42 @@ Las **vistas** son conjuntos de filtros con nombre, que se guardan como los plan
   - Ojo: el esperado es una aproximación, porque mezcla nuestro PER con el PEG de Yahoo, que usa el suyo. A veces sale raro; por ejemplo, ADI con PER 46 y PEG esperado 0,54 da un 85,6 %.
 - **Panel de filtros.** Ahora mide 440 px y se puede ocultar (◀ / «▶ Filtros»). La app recuerda si estaba oculto en el navegador (`screener.panelOculto`).
 
-## 9. Comprobación
+## 9. Parte 2 · Técnico, fase 2a (precios, EMA 200, máximo de 52 semanas, volumen, sector y mercado)
+
+- **Base** (`sql/screener_tecnico.sql`, con REVERSIÓN). Columna `screener_empresas.tecnico` (jsonb): `{ fecha, cierre, ema200, max52, volUlt, volMedio50, cierre3m, velas, en }`. Son PRECIOS, no las cifras de los filtros, para poder cambiar una fórmula sin volver a descargar.
+  - Solo se escribe con `guardar_tecnico_screener(simbolo, tecnico)`, de tipo SECURITY DEFINER. Exige un usuario con sesión y solo toca esa columna de una empresa que ya está en el screener.
+  - Valida el JSON: es un objeto de 2 KB como mucho, la fecha no es futura, el cierre es mayor que 0 y los demás valores son números no negativos. Las claves de más se quitan. Devuelve false si el símbolo no está en el screener.
+  - La tabla sigue sin permisos de escritura para la app. Lo comprueba `screenerSeguridad.js` (20 pruebas, todas con ROLLBACK).
+- **Cálculo** (`lib/screener/tecnico.js`, lógica pura). `tecnicoDe(velas cerradas)` usa los últimos 5 años (≈ 1.260 velas).
+  - EMA 200: la MISMA función que el Builder (`media()` → `calcEMA`, que arranca con la media simple). Con 5 años, lo que pesa el arranque es despreciable (≈ 0,003 %).
+  - Máximo (high) de las últimas 252 velas, contando la última.
+  - Volumen de la última vela y media de las 50 anteriores, sin contarla.
+  - Cierre de 63 velas antes.
+- **Cifras de los filtros** (`cifrasTecnicas`, en la pantalla). Las cuatro son números, como los demás filtros desde V9.1167.
+  - Precio frente a la EMA 200 = cierre ÷ EMA − 1, en %. Por defecto, ≥ 0.
+  - Distancia al máximo de 52 semanas = (máximo − cierre) ÷ máximo, en %. Por defecto, ≤ 5.
+  - Volumen relativo = volumen ÷ media de 50, en veces. Por defecto, ≥ 2.
+  - Su sector frente al SPY (3 meses) = variación del ETF de su sector − variación del SPY, en puntos. Por defecto, ≥ 0. Solo se calcula si los dos llegan a la misma fecha. Los ETF son XLK, XLV, XLF, XLY, XLC, XLI, XLP, XLE, XLU, XLRE y XLB; el sector «Otros» no tiene.
+- **Mercado.** Línea arriba a la derecha: «Mercado (SPY): por encima / por debajo de su EMA 200 (±X %)», con su «?». Es solo informativa: no quita valores.
+- **SPY y ETF.** No están en el screener (SPY sí, porque está en una lista de Sergi). La pantalla los lee de la caché de precios al abrirse (`leerReferencias`, con `leer_velas` y la misma ventana de 5 años).
+- **«⟳ Actualizar precios»** (`pages/api/screener-tecnico.js`).
+  - Va por tandas de 10 símbolos, dos tandas a la vez: primero el SPY y los ETF, luego las ~600 empresas. Unos 2–3 minutos, con «Actualizando N de M…» y «Parar».
+  - Cada símbolo pasa por `diariasConCache` (lo guardado más lo último de Yahoo; guarda en la caché lo cerrado que falte), el mismo camino que el paso 1 del Builder. Si falla, se usa la descarga de Yahoo de siempre.
+  - Se quita la vela en curso (con la sesión de NY abierta, cuenta el cierre de ayer). Después se calcula el técnico, se guarda con el token del usuario y la tabla cambia en cuanto llega cada tanda.
+  - Al terminar dice «✓ Hecho» o «Parado», con cuántos se quedaron sin precios (el tooltip dice cuáles).
+- **Carga desde el PC.**
+  - `node scripts/llenaCachePrecios.js --screener` llena la caché con las empresas, el SPY y los ETF (20 años). Salta los que ya están al día.
+  - `node scripts/cargaScreener.js --tecnico` calcula la columna con lo que hay en la caché, sin descargar nada. Escribe con la misma función, como el usuario de Sergi.
+  - Diferencia conocida: la caché no guarda la vela de «hoy» (UTC). Por eso, entre el cierre de NY y la medianoche UTC, el script usa el cierre anterior y el botón ya el de hoy.
+- **Pantalla.**
+  - La línea «Precios: cierre del dd/mm · N sin precios» va junto al botón.
+  - La pestaña «2 · Técnico» deja encender los cuatro filtros. «Da señal de compra hoy con…» (fase 2b) y los niveles y figuras siguen en gris.
+  - El cajón de un valor tiene un apartado «2 · Técnico» con la cuenta de cada filtro.
+  - La vista de ejemplo «Rentabilidad y poca deuda» lleva ahora la EMA 200 (≥ 0 %), como en el boceto. Solo afecta a las que se creen a partir de ahora.
+  - Un valor sin precios no pasa un filtro técnico encendido.
+- **El precio de la columna «Precio $»** y el PER siguen saliendo de la carga semanal: «Actualizar precios» no cambia ninguna cifra de los fundamentales.
+
+## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:
 - Ventas corregidas en un documento posterior.
@@ -143,6 +178,12 @@ Las **vistas** son conjuntos de filtros con nombre, que se guardan como los plan
   - Caja / deuda: 56.722 ÷ 11.903 = 4,77 (AAPL) y 218 ÷ 338 = 0,64 (FICO); sin deuda a corto, la mejor.
   - P/S frente al sector: +71,3 %, +4,7 % y −5,1 %.
   - Además: los tooltips, los 14 «Recomendado», una vista vieja completada, el crecimiento exigido apagado y encendido (en rojo 20 % > 12 %) y el panel oculto (112 en total).
+- Parte 2 · Técnico, con 300 velas hechas a mano:
+  - EMA 200 = 100 + 10 × 2 ÷ 201 = 100,0995, y el precio frente a ella, +9,89 %.
+  - Máximo 130 → 15,38 %; volumen relativo 3; 3 meses +10 %; con 150 velas, sin EMA ni máximo.
+  - Sector: XLK +8 − SPY +5 = +3, y sin dato con fechas distintas o con «Otros».
+  - Filtro de la EMA 200 y «−3»; línea del mercado (+5,0 %); celdas +5,0 y −5,0; el cajón.
+  - «Actualizar precios» con una descarga falsa: 16 símbolos en 2 tandas, SPY primero, «✓ Hecho · 1 sin precios», y el mercado y el embudo cambian (133 en total).
 - Balance anual que no tapa el 10-Q.
 - El universo y los tramos SIC.
 - La tabla de Wikipedia, y que esté vacía si cambia la página.

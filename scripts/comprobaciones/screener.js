@@ -185,7 +185,7 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
   hp = monta({ busca: 'SALUD', verNo: true })
   ok(hp.includes('data-fila="BBB"') && !hp.includes('data-fila="AAA"'), 'buscar por sector sin distinguir mayúsculas')
   hp = monta({ piso: 'T' })
-  ok(hp.includes('Estos filtros llegan en la parte 2 del screener.') && hp.includes('data-filtro="ema200"'), 'pestaña Técnico: filtros que llegan más adelante')
+  ok(hp.includes('Con velas diarias, cierre del') && hp.includes('data-on="ema200"') && !/data-on="ema200"[^>]*disabled/.test(hp) && /data-on="senal"[^>]*disabled/.test(hp), 'pestaña Técnico: EMA 200 se puede encender; «Da señal de compra hoy con…» aún no')
   hp = renderToString(React.createElement(P, {}))
   ok(hp.includes('Cargando las empresas…'), 'sin datos: «Cargando las empresas…»')
 
@@ -296,6 +296,56 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     ok(h6.includes('data-mostrar-panel') && !h6.includes('data-panel-filtros'), 'panel oculto: solo el botón «▶ Filtros»')
     h6 = renderToString(React.createElement(P, { inicial: { empresas: [caro], vistas: [pestanaDe({ id: 1, nombre: 'X', vista: v6 })] } })).split('<!-- -->').join('')
     ok(h6.includes('data-ocultar-panel') && h6.includes('data-panel-filtros') && h6.includes('width:440px'), 'panel visible, de 440 px, con su botón «◀»')
+  }
+
+  // ── Parte 2 · Técnico (lib/screener/tecnico.js, datos.js, filtros.js y la pantalla) ─────────────────────────────────────
+  {
+    const T = require('../../lib/screener/tecnico')
+    const { conTecnico, fechaTecnico } = require('../../lib/screener/datos')
+    // 300 velas: cierre 100 (alto 101, volumen 1.000) salvo la vela 100 con alto 130 y la última con cierre 110 y volumen 3.000.
+    const dia = (i) => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10)
+    const velas = Array.from({ length: 300 }, (_, i) => ({ date: dia(i), open: 100, high: i === 100 ? 130 : 101, low: 99, close: i === 299 ? 110 : 100, volume: i === 299 ? 3000 : 1000 }))
+    const t = T.tecnicoDe(velas)
+    ok(t.fecha === dia(299) && t.cierre === 110 && t.velas === 300, 'técnico: la última vela (cierre 110), 300 velas')
+    ok(cerca(t.ema200, 100 + 10 * 2 / 201), `EMA 200 de 299 cierres de 100 y uno de 110 = 100 + 10 × 2 ÷ 201 = 100,0995 (sale ${t.ema200})`)
+    ok(t.max52 === 130, 'máximo de 52 semanas: la vela 100 (130) está dentro de las últimas 252 (48–299)')
+    ok(t.volMedio50 === 1000 && t.volUlt === 3000 && t.cierre3m === 100, 'volumen medio de las 50 anteriores 1.000; último 3.000; cierre de hace 63 velas 100')
+    const c = T.cifrasTecnicas(t)
+    ok(cerca(c.emaDist, (110 / (100 + 20 / 201) - 1) * 100) && cerca(c.emaDist, 9.8907, 1e-4), `precio frente a la EMA 200: 110 ÷ 100,0995 − 1 = +9,89 % (sale ${c.emaDist})`)
+    ok(cerca(c.dist52, 20 / 130 * 100), 'distancia al máximo: (130 − 110) ÷ 130 = 15,38 %')
+    ok(c.rvol === 3 && cerca(c.var3m, 10), 'volumen relativo 3.000 ÷ 1.000 = 3; variación en 3 meses 110 ÷ 100 − 1 = 10 %')
+    const corto = T.tecnicoDe(velas.slice(150))
+    ok(corto.ema200 === null && corto.max52 === null && corto.cierre3m === 100 && corto.velas === 150, 'con 150 velas: sin EMA 200 ni máximo de 52 semanas; sí 3 meses')
+    ok(T.tecnicoDe([]) === null && T.tecnicoDe([{ date: dia(0), close: null }]) === null, 'sin velas válidas: null')
+    ok(T.REFERENCIAS_TECNICO.length === 12 && T.REFERENCIAS_TECNICO[0] === 'SPY' && T.ETF_SECTOR['Tecnología'] === 'XLK', 'SPY y los 11 ETF de sectores')
+    const ref = { SPY: { fecha: 'F', cierre: 105, cierre3m: 100 }, XLK: { fecha: 'F', cierre: 108, cierre3m: 100 }, XLV: { fecha: 'G', cierre: 120, cierre3m: 100 } }
+    ok(cerca(T.fuerzaSector('Tecnología', ref), 3), 'sector: XLK +8 % − SPY +5 % = +3 puntos')
+    ok(T.fuerzaSector('Salud', ref) === null && T.fuerzaSector('Otros', ref) === null && T.fuerzaSector('Industria', ref) === null, 'sector: fechas distintas, «Otros» o sin su ETF → sin dato')
+    // La pantalla: AAA por encima de su EMA 200 (105 frente a 100), BBB por debajo (95).
+    const tec = (cierre) => ({ fecha: '2026-11-09', cierre, ema200: 100, max52: 110, volUlt: 1500, volMedio50: 1000, cierre3m: 100, velas: 1260 })
+    const E2 = [{ ...E[0], tecnico: tec(105) }, { ...E[1], tecnico: tec(95) }, E[2], E[3]]
+    ok(fechaTecnico(E2) === '2026-11-09' && cerca(conTecnico(E2, ref)[0].t.sector, 3) && conTecnico(E2, ref)[3].t.emaDist === null, 'conTecnico: cifras y sector; sin técnico, null')
+    const v7 = vistaNueva({ on: ['ema200'], sectoresFuera: [] })
+    const r7 = evaluaVista(conTecnico(E2, ref), v7)
+    ok(r7.f1.length === 4 && r7.f2.map(e => e.simbolo).join() === 'AAA' && r7.cuantos.ema200 === 3, 'EMA 200 ≥ 0 %: pasa AAA; quita 3 (BBB por debajo; CCC y DDD sin precios)')
+    const refSpy = { SPY: { fecha: '2026-11-09', cierre: 105, ema200: 100, cierre3m: 100 } }
+    const h7 = renderToString(React.createElement(P, { inicial: { empresas: E2, refs: refSpy, vistas: [pestanaDe({ id: 1, nombre: 'T', vista: v7 })], verNo: true } })).split('<!-- -->').join('')
+    ok(h7.includes('por encima de su EMA 200 ✓ (+5,0 %)') && h7.includes('Precios: cierre del 09/11/2026 · 2 sin precios'), 'línea del mercado (+5,0 %) y de los precios')
+    ok(h7.includes('+5,0 %') && h7.includes('-5,0 %') && h7.includes('data-actualizar'), 'celdas de la EMA 200 (+5,0 y −5,0) y botón «Actualizar precios»')
+    ok(VISTAS_EJEMPLO[0].vista.filtros.ema200.on === true && VISTAS_EJEMPLO[0].vista.filtros.ema200.valor === 0, '«Rentabilidad y poca deuda» lleva la EMA 200 (≥ 0 %)')
+    const h8 = renderToString(React.createElement(P, { inicial: { empresas: E2, refs: refSpy, vistas: [pestanaDe({ id: 1, nombre: 'T', vista: v7 })], detalle: 'AAA' } })).split('<!-- -->').join('')
+    ok(h8.includes('data-cajon-tecnico') && h8.includes('105,00 ÷ 100,00 − 1') && h8.includes('técnico con el cierre del 09/11/2026'), 'cajón: piso técnico con su cuenta y su fecha')
+    // «Actualizar precios» con una descarga falsa: DDD sin precios; AAA baja a 90 (por debajo); el SPY pasa a estar por debajo.
+    const RDC = require('react-dom/client')
+    const pedidas = []
+    const falsa = async (simbolos) => { pedidas.push(simbolos); return { resultados: simbolos.map(s => s === 'DDD' ? { simbolo: s, tecnico: null, error: 'sin velas' } : { simbolo: s, tecnico: s === 'SPY' ? { ...tec(95), fecha: '2026-11-10' } : { ...tec(s === 'AAA' ? 90 : 101), fecha: '2026-11-10' } }) } }
+    const m = D.monta(React.createElement(P, { inicial: { empresas: E2, refs: refSpy, vistas: [pestanaDe({ id: 1, nombre: 'T', vista: v7 })] }, pideTecnico: falsa }), RDC); await D.espera(30)
+    const uno = (k, v) => m.raiz.conAtributo(k, v)[0]
+    D.pulsa(uno('data-actualizar')); await D.espera(60)
+    ok(pedidas.length === 2 && pedidas.flat().length === 16 && pedidas[0].slice(0, 2).join() === 'SPY,XLK', `se pide en tandas de 10: primero SPY y los ETF, luego las 4 empresas (16; sale ${pedidas.flat().length})`)
+    ok(uno('data-act-fin') && uno('data-act-fin').textContent.includes('✓ Hecho · 1 sin precios'), '«✓ Hecho · 1 sin precios» (DDD)')
+    ok(uno('data-mercado').textContent.includes('por debajo de su EMA 200 ✗ (-5,0 %)') && uno('data-embudo-n', 2).textContent === '2', 'tras actualizar: SPY por debajo; AAA (90) ya no pasa y sí BBB y CCC (101)')
+    m.quita()
   }
 
   // La app deja el screener montado tras la primera visita (como el Builder): al volver de una ficha o un gráfico sigue igual.

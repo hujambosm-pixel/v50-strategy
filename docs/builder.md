@@ -2661,3 +2661,18 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - La tabla queda sin ✓ ni ✗ (en rojo lo que no pasa), con un tooltip por celda. Cada «?» lleva «Recomendado». El crecimiento exigido va detrás de una casilla y se muestra junto al esperado. El panel mide 440 px y se puede ocultar.
 - Detalle en docs/screener.md §8. Las cifras de la base no cambian: lo nuevo se calcula en la pantalla con lo que ya trae `metricas`.
 - `screener.js` (112). Nada cambia en las demás pantallas ni en las cifras.
+
+## 106. Screener (parte 2, fase 2a): piso técnico, precios y mercado
+
+- Cambio en la base, aprobado por Sergi el 10/11 (`sql/screener_tecnico.sql`, con REVERSIÓN): columna `screener_empresas.tecnico` y la función `guardar_tecnico_screener`, que solo escribe esa columna. Seguridad: `screenerSeguridad.js`, 20 de 20.
+- Cuatro filtros técnicos que ya se pueden encender, todos con números:
+  - precio frente a la EMA 200 (la misma EMA del Builder);
+  - distancia al máximo de 52 semanas;
+  - volumen relativo;
+  - su sector frente al SPY en 3 meses (ETF XLK…).
+- Línea informativa «Mercado (SPY) por encima / por debajo de su EMA 200».
+- Botón «⟳ Actualizar precios», por tandas (`pages/api/screener-tecnico.js`, con `diariasConCache`).
+- Scripts: `llenaCachePrecios.js --screener` y `cargaScreener.js --tecnico`.
+- Detalle en docs/screener.md §9.
+- Nada cambia en las demás pantallas ni en las cifras: la caché de precios solo gana valores, y los fundamentales del screener no cambian.
+- `screener.js` pasa de 112 a 133 pruebas.

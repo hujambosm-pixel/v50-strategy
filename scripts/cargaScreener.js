@@ -8,6 +8,10 @@
 //   node scripts/cargaScreener.js --ensayo           lo descarga y lo cuenta todo, pero no escribe nada (ROLLBACK)
 //   node scripts/cargaScreener.js --metricas         solo vuelve a calcular la columna `metricas` con lo que ya hay en la base
 //                                                    (sin descargar nada: tras cambiar una fórmula de lib/screener/metricas.js)
+//   node scripts/cargaScreener.js --tecnico          solo vuelve a calcular la columna `tecnico` (piso técnico, parte 2) con las velas
+//                                                    que YA están en la caché de precios (sin descargar: antes, llenaCachePrecios.js
+//                                                    --screener). Escribe con guardar_tecnico_screener, como la app (botón
+//                                                    «Actualizar precios»), simulando al usuario de Sergi. Admite --solo.
 //   opciones: --pausa-sec 150 (ms entre peticiones a la SEC; su límite es 10 por segundo) · --pausa-yahoo 250
 //
 // LA SEC EXIGE que cada petición diga quién la hace (nombre y correo de contacto). Se lee de SEC_UA en .env.local (no
@@ -34,6 +38,8 @@ const opcion = (n, def = null) => { const i = args.indexOf(n); return i >= 0 ? a
 const SOLO = opcion('--solo') ? opcion('--solo').split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : null
 const ENSAYO = args.includes('--ensayo')
 const SOLO_METRICAS = args.includes('--metricas')
+const SOLO_TECNICO = args.includes('--tecnico')
+const USUARIO = 'c006506d-084b-4c2e-a458-70c5caa35d3a'   // el de Sergi (guardar_tecnico_screener exige un usuario)
 const PAUSA_SEC = Number(opcion('--pausa-sec', 150))
 const PAUSA_YAHOO = Number(opcion('--pausa-yahoo', 250))
 const TANDA = 20
@@ -130,7 +136,40 @@ async function recalculaMetricas(metricasDe, simbolos = null) {
   return hechas
 }
 
+// La columna `tecnico` (lib/screener/tecnico.js) con las velas de la caché: la MISMA ventana que la ruta /api/screener-tecnico
+// (desde el mismo día de hace ANIOS_TECNICO años, UTC) y los precios exactos (extra_float_digits = 1). Por tandas de 20.
+async function recalculaTecnico({ tecnicoDe, ANIOS_TECNICO }, simbolos = null) {
+  const empresas = (await consulta(`SELECT simbolo FROM public.screener_empresas${simbolos ? ` WHERE simbolo IN (${simbolos.map(lit).join(', ')})` : ''} ORDER BY simbolo;`)).map(e => e.simbolo)
+  const hoy = new Date().toISOString().slice(0, 10)
+  const [y, m, d] = hoy.split('-').map(Number)
+  const inicio = new Date(Date.UTC(y - ANIOS_TECNICO, m - 1, d)).toISOString().slice(0, 10)
+  let hechas = 0; const sin = []
+  for (let i = 0; i < empresas.length; i += 20) {
+    const lote = empresas.slice(i, i + 20)
+    const filas = await consulta(`BEGIN READ ONLY; SET LOCAL extra_float_digits = 1;
+      SELECT simbolo, json_agg(json_build_array(fecha::text, high, close, volumen) ORDER BY fecha) AS d FROM public.precios_diarios
+      WHERE simbolo IN (${lote.map(lit).join(', ')}) AND fecha >= ${lit(inicio)} AND fecha < ${lit(hoy)} GROUP BY simbolo; ROLLBACK;`)
+    const porSimbolo = Object.fromEntries(filas.map(f => [f.simbolo, f.d]))
+    const llamadas = []
+    for (const s of lote) {
+      const t = porSimbolo[s] ? tecnicoDe(porSimbolo[s].map(([date, high, close, volume]) => ({ date, high, close, volume: volume ?? 0 }))) : null
+      if (!t) { sin.push(s); continue }
+      llamadas.push(`public.guardar_tecnico_screener(${lit(s)}, ${lit(JSON.stringify(t))}::jsonb)`)
+    }
+    if (llamadas.length) await consulta(`BEGIN; SET LOCAL ROLE authenticated; SELECT set_config('request.jwt.claims', '{"sub":"${USUARIO}","role":"authenticated"}', true);
+      SELECT ${llamadas.join(', ')}; COMMIT;`)
+    hechas += llamadas.length
+  }
+  return { hechas, sin }
+}
+
 if (require.main === module) (async () => {
+  if (SOLO_TECNICO) {
+    await preparaEsm()
+    const t0 = Date.now(), r = await recalculaTecnico(require('../lib/screener/tecnico'), SOLO)
+    console.log(`Técnico calculado de ${r.hechas} empresas en ${Math.round((Date.now() - t0) / 1000)} s.${r.sin.length ? ` Sin velas en la caché (${r.sin.length}): ${r.sin.join(', ')}.` : ''}`)
+    return
+  }
   if (SOLO_METRICAS) {
     await preparaEsm()
     const { metricasDe } = require('../lib/screener/metricas')
