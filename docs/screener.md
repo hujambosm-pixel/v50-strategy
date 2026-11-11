@@ -247,6 +247,19 @@ Pedidos por Sergi el 11/11, en el orden EMA 200, 50, 20 (piso Técnico, grupo «
 - **Comprobaciones**: `screener.js` (EMA 50 = 100 + 10 × 2 ÷ 51; EMA 20 = 100 + 10 × 2 ÷ 21 → +8,96 %; orden; vistas viejas) y `screenerSeguridad.js` (guarda las dos; negativa, rechazada).
 - Al pasar el ratón por el NOMBRE de cualquier filtro, el tooltip dice su cifra recomendada («Recomendado: ≥ 25 % (30 % = muy exigente). Pulsa para ver qué es.»; pedido por Sergi el 11/11).
 
+## 17. Desplegable de cifras que se puede editar
+
+Pedido por Sergi el 11/11 (boceto `bocetos/screener-desplegable.html`). Sustituye al `<select>` con «Otra cifra…»: un `<select>` no admite botones dentro, así que es un desplegable propio (`components/ScreenerCifras.js`).
+- Al pasar el ratón por una cifra salen ✎ (cambiarla: ≥/≤ y la cifra; Enter guarda, Esc cancela) y la papelera roja (quitarla de la lista). Abajo, «+ Añadir cifra» y «↺ Las de fábrica».
+- **La lista se ordena sola** (`ordenaCifras` en `lib/screener/opciones.js`): primero las del sentido de siempre del filtro y luego las del contrario; dentro de cada grupo, de menor a mayor. En las EMA, de más cerca a más lejos de la media («Por encima», «5 % o más por encima»…, «Por debajo», «5 % o más por debajo»…). Ej.: cambiar ROCE 25 → 45 la coloca detrás de 40; añadir 12 la coloca entre 10 y 15.
+- **Dónde se guardan**: en tus ajustes (`settings.screenerCifras = { id del filtro: [[op, cifra], …] }`, `saveSettingsRemote`: navegador y tu cuenta, como las comisiones). Valen en todas las vistas. Sin entrada, las de fábrica. Decidido por mí: no hace falta cambiar la base.
+- Cambiar con ✎ la cifra que está elegida cambia también el filtro de esa vista. Las demás vistas que usaban la cifra vieja la conservan.
+- Una cifra de la vista que no está en tu lista (la quitaste, o la vista es de antes) sale arriba en gris, «≥ 27 % · no está en tu lista», con ＋ para añadirla. Sigue funcionando igual.
+- Las EMA siguen con palabras; con las cifras al revés: «Por encima o hasta 5 % por debajo» (≥ −5) y «Por debajo o hasta 5 % por encima» (≤ 5).
+- «Da señal de compra… en las últimas N velas» no cambia (sus velas no se editan).
+- Lo que se guarda en una vista no cambia (`{ on, op, valor }`). Ninguna cifra cambia.
+- **Comprobación** `screener.js` (201): orden, añadir sin repetir, quitar, cambiar (también en las EMA), la lista con tus cifras (las raras se ignoran), «no está en tu lista», y con estado: abrir, ✎ 25 → 45 (se ordena, cambia el filtro y se guarda en tus ajustes), elegir, quitar la elegida, añadir 12 y «Las de fábrica».
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:

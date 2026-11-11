@@ -15,7 +15,9 @@ import { AYUDAS, FILTROS, FILTRO, evaluaVista, fmt, pasa } from '../lib/screener
 import { SECTORES_FUERA_POR_DEFECTO } from '../lib/screener/sectores'
 import { VISTAS_EJEMPLO, normalizaVista, textoVista, vistaNueva } from '../lib/screener/vista'
 import { borrarVista, cambiarVista, creaEjemplos, crearVista, listarVistas, nombreLimpio } from '../lib/screener/vistasBase'
-import { opcionElegida, opcionesDe, textoCondicion, textoEncendido } from '../lib/screener/opciones'
+import { cifrasDe, opcionElegida, opcionesDe, textoCondicion, textoEncendido } from '../lib/screener/opciones'
+import ScreenerCifras from './ScreenerCifras'
+import { loadSettings, saveSettingsRemote } from '../lib/settings'
 import { Papelera, Pregunta } from './VentanaPregunta'
 import { guardarComoLista, nombrePropuesto } from '../lib/screener/lista'
 import { esDeTarjetas, fotoDe } from '../lib/pruebaAzar'
@@ -24,7 +26,7 @@ import { listarEnlacesTesis, tesisDe } from '../lib/tesis'
 
 const copia = (x) => JSON.parse(JSON.stringify(x))
 // §15: el «?» junto a las pestañas de los filtros.
-export const AYUDA_FILTROS = ['Filtros', 'Pestañas: «Universo y sectores», «1 · Fundamentales», «2 · Técnico» y «Todos» (todo junto); el número azul dice cuántos hay encendidos en cada una. Pulsa el NOMBRE de un filtro para ver qué es, con un ejemplo. Cada filtro tiene cifras fijas; con «Otra cifra…» pones la tuya. El número rojo «−N» dice cuántos valores de los que llegan a ese piso no pasan ese filtro. «Filtros ▲» los oculta: queda una línea con los encendidos (✕ quita uno) y la tabla sube.', 'Llegan 300 valores a Fundamentales y 120 tienen ROCE menor que 25 % → «−120».']
+export const AYUDA_FILTROS = ['Filtros', 'Pestañas: «Universo y sectores», «1 · Fundamentales», «2 · Técnico» y «Todos» (todo junto); el número azul dice cuántos hay encendidos en cada una. Pulsa el NOMBRE de un filtro para ver qué es, con un ejemplo; al pasar el ratón por él, su cifra recomendada. En el desplegable de cada filtro, al pasar el ratón por una cifra, ✎ la cambia y 🗑 la quita; «+ Añadir cifra» añade otra y «↺ Las de fábrica» vuelve a las de la app. Tus cifras se ordenan solas, se guardan en tus ajustes y valen en todas las vistas. El número rojo «−N» dice cuántos valores de los que llegan a ese piso no pasan ese filtro. «Filtros ▲» los oculta: queda una línea con los encendidos (✕ quita uno) y la tabla sube.', 'Llegan 300 valores a Fundamentales y 120 tienen ROCE menor que 25 % → «−120».']
 const PESTANAS_FILTROS = [['U', 'Universo y sectores'], ['F', '1 · Fundamentales'], ['T', '2 · Técnico'], ['todos', 'Todos']]
 // Una pestaña de vista: { clave (local), id (de la base, null si aún no está guardada), nombre, vista, base: { nombre, vista } | null
 // (lo guardado; null si es nueva) }. Con cambios = nueva, u otro nombre u otra vista que lo guardado.
@@ -89,7 +91,8 @@ const valorOrden = (e, col) => {
 // visible: la app la deja montada al ir a otra pantalla (pages/index.js) y la oculta; oculta, Esc no cierra el cajón.
 // refs (inicial.refs): el técnico de SPY y de los ETF de sectores. pideTecnico(símbolos): una tanda de «Actualizar precios» (en las
 // comprobaciones, una falsa).
-export default function ScreenerPanel({ tema = 'oscuro', inicial = {}, salida = null, onIrAValor = null, onListaGuardada = null, visible = true, pideTecnico = pideTecnicoDeVerdad, estrategias = [], pideSenales = pideSenalesDeVerdad, onAbrirTesis = null, abrirVista = null, onVistaAbierta = null }) {
+export function guardaCifrasEnAjustes(n) { try { saveSettingsRemote({ ...(loadSettings() || {}), screenerCifras: n }) } catch (_) {} }
+export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCifrasEnAjustes, inicial = {}, salida = null, onIrAValor = null, onListaGuardada = null, visible = true, pideTecnico = pideTecnicoDeVerdad, estrategias = [], pideSenales = pideSenalesDeVerdad, onAbrirTesis = null, abrirVista = null, onVistaAbierta = null }) {
   const [estado, setEstado] = useState(() => inicial.empresas ? { cargando: false, error: null, empresas: inicial.empresas } : { cargando: true, error: null, empresas: [] })
   const [refs, setRefs] = useState(inicial.refs || {})
   const [act, setAct] = useState(inicial.act || null)   // «Actualizar precios»: { hechos, total, fallos: [símbolo], fin, parado }
@@ -115,7 +118,13 @@ export default function ScreenerPanel({ tema = 'oscuro', inicial = {}, salida = 
   const ponPanelOculto = (x) => { setPanelOculto(x); try { localStorage.setItem('screener.panelOculto', x ? '1' : '0') } catch (_) {} }
   const [iv, setIv] = useState(inicial.iv || 0)
   const [piso, setPiso] = useState(inicial.piso || 'F')   // pestaña de los filtros: 'U' (universo y sectores), 'F', 'T' o 'todos'
-  const [otra, setOtra] = useState({})   // { id: true } = la caja de «Otra cifra…» abierta (es de la pantalla: no se guarda)
+  // §17: tus cifras de cada filtro (settings.screenerCifras = { id: [[op, cifra], …] }; sin entrada, las de fábrica). Se leen de tus
+  // ajustes cada vez que se entra en la pantalla y se guardan en ellos (navegador + tu cuenta) al cambiarlas.
+  const [cifras, setCifras] = useState(inicial.cifras || {})
+  useEffect(() => { if (!inicial.empresas && visible) { try { setCifras(loadSettings()?.screenerCifras || {}) } catch (_) {} } }, [visible])
+  const ponLista = (f, nueva) => setCifras(cs => {
+    const n = { ...cs }; if (nueva) n[f.id] = nueva; else delete n[f.id]
+    guardaCifras(n); return n })
   const [editaNombre, setEditaNombre] = useState(false)   // cambiando el nombre de la vista (✎ o doble clic en su pestaña)
   const nombreRef = useRef(null)
   useEffect(() => { if (editaNombre) { nombreRef.current?.focus?.(); nombreRef.current?.select?.() } }, [editaNombre])
@@ -159,7 +168,7 @@ export default function ScreenerPanel({ tema = 'oscuro', inicial = {}, salida = 
   }, [abrirVista?.n, vistasLeidas])
 
   const actual = vistas[Math.min(iv, vistas.length - 1)]
-  useEffect(() => { setOtra({}); setEditaNombre(false) }, [iv, vistas.length])
+  useEffect(() => { setEditaNombre(false) }, [iv, vistas.length])
   const conCambios = conCambiosDe(actual)
   // Guardia al salir de la pantalla con cambios (como en Tesis).
   const conCambiosRef = useRef(conCambios); conCambiosRef.current = conCambios
@@ -325,15 +334,6 @@ export default function ScreenerPanel({ tema = 'oscuro', inicial = {}, salida = 
   const equis = { cursor: 'pointer', color: B.secundario, marginLeft: 2 }
   const cuentaPestana = (k) => k === 'U' ? vista.sectoresFuera.length
     : k === 'todos' ? vista.sectoresFuera.length + encendidos.length : encendidos.filter(f => f.piso === k).length
-  // Elegir en el desplegable de un filtro: «Cualquiera» lo apaga; una cifra fija lo enciende con ella; «Otra cifra…» abre la caja.
-  const eligeOpcion = (f, x) => {
-    const c = vista.filtros[f.id]
-    if (x === 'no') { setOtra(o => ({ ...o, [f.id]: false })); cambiaFiltro(f.id, { on: false }); return }
-    if (x === 'otra') { setOtra(o => ({ ...o, [f.id]: true })); cambiaFiltro(f.id, { on: true, op: c.op, valor: c.valor }); return }
-    if (x === 'tuya') return
-    const o = opcionesDe(f)[Number(x)]; if (!o) return
-    setOtra(oo => ({ ...oo, [f.id]: false })); cambiaFiltro(f.id, { on: true, op: o.op, valor: o.valor })
-  }
   const desplegable = { ...caja, width: 148, padding: '2px 4px', fontSize: 13 }
   // El nombre de un filtro: pulsarlo abre su «?» (no se abre al pasar el ratón). Al pasar el ratón, su cifra recomendada (pedido por
   // Sergi el 11/11).
@@ -369,23 +369,12 @@ export default function ScreenerPanel({ tema = 'oscuro', inicial = {}, salida = 
         </select>
         <span/>
       </div>]
-    const i = opcionElegida(f, c), abierta = on && !!otra[f.id]
-    const valor = !on ? 'no' : abierta ? 'otra' : i >= 0 ? String(i) : 'tuya'
     return (
       <div key={f.id} data-filtro={f.id} style={celdaRejilla}>
         <span style={{ textAlign: 'right', lineHeight: 1.15 }}>{nombreFiltro(f, on, f.nombre)}{f.fuente?.startsWith('Yahoo') && <Fuente f={f.fuente}/>}</span>
-        <select data-opcion={f.id} value={valor} onChange={e => eligeOpcion(f, e.target.value)} style={{ ...desplegable, ...(on ? encendido : {}) }}>
-          <option value="no">Cualquiera</option>
-          {opcionesDe(f).map((o, k) => <option key={k} value={String(k)}>{o.texto}</option>)}
-          {on && i < 0 && <option value="tuya">{textoCondicion(f, c.op, c.valor)} (tuya)</option>}
-          <option value="otra">Otra cifra…</option>
-        </select>
+        <ScreenerCifras f={f} c={c} lista={cifrasDe(f, cifras)} estilo={{ ...desplegable, ...(on ? encendido : {}) }} abiertoInicial={inicial.abierto === f.id}
+          onElige={x => cambiaFiltro(f.id, x ? { on: true, op: x[0], valor: x[1] } : { on: false })} onLista={l => ponLista(f, l)}/>
         {cuenta}
-        {abierta && <span style={{ gridColumn: '2 / 4', display: 'flex', gap: 4, alignItems: 'center' }}>
-          <select data-op={f.id} value={c.op} onChange={e => cambiaFiltro(f.id, { op: e.target.value })} style={{ ...caja, padding: '1px 2px', width: 42 }}><option>≥</option><option>≤</option></select>
-          <input data-valor={f.id} type="number" step="any" value={c.valor ?? ''} onChange={e => cambiaFiltro(f.id, { valor: e.target.value === '' ? null : Number(e.target.value) })} style={{ ...caja, width: 70, padding: '1px 5px' }}/>
-          <span style={S.apagado}>{f.unidad}</span>
-        </span>}
       </div>)
   }
   // La rejilla: 5 columnas, todas las casillas iguales, que se rellenan columna a columna en el orden del catálogo (así los de un

@@ -2744,3 +2744,8 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - Cambio en la base: `guardar_tecnico_screener` acepta y guarda `ema50` y `ema20` (sql/screener_tecnico_ema.sql, con REVERSIÓN).
 - Ninguna cifra de lo que ya había cambia.
 - Al pasar el ratón por el nombre de un filtro, su cifra recomendada.
+
+## 116. Screener: desplegable de cifras que se puede editar
+
+- Fuera «Otra cifra…»: en cada cifra del desplegable, ✎ (cambiarla) y papelera (quitarla); abajo, «+ Añadir cifra» y «↺ Las de fábrica». La lista se ordena sola. Detalle en docs/screener.md §17.
+- Tus cifras se guardan en tus ajustes (settings.screenerCifras), sin cambios en la base. Ninguna cifra cambia.
