@@ -115,6 +115,36 @@ const cerca = (a, b, tol = 1e-9) => Number.isFinite(a) && Math.abs(a - b) <= tol
   const d1 = rotar({ ...o1, velas }).decisiones.filter(d => d.fecha < fechas[corte]), d2 = rotar({ ...o1, velas: velas2 }).decisiones.filter(d => d.fecha < fechas[corte])
   ok(d1.length > 5 && JSON.stringify(d1) === JSON.stringify(d2), `las ${d1.length} decisiones anteriores a la vela ${corte} no cambian`)
 
+  // ── 12 · El azar (§126) ──
+  const { azarRotacion, eligeAlAzar, prepara, simula } = require(R + '/lib/rotacion.js')
+  r = rotar(base)
+  ok(r.decisiones.map(d => d.rotados).join(',') === '0,1,1', 'rotados de la estrategia K = 1: 0 el 31/12, 1 el 31/1 (A), 1 el 28/2 (B)')
+  // Con rnd = 0 siempre se saca el primero (en orden alfabético): tiene A y C, suelta 1 → suelta A; rellena con B.
+  const e = eligeAlAzar([1], () => 0)({ j: 0, candidatos: [{ s: 'A' }, { s: 'B' }, { s: 'C' }], enCartera: new Set(['A', 'C']), K: 2 })
+  ok(e.join(',') === 'C,B', 'eligeAlAzar a mano: con A y C, suelta 1 (A) y entra B')
+  const e2 = eligeAlAzar([0], () => 0)({ j: 0, candidatos: [{ s: 'B' }], enCartera: new Set(['A']), K: 1 })
+  ok(e2.join(',') === 'B', 'eligeAlAzar: el que ya no es candidato sale siempre (A) y entra B')
+  // K = 1 con A y B: cada copia rota igual que la estrategia (3 operaciones): A → B → A (la real) o B → A → B.
+  const az = azarRotacion(base, { nSim: 200, semilla: 7 })
+  const otra = 10000 * 121 / 106 * 131 / 116 * 128 / 126
+  const nReal = az.sims.final.filter(x => cerca(x, az.real.final)).length, nOtra = az.sims.final.filter(x => cerca(x, otra)).length
+  ok(nReal + nOtra === 200 && nReal > 50 && nOtra > 50, `copias K = 1: ${nReal} como la real (A → B → A) y ${nOtra} B → A → B = 10.000 × 121/106 × 131/116 × 128/126`)
+  const pEsp = (az.sims.cagr.filter(x => x < az.real.cagr).length + nReal / 2) / 200 * 100
+  ok(cerca(az.percentilCagr, pEsp), `percentil del CAGR a mano: ${az.percentilCagr.toFixed(1)} (las que ganan menos + la mitad de los empates)`)
+  // K = todos: no hay nada que elegir; todas las copias = la estrategia → percentil 50.
+  const az2 = azarRotacion({ ...base, K: 2 }, { nSim: 50, semilla: 3 })
+  ok(az2.sims.final.every(x => x === az2.real.final) && az2.percentilCagr === 50, 'K = todos: las copias son la estrategia (percentil 50)')
+  // Misma semilla, mismas copias; otra semilla, otras.
+  const o10 = { fechas, velas, desde, hasta, capital: 10000, K: 2, criterio: { tipo: 'momentum', L: 20 }, costes }
+  const s1 = azarRotacion(o10, { nSim: 30, semilla: 11 }), s2 = azarRotacion(o10, { nSim: 30, semilla: 11 }), s3 = azarRotacion(o10, { nSim: 30, semilla: 12 })
+  ok(JSON.stringify(s1.sims) === JSON.stringify(s2.sims) && JSON.stringify(s1.sims) !== JSON.stringify(s3.sims), 'semilla fija: mismas copias; otra semilla, otras')
+  // Las copias cambian lo mismo que la estrategia: en cada decisión sueltan tantos «voluntarios» como ella (si pueden).
+  const P10 = prepara(o10), real10 = simula(P10), rot = real10.decisiones.map(d => d.rotados)
+  const copia = simula(P10, eligeAlAzar(rot, () => 0.37))
+  ok(copia.decisiones.every((d, k) => d.rotados <= rot[k]) && copia.decisiones.reduce((a, d) => a + d.rotados, 0) === rot.reduce((a, x) => a + x, 0),
+    `la copia rota igual: ${rot.reduce((a, x) => a + x, 0)} cambios voluntarios en las dos`)
+  ok(cerca(az.real.final, rotar(base).final), 'la real del azar = rotar')
+
   console.log(fallos ? `rotacion: ${fallos} fallos` : 'rotacion: todo bien')
   process.exit(fallos ? 1 : 0)
 })()

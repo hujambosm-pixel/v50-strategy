@@ -2796,3 +2796,10 @@ Primer paso del orden del 11/11 (rotación → Comparar planes → …). Ninguna
 - Costes: máx(% × importe, mínimo) por orden (como costeOrden del plan) y deslizamiento: compra a precio × (1 + d), venta a precio × (1 − d).
 - Comprobación scripts/comprobaciones/rotacion.js (en comunes.sh): 27 casos calculados a mano (rotación A → B → A, costes, mínimo, mercado, filtro, miembros, venta anticipada, opción A con K = 2 de 3, deja de cotizar, menos candidatos que K), PRUEBA DE ORO (K = todos = Buy&Hold a partes iguales sin rebalanceo, con costes, mensual y semanal) y sin mirar al futuro.
 - Siguiente: la prueba contra el azar (K valores al azar en las mismas fechas) y la batería del plan de Sergi.
+## 126. Rotación: la prueba contra el azar (sin pantalla)
+
+- lib/rotacion.js se parte en prepara (datos alineados y candidatos de cada decisión, una vez) y simula (el dinero, con una función elige); rotar = las dos con «los K primeros». Mismos resultados que en §125 (las mismas comprobaciones).
+- azarRotacion: 1.000 copias (semilla fija). Cada copia decide en las MISMAS fechas, entre los MISMOS candidatos, con el mismo mercado, costes, venta anticipada y cierre al final; elige AL AZAR y cambia los mismos que la estrategia: suelta los que ya no son candidatos, suelta al azar tantos como la estrategia soltó ese día por decisión propia («rotados») y rellena al azar hasta K. Así rota igual de a menudo y paga costes parecidos: solo se prueba si el criterio elige mejor que el azar (la idea de «misma frecuencia» del paso 2).
+- Percentil del CAGR (% de copias que ganan menos; empates, la mitad) y de la caída (% de copias que caen más).
+- Calibración (fuera de comunes.sh, con 60 mercados de precios al azar, 60 valores, 5 años, K = 5, momentum 126 saltando 21, con costes): 0 de 60 con percentil ≥ 95, mediana 56,5. Velocidad: 1.000 copias con 130 valores y 10 años, unos 6 s.
+- Comprobación rotacion.js: 11 casos más (rotados a mano, elección al azar a mano, K = 1 con las dos copias posibles calculadas, percentil a mano, K = todos = percentil 50, semilla fija, misma rotación).
