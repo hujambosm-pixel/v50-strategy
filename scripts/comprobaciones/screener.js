@@ -474,6 +474,12 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     ok(h.includes('data-universo-sectores') && !h.includes('data-rejilla'), '«Universo y sectores»: sin la rejilla')
     ok(/data-mercado[^>]*title="Informativo: no es un filtro\./.test(h) && h.includes('data-embudo') && h.includes('data-actualizar') && h.includes('Cuentas de la SEC (EDGAR) del'), 'en la línea de los filtros: el mercado (informativo), los precios y el embudo; la fecha de las cuentas, al pie')
     ok(/data-nombre-vista[^>]*readonly=""/.test(h) && h.includes('data-editar-nombre') && /data-vistas[\s\S]*data-guardar-lista[\s\S]*data-descartar[\s\S]*data-guardar=/.test(h) && h.indexOf('data-bloque-filtros') > h.indexOf('data-guardar='), 'vistas en una línea: nombre (con ✎), y a la derecha lista, descartar y guardar')
+    {
+      const hx = monta15({})
+      ok(/data-explica-embudo="1" title="Llegan 3 y pasan 1: 2 no pasan algún filtro de Fundamentales\. Lo que quita cada uno \(mirándolo solo a él; uno puede fallar varios\): ROCE −2\."/.test(hx), '§18: tooltip del embudo: llegan 3, pasan 1 (ROCE ≥ 27: AAA 30), el ROCE quita 2')
+      ok(/data-explica-embudo="0" title="Universo elegido \(S&amp;P 500 \+ Nasdaq-100 \+ tus listas\): 4 empresas; se quitan 1 de los sectores quitados → quedan 3\./.test(hx) && /data-explica-embudo="2" title="Llegan 1 y pasan [01]: /.test(hx), '§18: tooltip del universo (4, sin 1 de sectores → 3) y del técnico')
+      ok(hx.includes('color-scheme:dark') && monta15({}).length > 0 && renderToString(React.createElement(P, { tema: 'claro', inicial: { empresas: E, vistas: [guardada()] } })).includes('color-scheme:light'), '§18: los desplegables del navegador siguen el tono (oscuro / claro)')
+    }
     ok(monta15({}).includes('data-recomendado-filtro="roce" title="Recomendado: ≥ 25 % (30 % = muy exigente). Pulsa para ver qué es."'), 'al pasar el ratón por el nombre: la cifra recomendada')
     // El «?» de siempre no cambia; con contenido, el nombre hace de botón.
     const Ay = require('../../components/BuilderAyuda').default

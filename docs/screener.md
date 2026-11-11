@@ -260,6 +260,15 @@ Pedido por Sergi el 11/11 (boceto `bocetos/screener-desplegable.html`). Sustituy
 - Lo que se guarda en una vista no cambia (`{ on, op, valor }`). Ninguna cifra cambia.
 - **Comprobación** `screener.js` (201): orden, añadir sin repetir, quitar, cambiar (también en las EMA), la lista con tus cifras (las raras se ignoran), «no está en tu lista», y con estado: abrir, ✎ 25 → 45 (se ordena, cambia el filtro y se guarda en tus ajustes), elegir, quitar la elegida, añadir 12 y «Las de fábrica».
 
+## 18. Tooltips del embudo y desplegables en el tono claro
+
+Visto por Sergi el 11/11 en la app.
+- **Embudo**: al pasar el ratón por cada número, por qué no se ven los demás.
+  - Universo: qué universo está elegido, cuántas empresas tiene y cuántas se quitan por los sectores (p. ej. «… 599 empresas; se quitan 205 de los sectores quitados → quedan 394»).
+  - Fundamentales y Técnico: cuántos llegan, cuántos pasan y lo que quita cada filtro encendido de ese piso mirándolo solo a él, como el «−N» (uno puede fallar varios filtros: no suman exactamente). Sin filtros encendidos, lo dice.
+- **Desplegables del navegador** («Da señal de compra con…», «… en las últimas N velas»): siguen el tono de la pantalla (`color-scheme` claro u oscuro). Antes, en el tono claro, su lista salía negra.
+- **Comprobación** `screener.js` (204).
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:

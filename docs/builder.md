@@ -2749,3 +2749,8 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 
 - Fuera «Otra cifra…»: en cada cifra del desplegable, ✎ (cambiarla) y papelera (quitarla); abajo, «+ Añadir cifra» y «↺ Las de fábrica». La lista se ordena sola. Detalle en docs/screener.md §17.
 - Tus cifras se guardan en tus ajustes (settings.screenerCifras), sin cambios en la base. Ninguna cifra cambia.
+
+## 117. Screener: tooltips del embudo y desplegables en el tono claro
+
+- Cada número del embudo explica en su tooltip por qué no se ven los demás valores (lo que quita cada filtro). Detalle en docs/screener.md §18.
+- Los desplegables del navegador siguen el tono de la pantalla (en el claro salían negros). Ninguna cifra cambia.

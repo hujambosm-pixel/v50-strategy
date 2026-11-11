@@ -332,6 +332,21 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
   const embudoN = { fontSize: 15, fontWeight: 700, color: B.titulo }
   const chipResumen = { display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 9px', border: `1px solid ${B.borde}`, borderRadius: 999, background: B.cabecera, color: B.texto }
   const equis = { cursor: 'pointer', color: B.secundario, marginLeft: 2 }
+  // §18: el tooltip de cada número del embudo dice por qué no se ven los demás: cuántos se quedan fuera y lo que quita cada filtro
+  // encendido de ese piso (mirándolo solo a él, como el «−N»; uno puede fallar varios, así que no suman exactamente).
+  const explicaEmbudo = (i) => {
+    const n = (x) => x.toLocaleString('es-ES')
+    if (i === 0) {
+      const sinSector = ev.universo.length + ev.quitadosSector
+      return `Universo elegido (${[vista.universo.sp500 && 'S&P 500', vista.universo.ndx && 'Nasdaq-100', vista.universo.listas && 'tus listas'].filter(Boolean).join(' + ') || 'nada marcado'}): ${n(sinSector)} empresas`
+        + (ev.quitadosSector ? `; se quitan ${n(ev.quitadosSector)} de los sectores quitados → quedan ${n(ev.universo.length)}.` : '.') + ' Se cambia en «Universo y sectores».'
+    }
+    const piso = i === 1 ? 'F' : 'T', base = i === 1 ? ev.universo : ev.f1, pasan = i === 1 ? ev.f1 : ev.f2
+    const fs = encendidos.filter(f => f.piso === piso), nombre = i === 1 ? 'Fundamentales' : 'Técnico'
+    if (!fs.length) return `Ningún filtro de ${nombre} encendido: pasan los ${n(base.length)} que llegan.`
+    const lista = fs.map(f => `${f.columna || f.nombre} −${n(ev.cuantos[f.id] || 0)}`).join(' · ')
+    return `Llegan ${n(base.length)} y pasan ${n(pasan.length)}: ${n(base.length - pasan.length)} no pasan algún filtro de ${nombre}. Lo que quita cada uno (mirándolo solo a él; uno puede fallar varios): ${lista}.`
+  }
   const cuentaPestana = (k) => k === 'U' ? vista.sectoresFuera.length
     : k === 'todos' ? vista.sectoresFuera.length + encendidos.length : encendidos.filter(f => f.piso === k).length
   const desplegable = { ...caja, width: 148, padding: '2px 4px', fontSize: 13 }
@@ -403,7 +418,7 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
     </div>)
 
   return (
-    <div data-screener data-tema={tema} style={{ ...varsTema(tema), ...S.pagina, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, height: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+    <div data-screener data-tema={tema} style={{ ...varsTema(tema), colorScheme: tema === 'claro' ? 'light' : 'dark', ...S.pagina, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, height: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
       <style>{CSS_TABLA}</style>
       {/* §15: las vistas en UNA línea: pestañas a la izquierda (la activa con su nombre editable: ✎ o doble clic) y sus botones a la derecha */}
       <div data-vistas style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'flex-end', borderBottom: `1px solid ${B.borde}` }}>
@@ -475,10 +490,9 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
             <AyudaFiltro a={AYUDAS.precios}/>
           </span>
           <span data-embudo style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, whiteSpace: 'nowrap', color: B.secundario }}>
-            <span title={`El universo elegido${ev.quitadosSector ? `, sin ${ev.quitadosSector} de los sectores quitados` : ''}`}>Universo</span>
-            <b data-embudo-n="0" style={embudoN}>{estado.cargando ? '…' : ev.universo.length}</b>
-            <span>→ 1 · Fundamentales</span><b data-embudo-n="1" style={embudoN}>{estado.cargando ? '…' : ev.f1.length}</b>
-            <span>→ 2 · Técnico</span><b data-embudo-n="2" style={{ ...embudoN, color: VERDE }}>{estado.cargando ? '…' : ev.f2.length}</b>
+            <span data-explica-embudo="0" title={explicaEmbudo(0)} style={{ cursor: 'help' }}>Universo <b data-embudo-n="0" style={embudoN}>{estado.cargando ? '…' : ev.universo.length}</b></span>
+            <span data-explica-embudo="1" title={explicaEmbudo(1)} style={{ cursor: 'help' }}>→ 1 · Fundamentales <b data-embudo-n="1" style={embudoN}>{estado.cargando ? '…' : ev.f1.length}</b></span>
+            <span data-explica-embudo="2" title={explicaEmbudo(2)} style={{ cursor: 'help' }}>→ 2 · Técnico <b data-embudo-n="2" style={{ ...embudoN, color: VERDE }}>{estado.cargando ? '…' : ev.f2.length}</b></span>
           </span>
           {panelOculto
             ? <button data-mostrar-panel onClick={() => ponPanelOculto(false)} title="Enseñar los filtros" style={{ ...S.boton, padding: '2px 10px', fontSize: 13 }}>Filtros ▼</button>
