@@ -2787,3 +2787,12 @@ Pedido por Sergi el 11/11.
 - Solo secciones (no las pestañas de dentro: el screener y el Builder ya recuerdan lo suyo), solo atrás (sin adelante), las últimas 20, sin repetir. Pasa por salirDeTesis: con cambios sin guardar, la ventana de siempre.
 - lib/navegacion.js (puro: apuntaAtras, vuelveAtras, textoAtras); en pages/index.js, la pila y el efecto sobre sidePanel. No se guarda: al recargar la página empieza vacía.
 - Comprobación tesis.js: 21 sitios que cambian de sección (el nuevo pasa por la guardia) y la pila con cuentas a mano.
+## 125. Rotación: el motor (sin pantalla)
+
+Primer paso del orden del 11/11 (rotación → Comparar planes → …). Ninguna cifra de la app cambia: nadie lo usa todavía.
+- lib/rotacion.js (puro): rotar, momentum, velasDeDecision. En cada decisión (al cierre de la última vela del mes o de la semana), entre los valores que son miembros ese día, pasan el filtro (serie del catálogo; «sin dato» = no pasa) y tienen puntuación (momentum de L velas saltando S, u otra función), se queda con los K de más puntuación (empate: alfabético).
+- Opción A (Sergi, 11/11): los que siguen no se tocan; lo vendido y la liquidez se reparten a partes iguales entre los que entran. Con menos de K candidatos, lo que sobra espera en liquidez.
+- Decidido por mí: decide con el cierre y opera a la apertura siguiente; la primera decisión, al cierre de la vela anterior al periodo (entra en la apertura del primer día). Cierre al final: vende todo al último cierre con costes. Valor que deja de cotizar: se vende a su último cierre. Filtro de mercado (opcional): se mira en cada decisión; si no es true, todo a liquidez. Venta anticipada (opcional): se mira cada cierre, vende a la apertura siguiente y el dinero espera a la siguiente decisión (gana a la decisión del mismo día).
+- Costes: máx(% × importe, mínimo) por orden (como costeOrden del plan) y deslizamiento: compra a precio × (1 + d), venta a precio × (1 − d).
+- Comprobación scripts/comprobaciones/rotacion.js (en comunes.sh): 27 casos calculados a mano (rotación A → B → A, costes, mínimo, mercado, filtro, miembros, venta anticipada, opción A con K = 2 de 3, deja de cotizar, menos candidatos que K), PRUEBA DE ORO (K = todos = Buy&Hold a partes iguales sin rebalanceo, con costes, mensual y semanal) y sin mirar al futuro.
+- Siguiente: la prueba contra el azar (K valores al azar en las mismas fechas) y la batería del plan de Sergi.
