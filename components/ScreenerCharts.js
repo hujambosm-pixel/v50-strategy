@@ -10,15 +10,18 @@ import { COLUMNA } from '../lib/screener/columnas'
 import { fmt, pasa } from '../lib/screener/filtros'
 
 export const A_LA_VEZ = 4
-const TAM = { grande: { porFila: 4, W: 380, H: 200 }, peq: { porFila: 6, W: 250, H: 120 } }
+const TAM = { grande: { porFila: 4, W: 380, H: 200 }, peq: { porFila: 6, W: 250, H: 120 }, ampliado: { W: 760, H: 360 } }   // se dibuja a ~1.150 px: todo (letras incluidas) 1,5 veces más grande
+// §24: un clic abre el detalle del valor; un doble clic amplía el gráfico (unas 3 veces). El clic espera ESPERA_CLIC ms por si llega
+// el segundo (el doble clic empieza con un clic).
+export const ESPERA_CLIC = 250
 // En «Grandes», la leyenda va en un hueco de arriba de dos líneas (fecha y A/M/m/C; debajo, las EMA): así no tapa las velas ni el
 // precio. En «Pequeños», solo con la cruz y encima del gráfico.
 export const ALTO_LEYENDA = 22
 const corto = (t) => t.replace(/^Precio frente a la /, '').replace(/ \(3 meses\)$/, '')
 
 // Un minigráfico (SVG): velas o línea, EMA, volumen, rayas del precio, fechas y la cruz.
-export function Grafico({ velas, ajustes, grande, marco, conCruz = true, cruzInicial = null }) {
-  const { W, H } = TAM[grande ? 'grande' : 'peq']
+export function Grafico({ velas, ajustes, grande, marco, conCruz = true, cruzInicial = null, ampliado = false }) {
+  const { W, H } = TAM[ampliado ? 'ampliado' : grande ? 'grande' : 'peq']
   const g = geometria(velas, ajustes, W, H, true, grande ? ALTO_LEYENDA : 0)
   const [cruz, setCruz] = useState(cruzInicial)   // { i, yy } en unidades del viewBox
   const marcas = marcasFecha(velas, marco, grande)
@@ -84,8 +87,46 @@ export function Grafico({ velas, ajustes, grande, marco, conCruz = true, cruzIni
 }
 
 // Un valor: cabecera (símbolo, nombre, cambio del día), el gráfico y las cifras de debajo.
-function Ficha({ e, dentro, datos, ajustes, cifras, vista, pide, onDetalle }) {
-  const ref = useRef(null)
+// Las cifras de debajo de un gráfico (en rojo, la de un filtro encendido que no pasa).
+function Cifras({ e, cifras, vista, grandes }) {
+  return cifras.length > 0 && <div data-cifras-ficha style={{ display: 'flex', gap: grandes ? '4px 16px' : '2px 10px', flexWrap: 'wrap', fontSize: grandes ? 13 : 11, color: B.secundario, borderTop: `1px solid ${B.borde}`, paddingTop: 3, marginTop: 2 }}>
+    {cifras.map(id => { const c = COLUMNA[id]; if (!c) return null
+      const cf = c.filtro && vista.filtros[id], mal = !!cf?.on && !pasa(e, c.filtro, cf)
+      return <span key={id} data-cifra-ficha={id} title={c.tip ? c.tip(e, vista) : undefined}>{corto(c.titulo)} <b style={{ color: mal ? ROJO : B.texto, fontWeight: 600 }}>{c.texto(e, vista)}</b></span> })}
+  </div>
+}
+const Cambio = ({ cambio, tam = 12 }) => cambio == null ? null : <span data-cambio style={{ fontSize: tam, fontWeight: 600, color: cambio >= 0 ? VERDE : ROJO }} title="Cambio del último día">{cambio >= 0 ? '+' : ''}{fmt(cambio, 2)} %</span>
+
+// El gráfico ampliado (doble clic): encima de todo, unas 3 veces más grande, con la cruz. Un clic en cualquier sitio o Esc lo cierra.
+export function Ampliado({ e, velas, ajustes, cifras, vista, onCierra }) {
+  const g = useMemo(() => velasGrafico(velas, ajustes.marco), [velas, ajustes.marco])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const k = (ev) => { if (ev.key === 'Escape') onCierra() }
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
+  }, [])
+  return (
+    <div data-ampliado={e.simbolo} onClick={onCierra} title="Clic para cerrar" style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}>
+      <div style={{ width: 1180, maxWidth: '94vw', background: B.tarjeta, border: `1px solid ${B.selBorde}`, borderRadius: 10, padding: '10px 14px 8px', boxShadow: `0 16px 40px ${B.sombra}` }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, whiteSpace: 'nowrap' }}>
+          <b style={{ color: B.enlace, fontSize: 20 }}>{e.simbolo}</b>
+          <span style={{ color: B.secundario, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.nombre}</span>
+          <span style={{ color: B.apagado, fontSize: 13 }}>{e.sector || ''} · {MARCOS[ajustes.marco].boton.toLowerCase()}, {MARCOS[ajustes.marco].texto}</span>
+          <span style={{ flex: 1 }}/>
+          <Cambio cambio={g.cambio} tam={15}/>
+          <span style={{ color: B.apagado, fontSize: 12 }}>clic o Esc para cerrar</span>
+        </div>
+        {g.velas.length ? <Grafico velas={g.velas} ajustes={ajustes} grande marco={ajustes.marco} ampliado/> : <div style={{ color: B.apagado, padding: 40, textAlign: 'center' }}>Sin precios guardados</div>}
+        <Cifras e={e} cifras={cifras} vista={vista} grandes/>
+      </div>
+    </div>)
+}
+
+function Ficha({ e, dentro, datos, ajustes, cifras, vista, pide, onDetalle, onAmplia }) {
+  const ref = useRef(null), reloj = useRef(null)
+  useEffect(() => () => clearTimeout(reloj.current), [])
+  const clic = () => { clearTimeout(reloj.current); reloj.current = setTimeout(() => onDetalle(e.simbolo), ESPERA_CLIC) }
+  const dobleClic = () => { clearTimeout(reloj.current); if (datos?.velas?.length) onAmplia(e.simbolo) }
   useEffect(() => {
     if (datos) return
     const n = ref.current
@@ -97,12 +138,12 @@ function Ficha({ e, dentro, datos, ajustes, cifras, vista, pide, onDetalle }) {
   const g = useMemo(() => datos?.velas ? velasGrafico(datos.velas, ajustes.marco) : null, [datos, ajustes.marco])
   const cambio = g?.cambio
   return (
-    <div ref={ref} data-ficha={e.simbolo} data-pasa={dentro ? '1' : '0'} onClick={() => onDetalle(e.simbolo)} title="Pulsa para ver el detalle"
+    <div ref={ref} data-ficha={e.simbolo} data-pasa={dentro ? '1' : '0'} onClick={clic} onDoubleClick={dobleClic} title="Clic: ver el detalle · doble clic: ampliar el gráfico"
       style={{ background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: 7, padding: '5px 7px 4px', cursor: 'pointer', opacity: dentro ? 1 : 0.45, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden' }}>
         <b style={{ color: B.enlace, fontSize: grande ? 15 : 13 }}>{e.simbolo}</b>
         <span style={{ color: B.secundario, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }} title={e.nombre}>{e.nombre}</span>
-        {cambio != null && <span data-cambio style={{ fontSize: 12, fontWeight: 600, color: cambio >= 0 ? VERDE : ROJO }} title="Cambio del último día">{cambio >= 0 ? '+' : ''}{fmt(cambio, 2)} %</span>}
+        <Cambio cambio={cambio}/>
       </div>
       <div style={{ minHeight: grande ? 120 : 70 }}>
         {!datos || datos.cargando ? <div style={{ color: B.apagado, fontSize: 12, padding: '20px 0', textAlign: 'center' }}>Cargando…</div>
@@ -110,18 +151,15 @@ function Ficha({ e, dentro, datos, ajustes, cifras, vista, pide, onDetalle }) {
           : !g.velas.length ? <div style={{ color: B.apagado, fontSize: 12, padding: '20px 0', textAlign: 'center' }}>Sin precios guardados</div>
           : <Grafico velas={g.velas} ajustes={ajustes} grande={grande} marco={ajustes.marco}/>}
       </div>
-      {cifras.length > 0 && <div data-cifras-ficha style={{ display: 'flex', gap: '2px 10px', flexWrap: 'wrap', fontSize: 11, color: B.secundario, borderTop: `1px solid ${B.borde}`, paddingTop: 3, marginTop: 2 }}>
-        {cifras.map(id => { const c = COLUMNA[id]; if (!c) return null
-          const cf = c.filtro && vista.filtros[id], mal = !!cf?.on && !pasa(e, c.filtro, cf)
-          return <span key={id} data-cifra-ficha={id} title={c.tip ? c.tip(e, vista) : undefined}>{corto(c.titulo)} <b style={{ color: mal ? ROJO : B.texto, fontWeight: 600 }}>{c.texto(e, vista)}</b></span> })}
-      </div>}
+      <Cifras e={e} cifras={cifras} vista={vista}/>
     </div>)
 }
 
 // filas: los valores (en el orden de la tabla); pasaTodo: Set de los que pasan; ajustes: vista.charts; cifras: ids de debajo;
 // cache: Map símbolo → { velas } | { cargando } | { error }; leeVelas(símbolo) → velas diarias.
-export default function ScreenerCharts({ filas, pasaTodo, ajustes, cifras, vista, cache, leeVelas, onDetalle }) {
+export default function ScreenerCharts({ filas, pasaTodo, ajustes, cifras, vista, cache, leeVelas, onDetalle, ampliadoInicial = null }) {
   const [, setVer] = useState(0)
+  const [ampliado, setAmpliado] = useState(ampliadoInicial)   // símbolo del gráfico ampliado (doble clic)
   const cola = useRef([]), activos = useRef(0), vivo = useRef(true)
   useEffect(() => { vivo.current = true; return () => { vivo.current = false } }, [])
   const sigue = () => {
@@ -136,7 +174,9 @@ export default function ScreenerCharts({ filas, pasaTodo, ajustes, cifras, vista
   const { porFila } = TAM[ajustes.tam === 'peq' ? 'peq' : 'grande']
   return (
     <div data-charts data-tam={ajustes.tam} style={{ display: 'grid', gridTemplateColumns: `repeat(${porFila}, minmax(0, 1fr))`, gap: 8, padding: 10 }}>
-      {filas.map(e => <Ficha key={e.simbolo} e={e} dentro={pasaTodo.has(e.simbolo)} datos={cache.get(e.simbolo)} ajustes={ajustes} cifras={cifras} vista={vista} pide={pide} onDetalle={onDetalle}/>)}
+      {filas.map(e => <Ficha key={e.simbolo} e={e} dentro={pasaTodo.has(e.simbolo)} datos={cache.get(e.simbolo)} ajustes={ajustes} cifras={cifras} vista={vista} pide={pide} onDetalle={onDetalle} onAmplia={setAmpliado}/>)}
+      {ampliado && (() => { const e = filas.find(x => x.simbolo === ampliado), d = cache.get(ampliado)
+        return e && d?.velas ? <Ampliado e={e} velas={d.velas} ajustes={ajustes} cifras={cifras} vista={vista} onCierra={() => setAmpliado(null)}/> : null })()}
     </div>)
 }
 export { MARCOS }

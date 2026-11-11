@@ -2775,3 +2775,7 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 ## 122. Screener: eje de Charts a la izquierda
 
 - Minigráficos con el eje de precios a la izquierda y la leyenda en dos líneas arriba; el tooltip de «Actualizar precios» dice que no se actualizan solos. Detalle en docs/screener.md §23.
+
+## 123. Screener: doble clic para ampliar un gráfico de Charts
+
+- Doble clic en un minigráfico lo amplía (unas 3 veces); un clic o Esc lo cierra; el clic sencillo abre el detalle tras 250 ms. Detalle en docs/screener.md §24.

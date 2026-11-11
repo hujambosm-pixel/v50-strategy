@@ -315,6 +315,13 @@ Pedido por Sergi el 11/11 al ver V9.1183.
 - Tooltip de «⟳ Actualizar precios» (y su «?»): los precios NO se actualizan solos, solo con el botón; más adelante, con las Alertas, cada día tras el cierre de Nueva York.
 - Ninguna cifra cambia. **Comprobación** `screener.js` (264).
 
+## 24. Charts: doble clic para ampliar un gráfico
+
+Pedido por Sergi el 11/11.
+- Doble clic en un minigráfico: se abre encima, unas 3 veces más grande (viewBox 760 × 360 dibujado a ~1.150 px: velas y letras 1,5 veces mayores que en «Grandes»), con el mismo marco, medias y volumen, la cruz, las fechas de los meses y las cifras de debajo. Un clic en cualquier sitio o Esc lo cierra. Un valor sin precios no se amplía.
+- Un clic sencillo sigue abriendo el detalle del valor, pero espera 250 ms por si llega el segundo clic (el doble clic empieza con un clic).
+- Ninguna cifra cambia. **Comprobación** `screener.js` (268).
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:
