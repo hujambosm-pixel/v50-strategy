@@ -2767,3 +2767,7 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 ## 120. Screener: pestaña «Custom»
 
 - Encima de la tabla, pestañas «Filtros» (igual) y «Custom»: eliges las columnas en «⚙ Columnas» (casillas por grupos), las ordenas arrastrando la cabecera y ✕ las quita; se guardan con la vista (null = las de los filtros). lib/screener/columnas.js. Sin cambios en la base; ninguna cifra cambia. Detalle en docs/screener.md §21.
+
+## 121. Screener: pestaña «Charts»
+
+- Un minigráfico por valor (velas o línea; diario 6 meses, semanal 2 años, mensual 5 años; EMA 200/50/20 calculadas en diario, la 200 igual a la del filtro; volumen), grandes (4 por fila) o pequeños (6), con la cruz como Finviz, fechas debajo y las cifras de «⚙ Cifras»; se cargan según bajas y se guardan con la vista. lib/screener/graficos.js y components/ScreenerCharts.js. Sin cambios en la base; ninguna cifra cambia. Detalle en docs/screener.md §22.

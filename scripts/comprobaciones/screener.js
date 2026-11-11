@@ -595,6 +595,74 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     m.quita()
   }
 
+  // §22: la pestaña «Charts» (minigráficos), con velas hechas a mano.
+  {
+    const G = require('../../lib/screener/graficos'), T = require('../../lib/screener/tecnico')
+    // 300 sesiones de lunes a viernes desde el lunes 03/02/2025: cierre 100 (máx. 101, mín. 99, apertura 100, volumen 1.000) y la
+    // última, 110 (volumen 3.000).
+    const dias = []; for (let d = new Date(Date.UTC(2025, 1, 3)); dias.length < 300; d.setUTCDate(d.getUTCDate() + 1)) { const w = d.getUTCDay(); if (w && w < 6) dias.push(d.toISOString().slice(0, 10)) }
+    const V = dias.map((date, i) => ({ date, open: 100, high: i === 299 ? 111 : 101, low: 99, close: i === 299 ? 110 : 100, volume: i === 299 ? 3000 : 1000 }))
+    const gd = G.velasGrafico(V, 'diario'), ult = gd.velas[gd.velas.length - 1]
+    ok(gd.velas.length === 126 && Math.abs(ult.e200 - (100 + 10 * 2 / 201)) < 1e-9 && ult.e200 === T.tecnicoDe(V).ema200 && ult.e50 === T.tecnicoDe(V).ema50 && Math.abs(gd.cambio - 10) < 1e-9, '§22: diario: 126 velas; EMA 200 = 100 + 10 × 2 ÷ 201 = 100,0995, la MISMA del filtro; cambio del día 110 ÷ 100 − 1 = +10 %')
+    const gs = G.velasGrafico(V, 'semanal'), us = gs.velas[gs.velas.length - 1]
+    ok(gs.velas.length === 60 && us.date === '2026-03-23' && us.fin === dias[299] && us.o === 100 && us.h === 111 && us.c === 110 && us.vol === 7000 && us.e200 === ult.e200, `§22: semanal: 300 sesiones = 60 semanas; la última, del lunes 23/03/2026 al ${dias[299]}: A 100, M 111, C 110, volumen 4 × 1.000 + 3.000 = 7.000, y su EMA 200 es la del último día`)
+    const gm = G.velasGrafico(V, 'mensual')
+    ok(gm.velas.length === 14 && gm.velas[0].date === '2025-02-03' && gm.velas[1].date === '2025-03-03' && gm.velas[13].date === '2026-03-02' && gm.velas[13].c === 110, '§22: mensual: de febrero de 2025 a marzo de 2026 = 11 + 3 = 14 velas, fechadas en su primera sesión')
+    ok(G.marcasFecha(gs.velas, 'semanal', true).map(m => m.t).join() === 'A,J,O,2026' && G.marcasFecha(gs.velas, 'semanal', false).map(m => m.t).join() === '2026', '§22: semanal grande: A (abril), J (julio), O (octubre) y 2026; pequeño: solo el año')
+    const wAnio = gs.velas.findIndex(v => v.date === '2026-01-05')
+    ok(gs.velas[wAnio - 1].date === '2025-12-29' && G.marcasFecha(gs.velas, 'semanal', true).find(m => m.t === '2026').i === wAnio, '§22: la semana del lunes 29/12/2025 es de 2025; «2026» sale en la del lunes 05/01/2026 (se compara la fecha de inicio)')
+    ok(gd.velas[0].date.slice(0, 7) === '2025-10' && G.marcasFecha(gd.velas, 'diario', true).map(m => m.t).join() === 'nov,dic,2026,feb,mar' && G.marcasFecha(gm.velas, 'mensual', true).map(m => m.t).join() === '2026', '§22: diario grande (126 sesiones desde octubre): nov, dic, 2026, feb, mar; mensual: solo el año')
+    ok(G.textoFecha(us, 'semanal') === 'sem. 23/03/2026' && G.textoFecha(ult, 'diario') === `${dias[299].slice(8)}/${dias[299].slice(5, 7)}/2026` && G.textoFecha(gm.velas[13], 'mensual') === 'mar 2026', '§22: fechas de la cruz: «sem. 23/03/2026», «dd/mm/aaaa», «mar 2026»')
+    ok(G.pasoBonito(30) === 10 && G.pasoBonito(7) === 2.5 && G.pasoBonito(0.9) === 0.5 && G.pasoBonito(5000) === 2000, '§22: rayas del precio: 30 → cada 10; 7 → 2,5; 0,9 → 0,5; 5.000 → 2.000')
+    const aj = G.normalizaCharts(null)
+    ok(JSON.stringify(aj) === '{"tam":"grande","tipo":"velas","marco":"semanal","ema200":true,"ema50":true,"ema20":false,"vol":true,"cifras":null}' && G.normalizaCharts({ tam: 'x', marco: 'anual', ema20: 'sí', vol: false }).marco === 'semanal' && G.normalizaCharts({ vol: false }).vol === false && G.normalizaCharts({ ema20: 'sí' }).ema20 === false, '§22: por defecto: grandes, velas, semanal, EMA 200 y 50 (la 20 apagada), volumen; lo raro, el de por defecto')
+    // Escala: 99 … 111 (y las EMA, entre medias) con un margen del 4 %: 98,52 … 111,48.
+    const geo = G.geometria(gd.velas, aj, 380, 200)
+    ok(Math.abs(geo.mx - 111.48) < 1e-9 && Math.abs(geo.mn - 98.52) < 1e-9 && Math.abs(geo.y(geo.mx) - geo.arriba) < 1e-9 && Math.abs(geo.y(geo.mn) - geo.abajo) < 1e-9 && Math.abs(geo.precioDe(geo.y(105)) - 105) < 1e-9 && geo.rayas.map(r => r.t).join() === '100,105,110', '§22: escala 98,52 … 111,48 (99 y 111 ± 4 % de 12), rayas en 100, 105 y 110; precio ↔ altura ida y vuelta')
+    ok(geo.ancho === 340 && Math.abs(geo.paso - 340 / 126) < 1e-9 && geo.volY(3000) === geo.volH && cerca(geo.volY(1000), geo.volH / 3), '§22: 126 velas en 340 de ancho; el volumen, a la altura de 3.000 (el máximo): 1.000 = un tercio')
+    ok(require('../../lib/screener/vista').normalizaVista(vieja).charts.marco === 'semanal' && textoVista(vieja) === textoVista(normalizaVista(vieja)), '§22: las vistas viejas, con los ajustes de por defecto y sin «cambios»')
+
+    // El gráfico montado.
+    const Gr = require('../../components/ScreenerCharts')
+    const svg = (p) => renderToString(React.createElement(Gr.Grafico, { velas: gs.velas, ajustes: aj, grande: true, marco: 'semanal', ...p })).split('<!-- -->').join('')
+    let s = svg({})
+    ok((s.match(/data-vela="/g) || []).length === 60 && s.includes('data-ema="e200"') && s.includes('data-ema="e50"') && !s.includes('data-ema="e20"') && (s.match(/data-marca="/g) || []).length === 4, '§22: 60 velas, EMA 200 y 50 (no la 20), 4 marcas de fecha (A, J, O, 2026)')
+    ok(/data-leyenda[^>]*>.*sem\. 23\/03\/2026.*A <\/tspan>100,00.*M <\/tspan>111,00.*m <\/tspan>99,00.*C <\/tspan>110,00.*EMA200 100,10.*EMA50 100,39/.test(s), '§22: leyenda de la última vela: A 100, M 111, m 99, C 110, EMA 200 100,10 y EMA 50 = 100 + 10 × 2 ÷ 51 = 100,39')
+    ok(/data-ultimo[^]*?>110,00</.test(s) && !s.includes('data-cruz='), '§22: el último cierre (110) en el eje; sin ratón, sin cruz')
+    const s2 = svg({ cruzInicial: { i: 10, yy: G.geometria(gs.velas, aj, 380, 200).y(105) } })
+    ok(s2.includes('data-cruz="10"') && /data-cruz-precio[^>]*>105,0</.test(s2) && new RegExp(`data-cruz-fecha[^>]*>${G.textoFecha(gs.velas[10], 'semanal')}<`).test(s2) && new RegExp(`data-leyenda[^>]*>.*${G.textoFecha(gs.velas[10], 'semanal').replace(/\./g, '\\.')}.*C <\\/tspan>100,00`).test(s2), '§22: la cruz sobre la vela 10 a la altura de 105: precio 105,0 a la derecha, su fecha abajo y su leyenda (C 100) arriba')
+    const s3 = svg({ ajustes: { ...aj, tipo: 'linea', vol: false, ema20: true }, grande: false })
+    ok(s3.includes('data-linea') && !s3.includes('data-vela=') && s3.includes('data-ema="e20"') && !s3.includes('data-leyenda') && !/<rect[^>]*opacity="0.35"/.test(s3), '§22: línea, sin volumen, con la EMA 20; pequeño y sin ratón, sin leyenda')
+
+    // La pestaña montada, con estado: los gráficos se piden (4 a la vez), se cambian los ajustes y se abre el cajón.
+    const RDC = require('react-dom/client')
+    const pedidos = []
+    const lee = (sim) => { pedidos.push(sim); return new Promise(r => setTimeout(() => r(sim === 'BBB' ? null : V), 5)) }
+    const v22 = { ...vistaNueva({ on: ['roce'], valores: { roce: 27 } }), sectoresFuera: [] }
+    const m = D.monta(React.createElement(P, { inicial: { empresas: E, vistas: [pestanaDe({ id: 9, nombre: 'G', vista: v22 })], resultados: 'charts', verNo: true, leeVelas: lee } }), RDC); await D.espera(80)
+    const uno = (k, v) => m.raiz.conAtributo(k, v)[0]
+    ok(m.raiz.conAtributo('data-ficha').length === 4 && pedidos.sort().join() === 'AAA,BBB,CCC,DDD' && m.raiz.conAtributo('data-grafico').length === 3, '§22: 4 fichas; se piden los 4 y se dibujan 3 (BBB sin precios guardados)')
+    ok(uno('data-ficha', 'AAA').getAttribute('data-pasa') === '1' && uno('data-ficha', 'BBB').getAttribute('data-pasa') === '0' && /\+10,00 %/.test(uno('data-ficha', 'AAA').textContent), '§22: AAA pasa (ROCE 30), BBB no (en gris); cambio del día +10,00 %')
+    ok(uno('data-cifra-ficha', 'roce') && /ROCE 30,0 %/.test(uno('data-ficha', 'AAA').textContent) && uno('data-abrir-columnas').textContent.includes('Cifras (1)'), '§22: debajo, la cifra del filtro encendido (ROCE 30,0 %); «⚙ Cifras (1)»')
+    D.pulsa(uno('data-opcion-charts', 'marco:diario')); await D.espera(20)
+    ok(uno('data-opcion-charts', 'marco:diario').getAttribute('data-on') === '1' && m.raiz.conAtributo('data-vela').length === 3 * 126 && m.raiz.conAtributo('data-punto-cambios').length === 1, '§22: «Diario»: 126 velas por gráfico; la vista tiene cambios (se guarda con ella)')
+    D.pulsa(uno('data-opcion-charts', 'tam:peq')); await D.espera(20)
+    ok(uno('data-charts').getAttribute('data-tam') === 'peq' && /repeat\(6/.test(uno('data-charts').getAttribute('style') || JSON.stringify(D.propsDe(uno('data-charts')).style)), '§22: «Pequeños · 6»: 6 por fila')
+    const casilla = (k, on) => { const n = uno('data-charts-casilla', k); n.checked = on; D.propsDe(n).onChange({ target: n, currentTarget: n }) }
+    casilla('ema20', true); await D.espera(20)
+    ok(m.raiz.conAtributo('data-ema', 'e20').length === 3, '§22: encender la EMA 20 la dibuja en los 3')
+    D.pulsa(uno('data-abrir-columnas')); await D.espera(10)
+    const marca = (id, on) => { const n = uno('data-columna', id); n.checked = on; D.propsDe(n).onChange({ target: n, currentTarget: n }) }
+    marca('sec', true); await D.espera(10)
+    ok(m.raiz.conAtributo('data-cifra-ficha', 'sec').length === 4 && uno('data-abrir-columnas').textContent.includes('Cifras (2)'), '§22: «⚙ Cifras»: marcar el sector lo añade debajo de cada gráfico')
+    D.pulsa(uno('data-columnas-hecho')); await D.espera(10)
+    D.pulsa(uno('data-ficha', 'AAA')); await D.espera(10)
+    ok(!!uno('data-cajon', 'AAA'), '§22: pulsar un gráfico abre su cajón')
+    D.pulsa(uno('data-descartar')); await D.espera(20)
+    ok(uno('data-opcion-charts', 'marco:semanal').getAttribute('data-on') === '1' && uno('data-charts').getAttribute('data-tam') === 'grande' && !m.raiz.conAtributo('data-ema', 'e20').length && pedidos.length === 4, '§22: «Descartar cambios» vuelve a semanal, grandes y sin EMA 20; los precios no se piden otra vez')
+    m.quita()
+  }
+
   console.log(`screener: ${fallos ? fallos + ' fallos de ' + n : 'todas bien (' + n + ')'}`)
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(1) })

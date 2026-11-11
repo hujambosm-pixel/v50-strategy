@@ -4,12 +4,14 @@
 // ordena (lib/screener/filtros.js). No toca el motor ni ninguna cifra del resto de la app.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { B as BA, S as SA } from '../lib/builder/estilo'   // las ventanas y los «?» (fuera del div de la pantalla) siguen con los de la app
-import { B, S, ROJO, VERDE, AMARILLO, CSS_TABLA, varsTema } from '../lib/screener/colores'
+import { B, S, ROJO, VERDE, AMARILLO, CSS_TABLA, GRAF, varsTema } from '../lib/screener/colores'
 import Ayuda from './BuilderAyuda'
 import ConLimpiar from './LimpiarBusqueda'
 import { ctxConSesion, fetchConSesion, hayConfigSupabase } from '../lib/supabase'
 import { sinTildes } from '../lib/builder/buscar'
-import { conTecnico, empresasDeFilas, fechaDatos, fechaTecnico, leerFilasEmpresas, leerReferencias } from '../lib/screener/datos'
+import { conTecnico, empresasDeFilas, fechaDatos, fechaTecnico, leerFilasEmpresas, leerReferencias, leerVelasGrafico } from '../lib/screener/datos'
+import ScreenerCharts from './ScreenerCharts'
+import { MARCOS } from '../lib/screener/graficos'
 import { MERCADO, REFERENCIAS_TECNICO, cifrasTecnicas } from '../lib/screener/tecnico'
 import { AYUDAS, FILTROS, FILTRO, enUniverso, evaluaVista, fmt, pasa } from '../lib/screener/filtros'
 import { POR_QUE_FUERA, SECTORES } from '../lib/screener/sectores'
@@ -77,7 +79,8 @@ const valorOrden = (e, col, vista) => {
   const c = COLUMNA[col]; return c ? c.orden(e, vista) : null
 }
 // §21: las pestañas de los resultados: «Filtros» (la tabla de siempre) y «Custom» (las columnas que eliges). «Charts», después.
-const PESTANAS_RESULTADOS = [['filtros', 'Filtros', 'Sector, precio y una columna por filtro encendido'], ['custom', 'Custom', 'Las columnas que tú elijas (se guardan con la vista)']]
+const PESTANAS_RESULTADOS = [['filtros', 'Filtros', 'Sector, precio y una columna por filtro encendido'], ['custom', 'Custom', 'Las columnas que tú elijas (se guardan con la vista)'], ['charts', 'Charts', 'Un gráfico pequeño de cada valor']]
+export const AYUDA_CHARTS = ['Charts', 'Un gráfico por valor, en el orden de la tabla y con el mismo buscador. Diario = 6 meses (126 velas), Semanal = 2 años (104 velas de lunes a viernes), Mensual = 5 años (60 velas). Las EMA 200, 50 y 20 se calculan con las velas diarias guardadas (la de 200 es la misma del filtro); en una vela semanal valen lo del último día de esa semana. Al pasar el ratón, una cruz: el precio a la derecha, la fecha abajo y arriba lo de esa vela (A apertura, M máximo, m mínimo, C cierre y las EMA). Pulsa un gráfico para abrir su detalle. Los gráficos se cargan según bajas. «⚙ Cifras» elige las cifras de debajo de cada gráfico (de entrada, las de los filtros encendidos; en rojo, la que no pasa). Todo esto se guarda con la vista.', 'Si en el filtro un valor está un 12 % por encima de su EMA 200 (cierre 112, EMA 100: 112 ÷ 100 − 1 = 12 %), en el gráfico la línea naranja acaba en 100, por debajo del último cierre.']
 export const AYUDA_RESULTADOS = ['Filtros y Custom', 'Los filtros deciden QUÉ valores salen; estas pestañas, CÓMO los ves. «Filtros»: sector, precio y una columna por filtro encendido. «Custom»: las columnas que tú eliges, aunque no filtres por ellas. Al cambiar de pestaña no cambian ni el orden ni el buscador.', 'Filtras por ROCE y EMA 200, pero quieres ver también el PER y la capitalización: en «Custom» los añades con «⚙ Columnas».']
 export const AYUDA_CUSTOM = ['Columnas «Custom»', 'Eliges qué cifras ver. Se guardan con la vista, como los filtros. Mientras no toques nada, salen las de los filtros (sector, precio y una por filtro encendido) y cambian al encender o apagar uno; en cuanto eliges, se quedan las tuyas («Las de los filtros» vuelve a lo de antes). «⚙ Columnas» abre la lista por grupos. Arrastra una cabecera para cambiar el orden, ✕ quita la columna y pulsar la cabecera ordena. En rojo, como en «Filtros», la cifra de un filtro encendido que no pasa.', 'Con 8 columnas y la pantalla estrecha, sale una barra para moverte a la derecha.']
 
@@ -113,10 +116,13 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
   const [panelOculto, setPanelOculto] = useState(!!inicial.panelOculto)
   // §21: la pestaña de los resultados ('filtros' o 'custom'; se recuerda en el navegador), la ventana «⚙ Columnas» y el arrastre.
   const [resultados, setResultados] = useState(inicial.resultados || 'filtros')
-  useEffect(() => { try { const r = localStorage.getItem('screener.resultados'); if (!inicial.empresas && (r === 'filtros' || r === 'custom')) setResultados(r) } catch (_) {} }, [])
+  useEffect(() => { try { const r = localStorage.getItem('screener.resultados'); if (!inicial.empresas && (r === 'filtros' || r === 'custom' || r === 'charts')) setResultados(r) } catch (_) {} }, [])
   const ponResultados = (x) => { setResultados(x); setMenuCols(false); try { localStorage.setItem('screener.resultados', x) } catch (_) {} }
   const [menuCols, setMenuCols] = useState(!!inicial.menuCols)
   const [arrastra, setArrastra] = useState(null), [sobre, setSobre] = useState(null)
+  // §22: las velas de los gráficos de «Charts» (símbolo → { velas } | { cargando } | { error }); se vacía tras «Actualizar precios».
+  const velasCache = useRef(new Map(Object.entries(inicial.velas || {}).map(([s, v]) => [s, { velas: v }])))
+  const [cacheN, setCacheN] = useState(0)
   useEffect(() => { try { if (!inicial.empresas && localStorage.getItem('screener.panelOculto') === '1') setPanelOculto(true) } catch (_) {} }, [])
   const ponPanelOculto = (x) => { setPanelOculto(x); try { localStorage.setItem('screener.panelOculto', x ? '1' : '0') } catch (_) {} }
   const [iv, setIv] = useState(inicial.iv || 0)
@@ -312,6 +318,7 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
     await Promise.all(Array.from({ length: TANDAS_A_LA_VEZ }, hilo))
     setAct(a => ({ ...a, fin: true, parado: paraRef.current }))
     setSenales({})   // con precios nuevos, las señales se calculan otra vez
+    velasCache.current = new Map(); setCacheN(x => x + 1)   // y los gráficos se piden otra vez
   }
 
   const filas = useMemo(() => {
@@ -334,6 +341,39 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
   // §21: las columnas de «Custom» (las de la vista o, si no tiene, las de los filtros) y cambiarlas (null = las de los filtros).
   const colsCustom = columnasDe(vista)
   const ponColumnas = (lista) => cambia(v => ({ ...v, columnas: lista }))
+  // §22: los ajustes de «Charts» (vista.charts) y sus cifras (null = las de los filtros encendidos).
+  const ch = vista.charts
+  const cifrasCharts = Array.isArray(ch.cifras) ? ch.cifras.filter(id => COLUMNA[id]) : encendidos.map(f => f.id)
+  const ponCharts = (cambio) => cambia(v => ({ ...v, charts: { ...v.charts, ...cambio } }))
+  const ponCifras = (lista) => ponCharts({ cifras: lista })
+  const leeVelas = inicial.leeVelas || ((s) => leerVelasGrafico(ctxConSesion(), s))
+  const segmento = (k, valor, opciones, titulo) => (
+    <span data-segmento={k} title={titulo} style={{ display: 'inline-flex', border: `1px solid ${B.borde}`, borderRadius: 6, overflow: 'hidden' }}>
+      {opciones.map(([v, tx, tip], i) => { const on = valor === v
+        return <button key={v} data-opcion-charts={k + ':' + v} data-on={on ? '1' : '0'} title={tip} onClick={() => ponCharts({ [k]: v })}
+          style={{ fontFamily: B.letra, fontSize: 13, padding: '2px 9px', border: 'none', borderLeft: i ? `1px solid ${B.borde}` : 'none', cursor: 'pointer',
+            background: on ? B.sel : 'transparent', color: on ? B.titulo : B.secundario, fontWeight: on ? 700 : 400 }}>{tx}</button> })}
+    </span>)
+  // La ventana de casillas por grupos: la de «⚙ Columnas» (Custom) y la de «⚙ Cifras» (Charts).
+  const menuGrupos = (lista, pon, nota, deFiltrosTip) => <>
+    <div data-fuera-columnas onClick={() => setMenuCols(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }}/>
+    <div data-menu-columnas style={{ position: 'absolute', right: 8, top: '100%', marginTop: 2, zIndex: 41, width: 700, maxWidth: 'calc(100% - 16px)', background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: 8, padding: 10, boxShadow: `0 10px 28px ${B.sombra}` }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '10px 14px' }}>
+        {GRUPOS_COLUMNAS.map(([g, l]) => <div key={g} data-grupo-columnas={g}>
+          <div style={{ color: B.secundario, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>{g}</div>
+          {l.map(c => <label key={c.id} title={c.filtro ? c.filtro.nombre : undefined} style={{ ...etiqueta, display: 'flex', gap: 6, alignItems: 'center', padding: '2px 0', cursor: 'pointer' }}>
+            <input type="checkbox" data-columna={c.id} checked={lista.includes(c.id)} onChange={e => pon(conColumna(lista, c.id, e.target.checked))}/>{c.titulo}</label>)}
+        </div>)}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: `1px solid ${B.borde}` }}>
+        <button data-columnas-todas onClick={() => pon(COLUMNAS.map(c => c.id))} style={{ ...S.boton, padding: '3px 10px', fontSize: 13 }}>Todas</button>
+        <button data-columnas-ninguna onClick={() => pon([])} style={{ ...S.boton, padding: '3px 10px', fontSize: 13 }}>Ninguna</button>
+        <button data-columnas-filtros onClick={() => pon(null)} title={deFiltrosTip} style={{ ...S.boton, padding: '3px 10px', fontSize: 13 }}>Las de los filtros</button>
+        <span style={{ flex: 1 }}/>
+        <span style={S.apagado}>{nota}</span>
+        <button data-columnas-hecho onClick={() => setMenuCols(false)} style={{ ...S.botonVerde, padding: '3px 12px', fontSize: 13 }}>Hecho</button>
+      </div>
+    </div></>
 
   const caja = { fontFamily: B.letra, fontSize: 13, background: B.caja, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: 6, padding: '3px 6px' }
   const etiqueta = { fontFamily: B.letra, fontSize: 13, color: B.texto, textTransform: 'none', letterSpacing: 0, fontWeight: 400, flexDirection: 'row' }   // la app pone a todo «label» columna y letra mono
@@ -570,25 +610,17 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
                   onChange={e => cambia(v => ({ ...v, pegRazonable: Number(e.target.value) > 0 ? Number(e.target.value) : v.pegRazonable }))}/></>}
               <button data-abrir-columnas onClick={() => setMenuCols(x => !x)} title="Elegir qué columnas se ven" style={{ ...S.boton, padding: '3px 10px', fontSize: 13 }}>⚙ Columnas ({colsCustom.length})</button>
               <AyudaFiltro a={AYUDA_CUSTOM}/>
-              {menuCols && <>
-                <div data-fuera-columnas onClick={() => setMenuCols(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }}/>
-                <div data-menu-columnas style={{ position: 'absolute', right: 8, top: '100%', marginTop: 2, zIndex: 41, width: 700, maxWidth: 'calc(100% - 16px)', background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: 8, padding: 10, boxShadow: `0 10px 28px ${B.sombra}` }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '10px 14px' }}>
-                    {GRUPOS_COLUMNAS.map(([g, l]) => <div key={g} data-grupo-columnas={g}>
-                      <div style={{ color: B.secundario, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>{g}</div>
-                      {l.map(c => <label key={c.id} title={c.filtro ? c.filtro.nombre : undefined} style={{ ...etiqueta, display: 'flex', gap: 6, alignItems: 'center', padding: '2px 0', cursor: 'pointer' }}>
-                        <input type="checkbox" data-columna={c.id} checked={colsCustom.includes(c.id)} onChange={e => ponColumnas(conColumna(colsCustom, c.id, e.target.checked))}/>{c.titulo}</label>)}
-                    </div>)}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: `1px solid ${B.borde}` }}>
-                    <button data-columnas-todas onClick={() => ponColumnas(COLUMNAS.map(c => c.id))} style={{ ...S.boton, padding: '3px 10px', fontSize: 13 }}>Todas</button>
-                    <button data-columnas-ninguna onClick={() => ponColumnas([])} style={{ ...S.boton, padding: '3px 10px', fontSize: 13 }}>Ninguna</button>
-                    <button data-columnas-filtros onClick={() => ponColumnas(null)} title="Sector, precio y una por filtro encendido, como en «Filtros» (y vuelven a cambiar al encender o apagar un filtro)" style={{ ...S.boton, padding: '3px 10px', fontSize: 13 }}>Las de los filtros</button>
-                    <span style={{ flex: 1 }}/>
-                    <span style={S.apagado}>El orden: arrastrando la cabecera</span>
-                    <button data-columnas-hecho onClick={() => setMenuCols(false)} style={{ ...S.botonVerde, padding: '3px 12px', fontSize: 13 }}>Hecho</button>
-                  </div>
-                </div></>}
+              {menuCols && menuGrupos(colsCustom, ponColumnas, 'El orden: arrastrando la cabecera', 'Sector, precio y una por filtro encendido, como en «Filtros» (y vuelven a cambiar al encender o apagar un filtro)')}
+            </> : resultados === 'charts' ? <>
+              {segmento('tam', ch.tam, [['grande', 'Grandes · 4', '4 gráficos por fila, con la leyenda y las fechas de los meses'], ['peq', 'Pequeños · 6', '6 gráficos por fila']], 'Tamaño de los gráficos')}
+              {segmento('tipo', ch.tipo, [['velas', 'Velas'], ['linea', 'Línea', 'Solo el cierre']])}
+              {segmento('marco', ch.marco, Object.entries(MARCOS).map(([k, m]) => [k, m.boton, `Últimos ${m.texto} (${m.velas} velas)`]))}
+              {[['ema200', 'EMA 200', GRAF.ema200], ['ema50', 'EMA 50', GRAF.ema50], ['ema20', 'EMA 20', GRAF.ema20], ['vol', 'volumen', B.secundario]].map(([k, tx, col]) => (
+                <label key={k} style={{ ...etiqueta, display: 'inline-flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
+                  <input type="checkbox" data-charts-casilla={k} checked={!!ch[k]} onChange={e => ponCharts({ [k]: e.target.checked })}/><span style={{ color: col }}>{tx}</span></label>))}
+              <button data-abrir-columnas onClick={() => setMenuCols(x => !x)} title="Elegir qué cifras salen debajo de cada gráfico" style={{ ...S.boton, padding: '3px 10px', fontSize: 13 }}>⚙ Cifras ({cifrasCharts.length})</button>
+              <AyudaFiltro a={AYUDA_CHARTS}/>
+              {menuCols && menuGrupos(cifrasCharts, ponCifras, 'Debajo de cada gráfico, en este orden', 'Las de los filtros encendidos (y vuelven a cambiar al encender o apagar un filtro)')}
             </> : <>
             <label style={{ ...etiqueta, display: 'inline-flex', gap: 5, alignItems: 'center', cursor: 'pointer', color: B.secundario }}>
               <input type="checkbox" data-ver-exigido checked={!!vista.verExigido} onChange={e => cambia(v => ({ ...v, verExigido: e.target.checked }))}/>ver crecimiento exigido</label>
@@ -601,7 +633,10 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
             </>}
           </div>
           <div style={{ overflow: 'auto', flex: 1 }}>
-            {estado.cargando ? <div style={{ ...S.apagado, padding: 20 }}>Cargando las empresas…</div> : resultados === 'custom' ? (
+            {estado.cargando ? <div style={{ ...S.apagado, padding: 20 }}>Cargando las empresas…</div> : resultados === 'charts' ? (
+              filas.length ? <ScreenerCharts key={cacheN} filas={filas} pasaTodo={ev.pasaTodo} ajustes={ch} cifras={cifrasCharts} vista={vista} cache={velasCache.current} leeVelas={leeVelas} onDetalle={setDetalle}/>
+                : <div style={{ color: B.secundario, padding: 20, textAlign: 'center' }}>{busca ? 'Ningún valor coincide con la búsqueda.' : 'Ningún valor pasa todos los filtros. Prueba a quitar alguno (el número rojo «−N» dice cuántos quita cada uno).'}</div>
+            ) : resultados === 'custom' ? (
               <table data-tabla="custom" style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>
                 <thead><tr>
                   <th data-col="simbolo" onClick={() => ordena('simbolo')} title="Pulsa para ordenar"
@@ -660,6 +695,7 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
               </table>)}
           </div>
           <div style={{ ...S.apagado, padding: '4px 12px', borderTop: `1px solid ${B.borde}` }}>
+            {resultados === 'charts' && <span data-nota-charts>Precios guardados: {fechaPrecios ? `cierre del ${fechaCorta(fechaPrecios)}` : 'sin cargar'} · los gráficos se cargan según bajas · pulsa uno para ver su detalle · </span>}
             {resultados === 'custom' && <span data-nota-custom>{vista.columnas == null ? 'Ahora salen las de los filtros' : 'Columnas guardadas con la vista'} · arrastra una cabecera para cambiar el orden · ✕ quita la columna · </span>}
             Cuentas de la SEC (EDGAR) del {fechaCorta(fecha)} · el PEG esperado es de Yahoo, solo de hoy · importes en millones de la moneda de sus cuentas · * sector aproximado (código SIC) · en <span style={{ color: ROJO }}>rojo</span>, la cifra que no pasa ese filtro (o el crecimiento exigido mayor que el esperado) · pasa el ratón por una cifra para ver de dónde sale
           </div>

@@ -294,6 +294,19 @@ Boceto bocetos/screener-charts-custom.html, opción 1 «casillas por grupos» (d
 - **Arreglo**: la columna del nombre del sector se llama ahora «sec» (antes «sector», el mismo id que el filtro «Su sector frente al SPY»: con ese filtro encendido, ordenar por él ordenaba por el nombre del sector).
 - **Comprobación**  (237): columnas por defecto, limpias, mover y quitar, cifras a mano (PER 40 ÷ PEG 2 = 20 %; 123.456 M $), tabla montada con el rojo, la ventana, ordenar por sector, y con estado: marcar, pulsar fuera, ✕, arrastrar, «Las de los filtros», «Todas», «Ninguna», «Hecho» y «Descartar cambios».
 
+## 22. Pestaña «Charts»: un minigráfico por valor
+
+Boceto bocetos/screener-charts-custom.html (decidido con Sergi el 10/11 y el 11/11). Tercera pestaña de los resultados, junto a «Filtros» y «Custom»; mismo orden y mismo buscador que la tabla.
+- **Barra**: «Grandes · 4» / «Pequeños · 6» (por fila), «Velas» / «Línea», «Diario» (6 meses, 126 velas) / «Semanal» (2 años, 104) / «Mensual» (5 años, 60), casillas EMA 200, EMA 50, EMA 20 y volumen, «⚙ Cifras (N)» y «?». De entrada: grandes, velas, semanal, EMA 200 y 50, volumen.
+- **Precios**: las velas diarias de la caché (, 5 años: la misma ventana que el técnico;  en ). Cada ficha pide las suyas cuando se ve (IntersectionObserver, 4 a la vez) y se guardan en memoria; tras «Actualizar precios», se piden otra vez.
+- **Cálculo** (, puro): semanas de lunes a viernes fechadas en su lunes (), meses fechados en su primera sesión. Las EMA se calculan con las diarias ( del Builder): en una vela semanal o mensual valen lo del último día de esa vela. La EMA 200 del gráfico es la MISMA del filtro. Escala con las velas y las EMA que se ven, con un 4 % de margen; rayas del precio cada 1, 2, 2,5 o 5 × 10^k.
+- **Fechas debajo**: los años siempre; en «Grandes», además, los meses (diario) o la inicial del mes cada trimestre (semanal: A, J, O). Se compara la fecha de INICIO de cada vela: la semana del lunes 29/12 es de diciembre y el año nuevo sale en la primera que empieza en enero.
+- **Cruz** (como Finviz): al pasar el ratón, raya vertical y horizontal, el precio de esa altura a la derecha, la fecha de la vela abajo («05/01/2026», «sem. 05/01/2026», «ene 2026») y arriba su leyenda: A (apertura), M (máximo), m (mínimo), C (cierre) y las EMA encendidas. En «Grandes», sin ratón, la leyenda es la de la última vela. El último cierre, en azul en el eje.
+- **Ficha**: símbolo, nombre, cambio del último día (verde o rojo), el gráfico y debajo las cifras de «⚙ Cifras» (las mismas casillas por grupos que «Custom»; de entrada, las de los filtros encendidos; en rojo, la que no pasa). Los que no pasan, en gris (con «ver también los que no pasan»). Pulsar → el cajón del valor.
+- **Se guarda con la vista** (: tam, tipo, marco, ema200, ema50, ema20, vol, cifras). Las vistas viejas, con los de por defecto (ninguna sale «con cambios»; sin cambios en la base).
+- Colores de las EMA, la rejilla y la línea, por tono ( en ).
+- **Comprobación**  (263): 300 sesiones hechas a mano (cierre 100 y la última 110): EMA 200 = 100 + 10 × 2 ÷ 201 = 100,0995 igual a la del filtro, EMA 50 = 100,39, +10 % en el día; semana del 23/03/2026 (volumen 4 × 1.000 + 3.000 = 7.000); 14 meses; marcas A, J, O, 2026 y la semana del 29/12; escala 98,52 … 111,48 con rayas 100, 105, 110; la cruz (precio 105,0, su fecha, su leyenda); la pestaña con estado (4 pedidas, 3 dibujadas, cambio +10,00 %, diario, pequeños, EMA 20, ⚙ Cifras, cajón y «Descartar cambios»).
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:
