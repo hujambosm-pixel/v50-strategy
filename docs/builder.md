@@ -2779,3 +2779,11 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 ## 123. Screener: doble clic para ampliar un gráfico de Charts
 
 - Doble clic en un minigráfico lo amplía (unas 3 veces); un clic o Esc lo cierra; el clic sencillo abre el detalle tras 250 ms. Detalle en docs/screener.md §24.
+
+## 124. Botón «← Atrás» en la barra de arriba
+
+Pedido por Sergi el 11/11.
+- A la izquierda de «☀ Claro / ☾ Oscuro», siempre visible. Cada vez que se cambia de sección (menú, logo, enlaces entre pantallas), la app apunta de dónde se venía; «← Atrás» vuelve a la última y la quita. Tooltip «Volver a: Tesis» (o «Aún no hay una sección anterior», atenuado).
+- Solo secciones (no las pestañas de dentro: el screener y el Builder ya recuerdan lo suyo), solo atrás (sin adelante), las últimas 20, sin repetir. Pasa por salirDeTesis: con cambios sin guardar, la ventana de siempre.
+- lib/navegacion.js (puro: apuntaAtras, vuelveAtras, textoAtras); en pages/index.js, la pila y el efecto sobre sidePanel. No se guarda: al recargar la página empieza vacía.
+- Comprobación tesis.js: 21 sitios que cambian de sección (el nuevo pasa por la guardia) y la pila con cuentas a mano.

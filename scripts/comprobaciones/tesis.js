@@ -325,7 +325,20 @@ const cuenta = (html, s) => html.split(s).length - 1
   // §13 (docs/screener.md): el 20.º es abrir una vista del screener desde «Relacionado» de una tesis (abrirVistaEnScreener): como
   // «Abrir» de un plan, la tesis pregunta antes con su propia guardia (conGuardia de TesisPanel).
   ok(fuenteIndex.includes(`const abrirVistaEnScreener=(id)=>{ setScreenerAbrir({id:Number(id),n:Date.now()}); setSidePanel('screener') }`) && leer('components', 'TesisPanel.js').includes('onClick={() => conGuardia(() => onAbrirVista(f.id))}'), 'abrir una vista desde una tesis pasa por la guardia de la tesis')
-  ok(llamadasPanel === 20,`los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
+  // §124: el 21.º es «← Atrás» (barra de arriba), que pasa por salirDeTesis.
+  ok(llamadasPanel === 21,`los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
+  ok(fuenteIndex.includes(`const atras=()=>{ const {destino,pila}=vuelveAtras(pilaAtras,sidePanel); if(!destino) return; salirDeTesis(()=>{ volviendo.current=true; setPilaAtras(pila); setSidePanel(destino) }) }`) && fuenteIndex.includes('<button data-atras onClick={atras}'), '§124: «← Atrás» también pregunta si hay cambios sin guardar')
+  {
+    const N = require('../../lib/navegacion')
+    let p = []; const va = (de, a) => { p = N.apuntaAtras(p, de, a) }
+    va('watchlist', 'screener'); va('screener', 'tesis'); va('tesis', 'tesis'); va('tesis', 'builder')
+    ok(p.join() === 'watchlist,screener,tesis' && N.textoAtras(p, 'builder') === 'Volver a: Tesis', '§124: Watchlist → Screener → Tesis → Builder: «Volver a: Tesis» (ir a la misma no apunta nada)')
+    let r = N.vuelveAtras(p, 'builder')
+    ok(r.destino === 'tesis' && r.pila.join() === 'watchlist,screener' && N.vuelveAtras(r.pila, 'tesis').destino === 'screener', '§124: «← Atrás» vuelve a Tesis y luego a Screener')
+    ok(N.vuelveAtras([], 'watchlist').destino === null && N.textoAtras([], 'watchlist') === 'Aún no hay una sección anterior' && N.vuelveAtras(['tesis', 'screener', 'screener'], 'screener').destino === 'tesis', '§124: sin nada apuntado, nada; lo que repite la sección de ahora se salta')
+    let q = []; for (let i = 0; i < 30; i++) q = N.apuntaAtras(q, 'w' + i, 'w' + (i + 1))
+    ok(q.length === 20 && q[0] === 'w10' && N.apuntaAtras(['a'], 'a', 'b').join() === 'a', '§124: guarda las últimas 20; no repite la última')
+  }
 
   // El buscador.
   const tres2 = [
