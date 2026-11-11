@@ -283,6 +283,17 @@ Visto por Sergi el 11/11 en V9.1179.
 Pedido por Sergi el 11/11 al ver V9.1180: los sectores que se quitan salen en gris, sin tachar. Ninguna cifra cambia.
 - **Comprobación** `screener.js` (207).
 
+## 21. Pestaña «Custom»: las columnas que eliges
+
+Boceto bocetos/screener-charts-custom.html, opción 1 «casillas por grupos» (decidida por Sergi el 10/11). Encima de la tabla, dos pestañas: **Filtros** (la tabla de siempre, igual) y **Custom**. «Charts» va después.
+- **Columnas** (): todos los filtros del catálogo y 9 más que la pantalla ya tenía: sector, precio, capitalización (M $), índice, P/S, crecimiento del beneficio pasado, crecimiento exigido, crecimiento esperado y variación en 3 meses. Ninguna cifra nueva: las mismas de siempre.
+- **⚙ Columnas (N)**: ventana con casillas en 7 grupos (Básicos, Rentabilidad, Deuda, Crecimiento, Precio, Tendencia y precio, Tus estrategias), con «Todas», «Ninguna», «Las de los filtros» y «Hecho». Se cierra pulsando fuera o con Esc.
+- **En la tabla**: arrastrar una cabecera cambia el orden (se suelta delante de la columna de destino si viene de la derecha y detrás si viene de la izquierda: ocupa su sitio); ✕ quita la columna; pulsar la cabecera ordena. En rojo, como en «Filtros», la cifra de un filtro encendido que no pasa (y el crecimiento exigido mayor que el esperado). Con la columna del crecimiento exigido, la caja «PEG razonable».
+- **Se guardan con la vista** (): null = «las de los filtros» (sector, precio y una por filtro encendido; cambian al encender o apagar uno). En cuanto se toca algo en «Custom», la lista queda fija. Las vistas viejas y las nuevas empiezan en null: ninguna sale «con cambios» y la base no cambia. Al pie, «Ahora salen las de los filtros» o «Columnas guardadas con la vista».
+- La pestaña elegida (Filtros o Custom) se recuerda en el navegador. El orden y el buscador son los mismos en las dos.
+- **Arreglo**: la columna del nombre del sector se llama ahora «sec» (antes «sector», el mismo id que el filtro «Su sector frente al SPY»: con ese filtro encendido, ordenar por él ordenaba por el nombre del sector).
+- **Comprobación**  (237): columnas por defecto, limpias, mover y quitar, cifras a mano (PER 40 ÷ PEG 2 = 20 %; 123.456 M $), tabla montada con el rojo, la ventana, ordenar por sector, y con estado: marcar, pulsar fuera, ✕, arrastrar, «Las de los filtros», «Todas», «Ninguna», «Hecho» y «Descartar cambios».
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:

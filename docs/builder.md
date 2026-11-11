@@ -2763,3 +2763,7 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 ## 119. Screener: sectores quitados, solo en gris
 
 - Los sectores que se quitan salen en gris, sin tachar (pedido por Sergi). Detalle en docs/screener.md §20. Ninguna cifra cambia.
+
+## 120. Screener: pestaña «Custom»
+
+- Encima de la tabla, pestañas «Filtros» (igual) y «Custom»: eliges las columnas en «⚙ Columnas» (casillas por grupos), las ordenas arrastrando la cabecera y ✕ las quita; se guardan con la vista (null = las de los filtros). lib/screener/columnas.js. Sin cambios en la base; ninguna cifra cambia. Detalle en docs/screener.md §21.

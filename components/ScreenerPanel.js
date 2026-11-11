@@ -17,6 +17,7 @@ import { VISTAS_EJEMPLO, normalizaVista, textoVista, vistaNueva } from '../lib/s
 import { borrarVista, cambiarVista, creaEjemplos, crearVista, listarVistas, nombreLimpio } from '../lib/screener/vistasBase'
 import { cifrasDe, opcionElegida, opcionesDe, textoCondicion, textoEncendido } from '../lib/screener/opciones'
 import ScreenerCifras from './ScreenerCifras'
+import { COLUMNA, COLUMNAS, GRUPOS_COLUMNAS, columnasDe, conColumna, exigidoDe, mueveColumna, textoCelda } from '../lib/screener/columnas'
 import { loadSettings, saveSettingsRemote } from '../lib/settings'
 import { Papelera, Pregunta } from './VentanaPregunta'
 import { guardarComoLista, nombrePropuesto } from '../lib/screener/lista'
@@ -67,22 +68,18 @@ const Fuente = ({ f }) => (
     style={{ fontSize: 10, padding: '0 5px', borderRadius: 4, marginLeft: 4, whiteSpace: 'nowrap',
       background: f.startsWith('Yahoo') ? B.fuenteYahoo : B.fuente, color: f.startsWith('Yahoo') ? AMARILLO : B.apagado }}>{f}</span>)
 
-// El valor de una celda de la tabla para el filtro f.
-export function textoCelda(e, f) {
-  const x = f.v(e)
-  if (f.texto) return f.texto(x)
-  if (x == null) return (f.sinDato && f.sinDato(e)) || '—'
-  return (f.signo && x > 0 ? '+' : '') + fmt(x, f.dec ?? 1) + (f.unidad === '%' ? ' %' : f.unidad === 'M' ? ' M' : f.unidad === 'puntos' ? ' pt' : '')
+// El valor de una celda de la tabla para el filtro f (ahora en lib/screener/columnas.js; se sigue exportando desde aquí).
+export { textoCelda }
+// El valor por el que se ordena una columna (los null, siempre al final). §21: el sector (nombre) es la columna «sec», como en
+// «Custom» (antes «sector», el mismo id que el filtro «Su sector frente al SPY»: con ese filtro encendido se ordenaba por el nombre).
+const valorOrden = (e, col, vista) => {
+  if (col === 'simbolo') return e.simbolo || ''
+  const c = COLUMNA[col]; return c ? c.orden(e, vista) : null
 }
-// El valor por el que se ordena una columna (los null, siempre al final).
-const valorOrden = (e, col) => {
-  if (col === 'simbolo' || col === 'sector') return e[col] || ''
-  if (col === 'precio') return e.precio
-  if (col === 'exigido') return e.m.per
-  if (col === 'esperado') return e.m.crecEsperado
-  const f = FILTRO[col]; if (!f) return null
-  const x = f.v(e); return x != null ? x : (f.orden ? f.orden(e) : null)
-}
+// §21: las pestañas de los resultados: «Filtros» (la tabla de siempre) y «Custom» (las columnas que eliges). «Charts», después.
+const PESTANAS_RESULTADOS = [['filtros', 'Filtros', 'Sector, precio y una columna por filtro encendido'], ['custom', 'Custom', 'Las columnas que tú elijas (se guardan con la vista)']]
+export const AYUDA_RESULTADOS = ['Filtros y Custom', 'Los filtros deciden QUÉ valores salen; estas pestañas, CÓMO los ves. «Filtros»: sector, precio y una columna por filtro encendido. «Custom»: las columnas que tú eliges, aunque no filtres por ellas. Al cambiar de pestaña no cambian ni el orden ni el buscador.', 'Filtras por ROCE y EMA 200, pero quieres ver también el PER y la capitalización: en «Custom» los añades con «⚙ Columnas».']
+export const AYUDA_CUSTOM = ['Columnas «Custom»', 'Eliges qué cifras ver. Se guardan con la vista, como los filtros. Mientras no toques nada, salen las de los filtros (sector, precio y una por filtro encendido) y cambian al encender o apagar uno; en cuanto eliges, se quedan las tuyas («Las de los filtros» vuelve a lo de antes). «⚙ Columnas» abre la lista por grupos. Arrastra una cabecera para cambiar el orden, ✕ quita la columna y pulsar la cabecera ordena. En rojo, como en «Filtros», la cifra de un filtro encendido que no pasa.', 'Con 8 columnas y la pantalla estrecha, sale una barra para moverte a la derecha.']
 
 // inicial (para las comprobaciones, scripts/comprobaciones/screener.js): { empresas, vistas (pestañas), iv, piso, busca, verNo, orden,
 // pregunta }; con inicial.empresas no se lee la base (ni las vistas). salida: la guardia de «cambios sin guardar» al salir de la
@@ -114,6 +111,12 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
   const [lista, setLista] = useState(inicial.lista || null)   // ventana «Guardar como lista»: { nombre, error, guardando }
   const [hecho, setHecho] = useState(null)   // texto tras guardar una lista
   const [panelOculto, setPanelOculto] = useState(!!inicial.panelOculto)
+  // §21: la pestaña de los resultados ('filtros' o 'custom'; se recuerda en el navegador), la ventana «⚙ Columnas» y el arrastre.
+  const [resultados, setResultados] = useState(inicial.resultados || 'filtros')
+  useEffect(() => { try { const r = localStorage.getItem('screener.resultados'); if (!inicial.empresas && (r === 'filtros' || r === 'custom')) setResultados(r) } catch (_) {} }, [])
+  const ponResultados = (x) => { setResultados(x); setMenuCols(false); try { localStorage.setItem('screener.resultados', x) } catch (_) {} }
+  const [menuCols, setMenuCols] = useState(!!inicial.menuCols)
+  const [arrastra, setArrastra] = useState(null), [sobre, setSobre] = useState(null)
   useEffect(() => { try { if (!inicial.empresas && localStorage.getItem('screener.panelOculto') === '1') setPanelOculto(true) } catch (_) {} }, [])
   const ponPanelOculto = (x) => { setPanelOculto(x); try { localStorage.setItem('screener.panelOculto', x ? '1' : '0') } catch (_) {} }
   const [iv, setIv] = useState(inicial.iv || 0)
@@ -175,6 +178,12 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
   useEffect(() => { if (salida) salida.current = (seguir) => { if (!conCambiosRef.current) return false; setPregunta({ tipo: 'salir', accion: seguir }); return true } })
   useEffect(() => () => { if (salida) salida.current = null }, [])
 
+  // Esc cierra la ventana «⚙ Columnas».
+  useEffect(() => {
+    if (!menuCols || !visible || typeof window === 'undefined') return
+    const k = (e) => { if (e.key === 'Escape') setMenuCols(false) }
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k)
+  }, [menuCols, visible])
   // Esc cierra el cajón.
   useEffect(() => {
     if (!detalle || !visible || typeof window === 'undefined') return
@@ -310,7 +319,7 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
     let l = (verNo ? ev.universo : ev.f2).filter(e => !q || sinTildes(`${e.simbolo} ${e.nombre || ''} ${e.sector || ''}`.toLowerCase()).includes(q))
     if (orden.col) {
       l = [...l].sort((a, b) => {
-        const x = valorOrden(a, orden.col), y = valorOrden(b, orden.col)
+        const x = valorOrden(a, orden.col, vista), y = valorOrden(b, orden.col, vista)
         if (x == null && y == null) return 0
         if (x == null) return 1
         if (y == null) return -1
@@ -318,10 +327,13 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
       })
     }
     return l
-  }, [ev, busca, verNo, orden])
+  }, [ev, busca, verNo, orden, vista.pegRazonable])
 
-  const ordena = (col) => setOrden(o => o.col === col ? { col, dir: -o.dir } : { col, dir: col === 'simbolo' || col === 'sector' ? 1 : -1 })
-  const exigido = (e) => e.m.per == null ? null : e.m.per / vista.pegRazonable
+  const ordena = (col) => setOrden(o => o.col === col ? { col, dir: -o.dir } : { col, dir: col === 'simbolo' || COLUMNA[col]?.izquierda ? 1 : -1 })
+  const exigido = (e) => exigidoDe(e, vista)
+  // §21: las columnas de «Custom» (las de la vista o, si no tiene, las de los filtros) y cambiarlas (null = las de los filtros).
+  const colsCustom = columnasDe(vista)
+  const ponColumnas = (lista) => cambia(v => ({ ...v, columnas: lista }))
 
   const caja = { fontFamily: B.letra, fontSize: 13, background: B.caja, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: 6, padding: '3px 6px' }
   const etiqueta = { fontFamily: B.letra, fontSize: 13, color: B.texto, textTransform: 'none', letterSpacing: 0, fontWeight: 400, flexDirection: 'row' }   // la app pone a todo «label» columna y letra mono
@@ -536,7 +548,14 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Resultados */}
         <div style={{ ...S.tarjeta, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderBottom: `1px solid ${B.borde}`, fontSize: 13 }}>
+          <div data-pestanas-resultados style={{ display: 'flex', gap: 2, alignItems: 'flex-end', padding: '6px 10px 0', borderBottom: `1px solid ${B.borde}` }}>
+            {PESTANAS_RESULTADOS.map(([k, t, tip]) => { const on = resultados === k
+              return <button key={k} data-resultados={k} data-activa={on ? '1' : '0'} title={tip} onClick={() => ponResultados(k)}
+                style={{ fontFamily: B.letra, fontSize: 13, padding: '4px 16px', borderRadius: '7px 7px 0 0', borderStyle: 'solid', borderWidth: '1px 1px 0 1px', borderColor: on ? B.selBorde : B.borde, cursor: 'pointer', whiteSpace: 'nowrap', background: on ? B.cabecera : 'transparent', color: on ? B.titulo : B.secundario, fontWeight: on ? 700 : 400 }}>{t}</button> })}
+            <span style={{ flex: 1 }}/>
+            <span style={{ paddingBottom: 4 }}><AyudaFiltro a={AYUDA_RESULTADOS}/></span>
+          </div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderBottom: `1px solid ${B.borde}`, fontSize: 13, position: 'relative' }}>
             <b data-n-filas style={{ color: B.titulo }}>{filas.length} valores</b>
             <ConLimpiar valor={busca} onLimpia={() => setBusca('')}>
               <input data-busca placeholder="Buscar valor o sector" value={busca} onChange={e => setBusca(e.target.value)} style={{ ...caja, width: 200 }}/>
@@ -544,6 +563,33 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
             <label style={{ ...etiqueta, display: 'inline-flex', gap: 5, alignItems: 'center', cursor: 'pointer', color: B.secundario }}>
               <input type="checkbox" data-ver-no checked={verNo} onChange={e => setVerNo(e.target.checked)}/>ver también los que no pasan (en gris)</label>
             <span style={{ flex: 1 }}/>
+            {resultados === 'custom' ? <>
+              {colsCustom.includes('exigido') && <>
+                <span style={{ color: B.secundario }}>Crec. exigido con PEG razonable</span>
+                <input data-peg type="number" step="0.1" min="0.1" value={vista.pegRazonable} style={{ ...caja, width: 56 }}
+                  onChange={e => cambia(v => ({ ...v, pegRazonable: Number(e.target.value) > 0 ? Number(e.target.value) : v.pegRazonable }))}/></>}
+              <button data-abrir-columnas onClick={() => setMenuCols(x => !x)} title="Elegir qué columnas se ven" style={{ ...S.boton, padding: '3px 10px', fontSize: 13 }}>⚙ Columnas ({colsCustom.length})</button>
+              <AyudaFiltro a={AYUDA_CUSTOM}/>
+              {menuCols && <>
+                <div data-fuera-columnas onClick={() => setMenuCols(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }}/>
+                <div data-menu-columnas style={{ position: 'absolute', right: 8, top: '100%', marginTop: 2, zIndex: 41, width: 700, maxWidth: 'calc(100% - 16px)', background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: 8, padding: 10, boxShadow: `0 10px 28px ${B.sombra}` }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '10px 14px' }}>
+                    {GRUPOS_COLUMNAS.map(([g, l]) => <div key={g} data-grupo-columnas={g}>
+                      <div style={{ color: B.secundario, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>{g}</div>
+                      {l.map(c => <label key={c.id} title={c.filtro ? c.filtro.nombre : undefined} style={{ ...etiqueta, display: 'flex', gap: 6, alignItems: 'center', padding: '2px 0', cursor: 'pointer' }}>
+                        <input type="checkbox" data-columna={c.id} checked={colsCustom.includes(c.id)} onChange={e => ponColumnas(conColumna(colsCustom, c.id, e.target.checked))}/>{c.titulo}</label>)}
+                    </div>)}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: `1px solid ${B.borde}` }}>
+                    <button data-columnas-todas onClick={() => ponColumnas(COLUMNAS.map(c => c.id))} style={{ ...S.boton, padding: '3px 10px', fontSize: 13 }}>Todas</button>
+                    <button data-columnas-ninguna onClick={() => ponColumnas([])} style={{ ...S.boton, padding: '3px 10px', fontSize: 13 }}>Ninguna</button>
+                    <button data-columnas-filtros onClick={() => ponColumnas(null)} title="Sector, precio y una por filtro encendido, como en «Filtros» (y vuelven a cambiar al encender o apagar un filtro)" style={{ ...S.boton, padding: '3px 10px', fontSize: 13 }}>Las de los filtros</button>
+                    <span style={{ flex: 1 }}/>
+                    <span style={S.apagado}>El orden: arrastrando la cabecera</span>
+                    <button data-columnas-hecho onClick={() => setMenuCols(false)} style={{ ...S.botonVerde, padding: '3px 12px', fontSize: 13 }}>Hecho</button>
+                  </div>
+                </div></>}
+            </> : <>
             <label style={{ ...etiqueta, display: 'inline-flex', gap: 5, alignItems: 'center', cursor: 'pointer', color: B.secundario }}>
               <input type="checkbox" data-ver-exigido checked={!!vista.verExigido} onChange={e => cambia(v => ({ ...v, verExigido: e.target.checked }))}/>ver crecimiento exigido</label>
             {vista.verExigido && <>
@@ -552,12 +598,44 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
                 onChange={e => cambia(v => ({ ...v, pegRazonable: Number(e.target.value) > 0 ? Number(e.target.value) : v.pegRazonable }))}/>
             </>}
             <AyudaFiltro a={AYUDAS.exigido}/>
+            </>}
           </div>
           <div style={{ overflow: 'auto', flex: 1 }}>
-            {estado.cargando ? <div style={{ ...S.apagado, padding: 20 }}>Cargando las empresas…</div> : (
+            {estado.cargando ? <div style={{ ...S.apagado, padding: 20 }}>Cargando las empresas…</div> : resultados === 'custom' ? (
+              <table data-tabla="custom" style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>
+                <thead><tr>
+                  <th data-col="simbolo" onClick={() => ordena('simbolo')} title="Pulsa para ordenar"
+                    style={{ ...cel, position: 'sticky', top: 0, background: B.cabecera, color: B.titulo, cursor: 'pointer', textAlign: 'left', fontWeight: 600, zIndex: 1 }}>
+                    Valor{orden.col === 'simbolo' ? (orden.dir > 0 ? ' ▲' : ' ▼') : ''}</th>
+                  {colsCustom.map(id => { const c = COLUMNA[id], destino = sobre === id && arrastra && arrastra !== id
+                    return <th key={id} data-col={id} draggable onClick={() => ordena(id)} title={(c.filtro ? c.filtro.nombre + '. ' : '') + 'Pulsa para ordenar; arrastra para cambiar el orden'}
+                      onDragStart={e => { setArrastra(id); try { e.dataTransfer.setData('text/plain', id); e.dataTransfer.effectAllowed = 'move' } catch (_) {} }}
+                      onDragEnd={() => { setArrastra(null); setSobre(null) }}
+                      onDragOver={e => { e.preventDefault(); if (sobre !== id) setSobre(id) }}
+                      onDrop={e => { e.preventDefault(); if (arrastra) ponColumnas(mueveColumna(colsCustom, arrastra, id)); setArrastra(null); setSobre(null) }}
+                      style={{ ...cel, position: 'sticky', top: 0, background: B.cabecera, color: B.titulo, cursor: 'grab', textAlign: c.izquierda ? 'left' : 'right', fontWeight: 600, zIndex: 1,
+                        opacity: arrastra === id ? 0.4 : 1, boxShadow: destino ? `inset ${colsCustom.indexOf(arrastra) < colsCustom.indexOf(id) ? '-3px' : '3px'} 0 0 ${B.selBorde}` : undefined }}>
+                      {c.titulo}{orden.col === id ? (orden.dir > 0 ? ' ▲' : ' ▼') : ''}
+                      <span data-quitar-columna={id} role="button" title="Quitar la columna" onClick={e => { e.stopPropagation(); ponColumnas(conColumna(colsCustom, id, false)) }}
+                        style={{ color: B.apagado, marginLeft: 6, cursor: 'pointer', fontWeight: 400 }}>✕</span></th> })}
+                </tr></thead>
+                <tbody>
+                  {filas.map(e => { const dentro = ev.pasaTodo.has(e.simbolo)
+                    return (
+                      <tr key={e.simbolo} data-fila={e.simbolo} onClick={() => setDetalle(e.simbolo)} title="Pulsa para ver el detalle" style={{ opacity: dentro ? 1 : 0.5, cursor: 'pointer', background: detalle === e.simbolo ? B.sel : undefined }}>
+                        <td style={{ ...cel, textAlign: 'left' }} title={e.aviso || undefined}><b style={{ color: B.enlace }}>{e.simbolo}</b> <span style={{ color: B.secundario }}>{e.nombre}</span></td>
+                        {colsCustom.map(id => { const c = COLUMNA[id], cf = c.filtro && vista.filtros[id]
+                          const mal = cf?.on ? !pasa(e, c.filtro, cf) : id === 'exigido' && exigido(e) != null && e.m.crecEsperado != null && exigido(e) > e.m.crecEsperado
+                          return <td key={id} data-celda={id} title={c.tip ? c.tip(e, vista) : undefined}
+                            style={{ ...cel, textAlign: c.izquierda ? 'left' : 'right', color: mal ? ROJO : id === 'sec' || id === 'esperado' || id === 'indice' ? B.secundario : B.texto }}>{c.texto(e, vista)}</td> })}
+                      </tr>) })}
+                  {!filas.length && <tr><td colSpan={colsCustom.length + 1} style={{ ...cel, textAlign: 'center', color: B.secundario, padding: 20 }}>
+                    {busca ? 'Ningún valor coincide con la búsqueda.' : 'Ningún valor pasa todos los filtros. Prueba a quitar alguno (el número rojo «−N» dice cuántos quita cada uno).'}</td></tr>}
+                </tbody>
+              </table>) : (
               <table data-tabla style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>
                 <thead><tr>
-                  {[['simbolo', 'Valor'], ['sector', 'Sector'], ['precio', 'Precio $'], ...encendidos.map(f => [f.id, f.columna || f.nombre]), ...(vista.verExigido ? [['exigido', 'Crec. exigido'], ['esperado', 'Crec. esperado']] : [])].map(([k, t], i) => (
+                  {[['simbolo', 'Valor'], ['sec', 'Sector'], ['precio', 'Precio $'], ...encendidos.map(f => [f.id, f.columna || f.nombre]), ...(vista.verExigido ? [['exigido', 'Crec. exigido'], ['esperado', 'Crec. esperado']] : [])].map(([k, t], i) => (
                     <th key={k} data-col={k} onClick={() => ordena(k)} title="Pulsa para ordenar"
                       style={{ ...cel, position: 'sticky', top: 0, background: B.cabecera, color: B.titulo, cursor: 'pointer', textAlign: i < 2 ? 'left' : 'right', fontWeight: 600, zIndex: 1 }}>
                       {t}{orden.col === k ? (orden.dir > 0 ? ' ▲' : ' ▼') : ''}</th>))}
@@ -582,6 +660,7 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
               </table>)}
           </div>
           <div style={{ ...S.apagado, padding: '4px 12px', borderTop: `1px solid ${B.borde}` }}>
+            {resultados === 'custom' && <span data-nota-custom>{vista.columnas == null ? 'Ahora salen las de los filtros' : 'Columnas guardadas con la vista'} · arrastra una cabecera para cambiar el orden · ✕ quita la columna · </span>}
             Cuentas de la SEC (EDGAR) del {fechaCorta(fecha)} · el PEG esperado es de Yahoo, solo de hoy · importes en millones de la moneda de sus cuentas · * sector aproximado (código SIC) · en <span style={{ color: ROJO }}>rojo</span>, la cifra que no pasa ese filtro (o el crecimiento exigido mayor que el esperado) · pasa el ratón por una cifra para ver de dónde sale
           </div>
         </div>

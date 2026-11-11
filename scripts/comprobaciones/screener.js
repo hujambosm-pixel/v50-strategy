@@ -526,6 +526,75 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     m.quita()
   }
 
+  // §21: la pestaña «Custom» (columnas que se eligen, guardadas con la vista).
+  {
+    const C = require('../../lib/screener/columnas')
+    const ids = C.COLUMNAS.map(c => c.id)
+    ok(ids.length === new Set(ids).size && FILTROS.filter(f => !f.proximamente).every(f => ids.includes(f.id)) && ['sec', 'precio', 'capi', 'indice', 'ps', 'crecPasado', 'exigido', 'esperado', 'var3m'].every(x => ids.includes(x)), `§21: ${ids.length} columnas sin repetir: todos los filtros y 9 más`)
+    ok(C.GRUPOS_COLUMNAS.map(g => g[0]).join(' | ') === 'Básicos | Rentabilidad | Deuda | Crecimiento | Precio | Tendencia y precio | Tus estrategias', '§21: los 7 grupos de «⚙ Columnas»')
+    const va = vistaNueva({ on: ['roce', 'ema200'] })
+    ok(C.columnasDe(va).join() === 'sec,precio,roce,ema200' && C.columnasDe({ ...va, verExigido: true }).join() === 'sec,precio,roce,ema200,exigido,esperado', '§21: sin columnas propias, las de los filtros (sector, precio, ROCE, EMA 200; y el crecimiento exigido si está a la vista)')
+    ok(C.columnasDe({ ...va, columnas: ['per', 'zzz', 'per', 'capi'] }).join() === 'per,capi' && C.columnasDe({ ...va, columnas: [] }).length === 0, '§21: columnas propias: sin las que no existen ni repetidas; «Ninguna» = ninguna')
+    ok(vistaNueva().columnas === null && normalizaVista(vieja).columnas === null && normalizaVista({ ...vieja, columnas: ['capi', 'zzz'] }).columnas.join() === 'capi', '§21: vista nueva y vistas viejas, null (= las de los filtros); lo raro se limpia')
+    ok(textoVista(vieja) === textoVista(normalizaVista(vieja)) && textoVista({ ...va, columnas: ['per'] }) !== textoVista(va), '§21: las vistas viejas no salen «con cambios»; cambiar las columnas sí cuenta')
+    const L = ['sec', 'precio', 'roce', 'per']
+    ok(C.mueveColumna(L, 'per', 'precio').join() === 'sec,per,precio,roce' && C.mueveColumna(L, 'sec', 'roce').join() === 'precio,roce,sec,per' && C.mueveColumna(L, 'sec', 'sec') === L, '§21: arrastrar PER sobre Precio la pone delante; Sector sobre ROCE, detrás (ocupa su sitio)')
+    ok(C.conColumna(L, 'capi', true).join() === 'sec,precio,roce,per,capi' && C.conColumna(L, 'roce', false).join() === 'sec,precio,per' && C.conColumna(L, 'per', true) === L, '§21: marcar añade al final; desmarcar quita; marcar una que ya está no la repite')
+    const eA = { ...E[0], en_ndx: true, en_listas: true, m: { ...E[0].m, per: 40, pegEsp: 2.5, crecEsperado: 16, capitalizacion: 123456.4, ps: 7.25, crecPasado: 12.34 }, t: { var3m: -4.56 }, tecnico: { cierre: 9.5, cierre3m: 9.953 } }
+    ok(C.exigidoDe(eA, { pegRazonable: 2 }) === 20 && C.COLUMNA.exigido.texto(eA, { pegRazonable: 2 }) === '20,0 %' && C.COLUMNA.exigido.tip(eA, { pegRazonable: 2 }) === 'PER 40,0 ÷ PEG 2,0', '§21: crecimiento exigido = PER 40 ÷ PEG 2 = 20 %')
+    ok(C.COLUMNA.capi.texto(eA) === '123.456' && C.COLUMNA.ps.texto(eA) === '7,25' && C.COLUMNA.crecPasado.texto(eA) === '+12,3 %' && C.COLUMNA.var3m.texto(eA) === '-4,6 %' && C.COLUMNA.indice.texto(eA) === 'S&P 500 · Nasdaq-100 · Tus listas' && C.COLUMNA.esperado.texto(eA) === '16,0 %', '§21: capitalización 123.456 M $, P/S 7,25, crec. pasado +12,3 %, 3 meses −4,6 %, índices, crec. esperado 16 %')
+    ok(C.COLUMNA.roce.texto(E[0]) === '30,0 %' && C.COLUMNA.sec.texto({ sector: 'Salud', sectorFuente: 'SIC' }) === 'Salud*' && C.COLUMNA.capi.texto(E[1]) === '—', '§21: las de los filtros, con el texto de siempre; sector SIC con «*»; sin dato, «—»')
+
+    // Montada: «Custom» con columnas propias (capitalización, ROCE ≥ 27 encendido, sector) y los que no pasan.
+    const E21 = [eA, ...E.slice(1)]
+    const v21 = { ...vistaNueva({ on: ['roce'], valores: { roce: 27 } }), columnas: ['capi', 'roce', 'sec'] }
+    const monta21 = (extra) => renderToString(React.createElement(P, { inicial: { empresas: E21, vistas: [pestanaDe({ id: 4, nombre: 'C', vista: v21 })], resultados: 'custom', verNo: true, ...extra } })).split('<!-- -->').join('')
+    let h = monta21({})
+    ok((h.match(/<th[^>]*data-col="([^"]+)"/g) || []).map(x => x.match(/data-col="([^"]+)"/)[1]).join() === 'simbolo,capi,roce,sec' && (h.match(/data-quitar-columna=/g) || []).length === 3 && h.includes('data-tabla="custom"') && /data-resultados="custom" data-activa="1"/.test(h), '§21: «Custom» con Valor + capitalización, ROCE y sector, cada una con ✕')
+    ok(/data-fila="AAA"[^]*?data-celda="capi"[^>]*>123\.456</.test(h) && /data-fila="BBB"[^]*?data-celda="roce"[^>]*color:var\(--sc-rojo\)[^>]*>20,0 %</.test(h) && /data-fila="AAA"[^]*?data-celda="roce"[^>]*color:var\(--sc-texto\)[^>]*>30,0 %</.test(h), '§21: AAA 123.456 M $; ROCE de BBB (20 < 27) en rojo, el de AAA (30) no')
+    ok(h.includes('⚙ Columnas (3)') && !h.includes('data-ver-exigido') && !h.includes('data-peg') && h.includes('Columnas guardadas con la vista'), '§21: «⚙ Columnas (3)», sin la casilla del crecimiento exigido ni el PEG (no está la columna)')
+    ok(monta21({ vistas: [pestanaDe({ id: 4, nombre: 'C', vista: { ...v21, columnas: ['exigido'] } })] }).includes('data-peg') && monta21({ vistas: [pestanaDe({ id: 4, nombre: 'C', vista: { ...v21, columnas: null } })] }).includes('Ahora salen las de los filtros'), '§21: con la columna del crecimiento exigido, la caja del PEG; sin columnas propias, lo dice')
+    const hm = monta21({ menuCols: true })
+    ok(hm.includes('data-menu-columnas') && (hm.match(/data-grupo-columnas=/g) || []).length === 7 && (hm.match(/data-columna="/g) || []).length === ids.length && /data-columna="capi" checked=""/.test(hm) && !/data-columna="per" checked=""/.test(hm), `§21: «⚙ Columnas»: 7 grupos, ${ids.length} casillas, marcadas las que se ven`)
+    const hf = monta21({ resultados: 'filtros' })
+    ok(/data-col="sec"/.test(hf) && !/data-col="sector"/.test(hf) && !hf.includes('data-tabla="custom"') && hf.includes('data-ver-exigido'), '§21: «Filtros» igual que antes (la columna del sector se llama «sec»)')
+    ok((monta21({ resultados: 'filtros', orden: { col: 'sec', dir: 1 } }).match(/data-fila="[A-Z]+"/g) || []).join() === 'data-fila="DDD",data-fila="BBB",data-fila="AAA"', '§21: ordenar por sector: Industria, Salud, Tecnología')
+
+    // Con estado: abrir «⚙ Columnas», marcar, quitar, arrastrar, «Las de los filtros» y cambiar de pestaña.
+    const RDC = require('react-dom/client')
+    const m = D.monta(React.createElement(P, { inicial: { empresas: E21, vistas: [pestanaDe({ id: 4, nombre: 'C', vista: v21 })], verNo: true } }), RDC); await D.espera(30)
+    const uno = (k, v) => m.raiz.conAtributo(k, v)[0]
+    const cab = () => m.raiz.conAtributo('data-col').filter(x => x.tagName === 'TH').map(x => x.getAttribute('data-col')).join()
+    ok(cab() === 'simbolo,sec,precio,roce' && !uno('data-tabla', 'custom'), '§21: empieza en «Filtros»')
+    D.pulsa(uno('data-resultados', 'custom')); await D.espera(10)
+    ok(cab() === 'simbolo,capi,roce,sec' && globalThis.__domFalso.almacen.get('screener.resultados') === 'custom', '§21: pulsar «Custom»: sus columnas; se recuerda en el navegador')
+    D.pulsa(uno('data-abrir-columnas')); await D.espera(10)
+    const marca = (id, on) => { const n = uno('data-columna', id); n.checked = on; D.propsDe(n).onChange({ target: n, currentTarget: n }) }
+    marca('per', true); await D.espera(10)
+    ok(!!uno('data-menu-columnas') && cab() === 'simbolo,capi,roce,sec,per' && m.raiz.conAtributo('data-punto-cambios').length === 1, '§21: marcar PER: sale al final y la vista tiene cambios (●)')
+    D.pulsa(uno('data-fuera-columnas')); await D.espera(10)
+    ok(!uno('data-menu-columnas'), '§21: pulsar fuera cierra la ventana')
+    D.pulsa(uno('data-quitar-columna', 'capi')); await D.espera(10)
+    ok(cab() === 'simbolo,roce,sec,per', '§21: ✕ quita la capitalización')
+    const th = (id) => m.raiz.conAtributo('data-col', id).find(x => x.tagName === 'TH')
+    D.propsDe(th('per')).onDragStart({ dataTransfer: { setData() {} } }); await D.espera(10)
+    D.propsDe(th('roce')).onDragOver({ preventDefault() {} }); await D.espera(10)
+    ok(D.propsDe(th('per')).style.opacity === 0.4 && D.propsDe(th('roce')).style.boxShadow === 'inset 3px 0 0 var(--sc-selBorde)', '§21: la columna que se arrastra, atenuada; la de destino, con la raya azul a la izquierda')
+    D.propsDe(th('roce')).onDrop({ preventDefault() {} }); await D.espera(10)
+    ok(cab() === 'simbolo,per,roce,sec', '§21: arrastrar PER sobre ROCE la pone delante')
+    D.pulsa(uno('data-abrir-columnas')); await D.espera(10); D.pulsa(uno('data-columnas-filtros')); await D.espera(10)
+    ok(cab() === 'simbolo,sec,precio,roce' && m.raiz.textContent.includes('Ahora salen las de los filtros'), '§21: «Las de los filtros»: sector, precio y ROCE')
+    D.pulsa(uno('data-columnas-todas')); await D.espera(10)
+    ok(cab().split(',').length === ids.length + 1, '§21: «Todas»')
+    D.pulsa(uno('data-columnas-ninguna')); await D.espera(10)
+    ok(cab() === 'simbolo' && uno('data-abrir-columnas').textContent.includes('(0)'), '§21: «Ninguna»: solo el valor')
+    D.pulsa(uno('data-columnas-hecho')); await D.espera(10)
+    ok(!uno('data-menu-columnas'), '§21: «Hecho» cierra')
+    D.pulsa(uno('data-descartar')); await D.espera(10)
+    ok(cab() === 'simbolo,capi,roce,sec' && !m.raiz.conAtributo('data-punto-cambios').length, '§21: «Descartar cambios» vuelve a las columnas guardadas')
+    m.quita()
+  }
+
   console.log(`screener: ${fallos ? fallos + ' fallos de ' + n : 'todas bien (' + n + ')'}`)
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(1) })
