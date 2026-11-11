@@ -2737,3 +2737,10 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - Los filtros pasan del panel de la izquierda a una rejilla de 5 columnas arriba, con un desplegable de cifras fijas por filtro y «Otra cifra…»; las vistas, en una sola línea. Detalle en docs/screener.md §15.
 - `components/BuilderAyuda.js` acepta un nombre en vez del «?» (`contenido`, `estiloBoton`, `soloClic`); sin ellos, igual que antes.
 - Ninguna cifra cambia y lo que se guarda en una vista, tampoco.
+
+## 115. Screener: filtros de la EMA 50 y la EMA 20
+
+- Dos filtros nuevos en el piso Técnico, detrás de la EMA 200: «Precio frente a la EMA 50» y «… EMA 20». Detalle en docs/screener.md §16.
+- Cambio en la base: `guardar_tecnico_screener` acepta y guarda `ema50` y `ema20` (sql/screener_tecnico_ema.sql, con REVERSIÓN).
+- Ninguna cifra de lo que ya había cambia.
+- Al pasar el ratón por el nombre de un filtro, su cifra recomendada.

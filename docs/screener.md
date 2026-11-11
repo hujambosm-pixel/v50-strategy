@@ -237,6 +237,16 @@ Boceto `bocetos/screener-arriba.html` (decidido por Sergi el 11/11: opción 1 «
 - No cambia lo que se guarda: una vista sigue siendo `{ on, op, valor }` por filtro (la caja de «Otra cifra…» es de la pantalla). Ninguna cifra cambia.
 - **Comprobación** `screener.js` (182): cifras fijas (las de por defecto y las de las vistas de ejemplo están en la lista), «(tuya)», contadores de las pestañas, rejilla de 5 columnas, «Todos», «Universo y sectores», «Otra cifra…», ocultar y quitar, y el nombre con ✎.
 
+## 16. Filtros «Precio frente a la EMA 50» y «… EMA 20»
+
+Pedidos por Sergi el 11/11, en el orden EMA 200, 50, 20 (piso Técnico, grupo «Tendencia y precio»).
+- `tecnicoDe` guarda también `ema50` y `ema20` (la misma `media()` del Builder; con menos de 50 o 20 velas, sin dato). `cifrasTecnicas` da `ema50Dist` y `ema20Dist` en %.
+- Desplegable con palabras, como la EMA 200: «Por encima», «Por debajo», «5 % o más por encima»…
+- **Base**: `sql/screener_tecnico_ema.sql` añade `ema50` y `ema20` a las claves que acepta y guarda `guardar_tecnico_screener` (sin cambiar la tabla ni los permisos; con REVERSIÓN). Comprobado antes que la función de la base era la del archivo.
+- Lo guardado antes no tiene esas medias: hasta recalcular, los dos filtros no tienen dato (no pasan). Se recalcula con `node scripts/cargaScreener.js --tecnico` (desde la caché, ~1 min) o con «⟳ Actualizar precios».
+- **Comprobaciones**: `screener.js` (EMA 50 = 100 + 10 × 2 ÷ 51; EMA 20 = 100 + 10 × 2 ÷ 21 → +8,96 %; orden; vistas viejas) y `screenerSeguridad.js` (guarda las dos; negativa, rechazada).
+- Al pasar el ratón por el NOMBRE de cualquier filtro, el tooltip dice su cifra recomendada («Recomendado: ≥ 25 % (30 % = muy exigente). Pulsa para ver qué es.»; pedido por Sergi el 11/11).
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:

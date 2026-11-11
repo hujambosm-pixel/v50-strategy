@@ -25,6 +25,9 @@ const prueba = async (nombre, sql, espera) => {
   await prueba('con sesión no escribe tecnico directamente', `${como(A)} UPDATE public.screener_empresas SET tecnico = '{}' WHERE simbolo = 'AAPL';`, 'error')
   await prueba('guardar_tecnico_screener escribe SOLO tecnico', `${como(A)} SELECT public.guardar_tecnico_screener('AAPL', ${t}) AS ok; RESET ROLE;
     SELECT tecnico->>'cierre' AS cierre, tecnico ? 'en' AS con_hora, precio IS NOT DISTINCT FROM (SELECT precio FROM public.screener_empresas WHERE simbolo='AAPL') AS precio_igual FROM public.screener_empresas WHERE simbolo = 'AAPL';`)
+  await prueba('§16: guarda también ema50 y ema20', `${como(A)} SELECT public.guardar_tecnico_screener('AAPL', '{"fecha":"2026-11-06","cierre":1,"ema50":2.5,"ema20":3.5}'); RESET ROLE;
+    DO $$ BEGIN IF (SELECT (tecnico->>'ema50')::numeric <> 2.5 OR (tecnico->>'ema20')::numeric <> 3.5 FROM public.screener_empresas WHERE simbolo='AAPL') THEN RAISE EXCEPTION 'no guardó ema50/ema20'; END IF; END $$;`)
+  await prueba('§16: ema20 negativa, rechazada', `${como(A)} SELECT public.guardar_tecnico_screener('AAPL', '{"fecha":"2026-11-06","cierre":1,"ema20":-1}');`, 'error')
   await prueba('guardar_tecnico_screener: claves de más se quitan', `${como(A)} SELECT public.guardar_tecnico_screener('AAPL', '{"fecha":"2026-11-06","cierre":1,"precio":5}'); RESET ROLE;
     DO $$ BEGIN IF (SELECT tecnico ? 'precio' FROM public.screener_empresas WHERE simbolo='AAPL') THEN RAISE EXCEPTION 'guardó una clave de más'; END IF; END $$;`)
   await prueba('guardar_tecnico_screener: símbolo fuera del screener → false', `${como(A)} DO $$ BEGIN IF public.guardar_tecnico_screener('ZZZZ9', '{"fecha":"2026-11-06","cierre":1}') THEN RAISE EXCEPTION 'ZZZZ9 no debería estar'; END IF; END $$;`)

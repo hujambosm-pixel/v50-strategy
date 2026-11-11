@@ -335,10 +335,11 @@ export default function ScreenerPanel({ tema = 'oscuro', inicial = {}, salida = 
     setOtra(oo => ({ ...oo, [f.id]: false })); cambiaFiltro(f.id, { on: true, op: o.op, valor: o.valor })
   }
   const desplegable = { ...caja, width: 148, padding: '2px 4px', fontSize: 13 }
-  // El nombre de un filtro: pulsarlo abre su «?» (no se abre al pasar el ratón).
+  // El nombre de un filtro: pulsarlo abre su «?» (no se abre al pasar el ratón). Al pasar el ratón, su cifra recomendada (pedido por
+  // Sergi el 11/11).
   const nombreFiltro = (f, on, texto) => f.ayuda
-    ? <AyudaFiltro a={f.ayuda} contenido={texto} soloClic estiloBoton={{ background: 'none', border: 'none', borderBottom: `1px dotted ${B.apagado}`, padding: 0, fontFamily: B.letra, fontSize: 13, lineHeight: 1.15,
-        color: on ? B.titulo : B.secundario, fontWeight: on ? 600 : 400, cursor: 'help', textAlign: 'right' }}/>
+    ? <span data-recomendado-filtro={f.id} title={f.ayuda[3] ? `Recomendado: ${f.ayuda[3]} Pulsa para ver qué es.` : 'Pulsa para ver qué es.'}><AyudaFiltro a={f.ayuda} contenido={texto} soloClic estiloBoton={{ background: 'none', border: 'none', borderBottom: `1px dotted ${B.apagado}`, padding: 0, fontFamily: B.letra, fontSize: 13, lineHeight: 1.15,
+        color: on ? B.titulo : B.secundario, fontWeight: on ? 600 : 400, cursor: 'help', textAlign: 'right' }}/></span>
     : <span style={{ color: B.secundario }}>{texto}</span>
   const celdaFiltro = (f) => {
     const c = vista.filtros[f.id], on = !!c?.on, n = ev.cuantos[f.id]
