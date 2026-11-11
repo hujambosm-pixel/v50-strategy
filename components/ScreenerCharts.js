@@ -11,40 +11,46 @@ import { fmt, pasa } from '../lib/screener/filtros'
 
 export const A_LA_VEZ = 4
 const TAM = { grande: { porFila: 4, W: 380, H: 200 }, peq: { porFila: 6, W: 250, H: 120 } }
+// En «Grandes», la leyenda va en un hueco de arriba de dos líneas (fecha y A/M/m/C; debajo, las EMA): así no tapa las velas ni el
+// precio. En «Pequeños», solo con la cruz y encima del gráfico.
+export const ALTO_LEYENDA = 22
 const corto = (t) => t.replace(/^Precio frente a la /, '').replace(/ \(3 meses\)$/, '')
 
 // Un minigráfico (SVG): velas o línea, EMA, volumen, rayas del precio, fechas y la cruz.
 export function Grafico({ velas, ajustes, grande, marco, conCruz = true, cruzInicial = null }) {
   const { W, H } = TAM[grande ? 'grande' : 'peq']
-  const g = geometria(velas, ajustes, W, H, true)
+  const g = geometria(velas, ajustes, W, H, true, grande ? ALTO_LEYENDA : 0)
   const [cruz, setCruz] = useState(cruzInicial)   // { i, yy } en unidades del viewBox
   const marcas = marcasFecha(velas, marco, grande)
   const n = velas.length, u = velas[n - 1]
   const mueve = (e) => {
     const r = e.currentTarget.getBoundingClientRect?.(); if (!r || !r.width) return
     const xx = (e.clientX - r.left) * W / r.width, yy = (e.clientY - r.top) * H / r.height
-    const i = Math.max(0, Math.min(n - 1, Math.floor(xx / g.paso)))
+    const i = Math.max(0, Math.min(n - 1, Math.floor((xx - g.ejeY) / g.paso)))
     setCruz({ i, yy: Math.max(g.arriba, Math.min(g.abajo, yy)) })
   }
   const linea = (k, color) => {
     let d = ''; velas.forEach((v, i) => { if (v[k] == null) return; d += (d ? 'L' : 'M') + g.x(i).toFixed(1) + ' ' + g.y(v[k]).toFixed(1) })
     return d ? <path data-ema={k} d={d} fill="none" stroke={color} strokeWidth={1.2}/> : null
   }
+  // La leyenda en dos líneas: la fecha y A/M/m/C; debajo, las EMA encendidas.
   const leyendaDe = (v) => {
     const d = decPrecio(v.c)
-    return <>
+    return [<>
       <tspan>{textoFecha(v, marco)} </tspan>
-      <tspan fill={B.apagado}>A </tspan>{fmt(v.o, d)}<tspan fill={B.apagado}> M </tspan>{fmt(v.h, d)}<tspan fill={B.apagado}> m </tspan>{fmt(v.l, d)}<tspan fill={B.apagado}> C </tspan>{fmt(v.c, d)}
-      {ajustes.ema200 && v.e200 != null && <tspan fill={GRAF.ema200}> EMA200 {fmt(v.e200, d)}</tspan>}
-      {ajustes.ema50 && v.e50 != null && <tspan fill={GRAF.ema50}> EMA50 {fmt(v.e50, d)}</tspan>}
-      {ajustes.ema20 && v.e20 != null && <tspan fill={GRAF.ema20}> EMA20 {fmt(v.e20, d)}</tspan>}</>
+      <tspan fill={B.apagado}>A </tspan>{fmt(v.o, d)}<tspan fill={B.apagado}> M </tspan>{fmt(v.h, d)}<tspan fill={B.apagado}> m </tspan>{fmt(v.l, d)}<tspan fill={B.apagado}> C </tspan>{fmt(v.c, d)}</>,
+    <>
+      {ajustes.ema200 && v.e200 != null && <tspan fill={GRAF.ema200}>EMA200 {fmt(v.e200, d)} </tspan>}
+      {ajustes.ema50 && v.e50 != null && <tspan fill={GRAF.ema50}>EMA50 {fmt(v.e50, d)} </tspan>}
+      {ajustes.ema20 && v.e20 != null && <tspan fill={GRAF.ema20}>EMA20 {fmt(v.e20, d)}</tspan>}</>]
   }
+  const tx = { style: { paintOrder: 'stroke' }, stroke: B.tarjeta, strokeWidth: 3, strokeOpacity: 0.85 }
   const c = cruz && velas[cruz.i]
   return (
     <svg data-grafico viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', cursor: 'crosshair' }} fontFamily="inherit"
       onMouseMove={conCruz ? mueve : undefined} onMouseLeave={conCruz ? () => setCruz(null) : undefined}>
-      {g.rayas.map((r, k) => <g key={k}><line x1={0} x2={g.ancho} y1={r.y} y2={r.y} stroke={GRAF.rejilla} strokeWidth={0.6}/>
-        <text x={g.ancho + 3} y={r.y + 3} fontSize={9} fill={B.apagado}>{r.t}</text></g>)}
+      {g.rayas.map((r, k) => <g key={k}><line x1={g.ejeY} x2={W} y1={r.y} y2={r.y} stroke={GRAF.rejilla} strokeWidth={0.6}/>
+        <text x={g.ejeY - 3} y={r.y + 3} fontSize={9} fill={B.apagado} textAnchor="end">{r.t}</text></g>)}
       {marcas.map(m => <g key={'f' + m.i} data-marca={m.t}>
         <line x1={g.x(m.i) - g.paso / 2} x2={g.x(m.i) - g.paso / 2} y1={g.arriba} y2={g.volBase} stroke={GRAF.rejilla} strokeWidth={m.anio ? 0.9 : 0.5}/>
         <text x={g.x(m.i) - g.paso / 2 + 2} y={H - 2} fontSize={9} fill={m.anio ? B.secundario : B.apagado} fontWeight={m.anio ? 700 : 400}>{m.t}</text></g>)}
@@ -59,17 +65,18 @@ export function Grafico({ velas, ajustes, grande, marco, conCruz = true, cruzIni
       {ajustes.ema50 && linea('e50', GRAF.ema50)}
       {ajustes.ema200 && linea('e200', GRAF.ema200)}
       {/* el último cierre, en azul en el eje */}
-      {u && <g data-ultimo><rect x={g.ancho + 1} y={g.y(u.c) - 6} width={g.ejeY - 1} height={12} fill={B.selBorde}/>
-        <text x={g.ancho + 3} y={g.y(u.c) + 3} fontSize={9} fill="#ffffff">{fmt(u.c, decPrecio(u.c))}</text></g>}
+      {u && <g data-ultimo><rect x={0} y={g.y(u.c) - 6} width={g.ejeY - 1} height={12} fill={B.selBorde}/>
+        <text x={g.ejeY - 3} y={g.y(u.c) + 3} fontSize={9} fill="#ffffff" textAnchor="end">{fmt(u.c, decPrecio(u.c))}</text></g>}
       {/* leyenda: en «Grandes», la última vela; con la cruz, la de la cruz */}
-      {(c || (grande && u)) && <text data-leyenda x={2} y={11} fontSize={grande ? 9.5 : 8.5} fill={B.texto}
-        style={{ paintOrder: 'stroke' }} stroke={B.tarjeta} strokeWidth={3} strokeOpacity={0.85}>{leyendaDe(c || u)}</text>}
+      {(c || (grande && u)) && (() => { const [l1, l2] = leyendaDe(c || u), fs = grande ? 9.5 : 8.5
+        return <><text data-leyenda x={g.ejeY + 2} y={11} fontSize={fs} fill={B.texto} {...tx}>{l1}</text>
+          <text data-leyenda-ema x={g.ejeY + 2} y={21} fontSize={fs} fill={B.texto} {...tx}>{l2}</text></> })()}
       {c && <g data-cruz={cruz.i} pointerEvents="none">
         <line x1={g.x(cruz.i)} x2={g.x(cruz.i)} y1={g.arriba} y2={g.volBase} stroke={B.secundario} strokeWidth={0.6} strokeDasharray="3 2"/>
-        <line x1={0} x2={g.ancho} y1={cruz.yy} y2={cruz.yy} stroke={B.secundario} strokeWidth={0.6} strokeDasharray="3 2"/>
-        <rect x={g.ancho + 1} y={cruz.yy - 6} width={g.ejeY - 1} height={12} fill={B.cabecera} stroke={B.borde} strokeWidth={0.5}/>
-        <text data-cruz-precio x={g.ancho + 3} y={cruz.yy + 3} fontSize={9} fill={B.titulo}>{fmt(g.precioDe(cruz.yy), g.dec + 1)}</text>
-        {(() => { const t = textoFecha(c, marco), w = t.length * 5 + 6, x0 = Math.max(0, Math.min(g.ancho - w, g.x(cruz.i) - w / 2))
+        <line x1={g.ejeY} x2={W} y1={cruz.yy} y2={cruz.yy} stroke={B.secundario} strokeWidth={0.6} strokeDasharray="3 2"/>
+        <rect x={0} y={cruz.yy - 6} width={g.ejeY - 1} height={12} fill={B.cabecera} stroke={B.borde} strokeWidth={0.5}/>
+        <text data-cruz-precio x={g.ejeY - 3} y={cruz.yy + 3} fontSize={9} fill={B.titulo} textAnchor="end">{fmt(g.precioDe(cruz.yy), g.dec + 1)}</text>
+        {(() => { const t = textoFecha(c, marco), w = t.length * 5 + 6, x0 = Math.max(g.ejeY, Math.min(W - w, g.x(cruz.i) - w / 2))
           return <><rect x={x0} y={H - 12} width={w} height={12} fill={B.cabecera} stroke={B.borde} strokeWidth={0.5}/>
             <text data-cruz-fecha x={x0 + 3} y={H - 3} fontSize={9} fill={B.titulo}>{t}</text></> })()}
       </g>}

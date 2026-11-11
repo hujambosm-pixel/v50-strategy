@@ -542,7 +542,7 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
             {act && !act.fin
               ? <><span data-progreso style={{ color: B.secundario }}>Actualizando {act.hechos} de {act.total}…</span>
                   <button data-parar onClick={() => { paraRef.current = true }} style={{ ...S.boton, padding: '2px 10px', fontSize: 13 }}>Parar</button></>
-              : <button data-actualizar onClick={actualizaPrecios} disabled={estado.cargando || !!estado.error} title="Descarga el último cierre de todos los valores (unos 2–3 minutos)" style={{ ...S.boton, padding: '2px 10px', fontSize: 13 }}>⟳ Actualizar precios</button>}
+              : <button data-actualizar onClick={actualizaPrecios} disabled={estado.cargando || !!estado.error} title="Descarga el último cierre de todos los valores (unos 2–3 minutos). Los precios NO se actualizan solos: solo con este botón. Más adelante, con las Alertas, se actualizarán cada día tras el cierre de Nueva York." style={{ ...S.boton, padding: '2px 10px', fontSize: 13 }}>⟳ Actualizar precios</button>}
             {act?.fin && <span data-act-fin style={{ color: act.fallos.length ? AMARILLO : VERDE }} title={act.fallos.length ? 'Sin precios: ' + act.fallos.join(', ') : undefined}>
               {act.parado ? `Parado: ${act.hechos} de ${act.total}` : '✓ Hecho'}{act.fallos.length ? ` · ${act.fallos.length} sin precios` : ''}</span>}
             <AyudaFiltro a={AYUDAS.precios}/>

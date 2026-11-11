@@ -307,6 +307,14 @@ Boceto bocetos/screener-charts-custom.html (decidido con Sergi el 10/11 y el 11/
 - Colores de las EMA, la rejilla y la línea, por tono ( en ).
 - **Comprobación**  (263): 300 sesiones hechas a mano (cierre 100 y la última 110): EMA 200 = 100 + 10 × 2 ÷ 201 = 100,0995 igual a la del filtro, EMA 50 = 100,39, +10 % en el día; semana del 23/03/2026 (volumen 4 × 1.000 + 3.000 = 7.000); 14 meses; marcas A, J, O, 2026 y la semana del 29/12; escala 98,52 … 111,48 con rayas 100, 105, 110; la cruz (precio 105,0, su fecha, su leyenda); la pestaña con estado (4 pedidas, 3 dibujadas, cambio +10,00 %, diario, pequeños, EMA 20, ⚙ Cifras, cajón y «Descartar cambios»).
 
+## 23. Charts: eje a la izquierda, leyenda en dos líneas y «Actualizar precios»
+
+Pedido por Sergi el 11/11 al ver V9.1183.
+- El eje de los precios (rayas, último cierre en azul y precio de la cruz) va a la IZQUIERDA; las velas, de ahí a la derecha.
+- En «Grandes», la leyenda va en un hueco de arriba en dos líneas: la fecha y A/M/m/C; debajo, las EMA. Con las tres EMA ya no se monta sobre el precio. En «Pequeños», solo con la cruz.
+- Tooltip de «⟳ Actualizar precios» (y su «?»): los precios NO se actualizan solos, solo con el botón; más adelante, con las Alertas, cada día tras el cierre de Nueva York.
+- Ninguna cifra cambia. **Comprobación** `screener.js` (264).
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:

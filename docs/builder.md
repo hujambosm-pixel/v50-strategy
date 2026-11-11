@@ -2771,3 +2771,7 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 ## 121. Screener: pestaña «Charts»
 
 - Un minigráfico por valor (velas o línea; diario 6 meses, semanal 2 años, mensual 5 años; EMA 200/50/20 calculadas en diario, la 200 igual a la del filtro; volumen), grandes (4 por fila) o pequeños (6), con la cruz como Finviz, fechas debajo y las cifras de «⚙ Cifras»; se cargan según bajas y se guardan con la vista. lib/screener/graficos.js y components/ScreenerCharts.js. Sin cambios en la base; ninguna cifra cambia. Detalle en docs/screener.md §22.
+
+## 122. Screener: eje de Charts a la izquierda
+
+- Minigráficos con el eje de precios a la izquierda y la leyenda en dos líneas arriba; el tooltip de «Actualizar precios» dice que no se actualizan solos. Detalle en docs/screener.md §23.
