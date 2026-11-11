@@ -2759,3 +2759,7 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 
 - Los 11 sectores con casilla: marcados los que se miran, desmarcados y en gris los que se quitan; en el tooltip de los 5 que se quitan por defecto, el motivo. Detalle en docs/screener.md §19.
 - Las listas de los desplegables del navegador, con el tono del screener (en el claro seguían negras). Ninguna cifra cambia.
+
+## 119. Screener: sectores quitados, solo en gris
+
+- Los sectores que se quitan salen en gris, sin tachar (pedido por Sergi). Detalle en docs/screener.md §20. Ninguna cifra cambia.

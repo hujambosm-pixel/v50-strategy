@@ -272,10 +272,15 @@ Visto por Sergi el 11/11 en la app.
 ## 19. Los 11 sectores a la vista y desplegables claros de verdad
 
 Visto por Sergi el 11/11 en V9.1179.
-- **Sectores**: en «Universo y sectores» (y en «Todos») salen los 11 sectores, cada uno con cuántas empresas tiene en el universo elegido. Marcados, los que se miran; desmarcados, en gris y tachados, los que se quitan. Pulsar uno lo cambia. Lo que se guarda sigue siendo `sectoresFuera` (las vistas no cambian).
+- **Sectores**: en «Universo y sectores» (y en «Todos») salen los 11 sectores, cada uno con cuántas empresas tiene en el universo elegido. Marcados, los que se miran; desmarcados, en gris, los que se quitan (sin tachar: §20). Pulsar uno lo cambia. Lo que se guarda sigue siendo `sectoresFuera` (las vistas no cambian).
   - Tooltip de cada uno: en los 5 que se quitan por defecto, «Recomendado: quitarlo.» y el motivo (`POR_QUE_FUERA` en `lib/screener/sectores.js`); en los demás, «Se mira normalmente.».
   - El «?» de «Sectores» explica las casillas y por qué se recomienda quitar los 5.
 - **Desplegables del navegador** («Da señal de compra con…», «… en las últimas N velas»): el arreglo de §18 (`color-scheme`) no bastaba, porque `styles/globals.css` pinta oscuras todas las listas (`select option`). Ahora, dentro del screener, la lista lleva el fondo y el texto del tono (`CSS_TABLA`). El resto de la app no cambia.
+- **Comprobación** `screener.js` (207).
+
+## 20. Sectores quitados, solo en gris
+
+Pedido por Sergi el 11/11 al ver V9.1180: los sectores que se quitan salen en gris, sin tachar. Ninguna cifra cambia.
 - **Comprobación** `screener.js` (207).
 
 ## 10. Comprobación

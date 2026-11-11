@@ -411,13 +411,13 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
       </span>
       <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <b style={{ color: B.secundario, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sectores</b><AyudaFiltro a={AYUDAS.sectores}/>
-        {/* §19: los 11 sectores; marcados los que se miran, desmarcados y en gris los que se quitan (lo guardado sigue siendo
+        {/* §19: los 11 sectores; marcados los que se miran, desmarcados y en gris (sin tachar, pedido por Sergi) los que se quitan (lo guardado sigue siendo
             sectoresFuera). Al lado, cuántas empresas tiene en el universo elegido; en el tooltip, por qué se recomienda quitar los 5. */}
         {SECTORES.map(s => { const dentro = !vista.sectoresFuera.includes(s), n = enElUniverso.filter(e => e.sector === s).length
           const porQue = POR_QUE_FUERA[s]
           return <label key={s} data-sector={s} data-dentro={dentro ? '1' : '0'}
             title={(porQue ? `Recomendado: quitarlo. ${porQue}` : 'Se mira normalmente.') + (dentro ? ' Pulsa para quitarlo.' : ' Pulsa para volver a mirarlo.')}
-            style={{ ...etiqueta, ...S.chip('neutro'), cursor: 'pointer', fontWeight: 400, opacity: dentro ? 1 : 0.45, ...(dentro ? {} : { textDecoration: 'line-through' }) }}>
+            style={{ ...etiqueta, ...S.chip('neutro'), cursor: 'pointer', fontWeight: 400, opacity: dentro ? 1 : 0.45 }}>
             <input type="checkbox" checked={dentro} style={{ margin: '0 4px 0 0', verticalAlign: 'middle' }}
               onChange={e => cambia(v => ({ ...v, sectoresFuera: e.target.checked ? v.sectoresFuera.filter(x => x !== s) : [...v.sectoresFuera, s] }))}/>{s} <span style={{ color: B.apagado }}>{n}</span></label> })}
       </span>

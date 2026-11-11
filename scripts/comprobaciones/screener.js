@@ -473,7 +473,7 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     {
       const hs = monta15({ piso: 'U' })
       const casillas = hs.match(/data-sector="[^"]+"/g) || []
-      ok(casillas.length === 11 && /data-sector="Tecnología" data-dentro="1"[^>]*>.*?checked=""[^>]*\/>Tecnología <span[^>]*>1<\/span>/.test(hs) && /data-sector="Financieras" data-dentro="0" title="Recomendado: quitarlo\. Bancos y aseguradoras/.test(hs) && /data-sector="Financieras"[^>]*text-decoration:line-through/.test(hs), '§19: los 11 sectores; Tecnología marcada (1 empresa), Financieras desmarcada, tachada y con su motivo')
+      ok(casillas.length === 11 && /data-sector="Tecnología" data-dentro="1"[^>]*>.*?checked=""[^>]*\/>Tecnología <span[^>]*>1<\/span>/.test(hs) && /data-sector="Financieras" data-dentro="0" title="Recomendado: quitarlo\. Bancos y aseguradoras/.test(hs) && /data-sector="Financieras"[^>]*opacity:0.45/.test(hs) && !/data-sector="Financieras"[^>]*text-decoration/.test(hs), '§19: los 11 sectores; Tecnología marcada (1 empresa), Financieras desmarcada, en gris sin tachar y con su motivo')
       ok(!/data-sector="Financieras"[^>]*>[^]*?<input type="checkbox" checked=""/.test(hs.slice(hs.indexOf('data-sector="Financieras"'), hs.indexOf('data-sector="Financieras"') + 600)), '§19: la casilla de Financieras, sin marcar')
       ok(/\[data-screener\] select option\{background:var\(--sc-tarjeta\)/.test(require('../../lib/screener/colores').CSS_TABLA), '§19: las listas de los desplegables del navegador, con el tono del screener')
     }
