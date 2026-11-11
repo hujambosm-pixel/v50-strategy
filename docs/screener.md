@@ -207,6 +207,19 @@ Sin cambios en la base: la columna `relacionados` de `tesis_inversion` ya admite
   - `tesis.js`: el sitio nuevo que cambia de pantalla (20) pasa por la guardia de la tesis.
   - `screener.js` (153): el «💡» de la vista, abrir por id, vista borrada y con cambios sin guardar.
 
+## 14. Colores: estilo Finviz y papel gris, con el botón «☀ Claro / ☾ Oscuro»
+
+Boceto `bocetos/screener-colores.html` (fuera de git). Sergi eligió el 11/11 dos tonos que se alternan: oscuro = «Estilo Finviz» y claro = «Papel gris».
+- **`lib/screener/colores.js`**: los dos tonos en un solo sitio (`TEMAS`).
+  - Oscuro: los colores medidos en una captura de Finviz (fondo 34,38,47; filas alternas 44,48,59; cabeceras 53,57,69; bordes 76,82,99; texto 243,243,245; símbolos en azul).
+  - Claro: papel apagado (fondo 214,210,200; texto 51,48,43), con menos brillo y menos amarillo que el sepia de los libros electrónicos.
+  - La pantalla usa variables CSS (`var(--sc-…)`): `B` y `S` con las mismas claves que `lib/builder/estilo.js`. El tono se cambia poniendo las variables en el div de la pantalla (`varsTema`).
+- **Fila resaltada**: al pasar el ratón por la tabla se resalta la fila entera, y las filas van alternas (`CSS_TABLA`). La fila del cajón abierto va con el color de selección.
+- **Botón** «☀ Claro / ☾ Oscuro» en la barra de arriba de la app, siempre visible, a la izquierda de la estrategia activa (`pages/index.js`, `temaApp`). Se recuerda en el navegador (`app.tema`).
+  - De momento SOLO cambia el screener. Llevarlo a toda la app es un trabajo aparte: hay muchos colores fijos repartidos por las pantallas.
+- Siguen con los colores de la app: las ventanas (Guardar / Salir sin guardar, Borrar, Guardar como lista), los «?» y el 💡.
+- **Comprobación** `screener.js` (159): los dos tonos, las filas, sin los colores fijos de antes y el botón.
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:

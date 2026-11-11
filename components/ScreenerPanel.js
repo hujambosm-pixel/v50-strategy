@@ -3,7 +3,8 @@
 // derecha. Las cifras de cada empresa vienen ya calculadas de la base (lib/screener/datos.js); aquí solo se filtra y se
 // ordena (lib/screener/filtros.js). No toca el motor ni ninguna cifra del resto de la app.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { B, S } from '../lib/builder/estilo'
+import { B as BA, S as SA } from '../lib/builder/estilo'   // las ventanas y los «?» (fuera del div de la pantalla) siguen con los de la app
+import { B, S, ROJO, VERDE, AMARILLO, CSS_TABLA, varsTema } from '../lib/screener/colores'
 import Ayuda from './BuilderAyuda'
 import ConLimpiar from './LimpiarBusqueda'
 import { ctxConSesion, fetchConSesion, hayConfigSupabase } from '../lib/supabase'
@@ -20,7 +21,6 @@ import { esDeTarjetas, fotoDe } from '../lib/pruebaAzar'
 import TesisEnlace from './TesisEnlace'
 import { listarEnlacesTesis, tesisDe } from '../lib/tesis'
 
-const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#56d364'
 const copia = (x) => JSON.parse(JSON.stringify(x))
 // Una pestaña de vista: { clave (local), id (de la base, null si aún no está guardada), nombre, vista, base: { nombre, vista } | null
 // (lo guardado; null si es nueva) }. Con cambios = nueva, u otro nombre u otra vista que lo guardado.
@@ -54,12 +54,12 @@ export const claveSenal = (x) => x ? `${x.id}|${JSON.stringify([x.definition, x.
 
 // Un «?» con título, explicación y ejemplo (los textos del catálogo).
 export const AyudaFiltro = ({ a, etiqueta }) => !a ? null : (
-  <Ayuda etiqueta={etiqueta || a[0]} texto={<><b>{a[0]}</b><br/>{a[1]}{a[2] ? <><br/><span style={{ color: B.secundario }}>Ejemplo: {a[2]}</span></> : null}{a[3] ? <><br/><span data-recomendado style={{ color: '#56d364' }}>Recomendado: {a[3]}</span></> : null}</>}/>)
+  <Ayuda etiqueta={etiqueta || a[0]} texto={<><b>{a[0]}</b><br/>{a[1]}{a[2] ? <><br/><span style={{ color: BA.secundario }}>Ejemplo: {a[2]}</span></> : null}{a[3] ? <><br/><span data-recomendado style={{ color: '#56d364' }}>Recomendado: {a[3]}</span></> : null}</>}/>)
 
 const Fuente = ({ f }) => (
   <span title={f.startsWith('Yahoo') ? 'Dato de Yahoo: solo existe el de hoy (no sirve para probar en el pasado).' : 'De dónde sale el dato'}
     style={{ fontSize: 10, padding: '0 5px', borderRadius: 4, marginLeft: 4, whiteSpace: 'nowrap',
-      background: f.startsWith('Yahoo') ? '#3a3220' : '#1b2836', color: f.startsWith('Yahoo') ? AMARILLO : B.apagado }}>{f}</span>)
+      background: f.startsWith('Yahoo') ? B.fuenteYahoo : B.fuente, color: f.startsWith('Yahoo') ? AMARILLO : B.apagado }}>{f}</span>)
 
 // El valor de una celda de la tabla para el filtro f.
 export function textoCelda(e, f) {
@@ -85,7 +85,7 @@ const valorOrden = (e, col) => {
 // visible: la app la deja montada al ir a otra pantalla (pages/index.js) y la oculta; oculta, Esc no cierra el cajón.
 // refs (inicial.refs): el técnico de SPY y de los ETF de sectores. pideTecnico(símbolos): una tanda de «Actualizar precios» (en las
 // comprobaciones, una falsa).
-export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor = null, onListaGuardada = null, visible = true, pideTecnico = pideTecnicoDeVerdad, estrategias = [], pideSenales = pideSenalesDeVerdad, onAbrirTesis = null, abrirVista = null, onVistaAbierta = null }) {
+export default function ScreenerPanel({ tema = 'oscuro', inicial = {}, salida = null, onIrAValor = null, onListaGuardada = null, visible = true, pideTecnico = pideTecnicoDeVerdad, estrategias = [], pideSenales = pideSenalesDeVerdad, onAbrirTesis = null, abrirVista = null, onVistaAbierta = null }) {
   const [estado, setEstado] = useState(() => inicial.empresas ? { cargando: false, error: null, empresas: inicial.empresas } : { cargando: true, error: null, empresas: [] })
   const [refs, setRefs] = useState(inicial.refs || {})
   const [act, setAct] = useState(inicial.act || null)   // «Actualizar precios»: { hechos, total, fallos: [símbolo], fin, parado }
@@ -304,12 +304,13 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
   const ordena = (col) => setOrden(o => o.col === col ? { col, dir: -o.dir } : { col, dir: col === 'simbolo' || col === 'sector' ? 1 : -1 })
   const exigido = (e) => e.m.per == null ? null : e.m.per / vista.pegRazonable
 
-  const caja = { fontFamily: B.letra, fontSize: 13, background: '#0d1117', color: B.texto, border: `1px solid ${B.borde}`, borderRadius: 6, padding: '3px 6px' }
+  const caja = { fontFamily: B.letra, fontSize: 13, background: B.caja, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: 6, padding: '3px 6px' }
   const etiqueta = { fontFamily: B.letra, fontSize: 13, color: B.texto, textTransform: 'none', letterSpacing: 0, fontWeight: 400, flexDirection: 'row' }   // la app pone a todo «label» columna y letra mono
   const cel = { padding: '5px 8px', borderBottom: `1px solid ${B.borde}`, whiteSpace: 'nowrap', textAlign: 'right' }
 
   return (
-    <div data-screener style={{ ...S.pagina, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, height: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+    <div data-screener data-tema={tema} style={{ ...varsTema(tema), ...S.pagina, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, height: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+      <style>{CSS_TABLA}</style>
       {/* Pestañas de vistas */}
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'flex-end', borderBottom: `1px solid ${B.borde}` }}>
         {vistas.map((v, i) => (
@@ -320,7 +321,7 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
         ))}
         <span style={{ position: 'relative' }}>
           <button data-nueva-vista onClick={() => setMenuNueva(x => !x)} style={{ ...S.boton, padding: '6px 12px', borderRadius: '8px 8px 0 0', borderBottom: 'none', background: 'transparent', color: B.enlace }}>+ Nueva vista ▾</button>
-          {menuNueva && <div data-menu-nueva style={{ position: 'absolute', top: '100%', left: 0, zIndex: 20, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: 8, padding: 4, minWidth: 200, boxShadow: '0 6px 20px rgba(0,0,0,0.45)' }}>
+          {menuNueva && <div data-menu-nueva style={{ position: 'absolute', top: '100%', left: 0, zIndex: 20, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: 8, padding: 4, minWidth: 200, boxShadow: `0 6px 20px ${B.sombra}` }}>
             {[['cero', 'Desde cero (sin filtros)'], ['copia', 'Copia de esta vista']].map(([k, tx]) => (
               <button key={k} data-nueva={k} onClick={() => nueva(k)} style={{ ...S.enlace, display: 'block', width: '100%', padding: '6px 10px', color: B.texto, fontSize: 13 }}>{tx}</button>))}
           </div>}
@@ -490,8 +491,8 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
                 <tbody>
                   {filas.map(e => { const dentro = ev.pasaTodo.has(e.simbolo), x = exigido(e)
                     return (
-                      <tr key={e.simbolo} data-fila={e.simbolo} onClick={() => setDetalle(e.simbolo)} title="Pulsa para ver el detalle" style={{ opacity: dentro ? 1 : 0.5, cursor: 'pointer', background: detalle === e.simbolo ? B.cabecera : undefined }}>
-                        <td style={{ ...cel, textAlign: 'left' }} title={e.aviso || undefined}><b>{e.simbolo}</b> <span style={{ color: B.secundario }}>{e.nombre}</span></td>
+                      <tr key={e.simbolo} data-fila={e.simbolo} onClick={() => setDetalle(e.simbolo)} title="Pulsa para ver el detalle" style={{ opacity: dentro ? 1 : 0.5, cursor: 'pointer', background: detalle === e.simbolo ? B.sel : undefined }}>
+                        <td style={{ ...cel, textAlign: 'left' }} title={e.aviso || undefined}><b style={{ color: B.enlace }}>{e.simbolo}</b> <span style={{ color: B.secundario }}>{e.nombre}</span></td>
                         <td style={{ ...cel, textAlign: 'left', color: B.secundario }} title={e.sectorFuente === 'SIC' ? 'Sector aproximado con el código de actividad que declara a la SEC (SIC)' : 'Sector oficial del S&P 500 (GICS)'}>{e.sector || '—'}{e.sectorFuente === 'SIC' ? '*' : ''}</td>
                         <td style={cel}>{fmt(e.precio, 2)}</td>
                         {encendidos.map(f => { const bien = pasa(e, f, vista.filtros[f.id])
@@ -516,20 +517,20 @@ export default function ScreenerPanel({ inicial = {}, salida = null, onIrAValor 
           detalle="La lista es FIJA: guarda los valores de hoy y no cambia sola. Los que no estén en tu Watchlist se añaden en el grupo «Screener»."
           extra={<input data-nombre-lista autoFocus value={lista.nombre} maxLength={120} onChange={e => setLista(l => ({ ...l, nombre: e.target.value, error: null }))}
             onKeyDown={e => { if (e.key === 'Enter' && !lista.guardando) guardaLista() }} style={{ ...caja, width: '100%', boxSizing: 'border-box', marginBottom: 16, fontSize: 14, padding: '6px 8px' }}/>}>
-          <button data-p="cancelar" style={S.boton} onClick={() => setLista(null)}>Cancelar</button>
-          <button data-p="guardar-lista" disabled={lista.guardando || !lista.nombre.trim()} style={lista.guardando || !lista.nombre.trim() ? S.botonDesactivado : S.botonVerde} onClick={guardaLista}>{lista.guardando ? 'Guardando…' : 'Guardar lista'}</button>
+          <button data-p="cancelar" style={SA.boton} onClick={() => setLista(null)}>Cancelar</button>
+          <button data-p="guardar-lista" disabled={lista.guardando || !lista.nombre.trim()} style={lista.guardando || !lista.nombre.trim() ? SA.botonDesactivado : SA.botonVerde} onClick={guardaLista}>{lista.guardando ? 'Guardando…' : 'Guardar lista'}</button>
         </Pregunta>)}
       {detalle && (() => { const e = empresas.find(x => x.simbolo === detalle); return e ? <Cajon e={e} vista={vista} dentro={ev.pasaTodo.has(e.simbolo)} nombreVista={nombreLimpio(actual.nombre)} onCierra={() => setDetalle(null)} onIrAValor={onIrAValor}/> : null })()}
       {pregunta?.tipo === 'salir' && (
         <Pregunta id="salir" texto={`Tienes cambios sin guardar en la vista «${nombreLimpio(actual.nombre) || 'Vista sin nombre'}».`}>
-          <button data-p="cancelar" style={S.boton} onClick={() => setPregunta(null)}>Cancelar</button>
-          <button data-p="salir" style={S.boton} onClick={() => { const a = pregunta.accion; setPregunta(null); descarta(); a() }}>Salir sin guardar</button>
-          <button data-p="guardar" style={S.botonVerde} onClick={async () => { const a = pregunta.accion; setPregunta(null); if (await guarda()) a() }}>Guardar</button>
+          <button data-p="cancelar" style={SA.boton} onClick={() => setPregunta(null)}>Cancelar</button>
+          <button data-p="salir" style={SA.boton} onClick={() => { const a = pregunta.accion; setPregunta(null); descarta(); a() }}>Salir sin guardar</button>
+          <button data-p="guardar" style={SA.botonVerde} onClick={async () => { const a = pregunta.accion; setPregunta(null); if (await guarda()) a() }}>Guardar</button>
         </Pregunta>)}
       {pregunta?.tipo === 'borrar' && (
         <Pregunta id="borrar" texto={`¿Borrar la vista «${nombreLimpio(actual.nombre) || 'Vista sin nombre'}»?`} aviso="No se puede deshacer.">
-          <button data-p="cancelar" style={S.boton} onClick={() => setPregunta(null)}>Cancelar</button>
-          <button data-p="borrar" style={{ ...S.boton, color: '#f85149', borderColor: '#f85149' }} onClick={borra}>Borrar</button>
+          <button data-p="cancelar" style={SA.boton} onClick={() => setPregunta(null)}>Cancelar</button>
+          <button data-p="borrar" style={{ ...SA.boton, color: '#f85149', borderColor: '#f85149' }} onClick={borra}>Borrar</button>
         </Pregunta>)}
     </div>
   )
@@ -552,7 +553,7 @@ export function Cajon({ e, vista, dentro, nombreVista, onCierra, onIrAValor }) {
   const enlace = { ...S.boton, padding: '5px 10px', fontSize: 13 }
   return (
     <div data-cajon={e.simbolo} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 440, maxWidth: '100%', zIndex: 2500, background: B.tarjeta, borderLeft: `1px solid ${B.borde}`,
-      boxShadow: '-8px 0 24px rgba(0,0,0,0.5)', padding: 16, overflowY: 'auto', boxSizing: 'border-box', fontFamily: B.letra, fontSize: 13, color: B.texto }}>
+      boxShadow: `-8px 0 24px ${B.sombra}`, padding: 16, overflowY: 'auto', boxSizing: 'border-box', fontFamily: B.letra, fontSize: 13, color: B.texto }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ fontSize: 18, fontWeight: 700, color: B.titulo, flex: 1 }}>{e.simbolo} · {e.nombre}</div>
         <button data-cierra-cajon onClick={onCierra} title="Cerrar (Esc)" style={{ ...S.boton, padding: '2px 9px' }}>✕</button>
@@ -565,7 +566,7 @@ export function Cajon({ e, vista, dentro, nombreVista, onCierra, onIrAValor }) {
         <button data-ir="watchlist" style={enlace} onClick={() => onIrAValor(e.simbolo, 'watchlist')}>📈 Gráfico ↗</button>
       </div>}
       {e.aviso && <div style={{ color: AMARILLO, marginBottom: 10 }}>⚠ {e.aviso}</div>}
-      <div data-exigido style={{ background: '#13283f', border: '1px solid #2d5b8c', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>
+      <div data-exigido style={{ background: B.sel, border: `1px solid ${B.selBorde}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>
         <b>Crecimiento que exige el precio:</b>{' '}
         {ex == null ? (e.moneda && e.moneda !== 'USD' ? `cuentas en ${e.moneda}: no se calcula.` : 'sin beneficio, no se calcula.')
           : <>PER {fmt(e.m.per)} ÷ PEG {fmt(vista.pegRazonable)} = <b>{fmt(ex)} % al año</b>.{' '}

@@ -2725,3 +2725,9 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - Prueba de oro con precios reales (solo lectura, fuera del repo; Capital concentrado, máx. 4, 10.000 €, 2016–2025, sin aportaciones ni impuestos, ocioso en liquidez): EMA20 · ndx_vol_10 (53 valores) 9.672,03 €; EMA20 · ndx_mom_20 (108) 5.109,43 €; SuperTrend 10/3 · ndx_vol_20 (79) 8.858,52 €; SuperTrend 10/3 · ndx_mom_10 (68) 14.332,65 €. «Tu dinero» = «por dentro» en los cuatro (diferencia < 1e-10 €). El cálculo del motor tarda 10–22 s en este equipo (como el Backtesting con el mismo universo).
 - Comprobación `plan-tu-dinero-lista.js`: prueba de oro con un universo de prueba sobre la foto (3/3), /api/plan con el Nasdaq-100 (cuadra, sin `ACTIVO`) y sus rechazos, el ocioso dentro del universo, y la pantalla (lee el universo una vez, calcula con su petición y no enseña la lista a partes iguales).
 - Con «Lista manual» y con «Una acción» no cambia nada: los planes guardados (4, 6 y 7) dan las mismas cifras.
+
+## 113. Screener: colores estilo Finviz y papel gris
+
+- El screener tiene dos tonos: oscuro (estilo Finviz) y claro (papel gris). Se cambia con el botón «☀ Claro / ☾ Oscuro» de la barra de arriba, que de momento solo cambia el screener. Detalle en docs/screener.md §14.
+- Se resalta la fila entera al pasar el ratón; las filas van alternas; los símbolos, en azul.
+- Ninguna cifra cambia: solo colores.

@@ -150,7 +150,7 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
   const guardada = (extra = {}) => pestanaDe({ id: 7, nombre: 'Prueba', vista: v1, ...extra })
   const monta = (inicial) => renderToString(React.createElement(P, { inicial: { empresas: E, vistas: [guardada()], ...inicial } })).split('<!-- -->').join('')
   let hp = monta({})
-  ok(hp.includes('1 · pasan Fundamentales') && hp.includes('data-embudo-n="1"') && hp.slice(hp.indexOf('data-embudo-n="1"')).startsWith('data-embudo-n="1" style="font-size:20px;font-weight:700;color:#ffffff">1<'), 'embudo: pasan Fundamentales 1')
+  ok(hp.includes('1 · pasan Fundamentales') && hp.includes('data-embudo-n="1"') && hp.slice(hp.indexOf('data-embudo-n="1"')).startsWith('data-embudo-n="1" style="font-size:20px;font-weight:700;color:var(--sc-titulo)">1<'), 'embudo: pasan Fundamentales 1')
   ok(hp.includes('data-fila="AAA"') && !hp.includes('data-fila="BBB"'), 'tabla: AAA sí, BBB no')
   ok(hp.includes('data-cuenta="roce"') && hp.includes('−2'), 'el ROCE dice «−2»')
   ok(/data-cuenta="roce" title="El número rojo dice cuántos valores[^"]*Ejemplo: Llegan 300 valores/.test(hp) && !hp.includes('cuántos quita cada filtro'), 'la explicación del «−N» va en su tooltip (sin la línea de abajo)')
@@ -291,7 +291,7 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     ok(!h6.includes('data-col="exigido"') && !h6.includes('data-peg') && h6.includes('data-ver-exigido'), 'crecimiento exigido apagado: sin columnas ni PEG razonable, con su casilla')
     h6 = renderToString(React.createElement(P, { inicial: { empresas: [caro], vistas: [pestanaDe({ id: 1, nombre: 'X', vista: { ...v6, verExigido: true } })] } })).split('<!-- -->').join('')
     ok(h6.includes('data-col="exigido"') && h6.includes('data-col="esperado"') && h6.includes('data-peg') && h6.includes('20,0 %') && h6.includes('12,0 %'), 'encendido: «Crec. exigido» 40 ÷ 2 = 20 % y «Crec. esperado» 12 %')
-    ok(/data-celda="exigido"[^>]*color:#ff8b8b/.test(h6), 'exigido (20 %) mayor que esperado (12 %): en rojo')
+    ok(/data-celda="exigido"[^>]*color:var\(--sc-rojo\)/.test(h6), 'exigido (20 %) mayor que esperado (12 %): en rojo')
     ok(!h6.includes('✓ ') && !h6.includes('✗ ') || h6.includes('data-cajon'), 'la tabla ya no lleva ✓ ni ✗')
     h6 = renderToString(React.createElement(P, { inicial: { empresas: [caro], vistas: [pestanaDe({ id: 1, nombre: 'X', vista: v6 })], panelOculto: true } })).split('<!-- -->').join('')
     ok(h6.includes('data-mostrar-panel') && !h6.includes('data-panel-filtros'), 'panel oculto: solo el botón «▶ Filtros»')
@@ -421,6 +421,19 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
   // La app deja el screener montado tras la primera visita (como el Builder): al volver de una ficha o un gráfico sigue igual.
   const fuenteIndex = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'pages', 'index.js'), 'utf8')
   ok(fuenteIndex.includes("{(screenerVisitado||sidePanel==='screener')&&(") && fuenteIndex.includes("<div style={{display:sidePanel==='screener'?'contents':'none'}}>") && fuenteIndex.includes("useEffect(()=>{ if(sidePanel==='screener') setScreenerVisitado(true) },[sidePanel])"), 'el screener sigue montado (oculto) al ir a otra pantalla')
+
+  // §14: los dos tonos (lib/screener/colores.js) y el botón de la barra de arriba.
+  {
+    const { varsTema, TEMAS, CSS_TABLA } = require('../../lib/screener/colores')
+    const o = monta({}), c = renderToString(React.createElement(P, { tema: 'claro', inicial: { empresas: E, vistas: [guardada()] } })).split('<!-- -->').join('')
+    ok(o.includes('data-tema="oscuro"') && o.includes('--sc-fondo:#22262f') && o.includes('--sc-rayado:#2c303b'), 'tono oscuro por defecto: el estilo Finviz (fondo 34,38,47; filas 44,48,59)')
+    ok(c.includes('data-tema="claro"') && c.includes('--sc-fondo:#d6d2c8') && c.includes('--sc-texto:#33302b'), 'tono claro: papel gris')
+    ok(Object.keys(TEMAS.oscuro).join() === Object.keys(TEMAS.claro).join() && varsTema('raro')['--sc-fondo'] === '#22262f', 'los dos tonos tienen las mismas cifras; uno desconocido = oscuro')
+    ok(o.includes(CSS_TABLA.split('&').join('&amp;').split('>').join('&gt;')) || o.includes(CSS_TABLA), 'filas alternas y la fila entera resaltada al pasar el ratón')
+    ok(!/#0d1117|#13283f|#1b2836|#3a3220/.test(o), 'la pantalla ya no lleva los colores fijos de antes')
+    const fi = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'pages', 'index.js'), 'utf8')
+    ok(fi.includes('<button data-tema-app onClick={alternaTema}') && fi.includes("{temaApp==='claro'?'☾ Oscuro':'☀ Claro'}") && fi.includes('<ScreenerPanel tema={temaApp}') && fi.includes("localStorage.setItem('app.tema',n)"), 'botón «☀ Claro / ☾ Oscuro» en la barra de arriba, recordado, y el screener lo recibe')
+  }
 
   console.log(`screener: ${fallos ? fallos + ' fallos de ' + n : 'todas bien (' + n + ')'}`)
   process.exit(fallos ? 1 : 0)

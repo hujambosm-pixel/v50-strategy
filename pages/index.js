@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1174'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1175'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -907,6 +907,11 @@ export default function Home() {
   // gráfico y volver siga la misma vista, con sus filtros sin guardar, el orden, la búsqueda y el cajón.
   const [screenerVisitado,setScreenerVisitado]=useState(false)
   useEffect(()=>{ if(sidePanel==='screener') setScreenerVisitado(true) },[sidePanel])
+  // docs/screener.md §14: el tono de la app, «oscuro» (estilo Finviz) o «claro» (papel gris), con el botón «☀ Claro / ☾ Oscuro» de
+  // la barra de arriba. Se recuerda en el navegador. DE MOMENTO solo cambia el Screener (lib/screener/colores.js); más adelante, toda la app.
+  const [temaApp,setTemaApp]=useState('oscuro')
+  useEffect(()=>{ try{ if(localStorage.getItem('app.tema')==='claro') setTemaApp('claro') }catch(_){} },[])
+  const alternaTema=()=>setTemaApp(t=>{ const n=t==='claro'?'oscuro':'claro'; try{ localStorage.setItem('app.tema',n) }catch(_){} return n })
   // builderAbrir (V9.1048): la estrategia que el Builder tiene que abrir (al pulsar su nombre en «Backtest de un valor»). { fila, n }
   const [builderAbrir,setBuilderAbrir]=useState(null)
   const abrirEnBuilder=(s)=>{ setBuilderAbrir({fila:s?{...s}:null,n:Date.now()}); setSidePanel('builder') }
@@ -5637,7 +5642,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1174</title>
+        <title>Trading Simulator V9.1175</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5726,7 +5731,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1174
+            <span className="dot"/>Trading Simulator V9.1175
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5749,6 +5754,10 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
 
           {/* Botones derecha */}
           <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',padding:'0 12px'}}>
+            <button data-tema-app onClick={alternaTema} title={(temaApp==='claro'?'Pasar a la vista oscura (estilo Finviz)':'Pasar a la vista clara (papel gris)')+'. De momento solo cambia el Screener.'}
+              style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:6,cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+              {temaApp==='claro'?'☾ Oscuro':'☀ Claro'}
+            </button>
             {stratName&&(
               <div style={{position:'relative',flexShrink:0}}>
                 {stratDropOpen&&(
@@ -8307,7 +8316,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 Aislado: no toca el motor ni ninguna cifra del resto de la app. ══ */}
             {(screenerVisitado||sidePanel==='screener')&&(
               <div style={{display:sidePanel==='screener'?'contents':'none'}}>
-                <ProteccionPanel nombre="Screener"><ScreenerPanel visible={sidePanel==='screener'} salida={screenerSalida} onListaGuardada={()=>reloadWatchlist()} onIrAValor={(sym,panel)=>salirDeTesis(()=>{setSimbolo(sym);setSidePanel(panel)})} estrategias={strategies} onAbrirTesis={abrirTesis} abrirVista={screenerAbrir} onVistaAbierta={()=>setScreenerAbrir(null)}/></ProteccionPanel>
+                <ProteccionPanel nombre="Screener"><ScreenerPanel tema={temaApp} visible={sidePanel==='screener'} salida={screenerSalida} onListaGuardada={()=>reloadWatchlist()} onIrAValor={(sym,panel)=>salirDeTesis(()=>{setSimbolo(sym);setSidePanel(panel)})} estrategias={strategies} onAbrirTesis={abrirTesis} abrirVista={screenerAbrir} onVistaAbierta={()=>setScreenerAbrir(null)}/></ProteccionPanel>
               </div>
             )}
 
