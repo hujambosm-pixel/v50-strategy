@@ -2754,3 +2754,8 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 
 - Cada número del embudo explica en su tooltip por qué no se ven los demás valores (lo que quita cada filtro). Detalle en docs/screener.md §18.
 - Los desplegables del navegador siguen el tono de la pantalla (en el claro salían negros). Ninguna cifra cambia.
+
+## 118. Screener: los 11 sectores a la vista y desplegables claros
+
+- Los 11 sectores con casilla: marcados los que se miran, desmarcados y en gris los que se quitan; en el tooltip de los 5 que se quitan por defecto, el motivo. Detalle en docs/screener.md §19.
+- Las listas de los desplegables del navegador, con el tono del screener (en el claro seguían negras). Ninguna cifra cambia.

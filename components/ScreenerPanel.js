@@ -11,8 +11,8 @@ import { ctxConSesion, fetchConSesion, hayConfigSupabase } from '../lib/supabase
 import { sinTildes } from '../lib/builder/buscar'
 import { conTecnico, empresasDeFilas, fechaDatos, fechaTecnico, leerFilasEmpresas, leerReferencias } from '../lib/screener/datos'
 import { MERCADO, REFERENCIAS_TECNICO, cifrasTecnicas } from '../lib/screener/tecnico'
-import { AYUDAS, FILTROS, FILTRO, evaluaVista, fmt, pasa } from '../lib/screener/filtros'
-import { SECTORES_FUERA_POR_DEFECTO } from '../lib/screener/sectores'
+import { AYUDAS, FILTROS, FILTRO, enUniverso, evaluaVista, fmt, pasa } from '../lib/screener/filtros'
+import { POR_QUE_FUERA, SECTORES } from '../lib/screener/sectores'
 import { VISTAS_EJEMPLO, normalizaVista, textoVista, vistaNueva } from '../lib/screener/vista'
 import { borrarVista, cambiarVista, creaEjemplos, crearVista, listarVistas, nombreLimpio } from '../lib/screener/vistasBase'
 import { cifrasDe, opcionElegida, opcionesDe, textoCondicion, textoEncendido } from '../lib/screener/opciones'
@@ -234,6 +234,7 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
   const clave = claveSenal(estSenal)
   const mapa = clave ? senales[clave] : null
   const tecnicas = useMemo(() => conTecnico(estado.empresas, refs), [estado.empresas, refs])
+  const enElUniverso = useMemo(() => estado.empresas.filter(e => enUniverso(e, vista)), [estado.empresas, JSON.stringify(vista.universo)])
   const empresas = useMemo(() => tecnicas.map(e => { const x = mapa?.[e.simbolo]; return x ? { ...e, senal: x.senal || null, senalError: x.error || null } : e }), [tecnicas, mapa])
   const ev = useMemo(() => evaluaVista(empresas, vista), [empresas, JSON.stringify(vista)])
   // Se calcula sola, solo para los que pasan los fundamentales y aún no tienen resultado con esta estrategia, con el filtro
@@ -409,11 +410,16 @@ export default function ScreenerPanel({ tema = 'oscuro', guardaCifras = guardaCi
           </label>))}
       </span>
       <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        <b style={{ color: B.secundario, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sectores que se quitan</b><AyudaFiltro a={AYUDAS.sectores}/>
-        {SECTORES_FUERA_POR_DEFECTO.map(s => { const on = vista.sectoresFuera.includes(s)
-          return <label key={s} data-sector={s} style={{ ...etiqueta, ...S.chip(on ? 'noSupera' : 'neutro'), cursor: 'pointer', fontWeight: 400, opacity: on ? 1 : 0.7 }}>
-            <input type="checkbox" checked={on} style={{ margin: '0 4px 0 0', verticalAlign: 'middle' }}
-              onChange={e => cambia(v => ({ ...v, sectoresFuera: e.target.checked ? [...v.sectoresFuera, s] : v.sectoresFuera.filter(x => x !== s) }))}/>{s}</label> })}
+        <b style={{ color: B.secundario, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sectores</b><AyudaFiltro a={AYUDAS.sectores}/>
+        {/* §19: los 11 sectores; marcados los que se miran, desmarcados y en gris los que se quitan (lo guardado sigue siendo
+            sectoresFuera). Al lado, cuántas empresas tiene en el universo elegido; en el tooltip, por qué se recomienda quitar los 5. */}
+        {SECTORES.map(s => { const dentro = !vista.sectoresFuera.includes(s), n = enElUniverso.filter(e => e.sector === s).length
+          const porQue = POR_QUE_FUERA[s]
+          return <label key={s} data-sector={s} data-dentro={dentro ? '1' : '0'}
+            title={(porQue ? `Recomendado: quitarlo. ${porQue}` : 'Se mira normalmente.') + (dentro ? ' Pulsa para quitarlo.' : ' Pulsa para volver a mirarlo.')}
+            style={{ ...etiqueta, ...S.chip('neutro'), cursor: 'pointer', fontWeight: 400, opacity: dentro ? 1 : 0.45, ...(dentro ? {} : { textDecoration: 'line-through' }) }}>
+            <input type="checkbox" checked={dentro} style={{ margin: '0 4px 0 0', verticalAlign: 'middle' }}
+              onChange={e => cambia(v => ({ ...v, sectoresFuera: e.target.checked ? v.sectoresFuera.filter(x => x !== s) : [...v.sectoresFuera, s] }))}/>{s} <span style={{ color: B.apagado }}>{n}</span></label> })}
       </span>
     </div>)
 

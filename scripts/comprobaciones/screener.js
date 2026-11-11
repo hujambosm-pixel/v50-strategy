@@ -470,6 +470,13 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     ok(h.includes(`grid-template-rows:repeat(${Math.ceil(nF / 5)}, auto)`) && h.includes('grid-auto-flow:column') && !h.includes('data-filtro="ema200"') && !h.includes('data-universo-sectores'), `rejilla de 5 columnas (${nF} filtros → ${Math.ceil(nF / 5)} filas), solo los de Fundamentales`)
     h = monta15({ piso: 'todos' })
     ok(h.includes('data-universo-sectores') && h.includes('data-filtro="roce"') && h.includes('data-filtro="ema200"') && h.includes('data-sector="Energía"') && h.includes('data-universo="sp500"'), '«Todos»: universo, sectores y todos los filtros')
+    {
+      const hs = monta15({ piso: 'U' })
+      const casillas = hs.match(/data-sector="[^"]+"/g) || []
+      ok(casillas.length === 11 && /data-sector="Tecnología" data-dentro="1"[^>]*>.*?checked=""[^>]*\/>Tecnología <span[^>]*>1<\/span>/.test(hs) && /data-sector="Financieras" data-dentro="0" title="Recomendado: quitarlo\. Bancos y aseguradoras/.test(hs) && /data-sector="Financieras"[^>]*text-decoration:line-through/.test(hs), '§19: los 11 sectores; Tecnología marcada (1 empresa), Financieras desmarcada, tachada y con su motivo')
+      ok(!/data-sector="Financieras"[^>]*>[^]*?<input type="checkbox" checked=""/.test(hs.slice(hs.indexOf('data-sector="Financieras"'), hs.indexOf('data-sector="Financieras"') + 600)), '§19: la casilla de Financieras, sin marcar')
+      ok(/\[data-screener\] select option\{background:var\(--sc-tarjeta\)/.test(require('../../lib/screener/colores').CSS_TABLA), '§19: las listas de los desplegables del navegador, con el tono del screener')
+    }
     h = monta15({ piso: 'U' })
     ok(h.includes('data-universo-sectores') && !h.includes('data-rejilla'), '«Universo y sectores»: sin la rejilla')
     ok(/data-mercado[^>]*title="Informativo: no es un filtro\./.test(h) && h.includes('data-embudo') && h.includes('data-actualizar') && h.includes('Cuentas de la SEC (EDGAR) del'), 'en la línea de los filtros: el mercado (informativo), los precios y el embudo; la fecha de las cuentas, al pie')
