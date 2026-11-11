@@ -7,7 +7,8 @@
 //   OCIOSO_LIQUIDEZ y ACTIVO ({ id: { patrimonio: [...], vl: [...] } }, en las fechas de la serie del plan), con el mismo motor y los mismos
 //   datos; las medidas siguen siendo las de evaluacion.referencias. §51: con curvas, también ordenesReferencias: { id: costes.ordenes de su
 //   ejecución } de OCIOSO_LIQUIDEZ, ACTIVO, QQQ y SPY (evaluaPlan no las devuelve): las filas de la tabla de la pantalla. §57: en curvas, también el patrimonio
-//   de QQQ y SPY (las líneas que se pueden marcar en el gráfico); ya se ejecutaban para contar sus órdenes.
+//   de QQQ y SPY (las líneas que se pueden marcar en el gráfico); ya se ejecutaban para contar sus órdenes. §128: también su VL («Comparar
+//   planes»: «Crecimiento de 100 €» y «Año a año» de QQQ y SPY); las cuatro llevan patrimonio y VL. Ninguna cifra cambia.
 //
 // Datos: lib/planes/datosServidor.js (QQQ, SPY y el ETF del plan, con dividendos, desde 3 años antes del periodo; las velas de
 // la referencia de cada pieza de cartera que la tenga; con una pieza «estrategia», las del valor, del ocioso y de los índices de
@@ -79,7 +80,7 @@ export default async function handler(req, res) {
     const evaluacion = evaluaPlan(plan, c.datos, { detalle: true })
     const ro = rodantes ? iniciosRodantes(plan, c.datos, { desde: rodantes.desde || plan.periodo.desde, hasta: rodantes.hasta || plan.periodo.hasta, duracion: rodantes.duracion ?? 10, hastaElFinal: !!rodantes.hastaElFinal }) : null
     const ej = curvas && plan.piezas.some(x => x.tipo === 'estrategia') ? referenciasDe(plan).filter(x => ['OCIOSO_LIQUIDEZ', 'ACTIVO', 'QQQ', 'SPY'].includes(x.id)).map(x => [x.id, ejecutaPlan(x.plan, c.datos, { detalle: false })]) : null
-    const cu = ej ? Object.fromEntries(ej.map(([id, r]) => [id, ['OCIOSO_LIQUIDEZ', 'ACTIVO'].includes(id) ? { patrimonio: r.serie.map(p => p.patrimonio), vl: r.serie.map(p => p.vl) } : { patrimonio: r.serie.map(p => p.patrimonio) }])) : null
+    const cu = ej ? Object.fromEntries(ej.map(([id, r]) => [id, { patrimonio: r.serie.map(p => p.patrimonio), vl: r.serie.map(p => p.vl) }])) : null
     const ordenesReferencias = ej ? Object.fromEntries(ej.map(([id, r]) => [id, r.costes.ordenes])) : null
     return res.status(200).json({ evaluacion, ...(ro ? { rodantes: ro } : {}), ...(cu ? { curvas: cu, ordenesReferencias } : {}), ...(pLista ? { finalPorDentro } : {}), huella: await huellaPlan(plan), tiempos: { datosMs: t1 - t0, calculoMs: Date.now() - t1 } })
   } catch (e) {

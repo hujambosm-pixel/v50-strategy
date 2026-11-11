@@ -6,7 +6,7 @@
 // explicaciones no ocupan sitio fijo; cada término lleva su «?» (components/BuilderAyuda.js) con un ejemplo con números, y los avisos
 // van en una línea.
 // Parte 2 (§48): arriba, una pestaña por plan guardado (planes_inversion, lib/builder/planesGuardados.js) y los nuevos sin guardar,
-// con «+ Añadir plan» (copia los ajustes de ahora) y «Comparar planes» (desactivado). «Guardar este plan» pide el nombre; uno guardado,
+// con «+ Añadir plan» (copia los ajustes de ahora) y «Comparar planes» (§128: components/ComparaPlanes.js). «Guardar este plan» pide el nombre; uno guardado,
 // «Guardar cambios» (§50: solo si hay cambios), «Duplicar» y «Borrar» (con confirmación). Un plan guardado lleva la foto de su estrategia: si la
 // estrategia ha cambiado desde entonces, una línea lo avisa y deja usar la versión guardada (por defecto) o la de ahora.
 // §49: el desplegable con todas las estrategias de tarjetas y su prueba («pasa el azar / no pasa / sin prueba»); al entrar se abre el
@@ -50,6 +50,9 @@ import PanelPesos from './backtesting/PanelPesos'
 import PanelUniverso from './backtesting/PanelUniverso'
 import SelectorValores from './backtesting/SelectorValores'
 import PlanPorDentro, { peticionPorDentro, motivoSinPeticion } from './backtesting/PlanPorDentro'
+// §128: «Comparar planes» (opción A: cada plan tal como está guardado).
+import ComparaPlanes from './ComparaPlanes'
+import { CLAVE_COMPARAR, REFS_COMPARAR, TEXTO_SIN_PLANES, alterna, elegidosIniciales, pieza as piezaDe } from '../lib/builder/comparaPlanes'
 import { cargaUniversoMc, nDeUniverso, reglaDeUniverso } from '../lib/universoMc'
 import FiltrosPanel from './FiltrosPanel'
 import { mergeFiltros } from '../lib/filtros'
@@ -197,7 +200,7 @@ const Tarjeta = ({ id, titulo, ayuda, children }) => (
   </div>
 )
 
-export default function BuilderPlan({ estrategias = [], estrategiaId = null, planId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, salida = null, enlaceTesis = null, deps = null, inicial = null, datosLista = null, onIrAValor = null }) {
+export default function BuilderPlan({ estrategias = [], estrategiaId = null, planId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, salida = null, enlaceTesis = null, deps = null, inicial = null, datosLista = null, onIrAValor = null, tema = 'oscuro' }) {
   const tarjetas = useMemo(() => estrategias.filter(esDeTarjetas).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
   const diarias = useMemo(() => tarjetas.filter(s => !esSemanal(s)), [tarjetas])
   const deCodigo = useMemo(() => estrategias.filter(esDeCodigo).length, [estrategias])
@@ -258,6 +261,11 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const [resPrueba, setResPrueba] = useState(inicial?.resultadoPrueba || null)
   // §84: con «Una lista», la columna derecha tiene dos pestañas: «Tu dinero» y «La cartera por dentro» (boceto C). Solo de la vista.
   const [vistaDer, setVistaDer] = useState(inicial?.vistaDer || 'dinero')
+  // §128: «Comparar planes». comparando: se ve la comparación en lugar del plan abierto (que sigue con sus cambios). Lo elegido, recordado
+  // en este navegador (CLAVE_COMPARAR); el modo del gráfico (null = el de por defecto), solo en esta visita. resComp: { id: estado de su cálculo }.
+  const [comparando, setComparando] = useState(!!inicial?.comparando)
+  const [comp, setComp] = useState(() => ({ elegidos: inicial?.compararElegidos || null, refs: REFS_COMPARAR.map(r => r.id), log: true, modo: null }))
+  const [resComp, setResComp] = useState(inicial?.resComp || {})
   // §80: «Una lista». Lo que se guarda va en a.lista (lib/planes/lista.js); esto es solo de la vista (buscar, ★, la lista de la Watchlist, qué está desplegado).
   const [vistaLista, setVistaLista] = useState({ busca: '', favs: false, lista: '', seccion: { mode: true, strats: false }, mercado: false, activo: false, universoDatos: {} })
   const ponVista = (k) => (v) => setVistaLista(x => ({ ...x, [k]: typeof v === 'function' ? v(x[k]) : v }))
@@ -315,13 +323,16 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // Un plan ya calculado (p. ej., al volver a una pestaña) se enseña sin repetir el cálculo.
   const hechos = useRef(new Map())
   const calculador = useRef(null)
+  // §128: la llamada a /api/plan, en un ref para que «Comparar planes» pida con la misma (varios planes a la vez, sin el calculador).
+  const pideApi = useRef(null)
+  if (!pideApi.current) pideApi.current = deps?.calcula || (async (p, cuerpoLista = null) => {
+    const r = await api.current('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: p, curvas: true, ...(cuerpoLista ? { cuerpoLista } : {}) }) })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
+    return j
+  })
   if (!calculador.current) {
-    const pide = deps?.calcula || (async (p, cuerpoLista = null) => {
-      const r = await api.current('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: p, curvas: true, ...(cuerpoLista ? { cuerpoLista } : {}) }) })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
-      return j
-    })
+    const pide = pideApi.current
     // §89: con lista, lo que se pide es { plan, cuerpoLista }; el resultado guarda el plan calculado y su clave.
     calculador.current = creaCalculador({ calcula: async (p) => p?.cuerpoLista ? ({ respuesta: await pide(p.plan, p.cuerpoLista), plan: p.plan, clave: JSON.stringify(p) }) : ({ respuesta: await pide(p), plan: p }),
       alEstado: (e) => {
@@ -408,7 +419,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     if (actual?.startsWith('n') && actual !== clave) edic.current[actual] = { a, estId, version: cualVersion }
     const r = (lista || []).find(p => claveDe(p.id) === clave), e = r ? deFila(r) : edic.current[clave]
     if (!e) return
-    aplica(e); setActual(clave); limpiaDialogos()
+    aplica(e); setActual(clave); limpiaDialogos(); setComparando(false)
   }
   // Un plan nuevo, con los ajustes de ahora (o sin ninguno abierto, los de siempre): «Plan nuevo», «Plan nuevo 2»… (el primer número libre). junto: la pestaña a cuyo lado se abre.
   const creaNuevo = (desde = null, junto = null) => {
@@ -417,7 +428,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     edic.current[clave] = e
     setNuevas(xs => [...xs, { clave, nombre: nombreNueva(xs), base: base(e) }])
     setOrden(o => junto ? trasDe(o || [], junto, clave) : [...(o || []), clave])
-    aplica(e); setActual(clave); limpiaDialogos()
+    aplica(e); setActual(clave); limpiaDialogos(); setComparando(false)
   }
   // × : solo la quita de la vista (un plan nuevo se pierde). Sin pestañas, «Ningún plan abierto».
   const cierra = (clave) => {
@@ -528,12 +539,76 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   useEffect(() => { if (fila && cifras && !hayCambios && clave === (calc.resultado?.clave || JSON.stringify(calc.resultado?.plan))) setFinales(x => ({ ...x, [fila.id]: cifras.seis.final })) }, [cifras, fila?.id, hayCambios])
   const texto = () => textoParaClaudePlan({ ajustes: a, estrategia, plan, cifras: enLista ? null : cifras, estado, resultadoPrueba: resPrueba, version, nombre: fila?.nombre || null })
 
+  // ── §128: «Comparar planes» (los planes GUARDADOS, tal como están guardados; mismo motor y misma respuesta que su pestaña) ──
+  const compLeido = useRef(false), enCurso = useRef(new Set())
+  // Al entrar: lo recordado en este navegador (una vez) y, de los elegidos, los que siguen existiendo.
+  useEffect(() => {
+    if (!comparando || !planes) return
+    let g = null
+    if (!compLeido.current) { compLeido.current = true; if (!inicial?.compararElegidos) try { g = JSON.parse(window.localStorage.getItem(CLAVE_COMPARAR)) } catch (_) {} }
+    setComp(c => ({ ...c, ...(g && Array.isArray(g.refs) ? { refs: g.refs.filter(id => REFS_COMPARAR.some(r => r.id === id)) } : {}), ...(g && typeof g.log === 'boolean' ? { log: g.log } : {}),
+      elegidos: elegidosIniciales(planes, c.elegidos || g?.elegidos, idsDe(orden || [])) }))
+  }, [comparando, planes])
+  useEffect(() => { if (!comp.elegidos || inicial?.compararElegidos) return; try { window.localStorage.setItem(CLAVE_COMPARAR, JSON.stringify({ elegidos: comp.elegidos, refs: comp.refs, log: comp.log })) } catch (_) {} }, [comp.elegidos, comp.refs, comp.log])
+  // Lo que se pide de cada plan: el plan guardado; con una lista, como su pestaña (planListaCalculable y la petición de «La cartera por
+  // dentro», que solo sabe calcular con la estrategia de AHORA: si su regla ha cambiado, se dice por qué no se calcula).
+  const peticionComparar = (f) => {
+    const p0 = f.plan
+    if (piezaDe(p0)?.donde !== 'lista') return { clave: JSON.stringify(p0), plan: p0 }
+    const foto = fotoDelPlan(p0), actualE = estrategias.find(s => String(s.id) === String(foto?.id)) || null
+    if (!actualE) return { motivo: 'La estrategia de este plan ya no está entre las tuyas: con una lista, solo se calcula con una estrategia que siga entre las tuyas.' }
+    const rg = foto ? reglaDe(foto) : null, ra = reglaDe(actualE)
+    if (rg == null || ra == null || rg !== ra) return { motivo: 'La estrategia ha cambiado desde que guardaste este plan: con una lista, solo se calcula con la de ahora. Ábrelo y pulsa «Usar la versión actual».' }
+    const a2 = ajustesDe(p0), cuerpo = peticionPorDentro({ a: a2, estrategia: actualE, wlData: datosLista?.wlData || {}, universoDatos })
+    if (!cuerpo) return { motivo: motivoSinPeticion({ a: a2, estrategia: actualE, universoDatos }) || 'Este plan no se puede calcular.' }
+    const cl = planListaCalculable(p0), m = motivoListaNoCalculable(cl.plan, cuerpo.symbols)
+    return m ? { motivo: m } : { clave: JSON.stringify({ plan: cl.plan, cuerpoLista: cuerpo }), plan: cl.plan, cuerpoLista: cuerpo }
+  }
+  const filasComp = useMemo(() => comparando && comp.elegidos && planes ? comp.elegidos.map(id => planes.find(p => Number(p.id) === Number(id))).filter(Boolean) : [], [comparando, comp.elegidos, planes])
+  // Con el Nasdaq-100, su universo se lee de la base, como en la pestaña (una vez por universo).
+  const universosComp = [...new Set(filasComp.map(f => piezaDe(f.plan)).filter(x => x?.donde === 'lista' && nDeUniverso(x.lista?.universo || 'manual')).map(x => x.lista.universo))].filter(u => !universoDatos[u]).join()
+  useEffect(() => {
+    if (!universosComp || !ctx) return
+    universosComp.split(',').forEach(u => cargaUniversoMc(nDeUniverso(u), { url: ctx.url, headers: ctx.headers, fetch: ctx.fetch, regla: reglaDeUniverso(u) })
+      .then(d => { if (vivo.current) setVistaLista(x => ({ ...x, universoDatos: { ...x.universoDatos, [u]: d } })) })
+      .catch(e => { if (vivo.current) setVistaLista(x => ({ ...x, universoDatos: { ...x.universoDatos, [u]: { error: e.message || 'No se pudo leer el universo.' } } })) }))
+  }, [universosComp, ctx])
+  const peticionesComp = useMemo(() => filasComp.map(f => ({ id: f.id, ...peticionComparar(f) })), [filasComp, estrategias, universoDatos, datosLista?.wlData])
+  const clavesComp = JSON.stringify(peticionesComp.map(p => [p.id, p.clave || p.motivo]))
+  // Cada plan, a la vez; lo ya calculado (aquí o en su pestaña con la misma petición) no se repite.
+  useEffect(() => {
+    peticionesComp.forEach(p => {
+      if (p.motivo) { setResComp(r => ({ ...r, [p.id]: { estado: 'motivo', texto: p.motivo } })); return }
+      const ya = hechos.current.get(p.clave)
+      if (ya) { setResComp(r => r[p.id]?.estado === 'ok' && r[p.id].clave === p.clave ? r : { ...r, [p.id]: { estado: 'ok', clave: p.clave, respuesta: ya.respuesta, plan: ya.plan } }); return }
+      if (enCurso.current.has(p.clave)) return
+      enCurso.current.add(p.clave)
+      setResComp(r => ({ ...r, [p.id]: { estado: 'calculando', clave: p.clave } }))
+      Promise.resolve(p.cuerpoLista ? pideApi.current(p.plan, p.cuerpoLista) : pideApi.current(p.plan)).then(respuesta => {
+        hechos.current.set(p.clave, p.cuerpoLista ? { respuesta, plan: p.plan, clave: p.clave } : { respuesta, plan: p.plan }); if (hechos.current.size > 20) hechos.current.delete(hechos.current.keys().next().value)
+        if (vivo.current) setResComp(r => ({ ...r, [p.id]: { estado: 'ok', clave: p.clave, respuesta, plan: p.plan } }))
+      }).catch(e => { if (vivo.current) setResComp(r => ({ ...r, [p.id]: { estado: 'error', clave: p.clave, texto: e.message || 'error' } })) })
+        .finally(() => enCurso.current.delete(p.clave))
+    })
+  }, [clavesComp])
+  // La línea de la prueba del paso 2 de la estrategia de cada plan (la de su foto), como arriba en su pestaña.
+  const pruebaComp = (id) => {
+    const f = (planes || []).find(p => Number(p.id) === Number(id)), foto = f && fotoDelPlan(f.plan)
+    if (!foto || !todasPruebas) return null
+    const e = estadoPrueba(todasPruebas.filter(p => String(p.estrategia_id) === String(foto.id)), reglaDe(foto))
+    return e ? { texto: textoAvisoPrueba(e), clave: e.clave } : null
+  }
+  const hayComparar = (planes || []).length >= 2
+
   // ── Avisos (una línea; el detalle, tras «?») ──
   const avisoPrueba = estado && (
     <div data-aviso="prueba" data-estado={estado.clave} data-lista={enLista ? '1' : undefined} style={{ color: estado.clave === 'pasa' ? VERDE : estado.clave === 'noPasa' ? ROJO : AMARILLO, fontWeight: estado.clave === 'noPasa' ? 700 : 400, display: 'flex', alignItems: 'center', gap: 2 }}>
       {textoAvisoPrueba(estado)}<span style={S.apagado}>&nbsp;·&nbsp;</span>{!estBorrada && <button data-boton="ver-prueba" style={{ ...S.enlace, fontSize: 13 }} onClick={() => pide({ tipo: 'paso2' })}>{estado.clave === 'sinPrueba' ? 'Probarla ahora' : 'Ver la prueba'}</button>}<Ayuda texto={ayudaPrueba(estado, resPrueba)} etiqueta="La prueba contra el azar"/>
     </div>
   )
+  // §128: «Comparar planes», activo con al menos dos planes guardados.
+  const botonComparar = <button data-boton="comparar" disabled={!hayComparar} title={hayComparar ? 'Ver tus planes guardados uno al lado del otro' : TEXTO_SIN_PLANES} onClick={() => setComparando(true)}
+    style={{ ...S.boton, padding: '6px 12px', fontSize: 13, ...(hayComparar ? {} : { color: B.apagado, cursor: 'not-allowed' }) }}>Comparar planes</button>
   // §54: una línea bajo las pestañas: los avisos (en el móvil, uno debajo del otro: .bp-avisos), «Calculando…» y, a la derecha, guardar y «Comparar planes».
   const avisos = actual ? (
     <div data-avisos className="bp-avisos" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 24px', alignItems: 'center', marginBottom: 12 }}>
@@ -546,7 +621,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
         {sinGuardar && <button data-boton="descartar" style={{ ...S.boton, padding: '6px 12px' }} disabled={guardando} onClick={descartaCambios}>Descartar cambios</button>}
         {hayCambios && <button data-boton="guardar-cambios" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={`Guardado por última vez el ${fechaCorta(fila.updated_at)}`} onClick={guardaAbierta}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>}
         {nuevaActual && <button data-boton="guardar" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={!ctx ? 'Sin conexión con la base de datos: no se pueden guardar planes' : undefined} onClick={() => { limpiaDialogos(); setVentana('nuevo') }}>Guardar este plan</button>}
-        <button data-boton="comparar" disabled title="Próximamente" style={{ ...S.boton, padding: '6px 12px', fontSize: 13, color: B.apagado, cursor: 'not-allowed' }}>Comparar planes</button>
+        {botonComparar}
       </span>
     </div>
   ) : null
@@ -772,8 +847,13 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       <CabeceraPasos actual={3} estrategia={estBorrada ? `${estrategia?.name} ${ETIQUETA_BORRADA}` : estrategia?.name || null} desactivados={estBorrada ? { 1: AVISO_BORRADA, 2: AVISO_BORRADA } : {}} onVolver={(donde) => pide({ tipo: 'volver', donde })} hechos={{ 1: !!estrategia, 2: !!estado && estado.clave !== 'sinPrueba' }}
         onPaso={(n) => { if (n === 1) pide({ tipo: 'paso1' }); else if (n === 2) pide({ tipo: 'paso2' }) }}/>
       {pestanasPlanes}
+      {comparando ? <ComparaPlanes planes={planes || []} elegidos={comp.elegidos || []} refs={comp.refs} resultados={resComp} prueba={pruebaComp} log={comp.log} modo={comp.modo} tema={tema}
+        onElegir={id => setComp(c => ({ ...c, elegidos: alterna(c.elegidos || [], id) }))} onRef={id => setComp(c => ({ ...c, refs: c.refs.includes(id) ? c.refs.filter(x => x !== id) : [...c.refs, id] }))}
+        onLog={x => setComp(c => ({ ...c, log: x }))} onModo={x => setComp(c => ({ ...c, modo: x }))} onVolver={() => setComparando(false)}
+        onAbrir={id => { const c = claveDe(id); if (c === actual) setComparando(false); else pide({ tipo: 'anadir', id }) }} onDuplicar={id => pideDuplicar(claveDe(id))}/> : <>
       {avisos}
       {errorCalculo}
+      </>}
       {/* §49 y §50: en escritorio (≥ 1000 px), esta página es la que se desplaza (el alto de la ventana menos lo de encima) y la columna
           de ajustes queda fija al bajar, con su propia barra si no cabe (como mucho, el alto visible de la página menos su relleno); en el
           móvil, nada fijo y se desplaza la ventana, como antes. */}
@@ -784,7 +864,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
 .bp-mc { background: var(--bg, #080c14); border: 1px solid var(--border, #1a2d45); border-radius: 6px; overflow: hidden; color: var(--text, #e2eaf5) }
 @media (min-width: 1000px) { .bp-pagina { box-sizing: border-box; height: calc(100vh - var(--bp-arriba, 56px)); flex: none !important }
   .bp-izq { position: sticky; top: 0; max-height: calc(100vh - var(--bp-arriba, 56px) - 40px); overflow-y: auto; padding-right: 4px } }`}</style>
-      {actual ? <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      {comparando ? null : actual ? <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div data-columna="izquierda" className="bp-izq" style={{ flex: '1 1 340px', maxWidth: 520, minWidth: 0 }}>{bloques}{dinero}</div>
         <div data-columna="derecha" style={{ flex: '2 1 480px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {resultado}
@@ -793,7 +873,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             {!estBorrada && <button data-boton="paso2" style={S.boton} onClick={() => pide({ tipo: 'paso2' })}>Volver al paso 2</button>}
           </div>
         </div>
-      </div> : orden && <div data-sin-pestanas style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario, marginTop: 6 }}>Ningún plan abierto. Pulsa «+ Añadir plan».</div>}
+      </div> : orden && <div data-sin-pestanas style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario, marginTop: 6, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>Ningún plan abierto. Pulsa «+ Añadir plan».{hayComparar && botonComparar}</div>}
       {pregunta && (
         <Pregunta id="sin-guardar" texto={`Tienes cambios sin guardar en «${nombreDe(actual)}».`} aviso={pregunta.fallo ? falloGuardar : null}
           extra={!fila ? <input type="text" aria-label="Nombre del plan" placeholder="Nombre del plan" maxLength={200} value={nombreNuevo} onChange={e => setNombreNuevo(e.target.value)} style={{ ...campo, width: '100%', boxSizing: 'border-box', marginBottom: 16 }}/> : null}>

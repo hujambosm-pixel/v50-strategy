@@ -167,7 +167,7 @@ export const filaCopia = (s) => esDeCodigo(s) ? filaCopiaCodigo(s) : ({ id: null
 // «Código de la estrategia». onAbrirEstrategia(s, 'editor') las abre en el Editor clásico (la pestaña «Editor»). onBacktestValor:
 // el enlace «Backtest de un valor» (la pestaña donde se ejecutan y se ven en el gráfico). abrir ({ fila, n }): la página pide
 // abrir una estrategia (al pulsar su nombre en «Backtest de un valor»); cada n nuevo la abre. §55: { planId, n }, un plan en el paso 3. V9.1058: buscarInicial (para las pruebas de montaje): lo escrito en el buscador de «Mi trabajo».
-export default function BuilderPanel({ estrategias = [], salida = null, onAbrirEstrategia, onAbrirTesis = null, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '', datosLista = null, onIrAValor = null }) {
+export default function BuilderPanel({ estrategias = [], salida = null, onAbrirEstrategia, onAbrirTesis = null, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '', datosLista = null, onIrAValor = null, tema = 'oscuro' }) {
   // §58: planes y pruebasAzar (null: no se han podido leer; entonces la fila dice «—»).
   const [datos, setDatos] = useState(() => datosIniciales || { planes: [], pruebasAzar: null, tesis: [], cargando: !datosIniciales, error: null })
   const [filasE, setFilasE] = useState(listasIniciales?.estrategias || null)
@@ -298,7 +298,7 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   if (azar) return <ProteccionPanel nombre="Probarla contra el azar"><BuilderAzar key={azar.n} estrategias={estrategiasEf} estrategiaId={azar.estrategiaId} version={version}
     cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} onVolver={alVolver(() => setAzar(null))} onPaso1={f => { setAzar(null); if (f) abreEditor(f); else recarga() }} onPaso3={id => { setAzar(null); abrePlan(id) }} enlaceTesis={enlaceTesis}/></ProteccionPanel>
   if (plan) return <ProteccionPanel nombre="Convertirla en plan"><BuilderPlan key={plan.n} estrategias={estrategiasEf} estrategiaId={plan.estrategiaId} planId={plan.planId ?? null} salida={salida} apiFetch={apiFetch} version={version}
-    cargaSimbolos={cargaSimbolosCache} datosLista={datosLista} onIrAValor={onIrAValor} onVolver={alVolver(() => setPlan(null))} onPaso1={f => { setPlan(null); if (f) abreEditor(f); else recarga() }} onPaso2={id => { setPlan(null); abreAzar(id) }} enlaceTesis={enlaceTesis}/></ProteccionPanel>
+    cargaSimbolos={cargaSimbolosCache} datosLista={datosLista} onIrAValor={onIrAValor} tema={tema} onVolver={alVolver(() => setPlan(null))} onPaso1={f => { setPlan(null); if (f) abreEditor(f); else recarga() }} onPaso2={id => { setPlan(null); abreAzar(id) }} enlaceTesis={enlaceTesis}/></ProteccionPanel>
   return (
     <div style={S.pagina}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
