@@ -2731,3 +2731,9 @@ El nombre «screener» queda libre para el screener nuevo de Sergi (`lib/screene
 - El screener tiene dos tonos: oscuro (estilo Finviz) y claro (papel gris). Se cambia con el botón «☀ Claro / ☾ Oscuro» de la barra de arriba, que de momento solo cambia el screener. Detalle en docs/screener.md §14.
 - Se resalta la fila entera al pasar el ratón; las filas van alternas; los símbolos, en azul.
 - Ninguna cifra cambia: solo colores.
+
+## 114. Screener: los filtros arriba, como Finviz
+
+- Los filtros pasan del panel de la izquierda a una rejilla de 5 columnas arriba, con un desplegable de cifras fijas por filtro y «Otra cifra…»; las vistas, en una sola línea. Detalle en docs/screener.md §15.
+- `components/BuilderAyuda.js` acepta un nombre en vez del «?» (`contenido`, `estiloBoton`, `soloClic`); sin ellos, igual que antes.
+- Ninguna cifra cambia y lo que se guarda en una vista, tampoco.

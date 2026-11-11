@@ -10,7 +10,9 @@ import { B } from '../lib/builder/estilo'
 const ANCHOS = [300, 420, 560], MARGEN = 12, HUECO = 6
 const useLayout = typeof window === 'undefined' ? useEffect : useLayoutEffect
 
-export default function Ayuda({ texto, etiqueta = 'Ayuda', abiertoInicial = false, zIndice = 1000 }) {   // zIndice: para un «?» dentro de una pantalla que ya va por encima de 1000
+export default function Ayuda({ texto, etiqueta = 'Ayuda', abiertoInicial = false, zIndice = 1000, contenido = null, estiloBoton = null, soloClic = false }) {   // zIndice: para un «?» dentro de una pantalla que ya va por encima de 1000
+  // contenido / estiloBoton (screener, docs/screener.md §15): en vez del «?», el nombre del filtro hace de botón; soloClic: no se abre
+  // al pasar el ratón (en una rejilla de nombres saldría una ventana a cada paso). Sin ellos, el «?» de siempre.
   const [encima, setEncima] = useState(false)   // el ratón está encima
   const [fijo, setFijo] = useState(abiertoInicial)   // se tocó (o se hizo clic): sigue abierto hasta tocar fuera
   // abiertoInicial (para las pruebas de montaje): abierto desde el principio, en una posición provisional hasta medir el botón.
@@ -61,16 +63,16 @@ export default function Ayuda({ texto, etiqueta = 'Ayuda', abiertoInicial = fals
     window.addEventListener('resize', cierra)
     return () => { document.removeEventListener('pointerdown', fuera); document.removeEventListener('keydown', tecla); window.removeEventListener('scroll', desplaza, true); window.removeEventListener('resize', cierra) }
   }, [abierto])
-  const raton = { onPointerEnter: e => { if (e.pointerType === 'mouse') entra() }, onPointerLeave: e => { if (e.pointerType === 'mouse') sale() } }
+  const raton = soloClic ? {} : { onPointerEnter: e => { if (e.pointerType === 'mouse') entra() }, onPointerLeave: e => { if (e.pointerType === 'mouse') sale() } }
   const ventana = abierto && pos && (
     <span ref={burbuja} role="tooltip" data-ayuda-ventana {...raton}
       style={{ position: 'fixed', left: pos.left, top: pos.top, width: pos.width, maxHeight: pos.maxHeight ?? undefined, overflowY: pos.maxHeight ? 'auto' : 'visible', visibility: pos.provisional ? 'hidden' : 'visible', boxSizing: 'border-box', zIndex: zIndice, background: B.cabecera, border: `1px solid ${B.siguienteBorde}`, borderRadius: B.radioBoton,
         padding: '10px 12px', color: B.texto, fontFamily: B.letra, fontSize: 13, fontWeight: 400, lineHeight: 1.45, textAlign: 'left', whiteSpace: 'normal', boxShadow: '0 6px 20px rgba(0,0,0,0.45)', display: 'block' }}>{texto}</span>
   )
   return (
-    <span ref={ref} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: 4 }} {...raton}>
+    <span ref={ref} style={contenido ? { display: 'inline-block', verticalAlign: 'middle' } : { display: 'inline-block', verticalAlign: 'middle', marginLeft: 4 }} {...raton}>
       <button ref={boton} type="button" aria-label={`Ayuda: ${etiqueta}`} aria-expanded={abierto} onClick={() => setFijo(x => !x)}
-        style={{ width: 18, height: 18, padding: 0, borderRadius: '50%', border: `1px solid ${B.borde}`, background: B.fondo, color: B.secundario, fontFamily: B.letra, fontSize: 11, fontWeight: 700, lineHeight: '16px', cursor: 'pointer' }}>?</button>
+        style={estiloBoton || { width: 18, height: 18, padding: 0, borderRadius: '50%', border: `1px solid ${B.borde}`, background: B.fondo, color: B.secundario, fontFamily: B.letra, fontSize: 11, fontWeight: 700, lineHeight: '16px', cursor: 'pointer' }}>{contenido ?? '?'}</button>
       {ventana && (enPagina ? createPortal(ventana, document.body) : ventana)}
     </span>
   )

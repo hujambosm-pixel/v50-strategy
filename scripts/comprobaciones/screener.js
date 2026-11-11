@@ -150,7 +150,7 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
   const guardada = (extra = {}) => pestanaDe({ id: 7, nombre: 'Prueba', vista: v1, ...extra })
   const monta = (inicial) => renderToString(React.createElement(P, { inicial: { empresas: E, vistas: [guardada()], ...inicial } })).split('<!-- -->').join('')
   let hp = monta({})
-  ok(hp.includes('1 · pasan Fundamentales') && hp.includes('data-embudo-n="1"') && hp.slice(hp.indexOf('data-embudo-n="1"')).startsWith('data-embudo-n="1" style="font-size:20px;font-weight:700;color:var(--sc-titulo)">1<'), 'embudo: pasan Fundamentales 1')
+  ok(hp.includes('→ 1 · Fundamentales') && hp.includes('data-embudo-n="1"') && hp.slice(hp.indexOf('data-embudo-n="1"')).startsWith('data-embudo-n="1" style="font-size:15px;font-weight:700;color:var(--sc-titulo)">1<'), 'embudo: pasan Fundamentales 1')
   ok(hp.includes('data-fila="AAA"') && !hp.includes('data-fila="BBB"'), 'tabla: AAA sí, BBB no')
   ok(hp.includes('data-cuenta="roce"') && hp.includes('−2'), 'el ROCE dice «−2»')
   ok(/data-cuenta="roce" title="El número rojo dice cuántos valores[^"]*Ejemplo: Llegan 300 valores/.test(hp) && !hp.includes('cuántos quita cada filtro'), 'la explicación del «−N» va en su tooltip (sin la línea de abajo)')
@@ -186,7 +186,7 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
   hp = monta({ busca: 'SALUD', verNo: true })
   ok(hp.includes('data-fila="BBB"') && !hp.includes('data-fila="AAA"'), 'buscar por sector sin distinguir mayúsculas')
   hp = monta({ piso: 'T' })
-  ok(hp.includes('Con velas diarias, cierre del') && hp.includes('data-on="ema200"') && !/data-on="ema200"[^>]*disabled/.test(hp) && !/data-on="senal"[^>]*disabled/.test(hp) && /data-on="nivel"[^>]*disabled/.test(hp), 'pestaña Técnico: EMA 200 y «Da señal de compra…» se pueden encender; los niveles aún no')
+  ok(hp.includes('Con velas diarias, cierre del') && hp.includes('data-opcion="ema200"') && !/data-opcion="ema200"[^>]*disabled/.test(hp) && hp.includes('data-filtro="senal"') && /data-opcion="nivel"[^>]*disabled/.test(hp), 'pestaña Técnico: EMA 200 y «Da señal de compra…» se pueden encender; los niveles aún no')
   hp = renderToString(React.createElement(P, {}))
   ok(hp.includes('Cargando las empresas…'), 'sin datos: «Cargando las empresas…»')
 
@@ -249,9 +249,9 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     ok(m.raiz.conAtributo('data-pestana-vista').length === 3 && uno('data-nombre-vista').value === 'Vista nueva' && m.raiz.conAtributo('data-punto-cambios').length === 1, '«+ Nueva vista › Desde cero»: tercera pestaña, sin guardar')
     D.pulsa(uno('data-descartar')); await D.espera(10)
     ok(m.raiz.conAtributo('data-pestana-vista').length === 2, 'descartar una nueva sin guardar la quita')
-    const roce = () => uno('data-on', 'roce')
+    const roce = () => uno('data-opcion', 'roce')
     D.pulsa(uno('data-pestana-vista', 0)); await D.espera(10)
-    D.propsDe(roce()).onChange({ target: { checked: false } }); await D.espera(10)
+    D.propsDe(roce()).onChange({ target: { value: 'no' } }); await D.espera(10)
     ok(m.raiz.conAtributo('data-punto-cambios').length === 1 && uno('data-embudo-n', 1).textContent === '3', 'apagar el ROCE: pasan los 3 del universo, con «●»')
     D.pulsa(uno('data-descartar')); await D.espera(10)
     ok(!m.raiz.conAtributo('data-punto-cambios').length && uno('data-embudo-n', 1).textContent === '1', '«Descartar cambios»: vuelve a pasar 1')
@@ -294,9 +294,9 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     ok(/data-celda="exigido"[^>]*color:var\(--sc-rojo\)/.test(h6), 'exigido (20 %) mayor que esperado (12 %): en rojo')
     ok(!h6.includes('✓ ') && !h6.includes('✗ ') || h6.includes('data-cajon'), 'la tabla ya no lleva ✓ ni ✗')
     h6 = renderToString(React.createElement(P, { inicial: { empresas: [caro], vistas: [pestanaDe({ id: 1, nombre: 'X', vista: v6 })], panelOculto: true } })).split('<!-- -->').join('')
-    ok(h6.includes('data-mostrar-panel') && !h6.includes('data-panel-filtros'), 'panel oculto: solo el botón «▶ Filtros»')
+    ok(h6.includes('data-mostrar-panel') && !h6.includes('data-panel-filtros') && h6.includes('data-resumen-filtros') && h6.includes('data-encendido="roce"') && h6.includes('Filtros ▼'), 'filtros ocultos: una línea con los encendidos y «Filtros ▼»')
     h6 = renderToString(React.createElement(P, { inicial: { empresas: [caro], vistas: [pestanaDe({ id: 1, nombre: 'X', vista: v6 })] } })).split('<!-- -->').join('')
-    ok(h6.includes('data-ocultar-panel') && h6.includes('data-panel-filtros') && h6.includes('width:440px'), 'panel visible, de 440 px, con su botón «◀»')
+    ok(h6.includes('data-ocultar-panel') && h6.includes('data-panel-filtros') && h6.includes('data-rejilla') && h6.includes('Filtros ▲') && !h6.includes('width:440px'), 'filtros arriba, en rejilla, con «Filtros ▲» (sin el panel de 440 px)')
   }
 
   // ── Parte 2 · Técnico (lib/screener/tecnico.js, datos.js, filtros.js y la pantalla) ─────────────────────────────────────
@@ -433,6 +433,55 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     ok(!/#0d1117|#13283f|#1b2836|#3a3220/.test(o), 'la pantalla ya no lleva los colores fijos de antes')
     const fi = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'pages', 'index.js'), 'utf8')
     ok(fi.includes('<button data-tema-app onClick={alternaTema}') && fi.includes("{temaApp==='claro'?'☾ Oscuro':'☀ Claro'}") && fi.includes('<ScreenerPanel tema={temaApp}') && fi.includes("localStorage.setItem('app.tema',n)"), 'botón «☀ Claro / ☾ Oscuro» en la barra de arriba, recordado, y el screener lo recibe')
+  }
+
+  // §15: los filtros ARRIBA, como Finviz (cifras fijas, rejilla de 5 columnas, vistas en una línea).
+  {
+    const O = require('../../lib/screener/opciones')
+    const { VISTAS_EJEMPLO: VE } = require('../../lib/screener/vista')
+    ok(O.opcionesDe(FILTRO.roce).map(o => o.texto).join(' | ') === '≥ 10 % | ≥ 15 % | ≥ 20 % | ≥ 25 % | ≥ 30 % | ≥ 40 % | ≤ 10 % | ≤ 20 %', 'ROCE: cifras fijas (las de siempre y dos al revés)')
+    ok(O.opcionesDe(FILTRO.ema200).map(o => o.texto).slice(0, 3).join(' | ') === 'Por encima | Por debajo | 5 % o más por encima' && O.opcionesDe(FILTRO.ema200)[5].op === '≤' && O.opcionesDe(FILTRO.ema200)[5].valor === -5, 'EMA 200 con palabras: «Por encima»… «5 % o más por debajo» = ≤ −5')
+    ok(O.fmtFija(0.25) === '0,25' && O.fmtFija(1.5) === '1,5' && O.fmtFija(-1000) === '-1.000' && O.textoCondicion(FILTRO.cajaCubre, '≥', 1.5) === '≥ 1,5 veces' && O.textoCondicion(FILTRO.senal, '≤', 1) === '1 vela', 'textos: 0,25 · 1,5 · −1.000 · «≥ 1,5 veces» · «1 vela»')
+    ok(O.opcionElegida(FILTRO.roce, { on: true, op: '≥', valor: 25 }) === 3 && O.opcionElegida(FILTRO.roce, { on: true, op: '≥', valor: 27 }) === -1 && O.opcionElegida(FILTRO.roce, { on: false, op: '≥', valor: 25 }) === -1, 'ROCE ≥ 25 es la 4.ª; ≥ 27 es «tuya»; apagado, ninguna')
+    ok(O.textoEncendido(FILTRO.roce, { on: true, op: '≥', valor: 27 }) === '≥ 27 %' && O.textoEncendido(FILTRO.ema200, { on: true, op: '≥', valor: 0 }) === 'Por encima', 'texto de un encendido: «≥ 27 %», «Por encima»')
+    ok(FILTROS.filter(f => !f.proximamente && !f.conEstrategia).every(f => O.opcionElegida(f, { on: true, op: f.op, valor: f.valor }) >= 0), 'la cifra por defecto de cada filtro está en su desplegable')
+    ok(VE.every(v => Object.entries(v.vista.filtros).filter(([, c]) => c.on).every(([id, c]) => O.opcionElegida(FILTRO[id], c) >= 0)), 'las vistas de ejemplo usan solo cifras fijas (PER ≥ 30, PEG esperado ≥ 3…)')
+    const v15 = vistaNueva({ on: ['roce', 'ema200'], valores: { roce: 27 } })
+    const monta15 = (extra) => renderToString(React.createElement(P, { inicial: { empresas: E, vistas: [pestanaDe({ id: 3, nombre: 'Q', vista: v15 })], ...extra } })).split('<!-- -->').join('')
+    let h = monta15({})
+    ok(/data-opcion="roce"[^>]*>.*?<option value="tuya" selected="">≥ 27 % \(tuya\)<\/option>/.test(h) && h.includes('<option value="otra">Otra cifra…</option>'), 'ROCE ≥ 27: el desplegable dice «≥ 27 % (tuya)» y tiene «Otra cifra…»')
+    ok(h.includes('data-cuantos-pestana="F"') && /data-cuantos-pestana="F"[^>]*>1</.test(h) && /data-cuantos-pestana="T"[^>]*>1</.test(h) && /data-cuantos-pestana="todos"[^>]*>7</.test(h) && /data-cuantos-pestana="U"[^>]*>5</.test(h), 'pestañas con cuántos encendidos: F 1, T 1, sectores 5, todos 7')
+    const nF = FILTROS.filter(f => f.piso === 'F').length
+    ok(h.includes(`grid-template-rows:repeat(${Math.ceil(nF / 5)}, auto)`) && h.includes('grid-auto-flow:column') && !h.includes('data-filtro="ema200"') && !h.includes('data-universo-sectores'), `rejilla de 5 columnas (${nF} filtros → ${Math.ceil(nF / 5)} filas), solo los de Fundamentales`)
+    h = monta15({ piso: 'todos' })
+    ok(h.includes('data-universo-sectores') && h.includes('data-filtro="roce"') && h.includes('data-filtro="ema200"') && h.includes('data-sector="Energía"') && h.includes('data-universo="sp500"'), '«Todos»: universo, sectores y todos los filtros')
+    h = monta15({ piso: 'U' })
+    ok(h.includes('data-universo-sectores') && !h.includes('data-rejilla'), '«Universo y sectores»: sin la rejilla')
+    ok(/data-mercado[^>]*title="Informativo: no es un filtro\./.test(h) && h.includes('data-embudo') && h.includes('data-actualizar') && h.includes('Cuentas de la SEC (EDGAR) del'), 'en la línea de los filtros: el mercado (informativo), los precios y el embudo; la fecha de las cuentas, al pie')
+    ok(/data-nombre-vista[^>]*readonly=""/.test(h) && h.includes('data-editar-nombre') && /data-vistas[\s\S]*data-guardar-lista[\s\S]*data-descartar[\s\S]*data-guardar=/.test(h) && h.indexOf('data-bloque-filtros') > h.indexOf('data-guardar='), 'vistas en una línea: nombre (con ✎), y a la derecha lista, descartar y guardar')
+    // El «?» de siempre no cambia; con contenido, el nombre hace de botón.
+    const Ay = require('../../components/BuilderAyuda').default
+    ok(renderToString(React.createElement(Ay, { texto: 'x', etiqueta: 'E' })).includes('>?</button>') && renderToString(React.createElement(Ay, { texto: 'x', contenido: 'ROCE', soloClic: true })).includes('>ROCE</button>'), 'el «?»: igual que antes; con «contenido», el nombre del filtro')
+    // Con estado: «Otra cifra…», cifras fijas, ocultar y quitar, y el nombre.
+    const RDC = require('react-dom/client')
+    const m = D.monta(React.createElement(P, { inicial: { empresas: E, vistas: [pestanaDe({ id: 3, nombre: 'Q', vista: vistaNueva({ on: ['roce'] }) })] } }), RDC); await D.espera(30)
+    const uno = (k, v) => m.raiz.conAtributo(k, v)[0]
+    D.propsDe(uno('data-opcion', 'roce')).onChange({ target: { value: 'otra' } }); await D.espera(10)
+    ok(!!uno('data-op', 'roce') && !!uno('data-valor', 'roce') && D.propsDe(uno('data-opcion', 'roce')).value === 'otra', '«Otra cifra…»: sale la caja con ≥/≤ y la cifra')
+    D.escribe(uno('data-valor', 'roce'), '45'); await D.espera(10)
+    ok(uno('data-embudo-n', 1).textContent === '0' && m.raiz.conAtributo('data-punto-cambios').length === 1, 'ROCE ≥ 45: no pasa ninguno, con «●»')
+    D.propsDe(uno('data-opcion', 'roce')).onChange({ target: { value: '1' } }); await D.espera(10)
+    ok(!uno('data-valor', 'roce') && D.propsDe(uno('data-opcion', 'roce')).value === '1' && uno('data-embudo-n', 1).textContent === '2', 'elegir «≥ 15 %»: se cierra la caja y pasan 2 (AAA 30, BBB 20)')
+    D.pulsa(uno('data-ocultar-panel')); await D.espera(10)
+    ok(!uno('data-panel-filtros') && uno('data-encendido', 'roce')?.textContent.includes('≥ 15 %'), '«Filtros ▲»: queda la línea con «ROCE ≥ 15 %»')
+    D.pulsa(uno('data-quitar', 'roce')); await D.espera(10)
+    ok(!uno('data-encendido', 'roce') && uno('data-embudo-n', 1).textContent === '3', '✕ quita el ROCE: pasan los 3')
+    D.pulsa(uno('data-mostrar-panel')); await D.espera(10)
+    ok(!!uno('data-panel-filtros') && D.propsDe(uno('data-opcion', 'roce')).value === 'no', '«Filtros ▼»: vuelve la rejilla, ROCE en «Cualquiera»')
+    ok(D.propsDe(uno('data-nombre-vista')).readOnly === true, 'el nombre no se cambia sin ✎')
+    D.pulsa(uno('data-editar-nombre')); await D.espera(10)
+    ok(D.propsDe(uno('data-nombre-vista')).readOnly === false, '✎: el nombre se puede cambiar')
+    m.quita()
   }
 
   console.log(`screener: ${fallos ? fallos + ' fallos de ' + n : 'todas bien (' + n + ')'}`)

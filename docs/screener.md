@@ -220,6 +220,23 @@ Boceto `bocetos/screener-colores.html` (fuera de git). Sergi eligió el 11/11 do
 - Siguen con los colores de la app: las ventanas (Guardar / Salir sin guardar, Borrar, Guardar como lista), los «?» y el 💡.
 - **Comprobación** `screener.js` (159): los dos tonos, las filas, sin los colores fijos de antes y el botón.
 
+## 15. Los filtros ARRIBA, como Finviz
+
+Boceto `bocetos/screener-arriba.html` (decidido por Sergi el 11/11: opción 1 «Rejilla como Finviz», cada filtro con un desplegable de cifras fijas). Sustituye al panel de 440 px de la izquierda; la tabla va debajo, a todo el ancho.
+- **Vistas en UNA línea**: pestañas a la izquierda y, a la derecha, ⧉, 🗑, 💡, «☰ Guardar como lista (N)», «Descartar cambios» y «Guardar».
+  - El nombre se cambia en la misma pestaña: ✎ o doble clic (Enter o Esc para terminar).
+- **Línea de los filtros**: pestañas «Universo y sectores», «1 · Fundamentales», «2 · Técnico» y «Todos», cada una con cuántos hay encendidos (en «Universo y sectores», cuántos sectores se quitan), y su «?».
+  - A la derecha: el mercado (SPY frente a su EMA 200; informativo, no es un filtro), los precios con «⟳ Actualizar precios», el embudo «Universo N → 1 · Fundamentales N → 2 · Técnico N» y «Filtros ▲».
+  - «Filtros ▲» oculta la rejilla: queda una línea con los encendidos («ROCE ≥ 25 % −13 ✕»; ✕ lo quita) y la tabla sube. Se recuerda en el navegador.
+- **Rejilla**: 5 columnas, todas las casillas iguales (nombre a la derecha, desplegable de 148 px, «−N» en rojo). Se rellena columna a columna en el orden del catálogo, así los de un mismo grupo quedan juntos.
+  - Pulsar el NOMBRE abre su «?» (no se abre al pasar el ratón). `BuilderAyuda` acepta ahora `contenido`, `estiloBoton` y `soloClic`; sin ellos, el «?» de siempre.
+  - El desplegable: «Cualquiera» (apagado), las cifras fijas (`lib/screener/opciones.js`: primero las de su sentido de siempre y unas pocas al revés; las EMA con palabras: «Por encima», «5 % o más por debajo»…) y «Otra cifra…», que abre ≥/≤ y la cifra. Una cifra que no está en la lista sale como «≥ 27 % (tuya)».
+  - «Da señal de compra con [estrategia]» (elegir una la enciende; «Cualquiera» la apaga) y «… en las últimas [N velas]».
+  - «Todos» enseña arriba el universo y los sectores, y debajo todos los filtros.
+- La fecha de las cuentas de la SEC pasa al pie de la tabla.
+- No cambia lo que se guarda: una vista sigue siendo `{ on, op, valor }` por filtro (la caja de «Otra cifra…» es de la pantalla). Ninguna cifra cambia.
+- **Comprobación** `screener.js` (182): cifras fijas (las de por defecto y las de las vistas de ejemplo están en la lista), «(tuya)», contadores de las pestañas, rejilla de 5 columnas, «Todos», «Universo y sectores», «Otra cifra…», ocultar y quitar, y el nombre con ✎.
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:

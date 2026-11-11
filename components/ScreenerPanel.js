@@ -15,6 +15,7 @@ import { AYUDAS, FILTROS, FILTRO, evaluaVista, fmt, pasa } from '../lib/screener
 import { SECTORES_FUERA_POR_DEFECTO } from '../lib/screener/sectores'
 import { VISTAS_EJEMPLO, normalizaVista, textoVista, vistaNueva } from '../lib/screener/vista'
 import { borrarVista, cambiarVista, creaEjemplos, crearVista, listarVistas, nombreLimpio } from '../lib/screener/vistasBase'
+import { opcionElegida, opcionesDe, textoCondicion, textoEncendido } from '../lib/screener/opciones'
 import { Papelera, Pregunta } from './VentanaPregunta'
 import { guardarComoLista, nombrePropuesto } from '../lib/screener/lista'
 import { esDeTarjetas, fotoDe } from '../lib/pruebaAzar'
@@ -22,6 +23,9 @@ import TesisEnlace from './TesisEnlace'
 import { listarEnlacesTesis, tesisDe } from '../lib/tesis'
 
 const copia = (x) => JSON.parse(JSON.stringify(x))
+// §15: el «?» junto a las pestañas de los filtros.
+export const AYUDA_FILTROS = ['Filtros', 'Pestañas: «Universo y sectores», «1 · Fundamentales», «2 · Técnico» y «Todos» (todo junto); el número azul dice cuántos hay encendidos en cada una. Pulsa el NOMBRE de un filtro para ver qué es, con un ejemplo. Cada filtro tiene cifras fijas; con «Otra cifra…» pones la tuya. El número rojo «−N» dice cuántos valores de los que llegan a ese piso no pasan ese filtro. «Filtros ▲» los oculta: queda una línea con los encendidos (✕ quita uno) y la tabla sube.', 'Llegan 300 valores a Fundamentales y 120 tienen ROCE menor que 25 % → «−120».']
+const PESTANAS_FILTROS = [['U', 'Universo y sectores'], ['F', '1 · Fundamentales'], ['T', '2 · Técnico'], ['todos', 'Todos']]
 // Una pestaña de vista: { clave (local), id (de la base, null si aún no está guardada), nombre, vista, base: { nombre, vista } | null
 // (lo guardado; null si es nueva) }. Con cambios = nueva, u otro nombre u otra vista que lo guardado.
 let claves = 0
@@ -53,8 +57,8 @@ export const estrategiasSenal = (lista) => (lista || []).filter(esDeTarjetas).ma
 export const claveSenal = (x) => x ? `${x.id}|${JSON.stringify([x.definition, x.params])}` : null
 
 // Un «?» con título, explicación y ejemplo (los textos del catálogo).
-export const AyudaFiltro = ({ a, etiqueta }) => !a ? null : (
-  <Ayuda etiqueta={etiqueta || a[0]} texto={<><b>{a[0]}</b><br/>{a[1]}{a[2] ? <><br/><span style={{ color: BA.secundario }}>Ejemplo: {a[2]}</span></> : null}{a[3] ? <><br/><span data-recomendado style={{ color: '#56d364' }}>Recomendado: {a[3]}</span></> : null}</>}/>)
+export const AyudaFiltro = ({ a, etiqueta, contenido, estiloBoton, soloClic }) => !a ? null : (
+  <Ayuda etiqueta={etiqueta || a[0]} contenido={contenido} estiloBoton={estiloBoton} soloClic={soloClic} texto={<><b>{a[0]}</b><br/>{a[1]}{a[2] ? <><br/><span style={{ color: BA.secundario }}>Ejemplo: {a[2]}</span></> : null}{a[3] ? <><br/><span data-recomendado style={{ color: '#56d364' }}>Recomendado: {a[3]}</span></> : null}</>}/>)
 
 const Fuente = ({ f }) => (
   <span title={f.startsWith('Yahoo') ? 'Dato de Yahoo: solo existe el de hoy (no sirve para probar en el pasado).' : 'De dónde sale el dato'}
@@ -110,7 +114,11 @@ export default function ScreenerPanel({ tema = 'oscuro', inicial = {}, salida = 
   useEffect(() => { try { if (!inicial.empresas && localStorage.getItem('screener.panelOculto') === '1') setPanelOculto(true) } catch (_) {} }, [])
   const ponPanelOculto = (x) => { setPanelOculto(x); try { localStorage.setItem('screener.panelOculto', x ? '1' : '0') } catch (_) {} }
   const [iv, setIv] = useState(inicial.iv || 0)
-  const [piso, setPiso] = useState(inicial.piso || 'F')
+  const [piso, setPiso] = useState(inicial.piso || 'F')   // pestaña de los filtros: 'U' (universo y sectores), 'F', 'T' o 'todos'
+  const [otra, setOtra] = useState({})   // { id: true } = la caja de «Otra cifra…» abierta (es de la pantalla: no se guarda)
+  const [editaNombre, setEditaNombre] = useState(false)   // cambiando el nombre de la vista (✎ o doble clic en su pestaña)
+  const nombreRef = useRef(null)
+  useEffect(() => { if (editaNombre) { nombreRef.current?.focus?.(); nombreRef.current?.select?.() } }, [editaNombre])
   const [busca, setBusca] = useState(inicial.busca || '')
   const [verNo, setVerNo] = useState(!!inicial.verNo)
   const [orden, setOrden] = useState(inicial.orden || { col: null, dir: 1 })
@@ -151,6 +159,7 @@ export default function ScreenerPanel({ tema = 'oscuro', inicial = {}, salida = 
   }, [abrirVista?.n, vistasLeidas])
 
   const actual = vistas[Math.min(iv, vistas.length - 1)]
+  useEffect(() => { setOtra({}); setEditaNombre(false) }, [iv, vistas.length])
   const conCambios = conCambiosDe(actual)
   // Guardia al salir de la pantalla con cambios (como en Tesis).
   const conCambiosRef = useRef(conCambios); conCambiosRef.current = conCambios
@@ -307,159 +316,214 @@ export default function ScreenerPanel({ tema = 'oscuro', inicial = {}, salida = 
   const caja = { fontFamily: B.letra, fontSize: 13, background: B.caja, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: 6, padding: '3px 6px' }
   const etiqueta = { fontFamily: B.letra, fontSize: 13, color: B.texto, textTransform: 'none', letterSpacing: 0, fontWeight: 400, flexDirection: 'row' }   // la app pone a todo «label» columna y letra mono
   const cel = { padding: '5px 8px', borderBottom: `1px solid ${B.borde}`, whiteSpace: 'nowrap', textAlign: 'right' }
+  const celdaRejilla = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 148px 30px', alignItems: 'center', gap: 6, minHeight: 28 }
+  const encendido = { borderColor: B.selBorde, background: B.sel, color: B.titulo, fontWeight: 600 }
+  // §15: lo de los filtros arriba (la rejilla como Finviz, decidida por Sergi el 11/11 con el boceto bocetos/screener-arriba.html).
+  const pestana = { fontFamily: B.letra, fontSize: 13, padding: '5px 12px', borderRadius: '7px 7px 0 0', border: `1px solid ${B.borde}`, borderBottom: 'none', background: B.tarjeta, cursor: 'pointer', whiteSpace: 'nowrap' }
+  const embudoN = { fontSize: 15, fontWeight: 700, color: B.titulo }
+  const chipResumen = { display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 9px', border: `1px solid ${B.borde}`, borderRadius: 999, background: B.cabecera, color: B.texto }
+  const equis = { cursor: 'pointer', color: B.secundario, marginLeft: 2 }
+  const cuentaPestana = (k) => k === 'U' ? vista.sectoresFuera.length
+    : k === 'todos' ? vista.sectoresFuera.length + encendidos.length : encendidos.filter(f => f.piso === k).length
+  // Elegir en el desplegable de un filtro: «Cualquiera» lo apaga; una cifra fija lo enciende con ella; «Otra cifra…» abre la caja.
+  const eligeOpcion = (f, x) => {
+    const c = vista.filtros[f.id]
+    if (x === 'no') { setOtra(o => ({ ...o, [f.id]: false })); cambiaFiltro(f.id, { on: false }); return }
+    if (x === 'otra') { setOtra(o => ({ ...o, [f.id]: true })); cambiaFiltro(f.id, { on: true, op: c.op, valor: c.valor }); return }
+    if (x === 'tuya') return
+    const o = opcionesDe(f)[Number(x)]; if (!o) return
+    setOtra(oo => ({ ...oo, [f.id]: false })); cambiaFiltro(f.id, { on: true, op: o.op, valor: o.valor })
+  }
+  const desplegable = { ...caja, width: 148, padding: '2px 4px', fontSize: 13 }
+  // El nombre de un filtro: pulsarlo abre su «?» (no se abre al pasar el ratón).
+  const nombreFiltro = (f, on, texto) => f.ayuda
+    ? <AyudaFiltro a={f.ayuda} contenido={texto} soloClic estiloBoton={{ background: 'none', border: 'none', borderBottom: `1px dotted ${B.apagado}`, padding: 0, fontFamily: B.letra, fontSize: 13, lineHeight: 1.15,
+        color: on ? B.titulo : B.secundario, fontWeight: on ? 600 : 400, cursor: 'help', textAlign: 'right' }}/>
+    : <span style={{ color: B.secundario }}>{texto}</span>
+  const celdaFiltro = (f) => {
+    const c = vista.filtros[f.id], on = !!c?.on, n = ev.cuantos[f.id]
+    if (f.proximamente) return (
+      <div key={f.id} data-filtro={f.id} title="Por decidir" style={{ ...celdaRejilla, opacity: 0.4 }}>
+        <span style={{ textAlign: 'right', color: B.secundario, lineHeight: 1.15 }}>{f.nombre}</span>
+        <select data-opcion={f.id} disabled style={desplegable}><option>Cualquiera</option></select><span/></div>)
+    const cuenta = <span data-cuenta={f.id} title={on && n ? `${AYUDAS.cuenta[1]} Ejemplo: ${AYUDAS.cuenta[2]}` : undefined} style={{ textAlign: 'right', color: ROJO, fontSize: 12, fontWeight: 700 }}>{on && n ? '−' + n : ''}</span>
+    if (f.conEstrategia) return [
+      <div key={f.id} data-filtro={f.id} style={celdaRejilla}>
+        <span style={{ textAlign: 'right' }}>{nombreFiltro(f, on, 'Da señal de compra con')}</span>
+        {estSenales.length
+          ? <select data-estrategia-senal value={on && c.estrategia != null ? String(c.estrategia) : ''} title={estSenal ? estSenal.name : undefined}
+              onChange={e => cambiaFiltro(f.id, e.target.value === '' ? { on: false } : { on: true, estrategia: e.target.value })} style={{ ...desplegable, ...(on ? encendido : {}) }}>
+              <option value="">Cualquiera</option>
+              {estSenales.map(x => <option key={x.id} value={String(x.id)}>{x.name}</option>)}
+            </select>
+          : <span style={S.apagado} title="No tienes estrategias de tarjetas de velas diarias">(sin estrategias)</span>}
+        {cuenta}
+      </div>,
+      <div key={f.id + '-velas'} data-filtro={f.id + '-velas'} style={{ ...celdaRejilla, opacity: on ? 1 : 0.6 }}>
+        <span style={{ textAlign: 'right', color: on ? B.titulo : B.secundario }}>… en las últimas</span>
+        <select data-velas-senal value={opcionElegida(f, { ...c, on: true }) >= 0 ? String(opcionElegida(f, { ...c, on: true })) : 'tuya'} disabled={!on}
+          onChange={e => { const o = opcionesDe(f)[Number(e.target.value)]; if (o) cambiaFiltro(f.id, { valor: o.valor }) }} style={desplegable}>
+          {opcionesDe(f).map((o, k) => <option key={k} value={String(k)}>{o.texto}</option>)}
+          {opcionElegida(f, { ...c, on: true }) < 0 && <option value="tuya">{textoCondicion(f, f.op, c.valor)}</option>}
+        </select>
+        <span/>
+      </div>]
+    const i = opcionElegida(f, c), abierta = on && !!otra[f.id]
+    const valor = !on ? 'no' : abierta ? 'otra' : i >= 0 ? String(i) : 'tuya'
+    return (
+      <div key={f.id} data-filtro={f.id} style={celdaRejilla}>
+        <span style={{ textAlign: 'right', lineHeight: 1.15 }}>{nombreFiltro(f, on, f.nombre)}{f.fuente?.startsWith('Yahoo') && <Fuente f={f.fuente}/>}</span>
+        <select data-opcion={f.id} value={valor} onChange={e => eligeOpcion(f, e.target.value)} style={{ ...desplegable, ...(on ? encendido : {}) }}>
+          <option value="no">Cualquiera</option>
+          {opcionesDe(f).map((o, k) => <option key={k} value={String(k)}>{o.texto}</option>)}
+          {on && i < 0 && <option value="tuya">{textoCondicion(f, c.op, c.valor)} (tuya)</option>}
+          <option value="otra">Otra cifra…</option>
+        </select>
+        {cuenta}
+        {abierta && <span style={{ gridColumn: '2 / 4', display: 'flex', gap: 4, alignItems: 'center' }}>
+          <select data-op={f.id} value={c.op} onChange={e => cambiaFiltro(f.id, { op: e.target.value })} style={{ ...caja, padding: '1px 2px', width: 42 }}><option>≥</option><option>≤</option></select>
+          <input data-valor={f.id} type="number" step="any" value={c.valor ?? ''} onChange={e => cambiaFiltro(f.id, { valor: e.target.value === '' ? null : Number(e.target.value) })} style={{ ...caja, width: 70, padding: '1px 5px' }}/>
+          <span style={S.apagado}>{f.unidad}</span>
+        </span>}
+      </div>)
+  }
+  // La rejilla: 5 columnas, todas las casillas iguales, que se rellenan columna a columna en el orden del catálogo (así los de un
+  // mismo grupo quedan juntos).
+  const rejilla = (pisos) => {
+    const celdas = FILTROS.filter(f => pisos.includes(f.piso)).flatMap(f => [].concat(celdaFiltro(f)))
+    const filas = Math.max(1, Math.ceil(celdas.length / 5))
+    return <div data-rejilla style={{ display: 'grid', gridAutoFlow: 'column', gridTemplateRows: `repeat(${filas}, auto)`, gridAutoColumns: 'minmax(0, 1fr)', columnGap: 16, rowGap: 4, padding: '4px 0' }}>{celdas}</div>
+  }
+  const universoYSectores = (
+    <div data-universo-sectores style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', padding: '4px 0 8px' }}>
+      <span style={{ display: 'inline-flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <b style={{ color: B.secundario, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Universo</b>
+        {[['sp500', 'S&P 500'], ['ndx', 'Nasdaq-100'], ['listas', 'Tus listas']].map(([k, t]) => (
+          <label key={k} style={{ ...etiqueta, display: 'inline-flex', gap: 5, alignItems: 'center', cursor: 'pointer' }}>
+            <input type="checkbox" data-universo={k} checked={!!vista.universo[k]} onChange={e => cambia(v => ({ ...v, universo: { ...v.universo, [k]: e.target.checked } }))}/>{t}
+          </label>))}
+      </span>
+      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        <b style={{ color: B.secundario, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sectores que se quitan</b><AyudaFiltro a={AYUDAS.sectores}/>
+        {SECTORES_FUERA_POR_DEFECTO.map(s => { const on = vista.sectoresFuera.includes(s)
+          return <label key={s} data-sector={s} style={{ ...etiqueta, ...S.chip(on ? 'noSupera' : 'neutro'), cursor: 'pointer', fontWeight: 400, opacity: on ? 1 : 0.7 }}>
+            <input type="checkbox" checked={on} style={{ margin: '0 4px 0 0', verticalAlign: 'middle' }}
+              onChange={e => cambia(v => ({ ...v, sectoresFuera: e.target.checked ? [...v.sectoresFuera, s] : v.sectoresFuera.filter(x => x !== s) }))}/>{s}</label> })}
+      </span>
+    </div>)
 
   return (
     <div data-screener data-tema={tema} style={{ ...varsTema(tema), ...S.pagina, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, height: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
       <style>{CSS_TABLA}</style>
-      {/* Pestañas de vistas */}
-      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'flex-end', borderBottom: `1px solid ${B.borde}` }}>
-        {vistas.map((v, i) => (
-          <button key={v.clave} data-pestana-vista={i} onClick={() => { if (i !== iv) conGuardia(() => setIv(i)) }}
-            style={{ ...S.boton, padding: '6px 12px', borderRadius: '8px 8px 0 0', borderBottom: 'none', fontWeight: i === iv ? 700 : 400,
-              background: i === iv ? B.tarjeta : 'transparent', color: i === iv ? B.titulo : B.secundario }}>
+      {/* §15: las vistas en UNA línea: pestañas a la izquierda (la activa con su nombre editable: ✎ o doble clic) y sus botones a la derecha */}
+      <div data-vistas style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'flex-end', borderBottom: `1px solid ${B.borde}` }}>
+        {vistas.map((v, i) => i === iv ? (
+          <span key={v.clave} data-pestana-vista={i} data-activa="" title="Doble clic o ✎ para cambiar el nombre" onDoubleClick={() => setEditaNombre(true)}
+            style={{ ...pestana, display: 'inline-flex', alignItems: 'center', gap: 4, background: B.cabecera, borderColor: B.selBorde, padding: '3px 8px' }}>
+            <input ref={nombreRef} data-nombre-vista value={actual.nombre} readOnly={!editaNombre} maxLength={200} size={Math.max(6, Math.min(40, (actual.nombre || '').length + 1))}
+              title={editaNombre ? 'Nombre de la vista (Enter para terminar)' : 'Doble clic o ✎ para cambiar el nombre'}
+              onChange={e => ponPestana({ nombre: e.target.value })} onBlur={() => setEditaNombre(false)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { setEditaNombre(false); e.currentTarget.blur() } }}
+              style={{ fontFamily: B.letra, fontSize: 13, fontWeight: 700, color: B.titulo, background: editaNombre ? B.caja : 'transparent', border: `1px solid ${editaNombre ? B.selBorde : 'transparent'}`,
+                borderRadius: 4, padding: '1px 3px', cursor: editaNombre ? 'text' : 'default', outline: 'none' }}/>
+            {conCambios && <span data-punto-cambios title="Cambios sin guardar" style={{ color: AMARILLO }}>●</span>}
+            <span data-editar-nombre role="button" title="Cambiar el nombre" onClick={() => setEditaNombre(true)} style={{ color: B.secundario, cursor: 'pointer', fontSize: 12, padding: '0 2px' }}>✎</span>
+          </span>
+        ) : (
+          <button key={v.clave} data-pestana-vista={i} onClick={() => conGuardia(() => setIv(i))} style={{ ...pestana, color: B.secundario }}>
             {nombreLimpio(v.nombre) || 'Vista sin nombre'}{conCambiosDe(v) && <span data-punto-cambios title="Cambios sin guardar" style={{ color: AMARILLO, marginLeft: 5 }}>●</span>}</button>
         ))}
         <span style={{ position: 'relative' }}>
-          <button data-nueva-vista onClick={() => setMenuNueva(x => !x)} style={{ ...S.boton, padding: '6px 12px', borderRadius: '8px 8px 0 0', borderBottom: 'none', background: 'transparent', color: B.enlace }}>+ Nueva vista ▾</button>
+          <button data-nueva-vista onClick={() => setMenuNueva(x => !x)} style={{ ...pestana, background: 'transparent', color: B.enlace }}>+ Nueva vista ▾</button>
           {menuNueva && <div data-menu-nueva style={{ position: 'absolute', top: '100%', left: 0, zIndex: 20, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: 8, padding: 4, minWidth: 200, boxShadow: `0 6px 20px ${B.sombra}` }}>
             {[['cero', 'Desde cero (sin filtros)'], ['copia', 'Copia de esta vista']].map(([k, tx]) => (
               <button key={k} data-nueva={k} onClick={() => nueva(k)} style={{ ...S.enlace, display: 'block', width: '100%', padding: '6px 10px', color: B.texto, fontSize: 13 }}>{tx}</button>))}
           </div>}
         </span>
-      </div>
-
-      {/* La vista: nombre, duplicar, borrar, descartar y guardar */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input data-nombre-vista value={actual.nombre} onChange={e => ponPestana({ nombre: e.target.value })} title="Nombre de la vista (puedes cambiarlo)" maxLength={200}
-          style={{ ...caja, width: 260, fontSize: 14, fontWeight: 700, padding: '5px 8px' }}/>
-        <button data-duplicar onClick={() => nueva('copia')} title="Duplicar esta vista" style={{ ...S.boton, padding: '4px 8px', fontSize: 15 }}>⧉</button>
-        <button data-borrar-vista onClick={() => setPregunta({ tipo: 'borrar' })} title="Borrar esta vista" style={{ ...S.boton, padding: '3px 7px', background: 'transparent' }}><Papelera tamano={17}/></button>
-        {actual.id != null && <TesisEnlace lista={tesisDe(enlacesTesis, 'vista', actual.id)} onAbrir={onAbrirTesis}/>}
-        {avisoVista && <span data-aviso-vista style={{ color: AMARILLO, fontSize: 13 }}>⚠ {avisoVista}</span>}
         <span style={{ flex: 1 }}/>
-        {vistasError && <span data-error-vistas style={{ color: ROJO, fontSize: 13 }}>⚠ {vistasError}</span>}
-        <button data-descartar disabled={!conCambios || guardando} onClick={descarta} style={{ ...S.boton, padding: '5px 12px', opacity: conCambios ? 1 : 0.5, cursor: conCambios ? 'pointer' : 'default' }}>Descartar cambios</button>
-        <button data-guardar disabled={!conCambios || guardando} onClick={guarda} style={{ ...(conCambios ? S.botonVerde : S.botonDesactivado), padding: '5px 14px' }}>{guardando ? 'Guardando…' : 'Guardar'}</button>
-      </div>
-
-      {/* Universo y fechas de los datos */}
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontSize: 13 }}>
-        <span style={S.secundario}>Universo:</span>
-        {[['sp500', 'S&P 500'], ['ndx', 'Nasdaq-100'], ['listas', 'Tus listas']].map(([k, t]) => (
-          <label key={k} style={{ ...etiqueta, display: 'inline-flex', gap: 5, alignItems: 'center', cursor: 'pointer' }}>
-            <input type="checkbox" data-universo={k} checked={!!vista.universo[k]} onChange={e => cambia(v => ({ ...v, universo: { ...v.universo, [k]: e.target.checked } }))}/>{t}
-          </label>))}
-        <span style={S.apagado}>Cuentas de la SEC (EDGAR) del {fechaCorta(fecha)} · el PEG esperado es de Yahoo, solo de hoy</span>
-        <span style={{ flex: 1 }}/>
-        <span data-mercado style={{ display: 'inline-flex', alignItems: 'center' }} title={refs[MERCADO] ? `SPY ${fmt(refs[MERCADO].cierre, 2)} frente a EMA 200 ${fmt(refs[MERCADO].ema200, 2)} (cierre del ${fechaCorta(refs[MERCADO].fecha)})` : undefined}>
-          <span style={S.secundario}>Mercado (SPY):&nbsp;</span>
-          {mercado == null ? <span style={S.apagado}>sin precios</span>
-            : mercado >= 0 ? <span style={{ color: VERDE }}>por encima de su EMA 200 ✓ ({mercado > 0 ? '+' : ''}{fmt(mercado)} %)</span>
-            : <span style={{ color: ROJO }}>por debajo de su EMA 200 ✗ ({fmt(mercado)} %)</span>}
-          <AyudaFiltro a={AYUDAS.mercado}/>
-        </span>
-        <span data-precios style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={S.apagado}>Precios: {fechaPrecios ? `cierre del ${fechaCorta(fechaPrecios)}` : 'sin cargar'}{sinPrecios && fechaPrecios ? ` · ${sinPrecios} sin precios` : ''}</span>
-          {act && !act.fin
-            ? <><span data-progreso style={{ color: B.secundario }}>Actualizando {act.hechos} de {act.total}…</span>
-                <button data-parar onClick={() => { paraRef.current = true }} style={{ ...S.boton, padding: '3px 10px' }}>Parar</button></>
-            : <button data-actualizar onClick={actualizaPrecios} disabled={estado.cargando || !!estado.error} title="Descarga el último cierre de todos los valores (unos 2–3 minutos)" style={{ ...S.boton, padding: '3px 10px' }}>⟳ Actualizar precios</button>}
-          {act?.fin && <span data-act-fin style={{ color: act.fallos.length ? AMARILLO : VERDE }} title={act.fallos.length ? 'Sin precios: ' + act.fallos.join(', ') : undefined}>
-            {act.parado ? `Parado: ${act.hechos} de ${act.total}` : '✓ Hecho'}{act.fallos.length ? ` · ${act.fallos.length} sin precios` : ''}</span>}
-          <AyudaFiltro a={AYUDAS.precios}/>
+        <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', paddingBottom: 4 }}>
+          {avisoVista && <span data-aviso-vista style={{ color: AMARILLO, fontSize: 13 }}>⚠ {avisoVista}</span>}
+          {vistasError && <span data-error-vistas style={{ color: ROJO, fontSize: 13 }}>⚠ {vistasError}</span>}
+          <button data-duplicar onClick={() => nueva('copia')} title="Duplicar esta vista" style={{ ...S.boton, padding: '2px 8px', fontSize: 15 }}>⧉</button>
+          <button data-borrar-vista onClick={() => setPregunta({ tipo: 'borrar' })} title="Borrar esta vista" style={{ ...S.boton, padding: '2px 7px', background: 'transparent' }}><Papelera tamano={16}/></button>
+          {actual.id != null && <TesisEnlace lista={tesisDe(enlacesTesis, 'vista', actual.id)} onAbrir={onAbrirTesis}/>}
+          <button data-guardar-lista disabled={!ev.f2.length} onClick={() => { setHecho(null); setLista({ nombre: nombrePropuesto(nombreLimpio(actual.nombre)), error: null, guardando: false }) }}
+            title="Crea una lista de la Watchlist con los valores que pasan (fija: no cambia sola)" style={{ ...S.boton, padding: '4px 10px', fontSize: 13, opacity: ev.f2.length ? 1 : 0.5 }}>☰ Guardar como lista ({ev.f2.length})</button>
+          <button data-descartar disabled={!conCambios || guardando} onClick={descarta} style={{ ...S.boton, padding: '4px 10px', fontSize: 13, opacity: conCambios ? 1 : 0.5, cursor: conCambios ? 'pointer' : 'default' }}>Descartar cambios</button>
+          <button data-guardar disabled={!conCambios || guardando} onClick={guarda} style={{ ...(conCambios ? S.botonVerde : S.botonDesactivado), padding: '4px 12px', fontSize: 13 }}>{guardando ? 'Guardando…' : 'Guardar'}</button>
         </span>
       </div>
+      {hecho && <div data-lista-hecha style={{ color: VERDE, fontSize: 13 }}>{hecho}</div>}
 
-      {/* Embudo */}
-      <div data-embudo style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        {[
-          [`Universo${ev.quitadosSector ? ` (sin ${ev.quitadosSector} de sectores quitados)` : ''}`, ev.universo.length, false],
-          ['1 · pasan Fundamentales', ev.f1.length, false],
-          ['2 · pasan también Técnico', ev.f2.length, true],
-        ].map(([t, n, fin], i) => (
-          <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-            {i > 0 && <span style={{ color: B.apagado }}>→</span>}
-            <span style={{ ...S.tarjeta, padding: '6px 14px', borderColor: fin ? B.pasoBorde : B.borde, background: fin ? B.pasoFondo : B.tarjeta }}>
-              <div style={{ fontSize: 12, color: B.secundario }}>{t}</div>
-              <div data-embudo-n={i} style={{ fontSize: 20, fontWeight: 700, color: B.titulo }}>{estado.cargando ? '…' : n}</div>
-            </span>
-          </span>))}
-        <span style={{ flex: 1 }}/>
-        <button data-guardar-lista disabled={!ev.f2.length} onClick={() => { setHecho(null); setLista({ nombre: nombrePropuesto(nombreLimpio(actual.nombre)), error: null, guardando: false }) }}
-          title="Crea una lista de la Watchlist con los valores que pasan (fija: no cambia sola)" style={{ ...S.boton, padding: '6px 12px', opacity: ev.f2.length ? 1 : 0.5 }}>☰ Guardar como lista ({ev.f2.length})</button>
-        {hecho && <div data-lista-hecha style={{ flexBasis: '100%', color: VERDE, fontSize: 13 }}>{hecho}</div>}
+      {/* §15: los FILTROS ARRIBA, como Finviz: pestañas, el mercado, los precios, el embudo y «Filtros ▲»; debajo, la rejilla */}
+      <div data-bloque-filtros style={{ ...S.tarjeta, borderRadius: 8, flexShrink: 0, overflow: 'visible' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', padding: '6px 10px', fontSize: 13, borderBottom: panelOculto ? 'none' : `1px solid ${B.borde}` }}>
+          <span style={{ display: 'inline-flex', border: `1px solid ${B.borde}`, borderRadius: 6, overflow: 'hidden' }}>
+            {PESTANAS_FILTROS.map(([k, t], i) => { const on = piso === k && !panelOculto, n = cuentaPestana(k)
+              return <button key={k} data-piso={k} onClick={() => { setPiso(k); ponPanelOculto(false) }}
+                style={{ fontFamily: B.letra, fontSize: 13, padding: '4px 12px', border: 'none', borderLeft: i ? `1px solid ${B.borde}` : 'none', cursor: 'pointer', whiteSpace: 'nowrap',
+                  background: on ? B.sel : 'transparent', color: on ? B.titulo : B.secundario, fontWeight: on ? 700 : 400 }}>
+                {t}{n ? <span data-cuantos-pestana={k} style={{ display: 'inline-block', minWidth: 16, padding: '0 4px', marginLeft: 5, borderRadius: 999, background: B.selBorde, color: '#fff', fontSize: 10, textAlign: 'center' }}>{n}</span> : null}</button> })}
+          </span>
+          <AyudaFiltro a={AYUDA_FILTROS}/>
+          <span style={{ flex: 1 }}/>
+          <span data-mercado style={{ display: 'inline-flex', alignItems: 'center' }} title={refs[MERCADO] ? `Informativo: no es un filtro. SPY ${fmt(refs[MERCADO].cierre, 2)} frente a EMA 200 ${fmt(refs[MERCADO].ema200, 2)} (cierre del ${fechaCorta(refs[MERCADO].fecha)})` : 'Informativo: no es un filtro.'}>
+            <span style={S.secundario}>Mercado (SPY):&nbsp;</span>
+            {mercado == null ? <span style={S.apagado}>sin precios</span>
+              : mercado >= 0 ? <span style={{ color: VERDE }}>por encima de su EMA 200 ✓ ({mercado > 0 ? '+' : ''}{fmt(mercado)} %)</span>
+              : <span style={{ color: ROJO }}>por debajo de su EMA 200 ✗ ({fmt(mercado)} %)</span>}
+            <AyudaFiltro a={AYUDAS.mercado}/>
+          </span>
+          <span data-precios style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={S.apagado}>Precios: {fechaPrecios ? `cierre del ${fechaCorta(fechaPrecios)}` : 'sin cargar'}{sinPrecios && fechaPrecios ? ` · ${sinPrecios} sin precios` : ''}</span>
+            {act && !act.fin
+              ? <><span data-progreso style={{ color: B.secundario }}>Actualizando {act.hechos} de {act.total}…</span>
+                  <button data-parar onClick={() => { paraRef.current = true }} style={{ ...S.boton, padding: '2px 10px', fontSize: 13 }}>Parar</button></>
+              : <button data-actualizar onClick={actualizaPrecios} disabled={estado.cargando || !!estado.error} title="Descarga el último cierre de todos los valores (unos 2–3 minutos)" style={{ ...S.boton, padding: '2px 10px', fontSize: 13 }}>⟳ Actualizar precios</button>}
+            {act?.fin && <span data-act-fin style={{ color: act.fallos.length ? AMARILLO : VERDE }} title={act.fallos.length ? 'Sin precios: ' + act.fallos.join(', ') : undefined}>
+              {act.parado ? `Parado: ${act.hechos} de ${act.total}` : '✓ Hecho'}{act.fallos.length ? ` · ${act.fallos.length} sin precios` : ''}</span>}
+            <AyudaFiltro a={AYUDAS.precios}/>
+          </span>
+          <span data-embudo style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, whiteSpace: 'nowrap', color: B.secundario }}>
+            <span title={`El universo elegido${ev.quitadosSector ? `, sin ${ev.quitadosSector} de los sectores quitados` : ''}`}>Universo</span>
+            <b data-embudo-n="0" style={embudoN}>{estado.cargando ? '…' : ev.universo.length}</b>
+            <span>→ 1 · Fundamentales</span><b data-embudo-n="1" style={embudoN}>{estado.cargando ? '…' : ev.f1.length}</b>
+            <span>→ 2 · Técnico</span><b data-embudo-n="2" style={{ ...embudoN, color: VERDE }}>{estado.cargando ? '…' : ev.f2.length}</b>
+          </span>
+          {panelOculto
+            ? <button data-mostrar-panel onClick={() => ponPanelOculto(false)} title="Enseñar los filtros" style={{ ...S.boton, padding: '2px 10px', fontSize: 13 }}>Filtros ▼</button>
+            : <button data-ocultar-panel onClick={() => ponPanelOculto(true)} title="Ocultar los filtros (queda una línea con los encendidos y la tabla sube)" style={{ ...S.boton, padding: '2px 10px', fontSize: 13 }}>Filtros ▲</button>}
+        </div>
+        {panelOculto ? (
+          <div data-resumen-filtros style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '0 10px 8px', fontSize: 13 }}>
+            {vista.sectoresFuera.length > 0 && <span style={chipResumen}>Sin {vista.sectoresFuera.length} sector{vista.sectoresFuera.length === 1 ? '' : 'es'}
+              <span data-quitar="sectores" title="Volver a poner todos los sectores" onClick={() => cambia(v => ({ ...v, sectoresFuera: [] }))} style={equis}>✕</span></span>}
+            {encendidos.map(f => { const c = vista.filtros[f.id], n = ev.cuantos[f.id]
+              return <span key={f.id} data-encendido={f.id} style={chipResumen}>{f.columna || f.nombre} {f.conEstrategia ? `(${estSenal ? estSenal.name : 'sin estrategia'}) en ${textoEncendido(f, c)}` : textoEncendido(f, c)}
+                {n ? <b style={{ color: ROJO, fontWeight: 400 }}> −{n}</b> : null}
+                <span data-quitar={f.id} title="Quitar este filtro" onClick={() => cambiaFiltro(f.id, { on: false })} style={equis}>✕</span></span> })}
+            {!encendidos.length && !vista.sectoresFuera.length && <span style={S.apagado}>Ningún filtro encendido</span>}
+          </div>
+        ) : (
+          <div data-panel-filtros style={{ padding: '6px 10px 10px', fontSize: 13 }}>
+            {(piso === 'U' || piso === 'todos') && universoYSectores}
+            {piso !== 'U' && rejilla(piso === 'todos' ? ['F', 'T'] : [piso])}
+            {(piso === 'T' || piso === 'todos') && <div style={{ ...S.apagado, marginTop: 6 }}>Con velas diarias, cierre del {fechaCorta(fechaPrecios)} (piso Técnico). Un valor sin precios no pasa un filtro encendido.</div>}
+            {(piso === 'T' || piso === 'todos') && conSenal?.on && <div style={{ ...S.apagado, marginTop: 4 }}>
+              {conSenal.estrategia != null && !estSenal && estSenales.length > 0 && <span data-senal-sin style={{ color: AMARILLO }}>⚠ La estrategia de «Da señal de compra» ya no está (o es de velas semanales): elige otra. </span>}
+              {conSenal.estrategia == null && estSenales.length > 0 && <span data-senal-elige>«Da señal de compra»: sin estrategia elegida, el filtro no quita nada. </span>}
+              {estSenal && <span data-senal-estado>
+                {calcSenal && calcSenal.clave === clave ? `Calculando ${calcSenal.hechos} de ${calcSenal.total}…`
+                  : mapaVals.length ? `Calculado para ${mapaVals.length}${ultimaSenal ? ` · última vela del ${fechaCorta(ultimaSenal)}` : ''}${sinCalcularSenal ? ` · ${sinCalcularSenal} sin calcular` : ''}` : ''}</span>}
+            </div>}
+          </div>
+        )}
       </div>
 
       {estado.error && <div style={{ color: ROJO }}>⚠ {estado.error}</div>}
 
-      <div style={{ display: 'flex', gap: 12, flex: 1, minHeight: 0 }}>
-        {/* Panel de filtros (se puede ocultar; se recuerda en el navegador) */}
-        {panelOculto ? (
-          <button data-mostrar-panel onClick={() => ponPanelOculto(false)} title="Mostrar los filtros"
-            style={{ ...S.boton, padding: '8px 6px', writingMode: 'vertical-rl', fontSize: 13, flexShrink: 0 }}>▶ Filtros</button>
-        ) : (
-        <div data-panel-filtros style={{ ...S.tarjeta, width: 440, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <div style={{ display: 'flex', borderBottom: `1px solid ${B.borde}` }}>
-            <button data-ocultar-panel onClick={() => ponPanelOculto(true)} title="Ocultar los filtros (la tabla usa todo el ancho)"
-              style={{ padding: '8px 10px', border: 'none', borderRight: `1px solid ${B.borde}`, cursor: 'pointer', background: 'transparent', color: B.secundario, fontFamily: B.letra, fontSize: 13 }}>◀</button>
-            {[['F', '1 · Fundamentales'], ['T', '2 · Técnico']].map(([p, t]) => (
-              <button key={p} data-piso={p} onClick={() => setPiso(p)}
-                style={{ flex: 1, padding: '8px 0', border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: 13, fontWeight: piso === p ? 700 : 400,
-                  background: piso === p ? B.cabecera : 'transparent', color: piso === p ? B.titulo : B.secundario, borderBottom: piso === p ? `2px solid ${B.enlace}` : '2px solid transparent' }}>{t}</button>))}
-          </div>
-          <div style={{ overflowY: 'auto', padding: '6px 12px 12px', fontSize: 13 }}>
-            {piso === 'F' && <>
-              <div style={grupoEst}>Sectores que se quitan<AyudaFiltro a={AYUDAS.sectores}/></div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {SECTORES_FUERA_POR_DEFECTO.map(s => { const on = vista.sectoresFuera.includes(s)
-                  return <label key={s} data-sector={s} style={{ ...etiqueta, ...S.chip(on ? 'noSupera' : 'neutro'), cursor: 'pointer', fontWeight: 400, opacity: on ? 1 : 0.7 }}>
-                    <input type="checkbox" checked={on} style={{ margin: '0 4px 0 0', verticalAlign: 'middle' }}
-                      onChange={e => cambia(v => ({ ...v, sectoresFuera: e.target.checked ? [...v.sectoresFuera, s] : v.sectoresFuera.filter(x => x !== s) }))}/>{s}</label> })}
-              </div>
-            </>}
-            {piso === 'T' && <div style={{ ...S.apagado, margin: '8px 0' }}>Con velas diarias, cierre del {fechaCorta(fechaPrecios)}. Un valor sin precios no pasa un filtro encendido.</div>}
-            {FILTROS.filter(f => f.piso === piso).map((f, i, l) => {
-              const c = vista.filtros[f.id], on = !!c?.on, n = ev.cuantos[f.id]
-              return (
-                <div key={f.id}>
-                  {(i === 0 || l[i - 1].grupo !== f.grupo) && <div style={grupoEst}>{f.grupo}</div>}
-                  <div data-filtro={f.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', opacity: f.proximamente ? 0.45 : on ? 1 : 0.7 }}>
-                    <input type="checkbox" data-on={f.id} checked={on} disabled={!!f.proximamente} onChange={e => cambiaFiltro(f.id, { on: e.target.checked })}/>
-                    <span style={{ flex: 1, minWidth: 0 }}>{f.nombre}{f.fuente && <Fuente f={f.fuente}/>}</span>
-                    {f.conEstrategia && <>
-                      <input data-valor={f.id} type="number" min="1" max="20" step="1" value={c.valor ?? ''} title="1 = solo la última vela; como mucho 20" style={{ ...caja, width: 48, flex: '0 0 auto' }}
-                        onChange={e => cambiaFiltro(f.id, { valor: e.target.value === '' ? null : Math.max(1, Math.min(20, Math.round(Number(e.target.value)))) })}/>
-                      <span style={{ ...S.apagado, width: 36 }}>{f.unidad}</span>
-                    </>}
-                    {!f.proximamente && !f.conEstrategia && <>
-                      <select data-op={f.id} value={c.op} onChange={e => cambiaFiltro(f.id, { op: e.target.value })} style={{ ...caja, padding: '2px 2px', width: 42, flex: '0 0 auto' }}>
-                        <option>≥</option><option>≤</option></select>
-                      <input data-valor={f.id} type="number" step="any" value={c.valor ?? ''} style={{ ...caja, width: 62, flex: '0 0 auto' }}
-                        onChange={e => cambiaFiltro(f.id, { valor: e.target.value === '' ? null : Number(e.target.value) })}/>
-                      <span style={{ ...S.apagado, width: 44 }}>{f.unidad}</span>
-                    </>}
-                    {f.ayuda && <AyudaFiltro a={f.ayuda}/>}
-                    <span data-cuenta={f.id} title={on && n ? `${AYUDAS.cuenta[1]} Ejemplo: ${AYUDAS.cuenta[2]}` : undefined} style={{ width: 40, textAlign: 'right', color: ROJO, fontWeight: 700 }}>{on && n ? '−' + n : ''}</span>
-                  </div>
-                  {f.conEstrategia && <div data-senal-estrategia style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 0 4px 22px', flexWrap: 'wrap', opacity: on ? 1 : 0.7 }}>
-                    <span style={S.apagado}>con</span>
-                    {estSenales.length
-                      ? <select data-estrategia-senal value={c.estrategia ?? ''} onChange={e => cambiaFiltro(f.id, { estrategia: e.target.value === '' ? null : e.target.value })} style={{ ...caja, flex: 1, minWidth: 0 }}>
-                          <option value="">Elige una estrategia…</option>
-                          {estSenales.map(x => <option key={x.id} value={String(x.id)}>{x.name}</option>)}
-                        </select>
-                      : <span style={S.apagado}>(no tienes estrategias de tarjetas de velas diarias)</span>}
-                    {on && c.estrategia != null && !estSenal && estSenales.length > 0 && <span data-senal-sin style={{ color: AMARILLO, width: '100%' }}>⚠ Esa estrategia ya no está (o es de velas semanales): elige otra.</span>}
-                    {on && c.estrategia == null && estSenales.length > 0 && <span data-senal-elige style={{ ...S.apagado, width: '100%' }}>Sin estrategia elegida, el filtro no quita nada.</span>}
-                    {on && estSenal && <span data-senal-estado style={{ ...S.apagado, width: '100%' }}>
-                      {calcSenal && calcSenal.clave === clave ? `Calculando ${calcSenal.hechos} de ${calcSenal.total}…`
-                        : mapaVals.length ? `Calculado para ${mapaVals.length}${ultimaSenal ? ` · última vela del ${fechaCorta(ultimaSenal)}` : ''}${sinCalcularSenal ? ` · ${sinCalcularSenal} sin calcular` : ''}` : ''}</span>}
-                  </div>}
-                </div>)
-            })}
-          </div>
-        </div>)}
-
+      {/* Resultados, a todo el ancho */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Resultados */}
         <div style={{ ...S.tarjeta, flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', borderBottom: `1px solid ${B.borde}`, fontSize: 13 }}>
@@ -508,7 +572,7 @@ export default function ScreenerPanel({ tema = 'oscuro', inicial = {}, salida = 
               </table>)}
           </div>
           <div style={{ ...S.apagado, padding: '4px 12px', borderTop: `1px solid ${B.borde}` }}>
-            Importes en millones de la moneda de sus cuentas · * sector aproximado (código SIC) · en <span style={{ color: ROJO }}>rojo</span>, la cifra que no pasa ese filtro (o el crecimiento exigido mayor que el esperado) · pasa el ratón por una cifra para ver de dónde sale
+            Cuentas de la SEC (EDGAR) del {fechaCorta(fecha)} · el PEG esperado es de Yahoo, solo de hoy · importes en millones de la moneda de sus cuentas · * sector aproximado (código SIC) · en <span style={{ color: ROJO }}>rojo</span>, la cifra que no pasa ese filtro (o el crecimiento exigido mayor que el esperado) · pasa el ratón por una cifra para ver de dónde sale
           </div>
         </div>
       </div>
