@@ -11,6 +11,7 @@
 //        Copia diaria si aún no hay de hoy → para la app → postgres-meta → Supabase (los datos se
 //        quedan en Docker) → Docker Desktop (libera la memoria de WSL).
 //   node scripts/lanzador/lanzador.js estado      qué está encendido (JSON)
+//   node scripts/lanzador/lanzador.js meta        solo postgres-meta (lo enciende o lo rehace; §136)
 //
 // Escribe una línea «PASO: …» por paso, y al final «OK: …» o «FALLO: …» (la ventana las enseña).
 
@@ -26,6 +27,25 @@ const DIR_SUPABASE = path.dirname(C.SUPABASE_LOCAL); // %USERPROFILE%\TradingSim
 const SUPABASE_CLI = 'supabase@3.1.0';
 const EXCLUIDOS = 'imgproxy,mailpit,supavisor,vector,logflare,studio,realtime,edge-runtime';
 const CONT_META = 'supabase_meta_TradingSimulator_local';
+// §136: `supabase stop` borra la red de Docker y `supabase start` crea otra con el mismo nombre; el contenedor suelto de
+// postgres-meta sigue apuntando a la vieja y `docker start` falla («network … not found»). Entonces se rehace con esta
+// misma configuración (la de §129 y LEEME_RESTAURAR.txt): no guarda datos, así que rehacerlo no pierde nada.
+const RED_SUPABASE = 'supabase_network_TradingSimulator_local';
+const IMAGEN_META = 'public.ecr.aws/supabase/postgres-meta:v0.100.0';
+const ARGS_META = ['run', '-d', '--name', CONT_META, '--network', RED_SUPABASE, '-p', '127.0.0.1:54325:8080',
+  '-e', 'PG_META_DB_HOST=supabase_db_TradingSimulator_local', '-e', 'PG_META_DB_PORT=5432', '-e', 'PG_META_DB_NAME=postgres',
+  '-e', 'PG_META_DB_USER=postgres', '-e', 'PG_META_DB_PASSWORD=postgres', '-e', 'PG_META_PORT=8080', IMAGEN_META];
+
+// Enciende postgres-meta; si no arranca (o no existe), lo rehace. Devuelve 'ya' | 'encendido' | 'rehecho' o lanza el error.
+function enciendeMeta() {
+  if (C.contenedorEncendido(CONT_META)) return 'ya';
+  const m = C.docker(['start', CONT_META]);
+  if (m.codigo === 0) return 'encendido';
+  C.docker(['rm', '-f', CONT_META]);
+  const n = C.docker(ARGS_META);
+  if (n.codigo !== 0) throw new Error(`no arrancó (${m.error.trim()}) ni se pudo rehacer (${n.error.trim()})`);
+  return 'rehecho';
+}
 const PUERTO_APP = 3000;
 const URL_APP = `http://localhost:${PUERTO_APP}`;
 const DOCKER_DESKTOP = 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe';
@@ -162,12 +182,10 @@ async function arrancar(conNavegador) {
   }
 
   // 3) postgres-meta (lo usan los scripts; la app no lo necesita)
-  if (C.contenedorEncendido(CONT_META)) paso('postgres-meta ya estaba encendido');
-  else {
-    const m = C.docker(['start', CONT_META]);
-    if (m.codigo !== 0) paso(`   · postgres-meta no arrancó (solo lo usan los scripts): ${m.error.trim()}`);
-    else paso('   ✓ postgres-meta encendido');
-  }
+  try {
+    const m = enciendeMeta();
+    paso(m === 'ya' ? 'postgres-meta ya estaba encendido' : m === 'encendido' ? '   ✓ postgres-meta encendido' : '   ✓ postgres-meta rehecho (la red de Supabase era nueva) y encendido');
+  } catch (e) { paso(`   · postgres-meta (solo lo usan los scripts): ${e.message}`); }
 
   // 4) La app
   if (await puertoAbierto(PUERTO_APP)) paso('La app ya estaba encendida');
@@ -242,6 +260,7 @@ async function main() {
   const orden = process.argv[2];
   try {
     if (orden === 'estado') { console.log(JSON.stringify(await estado())); return 0; }
+    if (orden === 'meta') { console.log('OK: postgres-meta ' + enciendeMeta()); return 0; }
     if (orden === 'arrancar') {
       await arrancar(!process.argv.includes('--sin-navegador'));
       console.log(`OK: Trading Simulator está encendido en ${URL_APP}`);
@@ -252,7 +271,7 @@ async function main() {
       console.log('OK: Todo apagado. Tus datos se quedan guardados.');
       return 0;
     }
-    console.error('Uso: node scripts/lanzador/lanzador.js arrancar [--sin-navegador] | parar | estado');
+    console.error('Uso: node scripts/lanzador/lanzador.js arrancar [--sin-navegador] | parar | estado | meta');
     return 2;
   } catch (e) {
     console.log('FALLO: ' + e.message);
