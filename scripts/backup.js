@@ -66,6 +66,7 @@
 const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
+const { sqlLocal, urlSql, cabecerasSql } = require('./sqlDestino')   // §129: SQL a Supabase local si .env.local tiene SUPABASE_SQL_URL
 
 const NL = String.fromCharCode(10)
 const ROJO = '\x1b[31m', VERDE = '\x1b[32m', AMBAR = '\x1b[33m', GRIS = '\x1b[90m', FIN = '\x1b[0m'
@@ -81,6 +82,7 @@ const EXCLUIDAS = CON_CACHE ? {} : {
 // Se lee con CredRead, la misma API que usa la CLI de Supabase para guardarlo. El script de
 // PowerShell va por -Command y no por un fichero: así no hay nada en disco ni siquiera temporal.
 function leeToken() {
+  if (sqlLocal()) return 'local'   // §129: en local no hace falta el token de la nube
   if (process.env.SUPABASE_ACCESS_TOKEN) return process.env.SUPABASE_ACCESS_TOKEN.trim()
   if (process.platform !== 'win32') return null
   const ps = [
@@ -121,6 +123,7 @@ function leeToken() {
 
 // ── Referencia del proyecto ──────────────────────────────────────────────────
 function leeRef() {
+  if (sqlLocal()) return 'local'   // §129
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || (() => {
     try {
       const env = fs.readFileSync(path.join(__dirname, '..', '.env.local'), 'utf8')
@@ -158,9 +161,9 @@ if (!REF) {
 
 // ── Consulta en transacción de SOLO LECTURA ──────────────────────────────────
 async function sql(consulta) {
-  const res = await fetch('https://api.supabase.com/v1/projects/' + REF + '/database/query', {
+  const res = await fetch(urlSql(REF), {
     method: 'POST',
-    headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
+    headers: cabecerasSql(TOKEN),
     body: JSON.stringify({ query: 'BEGIN READ ONLY;' + NL + consulta + NL + 'ROLLBACK;' }),
   })
   const txt = await res.text()

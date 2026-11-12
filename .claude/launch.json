@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["C:/Users/Usuario/Desktop/v50-strategy/node_modules/next/dist/bin/next", "dev", "C:/Users/Usuario/Desktop/v50-strategy"],
       "port": 3000
+    },
+    {
+      "name": "Next.js Start",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:/Users/Usuario/Desktop/v50-strategy/node_modules/next/dist/bin/next", "start", "C:/Users/Usuario/Desktop/v50-strategy"],
+      "port": 3000
     }
   ]
 }

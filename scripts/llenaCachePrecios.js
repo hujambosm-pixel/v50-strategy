@@ -50,11 +50,13 @@
 const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
+const { sqlLocal, urlSql, cabecerasSql } = require('./sqlDestino')   // §129: SQL a Supabase local si .env.local tiene SUPABASE_SQL_URL
 const { preparaEsm, RAIZ } = require('./guardian/cargaEsm')
 const NL = String.fromCharCode(10)
 
 // ── Token y proyecto: copiados de scripts/backup.js ──────────────────────────────────────────────────
 function leeToken() {
+  if (sqlLocal()) return 'local'   // §129: en local no hace falta el token de la nube
   if (process.env.SUPABASE_ACCESS_TOKEN) return process.env.SUPABASE_ACCESS_TOKEN.trim()
   if (process.platform !== 'win32') return null
   const ps = [
@@ -93,6 +95,7 @@ function leeToken() {
   return r.stdout.trim()
 }
 function leeRef() {
+  if (sqlLocal()) return 'local'   // §129
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || (() => {
     try {
       const env = fs.readFileSync(path.join(RAIZ, '.env.local'), 'utf8')
@@ -126,8 +129,8 @@ const USUARIO = 'c006506d-084b-4c2e-a458-70c5caa35d3a'
 // ── Base de datos ───────────────────────────────────────────────────────────────────────────────────
 let TOKEN = null, REF = null   // se leen al ejecutar (no al cargar el módulo: las pruebas lo cargan sin red)
 async function consulta(q) {
-  const res = await fetch('https://api.supabase.com/v1/projects/' + REF + '/database/query', {
-    method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
+  const res = await fetch(urlSql(REF), {
+    method: 'POST', headers: cabecerasSql(TOKEN),
     body: JSON.stringify({ query: q }),
   })
   const txt = await res.text()

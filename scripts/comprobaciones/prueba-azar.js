@@ -165,5 +165,7 @@ const cerca = (a, b, e = 1e-9) => Math.abs(a - b) <= e
   } catch (e) { ok(false, `no se pudieron leer las políticas: ${e.message}`) }
 
   console.log(`${fallos ? '✗' : '✓'} prueba del azar (lib/pruebaAzar.js): ${fallos ? `${fallos} fallos` : 'todo bien'} · ${((Date.now() - t0) / 1000).toFixed(0)} s`)
-  process.exit(fallos ? 1 : 0)
-})().catch(e => { console.error(e); process.exit(1) })
+  // §129: sin process.exit (con Supabase local, Node en Windows se caía al cerrar con la conexión aún abierta: «UV_HANDLE_CLOSING»,
+  // código 127, aunque todo hubiera ido bien). Se deja el código y el proceso termina solo al cerrarse las conexiones.
+  process.exitCode = fallos ? 1 : 0
+})().catch(e => { console.error(e); process.exitCode = 1 })

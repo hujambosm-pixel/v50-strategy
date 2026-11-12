@@ -35,11 +35,13 @@ const os = require('os')
 const path = require('path')
 const crypto = require('crypto')
 const { spawnSync } = require('child_process')
+const { sqlLocal, urlSql, cabecerasSql } = require('./sqlDestino')   // §129: SQL a Supabase local si .env.local tiene SUPABASE_SQL_URL
 const NL = String.fromCharCode(10)
 const RAIZ = path.join(__dirname, '..')
 
 // ── Token y proyecto: copiados de scripts/llenaCachePrecios.js (que a su vez los copia de scripts/backup.js) ──────────
 function leeToken() {
+  if (sqlLocal()) return 'local'   // §129: en local no hace falta el token de la nube
   if (process.env.SUPABASE_ACCESS_TOKEN) return process.env.SUPABASE_ACCESS_TOKEN.trim()
   if (process.platform !== 'win32') return null
   const ps = [
@@ -78,6 +80,7 @@ function leeToken() {
   return r.stdout.trim()
 }
 function leeRef() {
+  if (sqlLocal()) return 'local'   // §129
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || (() => {
     try {
       for (const l of fs.readFileSync(path.join(RAIZ, '.env.local'), 'utf8').split(/\r?\n/)) {
@@ -93,8 +96,8 @@ function leeRef() {
 async function consulta(q) {
   const TOKEN = leeToken(), REF = leeRef()
   if (!TOKEN || !REF) throw new Error('sin sesión con Supabase (token o proyecto)')
-  const res = await fetch('https://api.supabase.com/v1/projects/' + REF + '/database/query', {
-    method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ query: q }),
+  const res = await fetch(urlSql(REF), {
+    method: 'POST', headers: cabecerasSql(TOKEN), body: JSON.stringify({ query: q }),
   })
   const txt = await res.text()
   let datos; try { datos = JSON.parse(txt) } catch (_) { datos = txt }

@@ -14,6 +14,8 @@ const URL_S = env.NEXT_PUBLIC_SUPABASE_URL, ANON = env.NEXT_PUBLIC_SUPABASE_ANON
 const BUCKET = 'tesis-archivos'
 
 async function claveServicio() {
+  // §129: con Supabase local, la clave de servicio local está en .env.local (SUPABASE_SERVICE_ROLE_KEY).
+  if (require('../sqlDestino').sqlLocal()) { if (!env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('falta SUPABASE_SERVICE_ROLE_KEY en .env.local'); return env.SUPABASE_SERVICE_ROLE_KEY }
   const ref = /https?:\/\/([^.]+)\./.exec(URL_S)[1]
   const token = leeToken()
   const r = await fetch(`https://api.supabase.com/v1/projects/${ref}/api-keys?reveal=true`, { headers: { Authorization: `Bearer ${token}` } })
