@@ -72,6 +72,11 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   const pD = planMano(fs, { costes: { comisionPct: 0.1, comisionMinEur: 0, horquillaPct: { QQQ: 0, ETF: 0, SPY: 0 } } })
   dif = K.diferencias([fila(1, 'A', pA), fila(4, 'D', pD)])
   ok(dif.dinero && dif.periodo && !dif.costes && K.avisosComparar(dif).map(x => x.id).join() === 'costes' && K.FILAS_COMPARAR.every(x => K.comparable(x, dif)), 'solo la comisión distinta: un aviso, y todo se compara')
+  { const fI = K.FILAS_COMPARAR.find(x => x.k === 'impuestos'), fT = K.FILAS_COMPARAR.find(x => x.k === 'twr'), fF = K.FILAS_COMPARAR.find(x => x.k === 'final')
+    ok(K.avisoCelda(fI, dif)?.startsWith('⚠ No tienen los mismos impuestos o comisiones') && K.avisoCelda(fT, dif) === null && K.avisoCelda(fF, dif) === null, '§137: solo la comisión distinta: ⚠ con su aviso en impuestos y comisiones; nada en CAGR ni final') }
+  { const t = K.textoRef({ id: 'QQQ', nombre: 'Buy&Hold QQQ' }, planMano(['2016-01-01', '2025-12-31']), { final: 64625.4, twr: 0.17454 }, 0.20537)
+    // A mano: 20,537 − 17,454 = 3,083 → «+3,08».
+    ok(t.includes('20,537 % − 17,454 % = +3,08') && t.includes('64.625 €') && t.includes('10.000 €, sin aportaciones') && t.includes('2016–2025') && !t.includes('cada aportación'), '§137: textoRef: dinero, periodo, final y la resta de puntos que cuadra a mano (20,537 − 17,454 = +3,08)') }
   ok(K.textoDinero(pB) === '10.000 € + 300 €/mes' && K.textoDinero(pA) === '10.000 €, sin aportaciones' && K.textoPeriodo({ periodo: { desde: '2016-01-01', hasta: '2025-12-31' } }) === '2016–2025', 'textos: «10.000 € + 300 €/mes», «10.000 €, sin aportaciones», «2016–2025»')
   ok(K.textoBloque(pA) === 'EMA2 · una acción, TEST · ocioso OCI', `el bloque de la tarjeta (${K.textoBloque(pA)})`)
   ok(K.modoGrafico(null, { dinero: false, periodo: true }) === 'crec' && K.modoGrafico(null, { dinero: true, periodo: true }) === 'eur' && K.modoGrafico('eur', { dinero: false, periodo: true }) === 'eur', 'el gráfico: «Crecimiento de 100 €» por defecto si el dinero o el periodo no coinciden; si no, «Tu dinero en €»')
@@ -105,9 +110,12 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   ok(q('data-comparar').length === 1 && q('data-columna', 'izquierda').length === 0, 'al comparar, se ve la comparación en lugar del plan')
   ok(q('data-tarjeta-plan').map(n => n.getAttribute('data-tarjeta-plan')).join() === '1,2', 'una tarjeta por plan elegido (A y B)')
   ok(q('data-valor', 'final').every(n => n.getAttribute('data-comparable') === 'no' && n.textContent.startsWith('⚠')) && q('data-valor', 'twr').every(n => n.getAttribute('data-comparable') === 'si'), '«Tienes al final» con ⚠ (dinero distinto); el CAGR se compara')
-  ok(q('data-aviso-comparar', 'dinero').length === 1 && q('data-aviso-comparar', 'periodo').length === 0, 'el aviso amarillo: «No meten el mismo dinero»')
+  // §137: sin franja amarilla; el aviso, en el tooltip del ⚠ de cada cifra que toca.
+  ok(q('data-avisos-comparar').length === 0 && q('data-valor', 'final').every(n => (n.getAttribute('title') || '').startsWith('⚠ No meten el mismo dinero («Plan A»')) && q('data-valor', 'twr').every(n => !n.getAttribute('title')) && q('data-valor', 't1').every(n => !n.getAttribute('title')), '§137: sin franja arriba; «No meten el mismo dinero», en el tooltip del ⚠ del final (el CAGR y los tramos, sin ⚠)')
   ok(q('data-mejor', 'si').every(n => ['twr', 'tir', 'caida', 't1', 't2'].includes(n.getAttribute('data-valor'))) && q('data-mejor', 'si').length >= 1, 'la ★, solo en filas que se comparan')
   ok(q('data-ref-fila', 'QQQ').length === 2 && q('data-ref-fila', 'SPY').length === 2 && q('data-puntos', 'QQQ')[0].textContent.startsWith('('), 'QQQ y SPY en cada tarjeta, con los puntos que les saca')
+  { const fq = q('data-ref-fila', 'QQQ')[0], t = fq.getAttribute('title') || ''
+    ok(fq.textContent.startsWith('CAGR Buy&Hold QQQ') && t.includes('MISMO dinero') && t.includes('Su CAGR') && t.includes(q('data-puntos', 'QQQ')[0].textContent.slice(1, -1)), '§137: «CAGR Buy&Hold QQQ», con sus cuentas en el tooltip (y los mismos puntos que se ven)') }
   ok(q('data-prueba-plan', 'sinPrueba').length === 2 && q('data-prueba-plan', 'sinPrueba')[0].textContent === 'Estrategia: sin prueba del paso 2', 'la línea de la prueba del paso 2 de cada plan')
   ok(q('data-modo', 'crec')[0]?.getAttribute('aria-pressed') === 'true' && q('data-linea').length === 4, 'el gráfico: «Crecimiento de 100 €» (dinero distinto), 2 planes + QQQ + SPY')
   ok(q('data-anio').length > 0 && q('data-tabla', 'anios-comparar').length === 1, '«Año a año»')
@@ -127,7 +135,7 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   D.pulsa(q('data-modo', 'eur')[0]); await D.espera(10)
   ok(q('data-linea').length === 2 && q('data-nota-grafico')[0].textContent.startsWith('⚠'), '«Tu dinero en €» con dinero distinto: sin QQQ y con el aviso')
   D.pulsa(q('data-elige-plan', '3')[0]); await D.espera(80)
-  ok(q('data-tarjeta-plan').length === 3 && q('data-aviso-comparar', 'periodo').length === 1 && q('data-valor', 'twr').every(n => n.getAttribute('data-comparable') === 'no'), 'añadir C (otro periodo): 3 tarjetas, aviso del periodo y el CAGR ya no se compara')
+  ok(q('data-tarjeta-plan').length === 3 && (q('data-valor', 'twr')[0].getAttribute('title') || '').startsWith('⚠ No tienen el mismo periodo') && q('data-valor', 'twr').every(n => n.getAttribute('data-comparable') === 'no'), 'añadir C (otro periodo): 3 tarjetas, aviso del periodo y el CAGR ya no se compara')
   const nPedidos = pedidos.length
   D.pulsa(q('data-elige-plan', '3')[0]); await D.espera(20); D.pulsa(q('data-elige-plan', '3')[0]); await D.espera(40)
   ok(pedidos.length === nPedidos, `quitar y volver a poner C no repite el cálculo (${pedidos.length} pedidos)`)
