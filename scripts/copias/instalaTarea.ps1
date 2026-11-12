@@ -1,0 +1,34 @@
+# scripts/copias/instalaTarea.ps1
+#
+# Crea (o rehace) la tarea programada de Windows «TradingSimulator - copia diaria»:
+#   - al iniciar sesión y cada hora,
+#   - lanza copiaDiaria.vbs (sin ventana), que copia la base solo si está encendida y aún no hay copia de hoy.
+# Es del usuario que la instala, sin permisos de administrador. Ver docs/builder.md §130.
+#
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\copias\instalaTarea.ps1           crea o rehace
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\copias\instalaTarea.ps1 -Quitar   la quita
+
+param([switch]$Quitar)
+
+$nombre = 'TradingSimulator - copia diaria'
+$vbs = Join-Path $PSScriptRoot 'copiaDiaria.vbs'
+$usuario = "$env:USERDOMAIN\$env:USERNAME"
+
+if (Get-ScheduledTask -TaskName $nombre -ErrorAction SilentlyContinue) {
+  Unregister-ScheduledTask -TaskName $nombre -Confirm:$false
+}
+if ($Quitar) { Write-Output "Tarea quitada: $nombre"; exit 0 }
+
+$accion = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument "`"$vbs`"" -WorkingDirectory $PSScriptRoot
+$alEntrar = New-ScheduledTaskTrigger -AtLogOn -User $usuario
+$alEntrar.Delay = 'PT5M'   # 5 minutos tras iniciar sesión: que Docker tenga tiempo de arrancar
+$cadaHora = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Hours 1)
+$ajustes = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+  -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -MultipleInstances IgnoreNew
+$quien = New-ScheduledTaskPrincipal -UserId $usuario -LogonType Interactive -RunLevel Limited
+
+Register-ScheduledTask -TaskName $nombre -Action $accion -Trigger @($alEntrar, $cadaHora) -Settings $ajustes -Principal $quien `
+  -Description 'Copia diaria de la base local de Trading Simulator (scripts/copias/copiaDiaria.js). Solo copia si la base esta encendida y aun no hay copia de hoy.' | Out-Null
+
+$t = Get-ScheduledTask -TaskName $nombre
+Write-Output "Tarea creada: $nombre ($($t.State)); proxima: $((Get-ScheduledTaskInfo -TaskName $nombre).NextRunTime)"
