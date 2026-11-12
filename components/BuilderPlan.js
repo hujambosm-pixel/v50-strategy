@@ -264,7 +264,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // §128: «Comparar planes». comparando: se ve la comparación en lugar del plan abierto (que sigue con sus cambios). Lo elegido, recordado
   // en este navegador (CLAVE_COMPARAR); el modo del gráfico (null = el de por defecto), solo en esta visita. resComp: { id: estado de su cálculo }.
   const [comparando, setComparando] = useState(!!inicial?.comparando)
-  const [comp, setComp] = useState(() => ({ elegidos: inicial?.compararElegidos || null, refs: REFS_COMPARAR.map(r => r.id), log: true, modo: null }))
+  const [comp, setComp] = useState(() => ({ elegidos: inicial?.compararElegidos || null, refs: REFS_COMPARAR.map(r => r.id), log: true, modo: null, plegado: !!inicial?.compararPlegado }))
   const [resComp, setResComp] = useState(inicial?.resComp || {})
   // §80: «Una lista». Lo que se guarda va en a.lista (lib/planes/lista.js); esto es solo de la vista (buscar, ★, la lista de la Watchlist, qué está desplegado).
   const [vistaLista, setVistaLista] = useState({ busca: '', favs: false, lista: '', seccion: { mode: true, strats: false }, mercado: false, activo: false, universoDatos: {} })
@@ -546,10 +546,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     if (!comparando || !planes) return
     let g = null
     if (!compLeido.current) { compLeido.current = true; if (!inicial?.compararElegidos) try { g = JSON.parse(window.localStorage.getItem(CLAVE_COMPARAR)) } catch (_) {} }
-    setComp(c => ({ ...c, ...(g && Array.isArray(g.refs) ? { refs: g.refs.filter(id => REFS_COMPARAR.some(r => r.id === id)) } : {}), ...(g && typeof g.log === 'boolean' ? { log: g.log } : {}),
+    setComp(c => ({ ...c, ...(g && Array.isArray(g.refs) ? { refs: g.refs.filter(id => REFS_COMPARAR.some(r => r.id === id)) } : {}), ...(g && typeof g.log === 'boolean' ? { log: g.log } : {}), ...(g && typeof g.plegado === 'boolean' ? { plegado: g.plegado } : {}),
       elegidos: elegidosIniciales(planes, c.elegidos || g?.elegidos, idsDe(orden || [])) }))
   }, [comparando, planes])
-  useEffect(() => { if (!comp.elegidos || inicial?.compararElegidos) return; try { window.localStorage.setItem(CLAVE_COMPARAR, JSON.stringify({ elegidos: comp.elegidos, refs: comp.refs, log: comp.log })) } catch (_) {} }, [comp.elegidos, comp.refs, comp.log])
+  useEffect(() => { if (!comp.elegidos || inicial?.compararElegidos) return; try { window.localStorage.setItem(CLAVE_COMPARAR, JSON.stringify({ elegidos: comp.elegidos, refs: comp.refs, log: comp.log, plegado: comp.plegado })) } catch (_) {} }, [comp.elegidos, comp.refs, comp.log, comp.plegado])
   // Lo que se pide de cada plan: el plan guardado; con una lista, como su pestaña (planListaCalculable y la petición de «La cartera por
   // dentro», que solo sabe calcular con la estrategia de AHORA: si su regla ha cambiado, se dice por qué no se calcula).
   const peticionComparar = (f) => {
@@ -844,10 +844,12 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
 
   return (
     <div ref={pagina} className="bp-pagina" style={{ ...S.pagina, '--bp-arriba': arriba != null ? `${arriba}px` : undefined }} data-pantalla="plan">
-      <CabeceraPasos actual={3} estrategia={estBorrada ? `${estrategia?.name} ${ETIQUETA_BORRADA}` : estrategia?.name || null} desactivados={estBorrada ? { 1: AVISO_BORRADA, 2: AVISO_BORRADA } : {}} onVolver={(donde) => pide({ tipo: 'volver', donde })} hechos={{ 1: !!estrategia, 2: !!estado && estado.clave !== 'sinPrueba' }}
-        onPaso={(n) => { if (n === 1) pide({ tipo: 'paso1' }); else if (n === 2) pide({ tipo: 'paso2' }) }}/>
-      {pestanasPlanes}
-      {comparando ? <ComparaPlanes planes={planes || []} elegidos={comp.elegidos || []} refs={comp.refs} resultados={resComp} prueba={pruebaComp} log={comp.log} modo={comp.modo} tema={tema}
+      {/* §135: al comparar, sin la cabecera de pasos (es de la estrategia) ni las pestañas de planes (se eligen con los círculos). */}
+      {!comparando && <CabeceraPasos actual={3} estrategia={estBorrada ? `${estrategia?.name} ${ETIQUETA_BORRADA}` : estrategia?.name || null} desactivados={estBorrada ? { 1: AVISO_BORRADA, 2: AVISO_BORRADA } : {}} onVolver={(donde) => pide({ tipo: 'volver', donde })} hechos={{ 1: !!estrategia, 2: !!estado && estado.clave !== 'sinPrueba' }}
+        onPaso={(n) => { if (n === 1) pide({ tipo: 'paso1' }); else if (n === 2) pide({ tipo: 'paso2' }) }}/>}
+      {comparando ? falloPlanes && <div data-fallo-planes style={{ color: ROJO, marginBottom: 10 }}>✕ {falloPlanes}</div> : pestanasPlanes}
+      {comparando ? <ComparaPlanes planes={planes || []} elegidos={comp.elegidos || []} refs={comp.refs} resultados={resComp} prueba={pruebaComp} log={comp.log} modo={comp.modo} plegado={comp.plegado} tema={tema}
+        onPlegar={x => setComp(c => ({ ...c, plegado: x }))}
         onElegir={id => setComp(c => ({ ...c, elegidos: alterna(c.elegidos || [], id) }))} onRef={id => setComp(c => ({ ...c, refs: c.refs.includes(id) ? c.refs.filter(x => x !== id) : [...c.refs, id] }))}
         onLog={x => setComp(c => ({ ...c, log: x }))} onModo={x => setComp(c => ({ ...c, modo: x }))} onVolver={() => setComparando(false)}
         onAbrir={id => { const c = claveDe(id); if (c === actual) setComparando(false); else pide({ tipo: 'anadir', id }) }} onDuplicar={id => pideDuplicar(claveDe(id))}/> : <>

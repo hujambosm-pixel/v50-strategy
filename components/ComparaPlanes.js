@@ -5,6 +5,7 @@
 //   planes: los guardados ([{ id, nombre, plan }]); elegidos: sus ids (hasta 4); refs: los ids de QQQ/SPY marcados.
 //   resultados: { id: { estado: 'calculando' | 'error' | 'motivo' | 'ok', texto?, respuesta?, plan? } }; prueba(id): la línea de la
 //   prueba del paso 2 de su estrategia ({ texto, clave } o null). log / modo (null = el de por defecto) del gráfico.
+//   plegado (§135; boceto bocetos/comparar-planes-v3.html, opción A): las tarjetas, en una línea por plan, y el gráfico más alto (470 px en vez de 330).
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { B, S, varsTema, CSS_TABLA } from '../lib/screener/colores'
 import Ayuda from './BuilderAyuda'
@@ -45,9 +46,9 @@ function Ficha({ on, color, texto, onClick, titulo, data }) {
     <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: color, display: 'inline-block', opacity: on ? 1 : 0.5 }}/>{on ? '☑' : '☐'} {texto}</button>
 }
 
-function Grafico({ lineas, log }) {
+function Grafico({ lineas, log, alto = 330 }) {
   const [ref, W] = useAncho(900)
-  const IZQ = 76, DER = 120, H = 330, ARR = 14, ABA = 26
+  const IZQ = 76, DER = 120, H = alto, ARR = 14, ABA = 26
   const t = (f) => Date.parse(f)
   const todos = lineas.flatMap(l => l.v.filter(x => Number.isFinite(x) && x > 0))
   const fechas = lineas.flatMap(l => [l.fechas[0], l.fechas[l.fechas.length - 1]]).filter(Boolean)
@@ -73,8 +74,8 @@ function Grafico({ lineas, log }) {
   )
 }
 
-export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], resultados = {}, prueba = () => null, log = true, modo = null, tema = 'oscuro',
-  onElegir, onRef, onLog, onModo, onAbrir, onDuplicar, onVolver }) {
+export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], resultados = {}, prueba = () => null, log = true, modo = null, plegado = false, tema = 'oscuro',
+  onElegir, onPlegar, onRef, onLog, onModo, onAbrir, onDuplicar, onVolver }) {
   const col = COLORES[tema === 'claro' ? 'claro' : 'oscuro']
   const elegidas = useMemo(() => elegidos.map(id => planes.find(p => Number(p.id) === Number(id))).filter(Boolean), [planes, elegidos])
   const colorDe = (id) => col.p[Math.max(0, planes.findIndex(p => Number(p.id) === Number(id))) % col.p.length]
@@ -91,6 +92,34 @@ export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], r
   const { lineas, refsFuera } = lineasGrafico(calculados, { modo: m, dif, refs: refsVis })
   const tabla = tablaAnios(calculados, refsVis)
   const avisos = avisosComparar(dif)
+
+  // §135: plegado, una línea por plan con lo esencial (las mismas cifras, ⚠ y ★ que su tarjeta).
+  const ESENCIAL = ['final', 'twr', 'caida'].map(k => FILAS_COMPARAR.find(f => f.k === k))
+  const resumen = () => (
+    <div data-resumen-planes style={{ ...S.tarjeta, marginBottom: 12, overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <thead><tr><th style={{ ...celda, textAlign: 'left', background: v('cabecera'), color: B.secundario, fontSize: 12 }}>Plan</th>
+        {ESENCIAL.map(f => <th key={f.k} style={{ ...celda, textAlign: 'right', background: v('cabecera'), color: B.secundario, fontSize: 12 }}>{f.t}</th>)}
+        {refsVis.map(rf => <th key={rf.id} title={`Puntos de CAGR que cada plan le saca (verde) o le pierde (rojo) a ${rf.nombre}, con su mismo dinero y periodo`} style={{ ...celda, textAlign: 'right', background: v('cabecera'), color: B.secundario, fontSize: 12 }}>frente a {rf.id}</th>)}
+        <th style={{ ...celda, background: v('cabecera') }}/></tr></thead>
+      <tbody>{elegidas.map(p => {
+        const r = resultados[p.id], cc = porId[p.id], pr = prueba(p.id), distinto = !dif.dinero || !dif.periodo
+        return <tr key={p.id} data-linea-plan={p.id}>
+          <td style={{ ...celda, minWidth: 200 }} title={pr?.texto}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: colorDe(p.id), flex: 'none' }}/>
+            <div style={{ minWidth: 0 }}><div style={{ fontWeight: 700, color: B.titulo, overflowWrap: 'anywhere' }}>{p.nombre}</div>
+              <div style={{ fontSize: 12, color: distinto ? v('amarillo') : B.secundario }}>{textoPeriodo(p.plan)} · {textoDinero(p.plan)}</div></div></div></td>
+          {!cc ? <td colSpan={ESENCIAL.length + refsVis.length} data-estado-plan={r?.estado || 'calculando'} style={{ ...celda, color: r?.estado === 'error' ? v('rojo') : r?.estado === 'motivo' ? B.texto : B.secundario }}>
+            {r?.estado === 'error' ? `✕ No se pudo calcular: ${r.texto}` : r?.estado === 'motivo' ? r.texto : 'Calculando…'}</td>
+          : <>{ESENCIAL.map(f => { const x = cc.c.valores[f.k], comp = comparable(f, dif), hay = Number.isFinite(x), esMej = comp && hay && mej[f.k] != null && x === mej[f.k]
+              return <td key={f.k} data-valor={f.k} data-comparable={comp ? 'si' : 'no'} data-mejor={esMej ? 'si' : undefined} title={!comp && hay ? MOTIVO_NO_COMPARABLE[f.tipo] : undefined}
+                style={{ ...celda, textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: !comp && hay ? B.apagado : colorCifra(f.k, x) || B.texto, fontWeight: esMej ? 700 : 400 }}>
+                {!comp && hay && <span style={{ color: v('amarillo') }}>⚠ </span>}{hay ? valorCifra(f.k, x) : '—'}{esMej && <span style={{ color: v('amarillo') }}> ★</span>}</td> })}
+            {refsVis.map(rf => { const b = cc.c.refs[rf.id]
+              return <td key={rf.id} data-puntos={rf.id} title={b ? `${rf.nombre}: CAGR ${pct(b.twr)} · ${euros(b.final, 0)} al final` : undefined} style={{ ...celda, textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: !b ? B.apagado : cc.c.valores.twr >= b.twr ? v('verde') : v('rojo') }}>{b ? puntosFrente(cc.c.valores.twr, b.twr) : '—'}</td> })}</>}
+          <td style={{ ...celda, whiteSpace: 'nowrap', textAlign: 'right' }}>
+            <button type="button" data-abrir-plan={p.id} title="Abrir este plan en su pestaña" onClick={() => onAbrir?.(p.id)} style={{ ...btn(false), padding: '3px 8px', fontSize: 12, marginRight: 4 }}>Abrir</button>
+            <button type="button" data-duplicar-plan={p.id} title="Duplicar este plan" aria-label="Duplicar este plan" onClick={() => onDuplicar?.(p.id)} style={{ ...btn(false), padding: '3px 8px', fontSize: 12 }}>⧉</button></td>
+        </tr> })}</tbody>
+    </table></div>)
 
   const tarjeta = (p) => {
     const r = resultados[p.id], cc = porId[p.id], pr = prueba(p.id), distinto = !dif.dinero || !dif.periodo
@@ -148,7 +177,11 @@ export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], r
         {avisos.length > 0 && <div data-avisos-comparar style={{ background: col.aviso, borderLeft: `3px solid ${v('amarillo')}`, borderRadius: 6, padding: '8px 12px', marginBottom: 12, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {avisos.map(a => <div key={a.id} data-aviso-comparar={a.id}>⚠ <b style={{ color: B.titulo }}>{a.titulo}</b> ({a.detalle}). {a.que}</div>)}
         </div>}
-        <div data-tarjetas style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10, marginBottom: 12 }}>{elegidas.map(tarjeta)}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+          <span style={{ fontWeight: 700, color: B.titulo, fontSize: 14 }}>Cifras de cada plan</span>
+          <button type="button" data-boton="plegar" aria-expanded={!plegado} title={plegado ? 'Ver todas las cifras de cada plan' : 'Dejar cada plan en una línea para que el gráfico tenga más sitio'} onClick={() => onPlegar?.(!plegado)} style={{ ...btn(false), color: v('enlace') }}>{plegado ? 'Mostrar todas las cifras ▼' : 'Ocultar ▲'}</button>
+        </div>
+        {plegado ? resumen() : <div data-tarjetas style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10, marginBottom: 12 }}>{elegidas.map(tarjeta)}</div>}
         <div data-tarjeta="grafico-comparar" style={{ ...S.tarjeta, marginBottom: 12 }}>
           <div style={{ background: v('cabecera'), padding: '8px 14px', fontWeight: 700, color: B.titulo, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>Plan a plan<Ayuda texto={AYUDA_COMPARAR.grafico} etiqueta="Plan a plan"/></span>
@@ -161,7 +194,7 @@ export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], r
             </span>
           </div>
           <div data-nota-grafico style={{ fontSize: 12, color: m === 'eur' && refsFuera ? v('amarillo') : B.secundario, padding: '6px 14px 0' }}>{m === 'crec' ? notaCrecimiento(calculados, dif) : refsFuera || (!dif.dinero || !dif.periodo) ? NOTA_EUROS_FUERA : 'Todos meten el mismo dinero en el mismo periodo: las líneas se comparan.'}</div>
-          <div style={{ padding: '6px 10px' }}>{lineas.length ? <Grafico lineas={lineas} log={log}/> : <div style={{ color: B.secundario, padding: 8 }}>Calculando…</div>}</div>
+          <div style={{ padding: '6px 10px' }}>{lineas.length ? <Grafico lineas={lineas} log={log} alto={plegado ? 470 : 330}/> : <div style={{ color: B.secundario, padding: 8 }}>Calculando…</div>}</div>
         </div>
         <div data-tarjeta="anios-comparar" style={S.tarjeta}>
           <div style={{ background: v('cabecera'), padding: '8px 14px', fontWeight: 700, color: B.titulo, display: 'flex', alignItems: 'center', gap: 2 }}>Año a año · rentabilidad del año<Ayuda texto={AYUDA_COMPARAR.anios} etiqueta="Año a año"/></div>

@@ -3,7 +3,8 @@
 //   1 · Cifras: las de la tarjeta = las de la pestaña (cifrasPlan); «Crecimiento de 100 €» acaba en 100 × (1 + CAGR)^años; con QQQ plano, 100.
 //   2 · Qué se compara: dinero distinto → ⚠ en aportado, final, impuestos y comisiones; periodo distinto → también CAGR, TIR y caída; los tramos, siempre.
 //   3 · La respuesta de /api/plan con el VL de QQQ y SPY (§128) no cambia ninguna cifra de la pestaña.
-//   4 · Montada: tarjetas, avisos, ★, fichas, QQQ/SPY, modos del gráfico, «Volver al plan», «Abrir», y los dos tonos.
+//   4 · Montada: tarjetas, avisos, ★, fichas, QQQ/SPY, modos del gráfico, «Volver al plan», «Abrir», y los dos tonos;
+//       §135: sin cabecera de pasos ni pestañas al comparar, y «Ocultar ▲» (una línea por plan, mismas cifras, gráfico de 470 px).
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://falso.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-de-la-prueba'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
@@ -110,6 +111,17 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   ok(q('data-prueba-plan', 'sinPrueba').length === 2 && q('data-prueba-plan', 'sinPrueba')[0].textContent === 'Estrategia: sin prueba del paso 2', 'la línea de la prueba del paso 2 de cada plan')
   ok(q('data-modo', 'crec')[0]?.getAttribute('aria-pressed') === 'true' && q('data-linea').length === 4, 'el gráfico: «Crecimiento de 100 €» (dinero distinto), 2 planes + QQQ + SPY')
   ok(q('data-anio').length > 0 && q('data-tabla', 'anios-comparar').length === 1, '«Año a año»')
+  // §135: al comparar, sin la cabecera de pasos ni las pestañas de planes; «Ocultar ▲» pliega las tarjetas a una línea y agranda el gráfico.
+  ok(q('data-ruta').length === 0 && q('data-planes').length === 0, '§135: al comparar, sin la cabecera de pasos ni las pestañas de planes')
+  const altoGraf = () => Number(q('data-grafico', 'comparar')[0]?.getAttribute('height'))
+  const finTarjetas = q('data-valor', 'final').map(n => n.textContent).join('|'), cagrTarjetas = q('data-valor', 'twr').map(n => n.textContent).join('|')
+  ok(altoGraf() === 330 && q('data-resumen-planes').length === 0, '§135: de entrada, tarjetas abiertas y gráfico de 330 px')
+  D.pulsa(q('data-boton', 'plegar')[0]); await D.espera(10)
+  ok(q('data-tarjeta-plan').length === 0 && q('data-linea-plan').map(n => n.getAttribute('data-linea-plan')).join() === '1,2' && altoGraf() === 470, '§135: «Ocultar ▲»: una línea por plan y el gráfico de 470 px')
+  ok(q('data-valor', 'final').map(n => n.textContent).join('|') === finTarjetas && q('data-valor', 'twr').map(n => n.textContent).join('|') === cagrTarjetas, '§135: plegado, las mismas cifras (con su ⚠ y su ★) que en las tarjetas')
+  ok(q('data-puntos', 'QQQ').length === 2 && q('data-puntos', 'SPY').length === 2 && q('data-abrir-plan').length === 2 && q('data-boton', 'plegar')[0].textContent.startsWith('Mostrar'), '§135: plegado, puntos frente a QQQ y SPY, «Abrir» y «Mostrar todas las cifras ▼»')
+  D.pulsa(q('data-boton', 'plegar')[0]); await D.espera(10)
+  ok(q('data-tarjeta-plan').length === 2 && q('data-resumen-planes').length === 0 && altoGraf() === 330, '§135: «Mostrar todas las cifras ▼» vuelve a las tarjetas')
   D.pulsa(q('data-elige-ref', 'SPY')[0]); await D.espera(10)
   ok(q('data-ref-fila', 'SPY').length === 0 && q('data-linea').length === 3, 'quitar SPY: fuera de las tarjetas y del gráfico')
   D.pulsa(q('data-modo', 'eur')[0]); await D.espera(10)
@@ -123,6 +135,7 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   ok(q('data-tarjeta-plan').length === 1, 'nunca se queda sin ninguno: quitar A y B deja C')
   D.pulsa(q('data-boton', 'volver-plan')[0]); await D.espera(30)
   ok(q('data-comparar').length === 0 && q('data-columna', 'izquierda').length === 1, '«← Volver al plan»: vuelve el plan abierto')
+  ok(q('data-ruta').length > 0 && q('data-planes').length === 1, '§135: al volver, la cabecera de pasos y las pestañas de planes vuelven')
   const b = q('data-boton', 'comparar')[0]
   ok(b && !b.hasAttribute('disabled'), 'el botón «Comparar planes», activo (3 planes guardados)')
   D.pulsa(b); await D.espera(40)
