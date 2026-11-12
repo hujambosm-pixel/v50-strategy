@@ -1,4 +1,4 @@
-# scripts/copias/instalaTarea.ps1
+﻿# scripts/copias/instalaTarea.ps1
 #
 # Crea (o rehace) la tarea programada de Windows «TradingSimulator - copia diaria»:
 #   - al iniciar sesión y cada hora,
@@ -29,6 +29,18 @@ $quien = New-ScheduledTaskPrincipal -UserId $usuario -LogonType Interactive -Run
 
 Register-ScheduledTask -TaskName $nombre -Action $accion -Trigger @($alEntrar, $cadaHora) -Settings $ajustes -Principal $quien `
   -Description 'Copia diaria de la base local de Trading Simulator (scripts/copias/copiaDiaria.js). Solo copia si la base esta encendida y aun no hay copia de hoy.' | Out-Null
+
+# Acceso directo «Copiar al USB ahora» en la carpeta de las copias (abre la ventana del USB cuando quieras).
+$carpetaCopias = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'TradingSimulator_copias'
+New-Item -ItemType Directory -Force $carpetaCopias | Out-Null
+$wsh = New-Object -ComObject WScript.Shell
+$acceso = $wsh.CreateShortcut((Join-Path $carpetaCopias 'Copiar al USB ahora.lnk'))
+$acceso.TargetPath = 'wscript.exe'
+$acceso.Arguments = '"' + (Join-Path $PSScriptRoot 'avisoUsb.vbs') + '"'
+$acceso.WorkingDirectory = $PSScriptRoot
+$acceso.IconLocation = 'shell32.dll,7'
+$acceso.Description = 'Abre la ventana para guardar la copia de seguridad en el USB'
+$acceso.Save()
 
 $t = Get-ScheduledTask -TaskName $nombre
 Write-Output "Tarea creada: $nombre ($($t.State)); proxima: $((Get-ScheduledTaskInfo -TaskName $nombre).NextRunTime)"

@@ -1,0 +1,85 @@
+CÓMO VOLVER A MONTAR TRADING SIMULATOR EN UN PC NUEVO
+=====================================================
+
+Este USB tiene todo lo necesario, aunque se hayan perdido el PC y GitHub:
+
+  TradingSimulator_copias\
+    AAAA-MM-DD\           copias de los datos (la más nueva es la de fecha más alta)
+      base.dump             toda la base de datos
+      almacenamiento\       archivos subidos a la app (adjuntos de las tesis)
+      config\               .env.local y la configuración de Supabase local (claves)
+      CLAUDE.local.md       la memoria entre sesiones de Claude
+      bocetos\              los bocetos
+      manifiesto.json       filas de cada tabla y huella de cada archivo
+    codigo\repo.bundle    el código de la app con todo su historial
+    LEEME_RESTAURAR.txt   este archivo
+
+OJO: estas copias NO están cifradas. Llevan claves (Groq, Supabase local) y la
+cartera real. No dejes el USB en cualquier sitio.
+
+Lo más fácil: abre una sesión de Claude Code en el PC nuevo, enséñale este
+archivo y pídele que lo monte paso a paso. Estos son los pasos:
+
+
+1. PREPARAR EL PC (una sola vez)
+--------------------------------
+  a) BIOS: activar la virtualización (Intel VT-x / AMD SVM). Sin ella Docker no
+     arranca.
+  b) WSL2: en PowerShell como administrador:  wsl --install   (reiniciar)
+     Limitar su memoria con el archivo %USERPROFILE%\.wslconfig:
+         [wsl2]
+         memory=3GB
+         processors=4
+         swap=2GB
+         [experimental]
+         autoMemoryReclaim=dropCache
+  c) Docker Desktop (winget install Docker.DockerDesktop), abrirlo y aceptar.
+  d) Node.js LTS (winget install OpenJS.NodeJS.LTS) y Git (winget install Git.Git).
+
+
+2. EL CÓDIGO
+------------
+  En una carpeta, por ejemplo el Escritorio:
+      git clone <letra del USB>:\TradingSimulator_copias\codigo\repo.bundle v50-strategy
+      cd v50-strategy
+      git checkout main
+      npm install
+  (Si GitHub sigue funcionando, también vale:
+      git clone https://github.com/hujambosm-pixel/v50-strategy.git )
+
+
+3. SUPABASE LOCAL (la base de datos)
+------------------------------------
+  a) Crear la carpeta %USERPROFILE%\TradingSimulator_local\supabase y copiar en
+     ella config.toml y signing_keys.json de la copia más nueva
+     (AAAA-MM-DD\config\supabase\).
+  b) En %USERPROFILE%\TradingSimulator_local:
+      npx --yes supabase@3.1.0 start -x imgproxy,mailpit,supavisor,vector,logflare,studio,realtime,edge-runtime
+  c) postgres-meta (lo usan los scripts):
+      docker run -d --name supabase_meta_TradingSimulator_local --network supabase_network_TradingSimulator_local -p 127.0.0.1:54325:8080 -e PG_META_DB_HOST=supabase_db_TradingSimulator_local -e PG_META_DB_PORT=5432 -e PG_META_DB_NAME=postgres -e PG_META_DB_USER=postgres -e PG_META_DB_PASSWORD=postgres -e PG_META_PORT=8080 public.ecr.aws/supabase/postgres-meta:v0.100.0
+  d) Copiar AAAA-MM-DD\config\.env.local a la carpeta v50-strategy.
+
+
+4. LOS DATOS
+------------
+  Con Supabase local encendido, recuperar la copia más nueva con el script de
+  restauración del repositorio (scripts/copias/, ver docs/builder.md, apartados
+  «Copias de seguridad»). Hace esto:
+  - recupera de base.dump el esquema public (estructura y datos) y los datos de
+    auth (tu usuario) y storage (filas de los archivos);
+  - vuelve a poner los archivos de almacenamiento\ en el contenedor de storage;
+  - compara las filas de cada tabla con manifiesto.json.
+  Si algo no cuadra, NO usar la app y revisar con Claude.
+
+
+5. ARRANCAR LA APP
+------------------
+      npm run build
+      npx next start
+  y abrir http://localhost:3000 . Entrar con tu correo y contraseña de siempre.
+
+
+6. COPIAS DE NUEVO
+------------------
+      powershell -NoProfile -ExecutionPolicy Bypass -File scripts\copias\instalaTarea.ps1
+  vuelve a programar la copia diaria y el aviso del USB.
