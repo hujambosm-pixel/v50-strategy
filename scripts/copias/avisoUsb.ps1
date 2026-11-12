@@ -1,6 +1,6 @@
 ﻿# scripts/copias/avisoUsb.ps1
 #
-# VENTANA «Copia de seguridad en el USB» (docs/builder.md §131).
+# VENTANA «Copia de seguridad en el USB» (docs/builder.md §131 y §132). Destino libre: USB o carpeta.
 #   -SiToca   solo se abre si toca (15 días desde la última copia en el USB y sin «Recordar mañana»
 #             pendiente). Así la lanza cada hora la tarea programada, tras la copia diaria.
 #   sin nada  se abre siempre (acceso directo «Copiar al USB ahora»).
@@ -36,7 +36,7 @@ function NodoYa([string]$argumentos) {
 # Una sola ventana a la vez (la tarea pasa cada hora).
 $creada = $false
 $mutex = New-Object System.Threading.Mutex($true, 'Local\TradingSimulatorAvisoUsb', [ref]$creada)
-if (-not $creada) { exit 0 }
+if (-not $creada -and -not $Captura) { exit 0 }   # en la comprobación (-Captura) no estorba a la ventana real
 
 try {
   $estado = NodoYa 'estado' | ConvertFrom-Json
@@ -74,15 +74,15 @@ $texto.Location = New-Object System.Drawing.Point(20, 48)
 $texto.Size = New-Object System.Drawing.Size(550, 66)
 $f.Controls.Add($texto)
 
-# Elegir el USB (solo la primera vez).
+# Dónde guardarla: el último destino, los USB conectados u «Otra carpeta…».
 $lblUsb = New-Object System.Windows.Forms.Label
 $lblUsb.Location = New-Object System.Drawing.Point(20, 120)
-$lblUsb.Size = New-Object System.Drawing.Size(150, 24)
-$lblUsb.Text = 'Tu USB de copias:'
+$lblUsb.Size = New-Object System.Drawing.Size(130, 24)
+$lblUsb.Text = 'Dónde guardarla:'
 $f.Controls.Add($lblUsb)
 $combo = New-Object System.Windows.Forms.ComboBox
-$combo.Location = New-Object System.Drawing.Point(170, 117)
-$combo.Size = New-Object System.Drawing.Size(290, 26)
+$combo.Location = New-Object System.Drawing.Point(150, 117)
+$combo.Size = New-Object System.Drawing.Size(310, 26)
 $combo.DropDownStyle = 'DropDownList'
 $f.Controls.Add($combo)
 $btnAct = New-Object System.Windows.Forms.Button
@@ -91,9 +91,15 @@ $btnAct.Size = New-Object System.Drawing.Size(100, 28)
 $btnAct.Text = 'Actualizar'
 $f.Controls.Add($btnAct)
 
+$aviso = New-Object System.Windows.Forms.Label
+$aviso.Location = New-Object System.Drawing.Point(20, 150)
+$aviso.Size = New-Object System.Drawing.Size(550, 40)
+$aviso.ForeColor = [System.Drawing.Color]::FromArgb(161, 98, 7)
+$f.Controls.Add($aviso)
+
 $log = New-Object System.Windows.Forms.TextBox
-$log.Location = New-Object System.Drawing.Point(20, 154)
-$log.Size = New-Object System.Drawing.Size(550, 150)
+$log.Location = New-Object System.Drawing.Point(20, 194)
+$log.Size = New-Object System.Drawing.Size(550, 112)
 $log.Multiline = $true
 $log.ReadOnly = $true
 $log.ScrollBars = 'Vertical'
@@ -115,42 +121,100 @@ $btnLuego.Text = 'Recordar mañana'
 $f.Controls.Add($btnLuego)
 $f.AcceptButton = $btnCopiar
 
-$script:unidades = @()
+$script:opciones = @()     # ruta de cada línea del desplegable ($null = «Otra carpeta…»)
+$script:anterior = -1
+$script:cargando = $false
 $script:hecho = $false
 $script:proceso = $null
 $script:lectura = $null
 
 function Escribe([string]$t) { $log.AppendText($t + "`r`n") }
 
-function CargaUnidades {
-  $combo.Items.Clear()
-  $script:unidades = @(NodoYa 'unidades' | ConvertFrom-Json)
-  foreach ($u in $script:unidades) {
-    $gb = [math]::Round($u.libres / 1GB, 1)
-    [void]$combo.Items.Add("$($u.raiz)  $($u.nombre)  ($gb GB libres)")
+# Ruta como argumento de node: entre comillas y, si acaba en «\», doblada (si no, se come la comilla).
+function Arg([string]$ruta) { if ($ruta.EndsWith('\')) { $ruta = $ruta + '\' }; return "`"$ruta`"" }
+
+function Revisa {
+  $i = $combo.SelectedIndex
+  $aviso.Text = ''
+  if ($i -lt 0 -or $script:opciones[$i] -eq $null) { $btnCopiar.Enabled = $false; return }
+  $r = NodoYa ('revisa ' + (Arg $script:opciones[$i]))
+  if ($r.StartsWith('FALLO: ')) {
+    $aviso.ForeColor = [System.Drawing.Color]::FromArgb(200, 30, 30)
+    $aviso.Text = $r.Substring(7)
+    $btnCopiar.Enabled = $false
+    return
   }
-  if ($combo.Items.Count -gt 0) { $combo.SelectedIndex = 0; $log.Text = '' }
-  else { $log.Text = "No veo ningún USB conectado. Conéctalo y pulsa «Actualizar».`r`n" }
+  $d = $r | ConvertFrom-Json
+  $partes = @()
+  if ($d.mismoDisco) { $partes += '⚠ Está en el mismo disco que el PC: si el disco falla, esta copia se pierde con él. Mejor un USB. No cuenta para el aviso de los 15 días.' }
+  if ($d.oneDrive) { $partes += '⚠ Es una carpeta de OneDrive: la copia (sin cifrar, con claves y tu cartera) se subirá a la nube.' }
+  if ($partes.Count -eq 0) { $partes += "Se guardará en $($d.destino)  ·  $([math]::Round($d.libres / 1GB, 1)) GB libres" ; $aviso.ForeColor = [System.Drawing.Color]::FromArgb(90, 90, 90) }
+  else { $aviso.ForeColor = [System.Drawing.Color]::FromArgb(161, 98, 7) }
+  $aviso.Text = ($partes -join ' ')
+  $btnCopiar.Enabled = $true
 }
 
-$frase = if ($estado.diasDesdeUsb -eq $null) { 'Aún no hay ninguna copia en el USB.' }
-         else { "La última copia en el USB es del $(FechaBonita $estado.ultimaCopiaUsb) (hace $($estado.diasDesdeUsb) días)." }
-$titulo.Text = if ($estado.toca) { 'Toca guardar la copia en el USB' } else { 'Copia en el USB' }
+function CargaDestinos([string]$primero) {
+  $script:cargando = $true
+  $combo.Items.Clear()
+  $script:opciones = @()
+  $vistas = @{}
+  if ($primero) {
+    [void]$combo.Items.Add("$primero")
+    $script:opciones += $primero; $vistas[$primero.TrimEnd('\').ToLower()] = $true
+  }
+  if ($estado.ultimoDestino -and (Test-Path -LiteralPath $estado.ultimoDestino) -and -not $vistas.ContainsKey($estado.ultimoDestino.TrimEnd('\').ToLower())) {
+    [void]$combo.Items.Add("$($estado.ultimoDestino)   (la última vez)")
+    $script:opciones += $estado.ultimoDestino; $vistas[$estado.ultimoDestino.TrimEnd('\').ToLower()] = $true
+  }
+  # (PowerShell 5.1 convierte «[]» en un elemento vacío: se filtra)
+  foreach ($u in @(NodoYa 'unidades' | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_ -and $_.raiz })) {
+    if ($vistas.ContainsKey($u.raiz.TrimEnd('\').ToLower())) { continue }
+    $gb = [math]::Round($u.libres / 1GB, 1)
+    [void]$combo.Items.Add("$($u.raiz)  USB «$($u.nombre)»  ($gb GB libres)")
+    $script:opciones += $u.raiz
+  }
+  [void]$combo.Items.Add('Otra carpeta…')
+  $script:opciones += $null
+  $script:cargando = $false
+  if ($script:opciones.Count -gt 1) { $combo.SelectedIndex = 0 }
+  else {
+    $combo.SelectedIndex = -1
+    $aviso.ForeColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
+    $aviso.Text = 'No veo ningún USB conectado. Conéctalo y pulsa «Actualizar», o elige «Otra carpeta…».'
+    $btnCopiar.Enabled = $false
+  }
+}
+
+$combo.Add_SelectedIndexChanged({
+  if ($script:cargando) { return }
+  $i = $combo.SelectedIndex
+  if ($i -ge 0 -and $script:opciones[$i] -eq $null) {
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = 'Elige la carpeta donde guardar la copia (mejor en un USB o en otro disco)'
+    $dlg.ShowNewFolderButton = $true
+    if ($dlg.ShowDialog($f) -eq 'OK') { CargaDestinos $dlg.SelectedPath }
+    else {
+      $script:cargando = $true; $combo.SelectedIndex = $script:anterior; $script:cargando = $false
+    }
+    return
+  }
+  $script:anterior = $i
+  Revisa
+})
+
+$frase = if ($estado.diasDesdeUsb -eq $null) { 'Aún no hay ninguna copia fuera del PC.' }
+         else { "La última copia fuera del PC es del $(FechaBonita $estado.ultimaCopiaUsb) (hace $($estado.diasDesdeUsb) días)." }
+$titulo.Text = if ($estado.toca) { 'Toca guardar la copia en el USB' } else { 'Copia en el USB o en otra carpeta' }
 if (-not $estado.ultimaDiaria) {
-  $texto.Text = "Todavía no hay ninguna copia diaria en el PC: no hay nada que pasar al USB."
+  $texto.Text = "Todavía no hay ninguna copia diaria en el PC: no hay nada que guardar fuera."
   $btnCopiar.Enabled = $false
-} elseif ($estado.usbElegido) {
-  $nombre = if ($estado.usbNombre) { " «$($estado.usbNombre)»" } else { '' }
-  $texto.Text = "$frase`r`nConecta tu USB de copias$nombre y pulsa «Copiar». Se pasará la copia del PC del $(FechaBonita $estado.ultimaDiaria) y se comprobará que llega entera."
-  $lblUsb.Visible = $false; $combo.Visible = $false; $btnAct.Visible = $false
-  $log.Location = New-Object System.Drawing.Point(20, 120)
-  $log.Size = New-Object System.Drawing.Size(550, 184)
 } else {
-  $texto.Text = "$frase`r`nPrimera vez: conecta el USB que usarás para las copias, elígelo y pulsa «Copiar». Se dejará en él un archivo de marca para no equivocarse nunca de disco."
-  CargaUnidades
+  $texto.Text = "$frase`r`nConecta el USB (o elige otra carpeta) y pulsa «Copiar». Se pasará la copia del PC del $(FechaBonita $estado.ultimaDiaria) y se comprobará que llega entera."
+  CargaDestinos ''
 }
 
-$btnAct.Add_Click({ CargaUnidades })
+$btnAct.Add_Click({ CargaDestinos '' })
 
 $btnLuego.Add_Click({
   if ($script:hecho) { $f.Close(); return }
@@ -168,7 +232,7 @@ $timer.Add_Tick({
       if ($linea.StartsWith('PASO: ')) { Escribe ('· ' + $linea.Substring(6)) }
       elseif ($linea.StartsWith('OK: ')) {
         Escribe ''; Escribe ('✓ ' + $linea.Substring(4))
-        $titulo.Text = '✓ Copia guardada en el USB'
+        $titulo.Text = '✓ Copia guardada'
         $texto.Text = 'Listo. El próximo aviso llegará dentro de 15 días. Guarda el USB en un sitio seguro.'
         $titulo.ForeColor = [System.Drawing.Color]::FromArgb(22, 128, 61)
         $script:hecho = $true
@@ -199,19 +263,13 @@ $timer.Add_Tick({
 })
 
 $btnCopiar.Add_Click({
+  $i = $combo.SelectedIndex
+  if ($i -lt 0 -or $script:opciones[$i] -eq $null) { return }
   $log.Text = ''
   $titulo.ForeColor = [System.Drawing.Color]::Black
-  if (-not $estado.usbElegido) {
-    if ($combo.SelectedIndex -lt 0) { Escribe 'Primero conecta el USB, pulsa «Actualizar» y elígelo.'; return }
-    $u = $script:unidades[$combo.SelectedIndex]
-    $r = NodoYa "marcar `"$($u.raiz.TrimEnd('\'))\\`""
-    Escribe $r
-    if (-not $r.StartsWith('OK')) { return }
-    $estado.usbElegido = $true
-  }
   $btnCopiar.Enabled = $false; $btnLuego.Enabled = $false; $btnAct.Enabled = $false; $combo.Enabled = $false
   $f.UseWaitCursor = $true
-  $script:proceso = Nodo 'copiar'
+  $script:proceso = Nodo ('copiar ' + (Arg $script:opciones[$i]))
   $script:lectura = $script:proceso.StandardOutput.ReadLineAsync()
   $timer.Start()
 })
@@ -243,4 +301,4 @@ if ($Captura -and $PulsaCopiar) {
   $f.Add_Shown({ Captura })
 }
 [void]$f.ShowDialog()
-$mutex.ReleaseMutex()
+if ($creada) { $mutex.ReleaseMutex() }

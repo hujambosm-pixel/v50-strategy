@@ -1,39 +1,38 @@
 // scripts/copias/copiaUsb.js
 //
-// COPIA AL USB, cada 15 días (docs/builder.md §131). La usa la ventana avisoUsb.ps1; también se puede
-// lanzar a mano:
+// COPIA AL USB (o a la carpeta que elijas), cada 15 días (docs/builder.md §131 y §132). La usa la
+// ventana avisoUsb.ps1; también se puede lanzar a mano:
 //
-//   node scripts/copias/copiaUsb.js estado        ¿toca copiar? (una línea JSON)
-//   node scripts/copias/copiaUsb.js unidades      unidades USB conectadas (una línea JSON)
-//   node scripts/copias/copiaUsb.js marcar E:\    marca esa unidad como «el USB de las copias»
-//   node scripts/copias/copiaUsb.js copiar        pasa la última copia diaria al USB marcado y la comprueba
-//   node scripts/copias/copiaUsb.js recordar      no vuelve a avisar hasta mañana
+//   node scripts/copias/copiaUsb.js estado              ¿toca copiar? (una línea JSON)
+//   node scripts/copias/copiaUsb.js unidades            unidades USB conectadas (una línea JSON)
+//   node scripts/copias/copiaUsb.js revisa <carpeta>    dónde iría y qué hay que avisar (JSON)
+//   node scripts/copias/copiaUsb.js copiar <carpeta>    pasa la última copia diaria allí y la comprueba
+//   node scripts/copias/copiaUsb.js recordar            no vuelve a avisar hasta mañana
 //
-// Por qué marcar el USB: para no copiar nunca en un disco equivocado (otro pendrive, una cámara…).
-// La primera vez se elige la unidad y se deja en su raíz el archivo TradingSimulator_USB_COPIAS.json
-// con un identificador; el mismo identificador queda en Documentos\TradingSimulator_copias\_usb.json.
-// Solo se copia en una unidad cuyo archivo de marca tenga ESE identificador.
+// El destino es LIBRE (decisión de Sergi, 12/11): cualquier USB o carpeta; la ventana propone el último.
+// Avisos: una carpeta del MISMO disco físico que el PC no protege si el disco falla, así que no cuenta
+// para el aviso de los 15 días; una de OneDrive sube a la nube datos sin cifrar. Prohibido dentro de la
+// carpeta de las copias diarias y dentro del repositorio (es público).
 //
-// En el USB, carpeta TradingSimulator_copias\:
+// En el destino, carpeta TradingSimulator_copias\ (si la carpeta elegida ya se llama así, esa misma):
 //   AAAA-MM-DD\            copia diaria tal cual (las 6 últimas), comprobada archivo a archivo con el
 //                          sha256 de su manifiesto
 //   codigo\repo.bundle     el repositorio entero con su historial (git bundle; solo se rehace si hay
-//                          commits nuevos): con él y el USB se reconstruye todo aunque falle GitHub
+//                          commits nuevos): con él y la copia se reconstruye todo aunque falle GitHub
 //   LEEME_RESTAURAR.txt    cómo montarlo todo en un PC nuevo
 //   _registro.txt          una línea por copia
 //
-// Prueba sin USB: COPIAS_USB_PRUEBA=<carpeta> hace que esa carpeta salga como una unidad USB más.
+// Pruebas: COPIAS_USB_PRUEBA=<carpeta> hace que esa carpeta salga como una unidad USB más;
+// COPIAS_OTRO_DISCO=1 trata cualquier carpeta como si estuviera en otro disco.
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const C = require('./comun');
 
 const DIAS_ENTRE_COPIAS = 15;
-const GUARDAR_EN_USB = 6;
-const MARCA = 'TradingSimulator_USB_COPIAS.json';
-const CARPETA_USB = 'TradingSimulator_copias';
+const GUARDAR_EN_DESTINO = 6;
+const CARPETA_DESTINO = 'TradingSimulator_copias';
 const ESTADO = path.join(C.RAIZ_COPIAS, '_usb.json');
 
 function leeEstado() {
@@ -50,7 +49,12 @@ function diasEntre(a, b) { // fechas AAAA-MM-DD
 function fb(f) { const [a, m, d] = f.split('-'); return `${d}/${m}/${a}`; } // 2026-11-12 → 12/11/2026
 function manana() { const d = new Date(); d.setDate(d.getDate() + 1); return C.hoyLocal(d); }
 
-// Unidades USB conectadas: { raiz: 'E:\\', nombre, bytes, libres, marcada }
+function powershell(ps) {
+  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { windowsHide: true, encoding: 'utf8' });
+  return (r.stdout || '').trim();
+}
+
+// Unidades USB conectadas: { raiz: 'E:\\', nombre, bytes, libres }
 function unidades() {
   const ps = `Get-Partition | Where-Object { $_.DriveLetter } | ForEach-Object {
   $d = Get-Disk -Number $_.DiskNumber
@@ -59,8 +63,7 @@ function unidades() {
     if ($v -and $v.Size -gt 0) { '{0}|{1}|{2}|{3}|{4}' -f $_.DriveLetter, $v.FileSystemLabel, $v.Size, $v.SizeRemaining, $d.FriendlyName }
   }
 }`;
-  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { windowsHide: true, encoding: 'utf8' });
-  const lista = (r.stdout || '').split(/\r?\n/).filter(Boolean).map((l) => {
+  const lista = powershell(ps).split(/\r?\n/).filter(Boolean).map((l) => {
     const [letra, etiqueta, bytes, libres, aparato] = l.split('|');
     return { raiz: `${letra}:\\`, nombre: etiqueta || aparato || 'USB', bytes: Number(bytes), libres: Number(libres) };
   });
@@ -70,29 +73,34 @@ function unidades() {
     const s = fs.statfsSync(p);
     lista.push({ raiz: p, nombre: 'USB de prueba', bytes: s.blocks * s.bsize, libres: s.bavail * s.bsize });
   }
-  const id = leeEstado().id;
-  for (const u of lista) u.marcada = !!id && leeMarca(u.raiz) === id;
   return lista;
 }
 
-function leeMarca(raiz) {
-  try { return JSON.parse(fs.readFileSync(path.join(raiz, MARCA), 'utf8')).id || null; } catch (_) { return null; }
-}
+const dentro = (hijo, padre) => {
+  const r = path.relative(path.resolve(padre), path.resolve(hijo));
+  return r === '' || (!r.startsWith('..') && !path.isAbsolute(r));
+};
 
-function marcar(raiz) {
-  if (!raiz) throw new Error('falta la unidad');
-  const u = unidades().find((x) => path.resolve(x.raiz) === path.resolve(raiz));
-  if (!u) throw new Error(`${raiz} no es una unidad USB conectada`);
-  const e = leeEstado();
-  if (!e.id) e.id = crypto.randomUUID();
-  fs.writeFileSync(path.join(u.raiz, MARCA), JSON.stringify({
-    id: e.id,
-    marcado: new Date().toISOString(),
-    nota: 'Este disco guarda las copias de seguridad de Trading Simulator. No borres este archivo.',
-  }, null, 2));
-  e.usbNombre = u.nombre;
-  guardaEstado(e);
-  return u;
+// Dónde iría la copia y qué hay que avisar.
+function revisa(elegida) {
+  if (!elegida) throw new Error('Falta elegir el USB o la carpeta');
+  const abs = path.resolve(elegida);
+  const raizUnidad = path.parse(abs).root;
+  if (!fs.existsSync(raizUnidad)) throw new Error(`No encuentro ${raizUnidad}: ¿está conectado?`);
+  if (!fs.existsSync(abs)) throw new Error(`No existe la carpeta ${abs}`);
+  const destino = path.basename(abs).toLowerCase() === CARPETA_DESTINO.toLowerCase() ? abs : path.join(abs, CARPETA_DESTINO);
+  if (dentro(destino, C.RAIZ_COPIAS) || dentro(C.RAIZ_COPIAS, destino)) throw new Error('Esa es la carpeta de las copias diarias del PC: elige otra');
+  if (dentro(destino, C.REPO)) throw new Error('Esa carpeta está dentro del proyecto, que se sube a GitHub (público): elige otra');
+  // ¿Mismo disco físico que el sistema? (otra partición del mismo disco tampoco protege)
+  let mismoDisco = false;
+  const letra = /^[A-Za-z]:\\$/.test(raizUnidad) ? raizUnidad[0].toUpperCase() : null;
+  if (letra && !process.env.COPIAS_OTRO_DISCO) {
+    mismoDisco = powershell(`$s = (Get-Partition -DriveLetter ($env:SystemDrive[0])).DiskNumber; ` +
+      `$d = (Get-Partition -DriveLetter '${letra}' -ErrorAction SilentlyContinue).DiskNumber; ` +
+      `if ($d -ne $null -and $d -eq $s) { 'SI' } else { 'NO' }`) === 'SI';
+  }
+  const s = fs.statfsSync(abs);
+  return { elegida: abs, destino, mismoDisco, oneDrive: /onedrive/i.test(abs), libres: s.bavail * s.bsize };
 }
 
 function estado() {
@@ -109,8 +117,7 @@ function estado() {
     ultimaCopiaUsb: e.ultimaCopiaUsb || null,
     diasDesdeUsb: dias,
     recordarDesde: e.recordarDesde || null,
-    usbElegido: !!e.id,
-    usbNombre: e.usbNombre || null,
+    ultimoDestino: e.ultimoDestino || null,
   };
 }
 
@@ -123,7 +130,7 @@ function recordar() {
 
 function paso(t) { console.log('PASO: ' + t); }
 
-function copiaComprobada(origen, destino, archivos) {
+function copiaArchivos(origen, destino, archivos) {
   for (const a of archivos) {
     const de = path.join(origen, ...a.archivo.split('/'));
     const a2 = path.join(destino, ...a.archivo.split('/'));
@@ -133,12 +140,12 @@ function copiaComprobada(origen, destino, archivos) {
   fs.copyFileSync(path.join(origen, 'manifiesto.json'), path.join(destino, 'manifiesto.json'));
 }
 
-async function verifica(carpeta, archivos) {
+async function verifica(carpeta, archivos, donde) {
   for (const a of archivos) {
     const ruta = path.join(carpeta, ...a.archivo.split('/'));
-    if (!fs.existsSync(ruta)) throw new Error(`falta ${a.archivo} en el USB`);
-    if (fs.statSync(ruta).size !== a.bytes) throw new Error(`${a.archivo} no tiene el tamaño esperado en el USB`);
-    if ((await C.sha256Archivo(ruta)) !== a.sha256) throw new Error(`${a.archivo} no coincide con su huella en el USB`);
+    if (!fs.existsSync(ruta)) throw new Error(`falta ${a.archivo} ${donde}`);
+    if (fs.statSync(ruta).size !== a.bytes) throw new Error(`${a.archivo} no tiene el tamaño esperado ${donde}`);
+    if ((await C.sha256Archivo(ruta)) !== a.sha256) throw new Error(`${a.archivo} no coincide con su huella ${donde}`);
   }
 }
 
@@ -148,14 +155,14 @@ function git(args, opciones = {}) {
 }
 
 // El repositorio entero (todas las ramas y etiquetas) en un solo archivo. Solo si cambió.
-function copiaCodigo(destUsb) {
-  const carpeta = path.join(destUsb, 'codigo');
+function copiaCodigo(dest) {
+  const carpeta = path.join(dest, 'codigo');
   fs.mkdirSync(carpeta, { recursive: true });
   const cabeza = git(['rev-parse', 'HEAD']).salida;
   const anotado = path.join(carpeta, 'commit.txt');
   const bundle = path.join(carpeta, 'repo.bundle');
   if (fs.existsSync(bundle) && fs.existsSync(anotado) && fs.readFileSync(anotado, 'utf8').split(/\r?\n/)[0] === cabeza) {
-    paso('El código del USB ya está al día');
+    paso('El código ya estaba al día');
     return { rehecho: false, cabeza };
   }
   paso('Guardando el código con todo su historial (puede tardar un par de minutos)…');
@@ -173,69 +180,69 @@ function copiaCodigo(destUsb) {
   return { rehecho: true, cabeza };
 }
 
-function anotaUsb(destUsb, linea) { C.anotaRegistro(destUsb, linea); }
-
-async function copiar() {
-  const e = leeEstado();
-  if (!e.id) throw new Error('Aún no has elegido el USB de las copias');
-  const u = unidades().find((x) => x.marcada);
-  if (!u) throw new Error(`No encuentro tu USB de copias${e.usbNombre ? ` («${e.usbNombre}»)` : ''}. Conéctalo y vuelve a pulsar «Copiar».`);
+async function copiar(elegida) {
+  const r0 = revisa(elegida);
+  if (r0.mismoDisco) paso('Ojo: esa carpeta está en el mismo disco que el PC; si el disco falla, se pierde con él. No cuenta para el aviso de los 15 días.');
+  if (r0.oneDrive) paso('Ojo: esa carpeta es de OneDrive: la copia (sin cifrar, con claves) se subirá a la nube.');
   const ultima = C.copiasCompletas(C.DIARIAS)[0];
   if (!ultima) throw new Error('No hay ninguna copia diaria en el PC todavía');
 
   const origen = path.join(C.DIARIAS, ultima);
   const manifiesto = JSON.parse(fs.readFileSync(path.join(origen, 'manifiesto.json'), 'utf8'));
-  const destUsb = path.join(u.raiz, CARPETA_USB);
-  fs.mkdirSync(destUsb, { recursive: true });
+  const dest = r0.destino;
+  fs.mkdirSync(dest, { recursive: true });
 
   // Sitio libre: la copia + el código (si hay que rehacerlo) + margen.
   const bytesCopia = manifiesto.archivos.reduce((a, b) => a + b.bytes, 0);
-  const s = fs.statfsSync(destUsb);
+  const s = fs.statfsSync(dest);
   const libres = s.bavail * s.bsize;
   if (libres < bytesCopia + 600 * 1048576) {
-    throw new Error(`En el USB quedan ${(libres / 1048576).toFixed(0)} MB libres y hacen falta unos ${((bytesCopia / 1048576) + 600).toFixed(0)} MB`);
+    throw new Error(`Allí quedan ${(libres / 1048576).toFixed(0)} MB libres y hacen falta unos ${((bytesCopia / 1048576) + 600).toFixed(0)} MB`);
   }
 
-  // 1) Comprobar la copia del PC antes de pasarla (no se pasa al USB una copia estropeada).
+  // 1) Comprobar la copia del PC antes de pasarla (no se pasa una copia estropeada).
   paso(`Comprobando la copia del ${fb(ultima)} en el PC…`);
-  await verifica(origen, manifiesto.archivos);
+  await verifica(origen, manifiesto.archivos, 'en el PC');
 
-  // 2) Pasarla al USB y comprobarla allí, archivo a archivo.
-  const final = path.join(destUsb, ultima);
-  const yaEstaba = fs.existsSync(path.join(final, 'manifiesto.json'));
-  if (yaEstaba) {
-    paso('Esa copia ya estaba en el USB: la compruebo…');
-    await verifica(final, manifiesto.archivos);
+  // 2) Pasarla y comprobarla allí, archivo a archivo.
+  const final = path.join(dest, ultima);
+  if (fs.existsSync(path.join(final, 'manifiesto.json'))) {
+    paso('Esa copia ya estaba allí: la compruebo…');
+    await verifica(final, manifiesto.archivos, 'en el destino');
   } else {
-    paso(`Copiando al USB (${(bytesCopia / 1048576).toFixed(0)} MB)…`);
+    paso(`Copiando en ${dest} (${(bytesCopia / 1048576).toFixed(0)} MB)…`);
     const enCurso = final + '.enCurso';
     fs.rmSync(enCurso, { recursive: true, force: true });
-    copiaComprobada(origen, enCurso, manifiesto.archivos);
+    copiaArchivos(origen, enCurso, manifiesto.archivos);
     paso('Comprobando que ha llegado entera…');
-    await verifica(enCurso, manifiesto.archivos);
+    await verifica(enCurso, manifiesto.archivos, 'en el destino');
     fs.renameSync(enCurso, final);
   }
 
   // 3) El código y la guía.
-  const cod = copiaCodigo(destUsb);
-  fs.copyFileSync(path.join(__dirname, 'LEEME_RESTAURAR.txt'), path.join(destUsb, 'LEEME_RESTAURAR.txt'));
+  const cod = copiaCodigo(dest);
+  fs.copyFileSync(path.join(__dirname, 'LEEME_RESTAURAR.txt'), path.join(dest, 'LEEME_RESTAURAR.txt'));
 
-  // 4) Se quedan las 6 últimas; fuera restos a medias.
-  const enUsb = C.copiasCompletas(destUsb);
-  for (const vieja of enUsb.slice(GUARDAR_EN_USB)) fs.rmSync(path.join(destUsb, vieja), { recursive: true, force: true });
-  for (const n of fs.readdirSync(destUsb)) if (n.endsWith('.enCurso')) fs.rmSync(path.join(destUsb, n), { recursive: true, force: true });
+  // 4) Se quedan las 6 últimas; fuera restos a medias. Solo se borra dentro de TradingSimulator_copias.
+  for (const vieja of C.copiasCompletas(dest).slice(GUARDAR_EN_DESTINO)) fs.rmSync(path.join(dest, vieja), { recursive: true, force: true });
+  for (const n of fs.readdirSync(dest)) if (n.endsWith('.enCurso')) fs.rmSync(path.join(dest, n), { recursive: true, force: true });
 
-  const quedan = C.copiasCompletas(destUsb);
-  const txt = `OK ${C.hoyLocal()}: copia del ${ultima} en el USB (${(bytesCopia / 1048576).toFixed(0)} MB, comprobada); código ${cod.cabeza.slice(0, 8)}${cod.rehecho ? ' (rehecho)' : ''}; en el USB hay ${quedan.length} copias`;
-  anotaUsb(destUsb, txt);
-  C.anotaRegistro(C.RAIZ_COPIAS, 'USB ' + txt);
+  const quedan = C.copiasCompletas(dest);
+  const txt = `OK ${C.hoyLocal()}: copia del ${ultima} en ${dest}${r0.mismoDisco ? ' (mismo disco que el PC)' : ''} (${(bytesCopia / 1048576).toFixed(0)} MB, comprobada); código ${cod.cabeza.slice(0, 8)}${cod.rehecho ? ' (rehecho)' : ''}; allí hay ${quedan.length} copias`;
+  C.anotaRegistro(dest, txt);
+  C.anotaRegistro(C.RAIZ_COPIAS, 'FUERA ' + txt);
 
   const e2 = leeEstado();
-  e2.ultimaCopiaUsb = C.hoyLocal();
-  e2.ultimaCopiaUsbDe = ultima;
-  delete e2.recordarDesde;
+  e2.ultimoDestino = r0.elegida;
+  if (!r0.mismoDisco) {
+    e2.ultimaCopiaUsb = C.hoyLocal();
+    e2.ultimaCopiaUsbDe = ultima;
+    e2.ultimaCopiaUsbEn = dest;
+    delete e2.recordarDesde;
+  }
   guardaEstado(e2);
-  return { ultima, quedan, libresMb: Math.round(fs.statfsSync(destUsb).bavail * fs.statfsSync(destUsb).bsize / 1048576), txt };
+  const s2 = fs.statfsSync(dest);
+  return { ultima, quedan, dest, mismoDisco: r0.mismoDisco, libresMb: Math.round(s2.bavail * s2.bsize / 1048576) };
 }
 
 async function main() {
@@ -243,20 +250,20 @@ async function main() {
   try {
     if (orden === 'estado') console.log(JSON.stringify(estado()));
     else if (orden === 'unidades') console.log(JSON.stringify(unidades()));
-    else if (orden === 'marcar') { const u = marcar(arg); console.log(`OK: ${u.raiz} (${u.nombre}) es ahora tu USB de copias`); }
+    else if (orden === 'revisa') console.log(JSON.stringify(revisa(arg)));
     else if (orden === 'recordar') console.log(`OK: te lo recordaré el ${fb(recordar())}`);
     else if (orden === 'copiar') {
-      const r = await copiar();
-      const cuantas = r.quedan.length === 1 ? 'Hay 1 copia en el USB'
-        : `Hay ${r.quedan.length} copias en el USB (la más vieja, del ${fb(r.quedan[r.quedan.length - 1])})`;
-      console.log(`OK: Copia del ${fb(r.ultima)} guardada y comprobada en el USB. ${cuantas}; quedan ${r.libresMb} MB libres. Ya puedes desconectarlo.`);
+      const r = await copiar(arg);
+      const cuantas = r.quedan.length === 1 ? 'Allí hay 1 copia'
+        : `Allí hay ${r.quedan.length} copias (la más vieja, del ${fb(r.quedan[r.quedan.length - 1])})`;
+      console.log(`OK: Copia del ${fb(r.ultima)} guardada y comprobada en ${r.dest}. ${cuantas}; quedan ${r.libresMb} MB libres.${r.mismoDisco ? '' : ' Si es un USB, ya puedes desconectarlo.'}`);
     } else {
-      console.error('Uso: node scripts/copias/copiaUsb.js estado | unidades | marcar <unidad> | copiar | recordar');
+      console.error('Uso: node scripts/copias/copiaUsb.js estado | unidades | revisa <carpeta> | copiar <carpeta> | recordar');
       return 2;
     }
     return 0;
   } catch (err) {
-    if (orden === 'copiar') C.anotaRegistro(C.RAIZ_COPIAS, `USB FALLO ${C.hoyLocal()}: ${err.message}`);
+    if (orden === 'copiar') C.anotaRegistro(C.RAIZ_COPIAS, `FUERA FALLO ${C.hoyLocal()}: ${err.message}`);
     console.log('FALLO: ' + err.message);
     return 1;
   }
