@@ -42,5 +42,14 @@ $acceso.IconLocation = 'shell32.dll,7'
 $acceso.Description = 'Abre la ventana para guardar la copia de seguridad en el USB'
 $acceso.Save()
 
+# Acceso directo «Restaurar copia» (elige una copia del PC, de un USB o de otra carpeta; «Probar» o «Restaurar»).
+$acceso2 = $wsh.CreateShortcut((Join-Path $carpetaCopias 'Restaurar copia.lnk'))
+$acceso2.TargetPath = 'wscript.exe'
+$acceso2.Arguments = '"' + (Join-Path $PSScriptRoot 'restaurarCopia.vbs') + '"'
+$acceso2.WorkingDirectory = $PSScriptRoot
+$acceso2.IconLocation = 'shell32.dll,238'
+$acceso2.Description = 'Comprueba o restaura una copia de seguridad de Trading Simulator'
+$acceso2.Save()
+
 $t = Get-ScheduledTask -TaskName $nombre
 Write-Output "Tarea creada: $nombre ($($t.State)); proxima: $((Get-ScheduledTaskInfo -TaskName $nombre).NextRunTime)"

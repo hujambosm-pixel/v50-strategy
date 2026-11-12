@@ -62,9 +62,12 @@ archivo y pídele que lo monte paso a paso. Estos son los pasos:
 
 4. LOS DATOS
 ------------
-  Con Supabase local encendido, recuperar la copia más nueva con el script de
-  restauración del repositorio (scripts/copias/, ver docs/builder.md, apartados
-  «Copias de seguridad»). Hace esto:
+  Con Supabase local encendido, desde la carpeta v50-strategy:
+      node scripts\copias\restaurar.js <letra del USB>:\TradingSimulator_copias\AAAA-MM-DD --prueba
+  (comprueba la copia en una base aparte, sin tocar nada) y, si sale bien:
+      node scripts\copias\restaurar.js <letra del USB>:\TradingSimulator_copias\AAAA-MM-DD --de-verdad
+  (o, tras el paso 6, doble clic en «Restaurar copia» de Documentos\TradingSimulator_copias).
+  Hace esto:
   - recupera de base.dump el esquema public (estructura y datos) y los datos de
     auth (tu usuario) y storage (filas de los archivos);
   - vuelve a poner los archivos de almacenamiento\ en el contenedor de storage;

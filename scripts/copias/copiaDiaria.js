@@ -93,8 +93,8 @@ function copiaCarpeta(origen, destino) {
 
 function borraCarpeta(ruta) { fs.rmSync(ruta, { recursive: true, force: true }); }
 
-async function copia(dia) {
-  const final = path.join(C.DIARIAS, dia);
+// «final» distinto lo usa restaurar.js para la copia de seguridad previa (antes_de_restaurar\…).
+async function copia(dia, final = path.join(C.DIARIAS, dia)) {
   const enCurso = final + '.enCurso';
   borraCarpeta(enCurso);
   fs.mkdirSync(enCurso, { recursive: true });
@@ -230,4 +230,5 @@ async function main() {
   }
 }
 
-main().then((c) => { process.exitCode = c; });
+if (require.main === module) main().then((c) => { process.exitCode = c; });
+module.exports = { copia };
