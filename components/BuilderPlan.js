@@ -864,8 +864,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       {avisos}
       {errorCalculo}
       </>}
-      {/* §49 y §50: en escritorio (≥ 1000 px), esta página es la que se desplaza (el alto de la ventana menos lo de encima) y la columna
-          de ajustes queda fija al bajar, con su propia barra si no cabe (como mucho, el alto visible de la página menos su relleno); en el
+      {/* §49, §50 y §143: en escritorio (≥ 1000 px), esta página tiene el alto de la ventana menos lo de encima; con el plan abierto no se
+          desplaza y cada columna (ajustes y resultados) lleva su propia barra; al comparar o sin plan abierto, se desplaza la página; en el
           móvil, nada fijo y se desplaza la ventana, como antes. */}
       {/* §90: las piezas del Backtesting en el bloque con lista, con letra más grande y más clara SOLO aquí (el Backtesting no cambia). */}
       {enLista && <style>{[[8, 12], [9, 12], [10, 12], [11, 13], [12, 13]].map(([de, a]) => `[data-lista] [style*="font-size:${de}px"], [data-lista] [style*="font-size: ${de}px"] { font-size: ${a}px !important }`).join(' ') + ' [data-lista] { --text3: #a9c3d6; --text2: #c6dbea }'}</style>}
@@ -873,10 +873,15 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
 /* §80: las piezas del Backtesting, en su caja oscura de siempre. */
 .bp-mc { background: var(--bg, #080c14); border: 1px solid var(--border, #1a2d45); border-radius: 6px; overflow: hidden; color: var(--text, #e2eaf5) }
 @media (min-width: 1000px) { .bp-pagina { box-sizing: border-box; height: calc(100vh - var(--bp-arriba, 56px)); flex: none !important }
-  .bp-izq { position: sticky; top: 0; max-height: calc(100vh - var(--bp-arriba, 56px) - 40px); overflow-y: auto; padding-right: 4px } }`}</style>
-      {comparando ? null : actual ? <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+  /* §143: con el plan abierto, la página NO se desplaza: lo de arriba queda fijo y cada columna tiene su barra, sin pasarse la rueda. */
+  .bp-pagina:has(> .bp-cols) { display: flex; flex-direction: column; overflow: hidden !important }
+  .bp-pagina:has(> .bp-cols) > * { flex-shrink: 0 }
+  .bp-pagina > .bp-cols { flex: 1 1 0; min-height: 0; flex-wrap: nowrap !important; align-items: stretch !important }
+  .bp-izq, .bp-der { overflow-y: auto; overscroll-behavior: contain; padding-right: 4px }
+  .bp-der > * { flex-shrink: 0 } }`}</style>
+      {comparando ? null : actual ? <div className="bp-cols" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div data-columna="izquierda" className="bp-izq" style={{ flex: '1 1 340px', maxWidth: 520, minWidth: 0 }}>{bloques}{dinero}</div>
-        <div data-columna="derecha" style={{ flex: '2 1 480px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div data-columna="derecha" className="bp-der" style={{ flex: '2 1 480px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {resultado}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
             <BotonCopiar obtenerTexto={texto} titulo="Copia en texto plano todos los ajustes, el plan y sus cifras"/>

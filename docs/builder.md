@@ -2917,3 +2917,9 @@ Plan = Cartera + Tu dinero (decisión de Sergi del 13/11; boceto bocetos/camino-
 - lib/builder/planPantalla.js: AYUDA_PLAN.cartera (el «?» de «Cartera»).
 - Comprobaciones: planes-montaje.js (5 nuevas).
 - Pendiente: bloque «Con pesos» (el motor de «pesos con reglas»), varios bloques por plan y «Volver al reparto entre bloques».
+
+## 143. Pantalla del plan: las dos columnas se desplazan por separado
+Pedido por Sergi al ver V9.1204: al llegar con la rueda al final de la columna de ajustes, seguía moviéndose la página (la columna de resultados no tenía barra propia: se desplazaba la página entera, §50). Solo cambia el desplazamiento; ninguna cifra ni nada guardado cambia.
+- components/BuilderPlan.js (solo CSS y tres clases): en escritorio (≥ 1000 px) y con el plan abierto, la página (.bp-pagina con un hijo .bp-cols) NO se desplaza (overflow oculto, en columna); la ruta, las pestañas de planes y los avisos quedan fijos arriba, y las columnas .bp-izq (Cartera + Tu dinero) y .bp-der (cifras, gráfico, tablas) ocupan el alto que queda, cada una con su barra y con overscroll-behavior: contain. La columna izquierda deja de ser «sticky» (ya no hace falta).
+- Al comparar planes o sin ningún plan abierto no hay .bp-cols: se desplaza la página, como antes. En pantallas estrechas (< 1000 px), nada fijo, como antes.
+- Comprobado en la app (plan con «Una acción», ventana de 1400 × 800): la página no se desplaza; con la rueda hasta el final de cada columna, la otra no se mueve.
