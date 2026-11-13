@@ -32,12 +32,12 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
     return b
   }
   const api = async () => ({ ok: false, status: 500, json: async () => ({ error: 'sin motor en esta prueba' }) })
-  const vista = (m) => ({ activa: m.raiz.busca(n => n.getAttribute('aria-selected') === 'true')?.getAttribute('data-pestana') ?? null, ruta: m.raiz.conAtributo('data-ruta', 'estrategia')[0]?.textContent ?? null, pestanas: m.raiz.conAtributo('data-pestana').map(n => n.getAttribute('data-pestana')).join() })
+  const vista = (m) => ({ activa: m.raiz.busca(n => n.getAttribute('aria-selected') === 'true')?.getAttribute('data-pestana') ?? null, ruta: m.raiz.conAtributo('data-ruta', 'plan')[0]?.textContent ?? null, rutaE: m.raiz.conAtributo('data-ruta', 'estrategia')[0]?.textContent ?? null, pasos: m.raiz.conAtributo('data-paso').length, pestanas: m.raiz.conAtributo('data-pestana').map(n => n.getAttribute('data-pestana')).join() })
   const props = (o = {}) => ({ estrategias: ests, visible: true, apiFetch: api, abrir: null, ...o })
   const LARGO = 120
 
   // ── 1 · «Abrir» un plan desde una tesis (§55): la pestaña activa y la ruta ──
-  const debeSer6 = (m, t) => { const v = vista(m); ok(v.activa === 'g6' && v.ruta === 'SuperTrend 10/3', `${t}: activa ${v.activa}, ruta «${v.ruta}»`); return v }
+  const debeSer6 = (m, t) => { const v = vista(m); ok(v.activa === 'g6' && v.ruta === 'SuperTrend 10/3 / gold' && v.rutaE == null && v.pasos === 0, `${t}: activa ${v.activa}, ruta «${v.ruta}»`); return v }
   // Builder sin montar: se monta ya con el plan pedido.
   let b = base([4, 7, 6]), m = D.monta(h(BP, props({ abrir: { planId: 6, n: 1 } })), RDC)
   await D.espera(LARGO); let v = debeSer6(m, 'sin montar, plan abierto y no primero')
@@ -179,7 +179,7 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   ok(az('e6').textContent === 'Pasa29/10 · NVDAVer', `pasa: «${az('e6').textContent}»`)
   ok(az('e4').getAttribute('data-azar') === 'sinPrueba', 'una prueba de la regla de antes no cuenta: «Sin probar»')
   const toca = (id) => filaDe(m, id).busca(n => n.getAttribute('data-toca') != null)?.textContent
-  ok(toca('e9') === 'Probarla contra el azar' && toca('e4') === 'Probarla contra el azar' && toca('e7') === 'Convertirla en plan' && toca('e6') === 'Convertirla en plan', '«Qué toca ahora»: sin prueba, probarla; con ella, convertirla en plan')
+  ok(toca('e9') === 'Probarla contra el azar' && toca('e4') === 'Probarla contra el azar' && toca('e7') === 'Usar en un plan' && toca('e6') === 'Usar en un plan', '«Qué toca ahora»: sin prueba, probarla; con ella, usarla en un plan (§139)')
   const nPl = (id) => filaDe(m, id).busca(n => n.getAttribute('data-planes-n') != null)
   ok(nPl('e9').getAttribute('data-planes-n') === '0' && nPl('e4').getAttribute('data-planes-n') === '1' && nPl('e7').getAttribute('data-planes-n') === '2' && nPl('e7').getAttribute('title') === 'Línea / oro · Línea / liquidez', 'planes: cuántos, con los nombres en el tooltip')
   ok(filaDe(m, 'e4').busca(n => n.getAttribute('data-borrar-estrategia') != null).busca(n => n.getAttribute('stroke') === '#f85149') != null && !!filaDe(m, 'e4').busca(n => n.getAttribute('data-duplicar-estrategia') != null).busca(n => n.nodeName === 'svg'), 'iconos: duplicar y papelera ROJA')

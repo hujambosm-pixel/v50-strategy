@@ -30,6 +30,8 @@ import { borrarPrueba, borrarPruebasDeEstrategia } from '../lib/pruebaAzar'
 
 export const PASOS = ['Crear la estrategia', 'Probarla contra el azar', 'Convertirla en plan']
 export const PASOS_CORTOS = ['Crear', 'Probar contra el azar', 'Convertirla en plan']   // §56: el nombre al lado de cada círculo de la cabecera B
+// §139: los pasos de una estrategia en la cabecera (el plan ya no es su paso 3: se llega con «Usar en un plan»).
+export const PASOS_ESTRATEGIA = ['Crear la estrategia', 'Validarla contra el azar'], PASOS_ESTRATEGIA_CORTOS = ['Crear', 'Validar']
 export const SUBTITULOS_PASOS = ['Cuándo compro, cuándo vendo y cuánto arriesgo', '¿Gana por algo más que suerte?', 'Dinero real, aportaciones e impuestos']
 // La firma de lo leído de la base (id y fecha o resultado): si no cambia, no se recalcula «Mi trabajo».
 export const firmaDatos = (planes, pruebasAzar, tesis) => JSON.stringify([(planes || []).map(p => [p.id, p.updated_at]), pruebasAzar && pruebasAzar.map(p => [p.id, p.resultado?.id ?? null]), (tesis || []).map(t => [t.id, t.updated_at])])
@@ -84,7 +86,7 @@ function CeldaPlanes({ planes, onAbrir }) {
   return (
     <span ref={caja} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
       <span data-planes-n={planes.length} title={nombres} style={{ cursor: 'default', textDecoration: 'underline dotted' }}>{planes.length}</span>
-      {planes.length === 1 ? <button data-abrir-plan-fila={planes[0].id} title={`Abrir «${planes[0].nombre}» en el paso 3`} style={{ ...S.enlace, fontSize: 13 }} onClick={() => onAbrir(planes[0].id)}>Abrir</button>
+      {planes.length === 1 ? <button data-abrir-plan-fila={planes[0].id} title={`Abrir el plan «${planes[0].nombre}»`} style={{ ...S.enlace, fontSize: 13 }} onClick={() => onAbrir(planes[0].id)}>Abrir</button>
         : <button data-abrir-planes aria-expanded={abierto} style={{ ...S.enlace, fontSize: 13 }} onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setDonde({ top: r.bottom + 4, left: r.left }); setAbierto(x => !x) }}>Abrir ▾</button>}
       {abierto && <div data-menu="planes" style={{ ...menuFijo, position: 'fixed', ...(donde || {}), width: 260, maxWidth: '86vw' }}>
         {planes.map(p => <button key={p.id} data-abrir-plan-fila={p.id} title={p.nombre} style={opcionMenu} onClick={() => { setAbierto(false); onAbrir(p.id) }}>{p.nombre}</button>)}
@@ -117,24 +119,27 @@ export function BarraPasos({ actual = 1, onPaso = null, desactivados = {} }) {
   )
 }
 
-// §54: la CABECERA B de los pasos 1, 2 y 3: a la izquierda, la ruta «Builder › Mi trabajo › <estrategia>» (onVolver(): «Builder»; onVolver('miTrabajo'): «Mi trabajo»); a la derecha, los pasos como
-// círculos pequeños: ✓ en los hechos (hechos: { n: true/false }; por defecto, los anteriores al actual), el actual en verde. Se pulsan como la barra: desactivados (string: el motivo, en el tooltip) no.
-// bloqueada: mientras corre algo, nada se pulsa. §56: cada círculo con su nombre al lado (hecho: ✓ de borde verde y texto apagado; actual: círculo verde relleno con su número y texto en negrita blanco;
-// pendiente: número y texto apagados). En una ventana estrecha (< 900 px) el texto se oculta y queda el círculo con el nombre en el tooltip.
-// enlace: lo que va a la derecha de la ruta («💡 …», components/TesisEnlace.js).
-export function CabeceraPasos({ actual = 1, onPaso = null, desactivados = {}, hechos = {}, estrategia = null, onVolver = null, bloqueada = false, enlace = null }) {
+// §54 y §139: la CABECERA de las pantallas de una estrategia (crear y validar) y de un plan. A la izquierda, la ruta: «Estrategias › <estrategia>» o, con zona="plan",
+// «Planes › <plan>» (la primera palabra vuelve a la lista: onVolver('miTrabajo')). A la derecha, solo en una estrategia, sus DOS pasos («1 Crear · 2 Validar») como círculos
+// pequeños: ✓ en los hechos (hechos: { n: true/false }; por defecto, los anteriores al actual), el actual en verde; desactivados (string: el motivo, en el tooltip) no se pulsan;
+// y el botón «Usar en un plan» (onUsar; usarMotivo: por qué no se puede, en el tooltip). Un plan no lleva pasos: no es el paso de ninguna estrategia.
+// bloqueada: mientras corre algo, nada se pulsa. §56: cada círculo con su nombre al lado; en una ventana estrecha (< 900 px) el texto se oculta y queda en el tooltip.
+// enlace: lo que va a la derecha de la ruta («💡 …», components/TesisEnlace.js). extra: lo que va delante de los pasos (la guía, en «Validar»).
+export function CabeceraPasos({ actual = 1, onPaso = null, desactivados = {}, hechos = {}, estrategia = null, onVolver = null, bloqueada = false, enlace = null, zona = 'estrategia', plan = null, onUsar = null, usarMotivo = null, extra = null }) {
   const miga = { ...S.enlace, color: B.secundario, fontSize: 13 }, sep = <span aria-hidden="true" style={{ color: B.apagado }}>›</span>
+  const enPlan = zona === 'plan', nombre = enPlan ? plan : estrategia, usable = !!onUsar && !usarMotivo && !bloqueada
   return (
-    <div data-cabecera-b style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+    <div data-cabecera-b data-zona={enPlan ? 'plan' : 'estrategia'} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
       <nav aria-label="Dónde estás" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: '1 1 240px' }}>
-        <button data-ruta="builder" style={miga} disabled={bloqueada || !onVolver} onClick={() => onVolver?.()}>Builder</button>{sep}
-        <button data-ruta="mi-trabajo" style={miga} disabled={bloqueada || !onVolver} onClick={() => onVolver?.('miTrabajo')}>Mi trabajo</button>
-        {estrategia && <>{sep}<span data-ruta="estrategia" title={estrategia} style={{ color: B.titulo, fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{estrategia}</span></>}
+        <button data-ruta="mi-trabajo" style={miga} disabled={bloqueada || !onVolver} title="Volver a la lista de estrategias y planes" onClick={() => onVolver?.('miTrabajo')}>{enPlan ? 'Planes' : 'Estrategias'}</button>
+        {nombre && <>{sep}<span data-ruta={enPlan ? 'plan' : 'estrategia'} title={nombre} style={{ color: B.titulo, fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{nombre}</span></>}
         {enlace && <span style={{ flex: 'none', marginLeft: 10 }}>{enlace}</span>}
       </nav>
+      {!enPlan && <>
       <style>{`@media (max-width: 900px) { .bp-nombre-paso { display: none } }`}</style>
-      <div aria-label="Pasos del Builder" style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
-        {PASOS.map((p, k) => {
+      <div aria-label="Pasos de la estrategia" style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {extra}
+        {PASOS_ESTRATEGIA.map((p, k) => {
           const n = k + 1, on = n === actual, hecho = hechos[n] ?? n < actual, pulsable = !!onPaso && !on && !desactivados[n] && !bloqueada, Caja = pulsable ? 'button' : 'span'
           return (<span key={p} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             {k > 0 && <span aria-hidden="true" style={{ width: 24, height: 1, background: B.borde }}/>}
@@ -142,11 +147,13 @@ export function CabeceraPasos({ actual = 1, onPaso = null, desactivados = {}, he
               style={{ padding: 0, background: 'transparent', border: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: B.letra, cursor: pulsable ? 'pointer' : 'default' }}>
               <span data-circulo style={{ width: 24, height: 24, flex: 'none', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700,
                 background: on ? B.verde : 'transparent', color: on ? B.sobreVerde : hecho ? '#7ee2a0' : desactivados[n] ? B.apagado : B.secundario, border: on ? 'none' : `1px solid ${hecho ? B.pasoBorde : pulsable ? B.siguienteBorde : B.borde}` }}>{hecho && !on ? '✓' : n}</span>
-              <span className="bp-nombre-paso" data-nombre-paso style={{ fontSize: 13, whiteSpace: 'nowrap', fontWeight: on ? 700 : 400, color: on ? B.titulo : B.apagado }}>{PASOS_CORTOS[k]}</span>
+              <span className="bp-nombre-paso" data-nombre-paso style={{ fontSize: 13, whiteSpace: 'nowrap', fontWeight: on ? 700 : 400, color: on ? B.titulo : B.apagado }}>{PASOS_ESTRATEGIA_CORTOS[k]}</span>
             </Caja>
           </span>)
         })}
-      </div>
+        {(onUsar || usarMotivo) && <button data-boton="usar-en-plan" style={{ ...(usable ? S.boton : S.botonDesactivado), padding: '4px 12px', fontSize: 13, marginLeft: 10 }} disabled={!usable} onClick={usable ? () => onUsar() : undefined}
+          title={usarMotivo || 'Abre el plan que usa esta estrategia; si aún no tiene ninguno, prepara uno nuevo con ella (no se guarda hasta que tú lo digas)'}>Usar en un plan</button>}
+      </div></>}
     </div>
   )
 }

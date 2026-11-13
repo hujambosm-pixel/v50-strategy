@@ -176,7 +176,7 @@ export default function BuilderAzarResultado({ prueba, resultado, onVolver = nul
           <Fila k="operaciones" t="Operaciones de tu estrategia" v={listo ? vista.estrategia.operaciones : per ? per.operaciones : '—'} fin={huecoIcono}/>
           <div data-cifra="fiabilidad" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, fontSize: 13, padding: '5px 0' }}><span style={{ color: B.secundario, display: 'inline-flex', alignItems: 'center', gap: 2 }}>Fiabilidad<Ayuda texto={ayudaFiabilidad(resultado)} etiqueta="Fiabilidad"/></span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ color: t.fiable ? VERDE : ROJO, fontWeight: 700 }}>{t.fiable ? 'Fiable ✓' : 'No fiable ✕'}</span>{huecoIcono}</span></div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-            <button data-boton="paso3" style={{ ...(resultado.veredicto === 'pasa' ? S.botonVerde : S.boton), padding: '6px 10px', fontSize: 13 }} onClick={() => onPaso3?.()}>Paso 3 · Convertirla en plan</button>
+            <button data-boton="paso3" style={{ ...(resultado.veredicto === 'pasa' ? S.botonVerde : S.boton), padding: '6px 10px', fontSize: 13 }} onClick={() => onPaso3?.()}>Usar en un plan</button>
             <button data-boton="paso1" style={{ ...S.boton, padding: '6px 10px', fontSize: 13 }} onClick={() => onPaso1?.()}>Volver al paso 1</button>
             <BotonCopiar obtenerTexto={() => textoParaClaude(prueba, resultado)} titulo="Copia en texto plano la configuración, la huella y las cifras del resultado"/>
           </div>

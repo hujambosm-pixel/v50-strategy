@@ -669,8 +669,9 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
                 return <option key={s.id} value={String(s.id)} disabled={sem}>{`${s.name}${ps.length ? ` (${ps.join(' · ')})` : ''}`}</option> })}
               {/* §50: al final, en gris y sin poder elegirse, cuántas de código hay (no sirven aquí). */}
               {deCodigo > 0 && <option data-codigo={deCodigo} value="" disabled style={{ color: B.apagado }}>{textoCodigo(deCodigo)}</option>}
-            </select> : <div style={S.secundario}>No tienes estrategias de tarjetas. Crea una en el paso 1.</div>}
-            {tarjetas.length > 0 && !diarias.length && <div style={{ color: AMARILLO, marginTop: 6 }}>Todas tus estrategias de tarjetas son semanales: el paso 3, por ahora, solo con velas diarias.</div>}
+            </select> : <div style={S.secundario}>No tienes estrategias de tarjetas. Crea una en «Estrategias».</div>}
+            {estrategia && !estBorrada && <div style={{ marginTop: 6 }}><button data-boton="abrir-estrategia" type="button" style={{ ...S.enlace, fontSize: 13 }} onClick={() => pide({ tipo: 'paso1' })} title="Abre esta estrategia para verla o cambiarla; si el plan tiene cambios sin guardar, pregunta antes">Abrir la estrategia ›</button></div>}
+            {tarjetas.length > 0 && !diarias.length && <div style={{ color: AMARILLO, marginTop: 6 }}>Todas tus estrategias de tarjetas son semanales: los planes, por ahora, solo con velas diarias.</div>}
           </div>
           <div>
             <Etiqueta texto="Dónde se aplica" ayuda={AYUDA_PLAN.dondeSeAplica}/>
@@ -845,8 +846,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   return (
     <div ref={pagina} className="bp-pagina" style={{ ...S.pagina, '--bp-arriba': arriba != null ? `${arriba}px` : undefined }} data-pantalla="plan">
       {/* §135: al comparar, sin la cabecera de pasos (es de la estrategia) ni las pestañas de planes (se eligen con los círculos). */}
-      {!comparando && <CabeceraPasos actual={3} estrategia={estBorrada ? `${estrategia?.name} ${ETIQUETA_BORRADA}` : estrategia?.name || null} desactivados={estBorrada ? { 1: AVISO_BORRADA, 2: AVISO_BORRADA } : {}} onVolver={(donde) => pide({ tipo: 'volver', donde })} hechos={{ 1: !!estrategia, 2: !!estado && estado.clave !== 'sinPrueba' }}
-        onPaso={(n) => { if (n === 1) pide({ tipo: 'paso1' }); else if (n === 2) pide({ tipo: 'paso2' }) }}/>}
+      {!comparando && <CabeceraPasos zona="plan" plan={nombreDe(actual) || null} onVolver={(donde) => pide({ tipo: 'volver', donde })}/>}
       {comparando ? falloPlanes && <div data-fallo-planes style={{ color: ROJO, marginBottom: 10 }}>✕ {falloPlanes}</div> : pestanasPlanes}
       {comparando ? <ComparaPlanes planes={planes || []} elegidos={comp.elegidos || []} refs={comp.refs} resultados={resComp} prueba={pruebaComp} log={comp.log} modo={comp.modo} plegado={comp.plegado} tema={tema}
         onPlegar={x => setComp(c => ({ ...c, plegado: x }))}

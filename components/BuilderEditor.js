@@ -455,12 +455,24 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
   return (
     <div style={S.pagina}>
       {/* §45 y §54: la cabecera B; el paso 2 («Probarla contra el azar») abre la estrategia GUARDADA (una nueva, al guardarla). */}
-      <CabeceraPasos actual={1} estrategia={est.nombre.trim() || null} onVolver={(donde) => guardiaTesis(() => onVolver?.(donde))} enlace={enlaceTesis?.('estrategia', fila?.id, guardiaTesis)} onPaso={onPaso2 ? (n) => guardiaTesis(() => { const f = guardada.current || fila; if (n === 2 && f?.id) onPaso2(f); else if (n === 3 && f?.id) onPaso3?.(f) }) : null}
-        desactivados={nueva ? { 2: 'Guárdala primero: el paso 2 prueba la estrategia tal como está guardada', 3: 'Guárdala primero: el plan usa la estrategia tal como está guardada' } : esSemanal(fila) ? { 3: 'El paso 3, por ahora, solo con estrategias de velas diarias' } : {}}/>
+      <CabeceraPasos actual={1} estrategia={est.nombre.trim() || null} onVolver={(donde) => guardiaTesis(() => onVolver?.(donde))} enlace={enlaceTesis?.('estrategia', fila?.id, guardiaTesis)} onPaso={onPaso2 ? (n) => guardiaTesis(() => { const f = guardada.current || fila; if (n === 2 && f?.id) onPaso2(f) }) : null}
+        desactivados={nueva ? { 2: 'Guárdala primero: se valida la estrategia tal como está guardada' } : {}}
+        onUsar={onPaso3 ? () => guardiaTesis(() => { const f = guardada.current || fila; if (f?.id) onPaso3(f) }) : null}
+        usarMotivo={!onPaso3 ? null : nueva ? 'Guárdala primero: el plan usa la estrategia tal como está guardada' : esSemanal(fila) ? 'Los planes, por ahora, solo con estrategias de velas diarias' : null}/>
       {/* V9.1073: la fila del título, fija arriba al desplazarse (con la barra de los cambios). */}
       <div data-fila-titulo style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 20, background: B.fondo, padding: '6px 0' }}>
-        <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Paso 1 · Crear la estrategia</span>
-        <span data-cabecera-nombre style={{ color: B.secundario }}>{est.nombre.trim() || 'Sin nombre'} · velas {intervalo === 'semanal' ? 'semanales' : 'diarias'}</span>
+        {/* §139: el título ES el nombre (se escribe encima); al lado, las velas y la versión. Ya no hay «Paso 1 · Crear la estrategia» ni caja del nombre. */}
+        <span data-titulo-nombre style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+          <input id="nombre-estrategia" aria-label="Nombre de la estrategia" placeholder="Nombre de la estrategia" title="Pulsa para cambiar el nombre" value={est.nombre} size={Math.min(44, Math.max(14, est.nombre.length + 1))} onChange={e => setEst(x => ({ ...x, nombre: e.target.value }))}
+            style={{ fontFamily: B.letra, fontSize: 22, fontWeight: 700, color: B.titulo, background: 'transparent', border: 'none', borderBottom: `1px dashed ${errNombre ? ROJO : B.borde}`, borderRadius: 0, padding: '0 2px', minWidth: 0, maxWidth: '100%', outline: 'none' }}/>
+          <span aria-hidden="true" title="Pulsa el nombre para cambiarlo" style={{ color: B.apagado, fontSize: 15 }}>✎</span>
+        </span>
+        <select style={{ ...entrada, padding: '4px 8px', fontSize: 13 }} aria-label="Velas" value={intervalo} onChange={e => setEst(x => ({ ...x, valores: { ...x.valores, intervalo: e.target.value } }))}
+          title={intervalo === 'semanal' ? AVISO_SEMANAL_PASO2 : 'La validación contra el azar solo admite velas diarias; «Señales en el gráfico» y sus cifras, diarias o semanales.'}>
+          <option value="diario">Velas diarias</option><option value="semanal">Velas semanales</option>
+        </select>
+        <span data-estado style={{ ...S.secundario, fontSize: 13 }}>{estado}</span>
+        {errNombre && <span data-error-nombre style={{ color: ROJO, fontSize: 13 }}>{errNombre}</span>}
         <span data-barra-cambios={cambiado ? 'cambios' : nueva ? 'nueva' : 'sin-cambios'} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <span data-estado-barra title={cambiosBarra.join(' · ') || undefined} style={{ fontSize: 13, maxWidth: 560, color: cambiado || nueva ? AMARILLO : '#7ee2a0' }}>
             {cambiado ? <>● Probando cambios sin guardar: {resumenCambios(cambiosBarra)}</> : nueva ? '● Estrategia nueva: todavía sin guardar' : '✓ Sin cambios: ves la estrategia guardada'}
@@ -468,10 +480,9 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
           {msgValores && <span data-error-barra style={{ color: ROJO, fontSize: 13 }}>{msgValores}</span>}
           {falloPruebas && <span data-aviso="pruebas-sin-leer" style={{ color: AMARILLO, fontSize: 13 }}>⚠ No se han podido leer sus pruebas: si cambias la regla, se guardará sobre esta misma</span>}
           <button data-boton="volver" style={cambiado && !guardando ? S.boton : S.botonDesactivado} disabled={!cambiado || guardando} onClick={volverGuardados}
-            title="Deshace los cambios de las tarjetas y de las casillas de prueba: la estrategia queda como está guardada">Volver a los guardados</button>
+            title="Deshace los cambios de las tarjetas y de las casillas de prueba: la estrategia queda como está guardada">Descartar cambios</button>
           <button data-boton="guardar-valores" style={puedeGuardarBarra ? S.botonVerde : S.botonDesactivado} disabled={!puedeGuardarBarra} onClick={guardaValores}
-            title={hayErrores || errConPrueba.length ? 'La regla tiene errores: corrígelos para guardar' : planBarra?.version ? avisoVersion(planBarra.version) : 'Guarda las tarjetas y las casillas de prueba en la estrategia; sigues en esta pestaña'}>{guardando ? 'Guardando…' : 'Guardar en la estrategia'}</button>
-          <button style={S.boton} onClick={() => setGuia(true)}>Guía: cómo se prueba una estrategia</button>
+            title={hayErrores || errConPrueba.length ? 'La regla tiene errores: corrígelos para guardar' : planBarra?.version ? avisoVersion(planBarra.version) : 'Guarda las tarjetas y las casillas de prueba en la estrategia; sigues en esta pestaña'}>{guardando ? 'Guardando…' : 'Guardar'}</button>
         </span>
       </div>
       {/* V9.1054: tres pestañas. «Tarjetas» es el editor; las otras dos dibujan la regla de la pantalla (con sus cambios sin guardar) y,
@@ -495,24 +506,6 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
           <div style={{ ...S.secundario, marginTop: 6 }}>Al guardar aquí se conservan tal cual. <button style={S.enlace} onClick={abreClasico}>Abrir en el Editor clásico</button></div>
         </div>
       )}
-      <div style={{ ...S.tarjeta, marginBottom: 16 }} data-tarjeta="nombre">
-        <div style={{ ...S.cuerpo, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <label style={etiquetaCampo} htmlFor="nombre-estrategia">Nombre de la estrategia</label>
-          <input id="nombre-estrategia" value={est.nombre} onChange={e => setEst(x => ({ ...x, nombre: e.target.value }))} style={{ ...entrada, flex: '1 1 240px', maxWidth: 420, ...(errNombre ? { borderColor: ROJO } : {}) }}/>
-          <label style={{ ...etiquetaCampo, gap: 6 }}>
-            <span>Velas:</span>
-            <select style={entrada} aria-label="Velas" value={intervalo} onChange={e => setEst(x => ({ ...x, valores: { ...x.valores, intervalo: e.target.value } }))}>
-              <option value="diario">Diarias (1 vela = 1 día de mercado)</option><option value="semanal">Semanales (1 vela = 1 semana)</option>
-            </select>
-          </label>
-          <div style={{ flexBasis: '100%', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <span data-estado style={S.secundario}>{estado}</span>
-            <span style={S.apagado}>{intervalo === 'semanal' ? AVISO_SEMANAL_PASO2 : 'La prueba del paso 2 solo admite velas diarias; el paso 1 («Señales en el gráfico» y sus cifras), diarias o semanales.'}</span>
-          </div>
-          {errNombre && <div style={{ color: ROJO, fontSize: 13, flexBasis: '100%' }}>{errNombre}</div>}
-        </div>
-      </div>
-
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {/* ── Izquierda: el catálogo ── */}
         <div data-columna="catalogo" style={{ flex: '1 1 230px', maxWidth: 320, minWidth: 0 }}>
@@ -753,10 +746,10 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
           </Tarjeta>
           {plan.version && <div data-aviso="version" style={{ background: '#3a3220', border: `1px solid ${AMARILLO}`, borderRadius: B.radioBoton, padding: 12, marginBottom: 12, color: B.texto }}>{avisoVersion(plan.version)}</div>}
           {intervalo === 'semanal' ? <div data-semanal-paso2 style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <button style={S.botonDesactivado} disabled title={AVISO_SEMANAL_PASO2}>Guardar y pasar al paso 2</button>
+            <button style={S.botonDesactivado} disabled title={AVISO_SEMANAL_PASO2}>Guardar y validar ›</button>
             <span data-aviso="semanal" style={{ color: AMARILLO, fontSize: 13 }}>{AVISO_SEMANAL_PASO2}</span>
           </div>
-          : <button style={hayErrores || guardando ? S.botonDesactivado : S.botonVerde} disabled={hayErrores || guardando} onClick={guarda}>{guardando ? 'Guardando…' : 'Guardar y pasar al paso 2'}</button>}
+          : <button style={hayErrores || guardando ? S.botonDesactivado : S.botonVerde} disabled={hayErrores || guardando} onClick={guarda}>{guardando ? 'Guardando…' : 'Guardar y validar ›'}</button>}
           {hayErrores && <div data-aviso="corrige" style={{ ...S.secundario, marginTop: 6 }}>Corrige lo que está en rojo para continuar.</div>}
           {msg && <div style={{ color: ROJO, marginTop: 6 }}>{msg}</div>}
         </div>

@@ -80,7 +80,7 @@ export default function BuilderCodigo({ fila, estrategias = [], apiFetch, onVolv
   return (
     <div style={S.pagina}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-        <button style={{ ...S.enlace, color: B.secundario }} onClick={() => onVolver?.()}>← Builder · Mi trabajo</button>
+        <button style={{ ...S.enlace, color: B.secundario }} onClick={() => onVolver?.()}>← Estrategias</button>
         <span style={{ fontSize: 22, fontWeight: 700, color: B.titulo }}>Paso 1 · La estrategia</span>
         <span style={S.secundario}>de código</span>
       </div>
