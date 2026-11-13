@@ -76,7 +76,8 @@ function puertoAbierto(puerto) {
 // ¿Responde algo HTTP? (cualquier código vale: basta con que conteste)
 function responde(url) {
   return new Promise((res) => {
-    const r = http.get(url, (resp) => { resp.resume(); res(true); });
+    // §138: solo cuenta una respuesta buena: un 502/503 (Supabase aún arrancando) es «todavía no».
+    const r = http.get(url, (resp) => { resp.resume(); res(resp.statusCode < 500); });
     r.setTimeout(4000, () => { r.destroy(); res(false); });
     r.on('error', () => res(false));
   });
@@ -172,12 +173,21 @@ async function arrancar(conNavegador) {
   }
 
   // 2) Supabase local
-  if (C.contenedorEncendido(C.CONT_DB) && (await responde('http://127.0.0.1:54321/rest/v1/'))) paso('La base de datos ya estaba encendida');
-  else {
+  // §138: si el PC se apagó sin «Parar», Docker vuelve a encender solo los contenedores de Supabase (unless-stopped) y la base
+  // tarda un rato en estar lista. Entonces no hay que lanzar `supabase start` (dice «already running … not ready»): basta esperar.
+  const REST = 'http://127.0.0.1:54321/rest/v1/';
+  if (C.contenedorEncendido(C.CONT_DB) && (await responde(REST))) paso('La base de datos ya estaba encendida');
+  else if (C.contenedorEncendido(C.CONT_DB)) {
+    paso('La base de datos se está encendiendo sola; esperando a que esté lista (hasta 3 minutos)…');
+    if (!(await hasta(() => responde(REST), 180))) throw new Error('la base de datos se encendió pero no responde en 3 minutos. Pulsa «Parar Trading Simulator» y vuelve a encenderlo.');
+    paso('   ✓ Base de datos encendida');
+  } else {
     paso('Encendiendo la base de datos (Supabase, 1–2 minutos)…');
     const s = supabaseCli(`start -x ${EXCLUIDOS}`, 600);
-    if (s.status !== 0) throw new Error(`Supabase no arrancó: ${((s.stderr || '') + (s.stdout || '')).trim().split(/\r?\n/).slice(-3).join(' ')}`);
-    if (!(await hasta(() => responde('http://127.0.0.1:54321/rest/v1/'), 120))) throw new Error('la base de datos no responde');
+    const texto = ((s.stderr || '') + (s.stdout || '')).trim();
+    // Por si los contenedores se encendían justo a la vez: «already running» = esperar a que esté lista.
+    if (s.status !== 0 && !/already running/i.test(texto)) throw new Error(`Supabase no arrancó: ${texto.split(/\r?\n/).slice(-3).join(' ')}`);
+    if (!(await hasta(() => responde(REST), 180))) throw new Error('la base de datos no responde');
     paso('   ✓ Base de datos encendida');
   }
 
