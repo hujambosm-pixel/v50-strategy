@@ -11,7 +11,7 @@ import { ctxConSesion, getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/su
 import { listarPlanes, listarPruebasUsuario } from '../lib/builder/planesGuardados'
 import { fotoDelPlan } from '../lib/builder/planesGuardados'
 import { ajustesDe } from '../lib/builder/planPantalla'
-import { textoDinero, textoPeriodo } from '../lib/builder/comparaPlanes'
+import { CLAVE_COMPARAR, MAX_COMPARAR, cifrasComparacion, elegidosIniciales, pieza as piezaPlan, pct, euros as eurosPlan, puntosFrente, textoDinero, textoPeriodo } from '../lib/builder/comparaPlanes'
 import { B, S } from '../lib/builder/estilo'
 import BuilderAzar from './BuilderAzar'
 import BuilderPlan from './BuilderPlan'
@@ -38,6 +38,9 @@ export const PASOS_ESTRATEGIA = ['Crear la estrategia', 'Validarla contra el aza
 // §140: los «?» de la portada de Planes (ejemplos con nombres inventados).
 const AYUDA_PORTADA_PLANES = 'Un plan es en qué inviertes (la cartera) y con qué dinero (cuánto, cuándo, comisiones e impuestos). Ejemplo: «Plan · Cruce de medias / oro» aplica la estrategia «Cruce de medias 50/200» a AAPL, con 10.000 € de inicio y 300 € al mes: en 10 años aportas 10.000 + 300 × 119 = 45.700 €. «Abrir» lo enseña con sus cifras; «Comparar planes» pone varios uno al lado del otro.'
 const AYUDA_PORTADA_CARTERA = 'En qué se invierte el dinero del plan: qué parte, con qué estrategia y dónde (una acción o una lista de valores). Ejemplo: «100 % · «Cruce de medias 50/200» en AAPL» quiere decir que todo el dinero del plan sigue esa estrategia en Apple.'
+const AYUDA_PORTADA_MARCAR = 'Marca los planes que quieres ver juntos (hasta 4) y pulsa «Comparar los marcados»: salen uno al lado del otro, con su gráfico y su año a año. Ejemplo: marcas «Plan · Cruce de medias / oro» y «Plan · 80/20 con refuerzo» y comparas sus dos curvas.'
+const AYUDA_PORTADA_CIFRAS = 'Lo que tendrías el último día del periodo si lo vendieras todo, ya pagadas las comisiones y los impuestos. Al lado, el CAGR del plan (cuánto crece cada euro al año, de media) y su peor caída desde un máximo. Ejemplo: 10.000 € que acaban en 25.937 € en 10 años son un CAGR del 10 %, porque 10.000 × 1,1^10 = 25.937.'
+const AYUDA_PORTADA_QQQ = 'Los puntos de CAGR que el plan saca (+) o pierde (−) frente a comprar QQQ el primer día (y con cada aportación) y no vender hasta el final, con el mismo dinero, periodo, impuestos y comisiones. Ejemplo: plan 21,40 % y QQQ 17,60 %: 21,40 − 17,60 = +3,80 puntos.'
 export const SUBTITULOS_PASOS = ['Cuándo compro, cuándo vendo y cuánto arriesgo', '¿Gana por algo más que suerte?', 'Dinero real, aportaciones e impuestos']
 // La firma de lo leído de la base (id y fecha o resultado): si no cambia, no se recalcula «Mi trabajo».
 export const firmaDatos = (planes, pruebasAzar, tesis) => JSON.stringify([(planes || []).map(p => [p.id, p.updated_at]), pruebasAzar && pruebasAzar.map(p => [p.id, p.resultado?.id ?? null]), (tesis || []).map(t => [t.id, t.updated_at])])
@@ -263,6 +266,34 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   useEffect(() => { if (ir?.n) { setEditor(null); setAzar(null); setPlan(null); setGuia(false); setZona(ir.zona === 'planes' ? 'planes' : 'estrategias'); recarga() } }, [ir?.n])
   const zonaEf = plan ? 'planes' : editor || azar ? 'estrategias' : zona
   useEffect(() => { onZona?.(zonaEf) }, [zonaEf])
+  // §141: las cifras de cada plan en la portada de Planes: el plan tal como está guardado, por /api/plan (el mismo cálculo de su pantalla y de «Comparar planes»), uno detrás de otro y solo
+  // con la portada a la vista; se recuerdan mientras el plan no cambie. Con una lista de valores no se calculan aquí (su petición es la de «La cartera por dentro»): al abrirlo o al comparar.
+  const [cifrasP, setCifrasP] = useState({})   // { [id]: { clave, estado: 'ok' | 'error', v?, qqq?, error? } }
+  const cacheCifras = useRef(new Map())
+  useEffect(() => {
+    if (visible === false || zonaEf !== 'planes' || plan || !apiFetch) return
+    const pend = (datos.planes || []).filter(p => piezaPlan(p.plan)?.donde !== 'lista' && cifrasP[p.id]?.clave !== JSON.stringify(p.plan))
+    if (!pend.length) return
+    let vivo = true
+    ;(async () => {
+      for (const p of pend) {
+        const clave = JSON.stringify(p.plan); let r = cacheCifras.current.get(clave)
+        if (!r) {
+          try {
+            const res = await apiFetch('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: p.plan, curvas: true }) }), j = await res.json().catch(() => ({}))
+            if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`)
+            const c = cifrasComparacion(j, p.plan); r = { estado: 'ok', v: c.valores, qqq: c.refs?.QQQ?.twr ?? null }; cacheCifras.current.set(clave, r)
+          } catch (e) { r = { estado: 'error', error: e?.message || 'No se pudo calcular' } }
+        }
+        if (!vivo) return
+        setCifrasP(x => ({ ...x, [p.id]: { clave, ...r } }))
+      }
+    })()
+    return () => { vivo = false }
+  }, [visible, zonaEf, datos.planes, !!plan])
+  // §141: los planes marcados para comparar (hasta 4): los mismos que recuerda «Comparar planes» en este navegador.
+  const [marcados, setMarcados] = useState(null)
+  useEffect(() => { if (marcados || !datos.planes?.length) return; let g = null; try { g = JSON.parse(window.localStorage.getItem(CLAVE_COMPARAR)) } catch (_) {} setMarcados(elegidosIniciales(datos.planes, g?.elegidos, [])) }, [datos.planes])
   // §54: «Mi trabajo» de la cabecera B: a «Mi trabajo», ya en su sitio de la página.
   const [irMiTrabajo, setIrMiTrabajo] = useState(0)
   const seccionMiTrabajo = useRef(null)
@@ -321,11 +352,26 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
   // §140: la portada de PLANES: los planes guardados, con su cartera y su dinero. Las cifras se ven al abrirlo o en «Comparar planes» (se calculan allí).
   const carteraDe = (p) => { try { const a = ajustesDe(p.plan), n = fotoDelPlan(p.plan)?.name || 'Estrategia'; return `100 % · «${n}» en ${a.donde === 'lista' ? (a.lista?.universo && a.lista.universo !== 'manual' ? 'el Nasdaq-100' : `una lista de ${(a.lista?.simbolos || []).length} valores`) : a.activo}` } catch (_) { return '—' } }
   const planesVis = (datos.planes || []).filter(p => coincide(buscarP, p.nombre, carteraDe(p))), nPlanes = (datos.planes || []).length
+  const marcadosVivos = (marcados || []).filter(id => (datos.planes || []).some(p => Number(p.id) === Number(id)))
+  const marca = (id) => setMarcados(m => { const xs = (m || []).map(Number), n = Number(id); return xs.includes(n) ? xs.filter(x => x !== n) : xs.length < MAX_COMPARAR ? [...xs, n] : xs })
+  const comparaMarcados = () => { try { const g = JSON.parse(window.localStorage.getItem(CLAVE_COMPARAR)) || {}; window.localStorage.setItem(CLAVE_COMPARAR, JSON.stringify({ ...g, elegidos: marcadosVivos })) } catch (_) {} setPlan({ comparar: true, n: Date.now() }) }
+  const VERDE_P = '#7ee2a0', ROJO_P = '#ff8b8b', cifraTd = { ...fila, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
+  const celdaCifra = (p, cual) => {
+    if (piezaPlan(p.plan)?.donde === 'lista') return <span data-cifra-plan="lista" title="Con una lista de valores, las cifras se calculan al abrir el plan o en «Comparar planes»" style={{ color: B.apagado, textDecoration: 'underline dotted' }}>al abrirlo</span>
+    const c = cifrasP[p.id]?.clave === JSON.stringify(p.plan) ? cifrasP[p.id] : null
+    if (!c) return <span data-cifra-plan="calculando" title="Calculando…" style={{ color: B.apagado }}>…</span>
+    if (c.estado !== 'ok') return <span data-cifra-plan="error" title={`No se ha podido calcular: ${c.error}`} style={{ color: B.apagado }}>—</span>
+    if (cual === 'final') return <span data-cifra-plan="final" style={{ color: B.titulo, fontWeight: 600 }}>{eurosPlan(c.v.final, 0)}</span>
+    if (cual === 'twr') return <span data-cifra-plan="twr" style={{ color: c.v.twr > 0 ? VERDE_P : c.v.twr < 0 ? ROJO_P : B.texto }}>{pct(c.v.twr)}</span>
+    if (cual === 'caida') return <span data-cifra-plan="caida" style={{ color: ROJO_P }}>{pct(c.v.caida)}</span>
+    const pts = puntosFrente(c.v.twr, c.qqq)
+    return <span data-cifra-plan="qqq" style={{ color: pts === '—' ? B.apagado : pts.startsWith('+') ? VERDE_P : ROJO_P }}>{pts === '—' ? pts : `${pts} pts`}</span>
+  }
   const portadaPlanes = (<>
     <div data-cabecera-planes style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '0 0 10px' }}>
       <span data-titulo-portada="planes" style={{ fontSize: 22, fontWeight: 700, color: B.titulo, display: 'inline-flex', alignItems: 'center', gap: 4 }}>Planes<Ayuda texto={AYUDA_PORTADA_PLANES} etiqueta="Planes"/></span>
       <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <button data-boton="comparar-portada" style={{ ...(nPlanes >= 2 ? S.boton : S.botonDesactivado), ...botonPeque }} disabled={nPlanes < 2} title={nPlanes >= 2 ? 'Ver tus planes guardados uno al lado del otro, con sus cifras' : 'Hacen falta al menos dos planes guardados'} onClick={() => setPlan({ comparar: true, n: Date.now() })}>Comparar planes</button>
+        <button data-boton="comparar-portada" style={{ ...(marcadosVivos.length >= 2 ? S.boton : S.botonDesactivado), ...botonPeque }} disabled={marcadosVivos.length < 2} title={marcadosVivos.length >= 2 ? 'Ver los planes marcados uno al lado del otro, con su gráfico' : nPlanes >= 2 ? 'Marca al menos dos planes en su casilla' : 'Hacen falta al menos dos planes guardados'} onClick={comparaMarcados}>Comparar los marcados ({marcadosVivos.length})</button>
         <button data-boton="nuevo-plan" style={{ ...S.botonVerde, ...botonPeque }} title="Prepara un plan nuevo; no se guarda hasta que tú lo digas" onClick={() => setPlan({ nuevo: true, n: Date.now() })}>+ Nuevo plan</button>
       </span>
     </div>
@@ -339,23 +385,28 @@ export default function BuilderPanel({ estrategias = [], salida = null, onAbrirE
       </div>
       <div style={{ overflowX: 'auto', maxHeight: 560, overflowY: 'auto' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%' }} data-tabla="planes">
-          <thead><tr>{[['Plan'], ['Cartera', AYUDA_PORTADA_CARTERA], ['Tu dinero'], ['Periodo'], ['']].map(([h, a]) => <th key={h} style={{ ...cabecera, verticalAlign: 'middle', padding: '7px 12px', whiteSpace: 'nowrap' }}>{a ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{h}<Ayuda texto={a} etiqueta={h}/></span> : h}</th>)}</tr></thead>
+          <thead><tr>{[['', AYUDA_PORTADA_MARCAR], ['Plan'], ['Cartera', AYUDA_PORTADA_CARTERA], ['Tu dinero'], ['Periodo'], ['Tienes al final', AYUDA_PORTADA_CIFRAS, 1], ['CAGR del plan', null, 1], ['Peor caída', null, 1], ['Frente a B&H QQQ', AYUDA_PORTADA_QQQ, 1], ['']].map(([h, a, num], i) => <th key={i} style={{ ...cabecera, verticalAlign: 'middle', padding: '7px 12px', whiteSpace: 'nowrap', textAlign: num ? 'right' : 'left' }}>{a ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{h}<Ayuda texto={a} etiqueta={h || 'Comparar'}/></span> : h}</th>)}</tr></thead>
           <tbody>
             {planesVis.map(p => (
               <tr key={p.id} data-fila-plan={p.id}>
+                <td style={{ ...fila, width: 34 }}><input type="checkbox" data-marcar-plan={p.id} aria-label={`Marcar «${p.nombre}» para comparar`} title={marcadosVivos.includes(Number(p.id)) ? 'Marcado para comparar' : marcadosVivos.length >= MAX_COMPARAR ? `Se comparan ${MAX_COMPARAR} como mucho: desmarca otro antes` : 'Marcar para comparar'} checked={marcadosVivos.includes(Number(p.id))} disabled={!marcadosVivos.includes(Number(p.id)) && marcadosVivos.length >= MAX_COMPARAR} onChange={() => marca(p.id)} style={{ width: 'auto', cursor: 'pointer' }}/></td>
                 <td style={{ ...fila, maxWidth: 340 }}><button data-nombre-plan style={{ ...S.enlace, color: B.titulo, fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }} title={`Abrir «${p.nombre}» con sus cifras`} onClick={() => setPlan({ planId: p.id, n: Date.now() })}><Resaltado texto={p.nombre} consulta={buscarP}/></button></td>
                 <td data-celda-cartera style={{ ...fila, color: B.secundario, maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis' }} title={carteraDe(p)}>{carteraDe(p)}</td>
                 <td data-celda-dinero style={{ ...fila, color: B.secundario }}>{textoDinero(p.plan)}</td>
                 <td style={{ ...fila, color: B.secundario }}>{textoPeriodo(p.plan)}</td>
+                <td style={cifraTd}>{celdaCifra(p, 'final')}</td>
+                <td style={cifraTd}>{celdaCifra(p, 'twr')}</td>
+                <td style={cifraTd}>{celdaCifra(p, 'caida')}</td>
+                <td style={cifraTd}>{celdaCifra(p, 'qqq')}</td>
                 <td style={{ ...fila, width: 70 }}><button data-abrir-plan={p.id} style={{ ...S.enlace, fontSize: 13, fontWeight: 700 }} onClick={() => setPlan({ planId: p.id, n: Date.now() })}>Abrir</button></td>
               </tr>
             ))}
-            {!datos.cargando && !planesVis.length && <tr><td colSpan={5} style={{ ...celda, color: B.secundario }}>{!nPlanes ? 'Todavía no hay planes. Crea uno con «+ Nuevo plan» o, desde una estrategia, con «Usar en un plan».' : `Nada con «${buscarP.trim()}».`}</td></tr>}
-            {datos.cargando && <tr><td colSpan={5} style={{ ...celda, color: B.secundario }}>Cargando…</td></tr>}
+            {!datos.cargando && !planesVis.length && <tr><td colSpan={10} style={{ ...celda, color: B.secundario }}>{!nPlanes ? 'Todavía no hay planes. Crea uno con «+ Nuevo plan» o, desde una estrategia, con «Usar en un plan».' : `Nada con «${buscarP.trim()}».`}</td></tr>}
+            {datos.cargando && <tr><td colSpan={10} style={{ ...celda, color: B.secundario }}>Cargando…</td></tr>}
           </tbody>
         </table>
       </div>
-      <div data-nota-cifras style={{ ...S.apagado, padding: '10px 12px' }}>Las cifras de cada plan (cuánto tienes al final, CAGR, peor caída) se ven al abrirlo y, juntas, en «Comparar planes».</div>
+      <div data-nota-cifras style={{ ...S.apagado, padding: '10px 12px' }}>Las cifras son las de cada plan tal como está guardado, vendiendo todo el último día. Con una lista de valores se calculan al abrirlo o en «Comparar planes».</div>
     </div>
   </>)
   return (

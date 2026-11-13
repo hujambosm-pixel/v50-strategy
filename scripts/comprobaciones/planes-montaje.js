@@ -65,6 +65,13 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   b = base([4, 7, 6]); m = await portadaP()
   ok(m.raiz.conAtributo('data-celda-cartera').length === 3 && m.raiz.conAtributo('data-celda-cartera').every(n => /^100 % · «.+» en .+/.test(n.textContent)) && m.raiz.conAtributo('data-celda-dinero').every(n => /€/.test(n.textContent)), `§140: cada plan con su cartera y su dinero («${m.raiz.conAtributo('data-celda-cartera')[0]?.textContent}» · «${m.raiz.conAtributo('data-celda-dinero')[0]?.textContent}»)`)
   ok(!m.raiz.conAtributo('data-tabla', 'estrategias').length && !m.raiz.conAtributo('data-paso').length, '§140: en la portada de Planes no sale la lista de estrategias ni pasos')
+  // §141: cada plan con su casilla (marcados los que recuerda «Comparar planes»; aquí, los 3) y sus cuatro cifras (o su aviso, si no se pueden calcular).
+  const marcas = (x) => x.raiz.conAtributo('data-marcar-plan'), textoComparar = (x) => botonP(x, 'comparar-portada').textContent
+  ok(marcas(m).length === 3 && marcas(m).every(n => D.propsDe(n).checked) && textoComparar(m) === 'Comparar los marcados (3)' && !D.propsDe(botonP(m, 'comparar-portada')).disabled && m.raiz.conAtributo('data-cifra-plan').length === 12, `§141: 3 casillas marcadas, «${textoComparar(m)}» y 12 celdas de cifras (${[...new Set(m.raiz.conAtributo('data-cifra-plan').map(n => n.getAttribute('data-cifra-plan')))].join()})`)
+  D.propsDe(marcas(m)[0]).onChange(); await D.espera(5); D.propsDe(marcas(m)[1]).onChange(); await D.espera(5)
+  ok(textoComparar(m) === 'Comparar los marcados (1)' && D.propsDe(botonP(m, 'comparar-portada')).disabled && !D.propsDe(marcas(m)[0]).checked && D.propsDe(marcas(m)[2]).checked, '§141: con uno solo marcado, «Comparar» se apaga')
+  D.propsDe(marcas(m)[0]).onChange(); await D.espera(5)
+  ok(textoComparar(m) === 'Comparar los marcados (2)' && !D.propsDe(botonP(m, 'comparar-portada')).disabled, '§141: con dos, se enciende')
   D.pulsa(botonP(m, 'nuevo-plan')); await D.espera(LARGO)
   ok(String(vista(m).activa).startsWith('n') && vista(m).ruta === 'Plan nuevo', `§140: «+ Nuevo plan»: uno nuevo sin guardar (${vista(m).activa}, «${vista(m).ruta}»)`); m.quita(); await D.espera(5)
   b = base([4, 7, 6]); m = await portadaP(); D.pulsa(botonP(m, 'comparar-portada')); await D.espera(LARGO)
