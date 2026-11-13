@@ -40,7 +40,8 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   const debeSer6 = (m, t) => { const v = vista(m); ok(v.activa === 'g6' && v.ruta === 'SuperTrend 10/3 / gold' && v.rutaE == null && v.pasos === 0, `${t}: activa ${v.activa}, ruta «${v.ruta}»`); return v }
   // Builder sin montar: se monta ya con el plan pedido.
   let b = base([4, 7, 6]), m = D.monta(h(BP, props({ abrir: { planId: 6, n: 1 } })), RDC)
-  await D.espera(LARGO); let v = debeSer6(m, 'sin montar, plan abierto y no primero')
+  await D.espera(LARGO); for (let i = 0; i < 200 && !vista(m).activa; i++) await D.espera(100)   // es el primer montaje: con el equipo cargado puede tardar (espera a lo que busca, 20 s como mucho)
+  let v = debeSer6(m, 'sin montar, plan abierto y no primero')
   ok(v.pestanas === 'g4,g7,g6', `las pestañas, en su orden (${v.pestanas})`); m.quita(); await D.espera(5)
   b = base([4, 7]); m = D.monta(h(BP, props({ abrir: { planId: 6, n: 2 } })), RDC)
   await D.espera(LARGO); v = debeSer6(m, 'sin montar, plan no abierto')
@@ -73,6 +74,15 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   D.propsDe(marcas(m)[0]).onChange(); await D.espera(5)
   ok(textoComparar(m) === 'Comparar los marcados (2)' && !D.propsDe(botonP(m, 'comparar-portada')).disabled, '§141: con dos, se enciende')
   D.pulsa(botonP(m, 'nuevo-plan')); await D.espera(LARGO)
+  // §142: «Cartera» con el bloque en una fila que se pliega; el dinero ocioso y el apalancamiento, dentro del bloque y no en «Tu dinero»; fuera «Bloque 1», «Parte de tu dinero», «Modo de asignación» y «+ Añadir bloque».
+  const tarjetaP = (id) => m.raiz.conAtributo('data-tarjeta', id)[0], bloque1 = () => m.raiz.conAtributo('data-bloque', '1')[0]
+  ok(tarjetaP('bloques')?.textContent.startsWith('Cartera') && !botonP(m, 'anadir-bloque') && !/Bloque 1|Modo de asignación|Parte de tu dinero|Bloques/.test(m.raiz.textContent) && m.raiz.conAtributo('data-parte')[0]?.textContent === '100 %', '§142: «Cartera», con el bloque al 100 % y sin lo que prometía de más')
+  ok(/Dinero ocioso/.test(bloque1().textContent) && /Apalancamiento/.test(bloque1().textContent) && !/Dinero ocioso|Apalancamiento|operación abierta/.test(tarjetaP('tu-dinero').textContent) && /Periodo/.test(tarjetaP('tu-dinero').textContent) && /Impuestos/.test(tarjetaP('tu-dinero').textContent) && /Comisión/.test(tarjetaP('tu-dinero').textContent), '§142: el ocioso y el apalancamiento, en el bloque; en «Tu dinero», periodo, dinero, impuestos y comisión')
+  ok(/^Estrategia · /.test(m.raiz.conAtributo('data-resumen-bloque')[0]?.textContent) && /^en AAPL · ocioso en /.test(m.raiz.conAtributo('data-resumen-donde')[0]?.textContent), `§142: la fila resume el bloque («${m.raiz.conAtributo('data-resumen-bloque')[0]?.textContent}» · «${m.raiz.conAtributo('data-resumen-donde')[0]?.textContent}»)`)
+  D.pulsa(m.raiz.conAtributo('data-fila-bloque')[0]); await D.espera(5)
+  ok(!m.raiz.conAtributo('data-cuerpo-bloque').length && !/Dinero ocioso/.test(bloque1().textContent) && m.raiz.conAtributo('data-resumen-bloque').length === 1, '§142: pulsar la fila pliega el bloque y deja su resumen')
+  D.pulsa(m.raiz.conAtributo('data-fila-bloque')[0]); await D.espera(5)
+  ok(m.raiz.conAtributo('data-cuerpo-bloque').length === 1, '§142: y volver a pulsarla lo abre')
   ok(String(vista(m).activa).startsWith('n') && vista(m).ruta === 'Plan nuevo', `§140: «+ Nuevo plan»: uno nuevo sin guardar (${vista(m).activa}, «${vista(m).ruta}»)`); m.quita(); await D.espera(5)
   b = base([4, 7, 6]); m = await portadaP(); D.pulsa(botonP(m, 'comparar-portada')); await D.espera(LARGO)
   ok(m.raiz.conAtributo('data-pantalla', 'plan').length === 1 && m.raiz.conAtributo('data-ruta').length === 0 && m.raiz.textContent.includes('Comparar planes'), '§140: «Comparar planes» de la portada entra comparando'); m.quita(); await D.espera(5)

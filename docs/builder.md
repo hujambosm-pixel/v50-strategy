@@ -2909,3 +2909,11 @@ Boceto bocetos/camino-completo.html, opción A, pantalla 3. Ninguna cifra cambia
 - Casilla por plan (hasta 4, MAX_COMPARAR) y «Comparar los marcados (N)», encendido con dos o más. Los marcados son los que recuerda «Comparar planes» en el navegador (CLAVE_COMPARAR): se leen al entrar y se escriben al pulsar el botón; la pantalla de comparar entra con ellos.
 - Comprobaciones: planes-montaje.js (3 nuevas). Comprobado en la app con los planes guardados: las cifras de la portada son las de cada plan abierto.
 - Pendiente: cifras de los planes con lista en la portada; duplicar y borrar desde la portada; quitar las pestañas de planes; desplegable de «Usar en un plan».
+
+## 142. El camino nuevo, parte 3: «Cartera» en filas y el dinero ocioso dentro del bloque
+Plan = Cartera + Tu dinero (decisión de Sergi del 13/11; boceto bocetos/camino-completo.html, opción A, pantalla 4). Solo cambia DÓNDE se pinta cada cosa en la columna izquierda del plan: el plan guardado no cambia (el ocioso, «aportacionDentro» y el apalancamiento ya eran de la pieza) y ninguna cifra cambia.
+- components/BuilderPlan.js, tarjeta «Cartera · en qué se invierte» (antes «Bloques»; sigue con data-tarjeta="bloques"): una barra con el reparto (hoy, un solo color al 100 %) y el bloque como una FILA que se pliega (data-fila-bloque; bloqueAbierto, solo en pantalla): «100 % · Estrategia · <nombre>» y, debajo, «en AAPL / una lista de N valores / el Nasdaq-100 · ocioso en <dónde>». Dentro del bloque, además de lo de siempre (estrategia, dónde se aplica, reparto y filtros con lista): «Dinero ocioso · mientras no hay señal, espera en», «Si llega una aportación con la operación abierta» (solo con una acción) y «Apalancamiento». Fuera: el rótulo «Bloque 1», «Parte de tu dinero» (el 100 % va en la fila), el desplegable apagado «Modo de asignación · Solo con listas» y el botón apagado «+ Añadir bloque» (volverá cuando un plan admita varios bloques).
+- «Tu dinero · cuánto, cuándo y costes»: periodo, dinero inicial, aportación, impuestos y comisión.
+- lib/builder/planPantalla.js: AYUDA_PLAN.cartera (el «?» de «Cartera»).
+- Comprobaciones: planes-montaje.js (5 nuevas).
+- Pendiente: bloque «Con pesos» (el motor de «pesos con reglas»), varios bloques por plan y «Volver al reparto entre bloques».

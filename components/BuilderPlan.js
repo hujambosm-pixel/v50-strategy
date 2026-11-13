@@ -238,6 +238,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const estBorrada = !!fotoG && String(fotoG.id) === estId && !estrategias.some(s => String(s.id) === estId)   // §60: se borró; el plan sigue con su copia
   const cambia = (k, v) => setA(x => ({ ...x, [k]: v }))
   const [otroForzado, setOtroForzado] = useState(false)
+  const [bloqueAbierto, setBloqueAbierto] = useState(true)   // §142: la fila del bloque de «Cartera», abierta o plegada (solo en pantalla)
   const otroOcioso = otroForzado || !OCIOSOS_FIJOS.some(([k]) => k === a.ocioso)
   const setOtroOcioso = setOtroForzado
   const [cambio, setCambio] = useState(inicial?.cambio || null)   // { cambiada, borrada } del plan guardado abierto
@@ -657,10 +658,20 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const L = a.lista || {}
   const bloques = (
     <div data-tarjeta="bloques" style={{ ...S.tarjeta, overflow: 'visible' }}>
-      <div style={{ ...S.cabeceraTarjeta, borderRadius: `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0`, display: 'flex', alignItems: 'center', gap: 2 }}>Bloques<Ayuda texto={AYUDA_PLAN.bloque} etiqueta="Bloques"/></div>
+      <div style={{ ...S.cabeceraTarjeta, borderRadius: `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0`, display: 'flex', alignItems: 'center', gap: 2 }}>Cartera<Ayuda texto={AYUDA_PLAN.cartera} etiqueta="Cartera"/><span data-subtitulo style={{ ...S.apagado, fontWeight: 400, marginLeft: 8 }}>en qué se invierte</span></div>
       <div style={{ ...S.cuerpo, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div data-bloque="1" style={{ border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ fontWeight: 700, color: B.titulo }}>Bloque 1</div>
+        <div data-barra-cartera aria-hidden="true" title="Todo el dinero del plan está en este bloque" style={{ height: 8, borderRadius: 4, background: AZUL }}/>
+        <div data-bloque="1" style={{ border: `1px solid ${B.borde}`, borderRadius: B.radioBoton }}>
+          <button type="button" data-fila-bloque aria-expanded={bloqueAbierto} onClick={() => setBloqueAbierto(x => !x)} title={bloqueAbierto ? 'Plegar el bloque' : 'Abrir el bloque'} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, textAlign: 'left' }}>
+            <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: AZUL, flex: 'none' }}/>
+            <span data-parte title="Qué parte del dinero del plan va a este bloque. Por ahora, un solo bloque con todo: de 10.000 €, los 10.000 €." style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>100 %</span>
+            <span style={{ minWidth: 0, flex: '1 1 auto' }}>
+              <span data-resumen-bloque style={{ display: 'block', color: B.titulo, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Estrategia · {estrategia?.name || 'sin elegir'}</span>
+              <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>en {enLista ? (L.universo && L.universo !== 'manual' ? 'el Nasdaq-100' : `una lista de ${(L.simbolos || []).length} valores`) : a.activo} · ocioso en {(OCIOSOS_FIJOS.find(([k]) => k === a.ocioso)?.[1] || a.ocioso || '—')}</span>
+            </span>
+            <span aria-hidden="true" style={{ color: B.secundario, flex: 'none' }}>{bloqueAbierto ? '▾' : '▸'}</span>
+          </button>
+          {bloqueAbierto && <div data-cuerpo-bloque style={{ borderTop: `1px solid ${B.borde}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <Etiqueta texto="Estrategia" ayuda={AYUDA_PLAN.estrategia}/>
             {tarjetas.length ? <select aria-label="Estrategia" value={estId} onChange={e => { setEstId(e.target.value); setCualVersion('actual') }} style={{ ...campo, maxWidth: '100%' }}>
@@ -706,19 +717,27 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
               <FiltrosPanel ambito="activo" titulo="FILTROS DEL ACTIVO" filtros={mergeFiltros(L.filtros || [])} setFiltros={ponLista('filtros')} open={vistaLista.activo} setOpen={ponVista('activo')} variant="mc" botonGrande/>
             </div>
           </div>}
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <div><Etiqueta texto="Parte de tu dinero" ayuda={AYUDA_PLAN.parte}/><span data-parte style={S.chip('neutro')}>100 %</span></div>
-            {!enLista && <div><Etiqueta texto="Modo de asignación" ayuda={AYUDA_PLAN.modo}/><select aria-label="Modo de asignación" disabled style={{ ...campo, color: B.apagado, cursor: 'not-allowed' }}><option>Solo con listas</option></select></div>}
+          {/* §142: el dinero ocioso, «Si llega una aportación…» y el apalancamiento son de CÓMO se invierte este bloque (en el plan guardado ya eran de su pieza): van aquí, no en «Tu dinero». */}
+          <div>
+            <Etiqueta texto="Dinero ocioso · mientras no hay señal, espera en" ayuda={AYUDA_PLAN.ocioso}/>
+            <Segmentos etiquetaGrupo="Dinero ocioso" valor={otroOcioso ? 'OTRO' : a.ocioso} onCambia={v => { if (v === 'OTRO') setOtroOcioso(true); else { setOtroOcioso(false); cambia('ocioso', v) } }} opciones={[...OCIOSOS_FIJOS, ['OTRO', 'Otro símbolo']]}/>
+            {otroOcioso && <div style={{ marginTop: 10 }}><BuscadorValor valores={valoresLista} valor={OCIOSOS_FIJOS.some(([k]) => k === a.ocioso) ? '' : a.ocioso} onCambia={s => cambia('ocioso', s)} etiqueta="Símbolo del ocioso"/></div>}
           </div>
+          {/* §91: con una lista, la aportación siempre espera en el ocioso hasta la siguiente compra (no hay una sola operación abierta). */}
+          {!enLista && <div>
+            <Etiqueta texto="Si llega una aportación con la operación abierta" ayuda={AYUDA_PLAN.dentro}/>
+            <Segmentos etiquetaGrupo="Si llega una aportación con la operación abierta" valor={a.aportacionDentro} onCambia={v => cambia('aportacionDentro', v)} opciones={[['espera', 'Espera en el ocioso hasta la siguiente compra'], ['compra', 'Compra más acción']]}/>
+          </div>}
+            <div><Etiqueta texto="Apalancamiento" ayuda={AYUDA_PLAN.apalancamiento}/><Segmentos etiquetaGrupo="Apalancamiento" valor={a.apalancamiento} onCambia={v => cambia('apalancamiento', v)} opciones={[[1, 'No'], [2, '×2'], [3, '×3']]}/></div>
+          </div>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}><button data-boton="anadir-bloque" type="button" disabled style={{ ...S.boton, color: B.apagado, cursor: 'not-allowed' }}>+ Añadir bloque</button><Ayuda texto={AYUDA_PLAN.anadirBloque} etiqueta="Añadir bloque"/></div>
       </div>
     </div>
   )
   const fs = fechasDe(a)
   const dinero = (
     <div data-tarjeta="tu-dinero" style={{ ...S.tarjeta, marginTop: 16, overflow: 'visible' }}>
-      <div style={{ ...S.cabeceraTarjeta, borderRadius: `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0` }}>Tu dinero</div>
+      <div style={{ ...S.cabeceraTarjeta, borderRadius: `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0` , display: 'flex', alignItems: 'baseline', gap: 8 }}>Tu dinero<span data-subtitulo style={{ ...S.apagado, fontWeight: 400 }}>cuánto, cuándo y costes</span></div>
       <div style={{ ...S.cuerpo, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div>
           <Etiqueta texto="Periodo" ayuda={AYUDA_PLAN.periodo}/>
@@ -736,18 +755,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           <Segmentos etiquetaGrupo="Cómo es la aportación" valor={a.sube ? 'sube' : 'fija'} onCambia={v => setA(x => ({ ...x, sube: v === 'sube', subePct: v === 'sube' && !(Number(x.subePct) > 0) ? SUBIDA_DEFECTO : x.subePct }))} opciones={[['fija', 'Fija'], ['sube', 'Sube cada año']]}/>
           {a.sube && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero etiqueta="Cuánto sube cada año" valor={a.subePct} onCambia={v => cambia('subePct', v)} ancho={70} minimo={-Infinity}/> % al año</span>}
         </div>
-        <div>
-          <Etiqueta texto="Dinero ocioso" ayuda={AYUDA_PLAN.ocioso}/>
-          <Segmentos etiquetaGrupo="Dinero ocioso" valor={otroOcioso ? 'OTRO' : a.ocioso} onCambia={v => { if (v === 'OTRO') setOtroOcioso(true); else { setOtroOcioso(false); cambia('ocioso', v) } }} opciones={[...OCIOSOS_FIJOS, ['OTRO', 'Otro símbolo']]}/>
-          {otroOcioso && <div style={{ marginTop: 10 }}><BuscadorValor valores={valoresLista} valor={OCIOSOS_FIJOS.some(([k]) => k === a.ocioso) ? '' : a.ocioso} onCambia={s => cambia('ocioso', s)} etiqueta="Símbolo del ocioso"/></div>}
-        </div>
-        {/* §91: con una lista, la aportación siempre espera en el ocioso hasta la siguiente compra (no hay una sola operación abierta). */}
-        {!enLista && <div>
-          <Etiqueta texto="Si llega una aportación con la operación abierta" ayuda={AYUDA_PLAN.dentro}/>
-          <Segmentos etiquetaGrupo="Si llega una aportación con la operación abierta" valor={a.aportacionDentro} onCambia={v => cambia('aportacionDentro', v)} opciones={[['espera', 'Espera en el ocioso hasta la siguiente compra'], ['compra', 'Compra más acción']]}/>
-        </div>}
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <div><Etiqueta texto="Apalancamiento" ayuda={AYUDA_PLAN.apalancamiento}/><Segmentos etiquetaGrupo="Apalancamiento" valor={a.apalancamiento} onCambia={v => cambia('apalancamiento', v)} opciones={[[1, 'No'], [2, '×2'], [3, '×3']]}/></div>
           <div><Etiqueta texto="Impuestos" ayuda={AYUDA_PLAN.impuestos}/><Segmentos etiquetaGrupo="Impuestos" valor={a.impuestos} onCambia={v => cambia('impuestos', v)} opciones={[['ES-ahorro', 'España · base del ahorro'], ['ninguno', 'Sin impuestos']]}/></div>
         </div>
         <div>
