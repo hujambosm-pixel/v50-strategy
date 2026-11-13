@@ -200,7 +200,7 @@ const Tarjeta = ({ id, titulo, ayuda, children }) => (
   </div>
 )
 
-export default function BuilderPlan({ estrategias = [], estrategiaId = null, planId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, salida = null, enlaceTesis = null, deps = null, inicial = null, datosLista = null, onIrAValor = null, tema = 'oscuro' }) {
+export default function BuilderPlan({ estrategias = [], estrategiaId = null, planId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, salida = null, enlaceTesis = null, deps = null, inicial = null, datosLista = null, onIrAValor = null, tema = 'oscuro', nuevo = false, comparar = false }) {
   const tarjetas = useMemo(() => estrategias.filter(esDeTarjetas).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
   const diarias = useMemo(() => tarjetas.filter(s => !esSemanal(s)), [tarjetas])
   const deCodigo = useMemo(() => estrategias.filter(esDeCodigo).length, [estrategias])
@@ -263,7 +263,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const [vistaDer, setVistaDer] = useState(inicial?.vistaDer || 'dinero')
   // §128: «Comparar planes». comparando: se ve la comparación en lugar del plan abierto (que sigue con sus cambios). Lo elegido, recordado
   // en este navegador (CLAVE_COMPARAR); el modo del gráfico (null = el de por defecto), solo en esta visita. resComp: { id: estado de su cálculo }.
-  const [comparando, setComparando] = useState(!!inicial?.comparando)
+  const [comparando, setComparando] = useState(!!inicial?.comparando || !!comparar)   // §140: comparar: se entra comparando (desde la portada de Planes)
   const [comp, setComp] = useState(() => ({ elegidos: inicial?.compararElegidos || null, refs: REFS_COMPARAR.map(r => r.id), log: true, modo: null, plegado: !!inicial?.compararPlegado }))
   const [resComp, setResComp] = useState(inicial?.resComp || {})
   // §80: «Una lista». Lo que se guarda va en a.lista (lib/planes/lista.js); esto es solo de la vista (buscar, ★, la lista de la Watchlist, qué está desplegado).
@@ -372,7 +372,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const entra = (xs, guardadas) => {
     const o = ordenInicial(guardadas, xs)
     ultimasIds.current = guardadas == null ? null : JSON.stringify(guardadas.map(Number))
-    const e = eligeEntrada({ planes: xs, orden: o, estrategiaId, planId, fotoDe: fotoDelPlan })
+    const e = nuevo ? { nuevo: true } : eligeEntrada({ planes: xs, orden: o, estrategiaId, planId, fotoDe: fotoDelPlan })   // §140: nuevo: «+ Nuevo plan» de la portada
     setPlanes(xs)
     if (e.noExiste) setAvisoPlan(AVISO_NO_EXISTE)
     if (e.nuevo) { const b = borrador(); setNuevas([{ clave: 'n1', nombre: 'Plan nuevo', base: base(b) }]); setOrden([...o, 'n1']); aplica(b); setActual('n1'); return }

@@ -47,8 +47,9 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   ok(v.pestanas === 'g4,g7,g6' && b.pestanas.join() === '4,7,6', `se añade al final y se guarda (${b.pestanas})`); m.quita(); await D.espera(5)
   // Builder ya montado: primero el paso 3 por su barra (sin pedir plan), luego se oculta (la tesis) y se pide.
   const hastaPaso3 = async () => {
-    const x = D.monta(h(BP, props()), RDC); await D.espera(30)
-    D.pulsa(x.raiz.busca(n => n.getAttribute('data-paso') === '3')); await D.espera(LARGO)
+    const x = D.monta(h(BP, { ...props(), zonaInicial: 'planes' }), RDC); const fila4 = () => x.raiz.busca(n => n.getAttribute('data-abrir-plan') === '4')
+    for (let i = 0; i < 100 && !fila4(); i++) await D.espera(20)   // la portada de Planes lee los planes (a veces tardan, a propósito)
+    D.pulsa(fila4()); await D.espera(LARGO)
     return x
   }
   for (const [t, pest, tarda] of [['plan abierto y no primero', [4, 7, 6], {}], ['plan no abierto', [4, 7], {}], ['las pestañas se leen después que los planes', [4, 7, 6], { pestanas: 40 }], ['los planes se leen después que las pestañas', [4, 7, 6], { planes: 40 }]]) {
@@ -59,6 +60,17 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
     debeSer6(m, `montado, ${t}`)
     ok(vista(m).pestanas === 'g4,g7,g6', `  con todas las pestañas (${vista(m).pestanas})`); m.quita(); await D.espera(5)
   }
+  // §140: las portadas. Planes: cada plan con su cartera y su dinero; «+ Nuevo plan» prepara uno nuevo aunque haya planes; «Comparar planes» entra comparando. Estrategias: sin la barra de tres cajas.
+  const portadaP = async () => { const x = D.monta(h(BP, { ...props(), zonaInicial: 'planes' }), RDC); await D.espera(LARGO); return x }, botonP = (x, id) => x.raiz.busca(n => n.getAttribute('data-boton') === id)
+  b = base([4, 7, 6]); m = await portadaP()
+  ok(m.raiz.conAtributo('data-celda-cartera').length === 3 && m.raiz.conAtributo('data-celda-cartera').every(n => /^100 % · «.+» en .+/.test(n.textContent)) && m.raiz.conAtributo('data-celda-dinero').every(n => /€/.test(n.textContent)), `§140: cada plan con su cartera y su dinero («${m.raiz.conAtributo('data-celda-cartera')[0]?.textContent}» · «${m.raiz.conAtributo('data-celda-dinero')[0]?.textContent}»)`)
+  ok(!m.raiz.conAtributo('data-tabla', 'estrategias').length && !m.raiz.conAtributo('data-paso').length, '§140: en la portada de Planes no sale la lista de estrategias ni pasos')
+  D.pulsa(botonP(m, 'nuevo-plan')); await D.espera(LARGO)
+  ok(String(vista(m).activa).startsWith('n') && vista(m).ruta === 'Plan nuevo', `§140: «+ Nuevo plan»: uno nuevo sin guardar (${vista(m).activa}, «${vista(m).ruta}»)`); m.quita(); await D.espera(5)
+  b = base([4, 7, 6]); m = await portadaP(); D.pulsa(botonP(m, 'comparar-portada')); await D.espera(LARGO)
+  ok(m.raiz.conAtributo('data-pantalla', 'plan').length === 1 && m.raiz.conAtributo('data-ruta').length === 0 && m.raiz.textContent.includes('Comparar planes'), '§140: «Comparar planes» de la portada entra comparando'); m.quita(); await D.espera(5)
+  b = base([4, 7, 6]); m = D.monta(h(BP, props()), RDC); await D.espera(LARGO)
+  ok(m.raiz.conAtributo('data-titulo-portada', 'estrategias').length === 1 && !m.raiz.conAtributo('data-paso').length && !m.raiz.conAtributo('data-tabla', 'planes').length && !/Convertirla en plan|Mi trabajo/.test(m.raiz.textContent), '§140: la portada de Estrategias: su título, sin la barra de tres cajas ni «Mi trabajo»'); m.quita(); await D.espera(5)
   // Un plan que ya no existe: el aviso, y lo de siempre.
   b = base([4, 7, 6]); m = D.monta(h(BP, props({ abrir: { planId: 99, n: 4 } })), RDC); await D.espera(LARGO)
   ok(vista(m).activa === 'g4' && m.raiz.conAtributo('data-aviso', 'plan-no-existe').length === 1, 'un plan borrado: lo avisa y abre lo de siempre'); m.quita(); await D.espera(5)
@@ -67,10 +79,11 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   const Sustituto = ({ valor }) => h('div', { 'data-texto': '' }, valor)
   const tesisDe = (rel) => { const t = { id: 22, titulo: 'Prueba adjuntos', texto: '', estado: 'estudio', relacionados: rel, created_at: '2026-11-01T10:00:00Z', updated_at: '2026-11-01T10:00:00Z' }; return { tesis: [t], abierta: 22, borrador: { titulo: t.titulo, texto: '', estado: 'estudio', relacionados: rel }, planes: PLANES.map(p => ({ id: p.id, nombre: p.nombre })) } }
   function Pagina({ inicial }) {
-    const [panel, setPanel] = React.useState(inicial.panel), [abrir, setAbrir] = React.useState(null), [visto, setVisto] = React.useState(inicial.panel === 'builder')
+    const [panel, setPanel] = React.useState(inicial.panel), [abrir, setAbrir] = React.useState(null), [visto, setVisto] = React.useState(inicial.panel === 'builder'), [ir, setIr] = React.useState(null)
     React.useEffect(() => { if (panel === 'builder') setVisto(true) }, [panel])
     return h('div', null,
-      (visto || panel === 'builder') && h('div', { 'data-builder': panel === 'builder' ? 'visible' : 'oculto' }, h(BP, props({ visible: panel === 'builder', abrir }))),
+      (visto || panel === 'builder') && h('div', { 'data-builder': panel === 'builder' ? 'visible' : 'oculto' }, h(BP, props({ visible: panel === 'builder', abrir, ir }))),
+      h('button', { 'data-menu-item': 'planes', onClick: () => { setIr({ zona: 'planes', n: Date.now() }); setPanel('builder') } }, 'Planes'),
       panel === 'tesis' && h(TP, { estrategias: ests, deps: { ctx: { url: 'https://falso.invalid', headers: {}, fetch: globalThis.fetch }, Editor: Sustituto }, inicial: tesisDe(inicial.rel), onAbrirEstrategia: (s) => { setAbrir({ fila: { ...s }, n: Date.now() }); setPanel('builder') }, onAbrirPlan: (id) => { setAbrir({ planId: Number(id), n: Date.now() }); setPanel('builder') } }),
       panel !== 'tesis' && h('button', { 'data-a-tesis': '', onClick: () => setPanel('tesis') }, 'Tesis'))
   }
@@ -78,8 +91,10 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   D.pulsa(m.raiz.busca(n => n.getAttribute('data-abrir-plan') === '6')); await D.espera(LARGO)
   debeSer6(m, 'la cadena entera, de la ficha «Plan» de la tesis, con el Builder sin montar'); m.quita(); await D.espera(5)
   b = base([4, 7, 6]); m = D.monta(h(Pagina, { inicial: { panel: 'builder', rel: [{ tipo: 'plan', id: '6' }] } }), RDC); await D.espera(30)
-  D.pulsa(m.raiz.busca(n => n.getAttribute('data-paso') === '3')); await D.espera(LARGO)
-  ok(vista(m).activa === 'g4', 'la cadena: el paso 3 abierto, g4 activa')
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-menu-item') === 'planes')); await D.espera(30)
+  ok(m.raiz.conAtributo('data-titulo-portada', 'planes').length === 1 && m.raiz.conAtributo('data-fila-plan').length === 3 && !m.raiz.conAtributo('data-tabla', 'estrategias').length, '§140: «Planes» del menú abre la portada de planes, con sus 3 planes')
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-abrir-plan') === '4')); await D.espera(LARGO)
+  ok(vista(m).activa === 'g4', 'la cadena: el plan abierto desde su portada, g4 activa')
   D.pulsa(m.raiz.busca(n => n.getAttribute('data-a-tesis') != null)); await D.espera(10)
   D.pulsa(m.raiz.busca(n => n.getAttribute('data-abrir-plan') === '6')); await D.espera(LARGO)
   debeSer6(m, 'la cadena entera, con el Builder ya montado en el paso 3'); m.quita(); await D.espera(5)

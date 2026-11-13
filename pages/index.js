@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1201'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1202'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -915,6 +915,8 @@ export default function Home() {
   const alternaTema=()=>setTemaApp(t=>{ const n=t==='claro'?'oscuro':'claro'; try{ localStorage.setItem('app.tema',n) }catch(_){} return n })
   // builderAbrir (V9.1048): la estrategia que el Builder tiene que abrir (al pulsar su nombre en «Backtest de un valor»). { fila, n }
   const [builderAbrir,setBuilderAbrir]=useState(null)
+  const [builderIr,setBuilderIr]=useState(null)   // §140: el menú pide una portada del Builder: { zona: 'estrategias' | 'planes', n }
+  const [builderZona,setBuilderZona]=useState('estrategias')   // §140: en cuál se está, para marcarla en el menú
   const abrirEnBuilder=(s)=>{ setBuilderAbrir({fila:s?{...s}:null,n:Date.now()}); setSidePanel('builder') }
   // §55: un plan guardado, por su id, en el paso 3 (desde «Relacionado» de una tesis). { planId, n }
   const abrirPlanEnBuilder=(id)=>{ setBuilderAbrir({planId:Number(id),n:Date.now()}); setSidePanel('builder') }
@@ -5649,7 +5651,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1201</title>
+        <title>Trading Simulator V9.1202</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5738,7 +5740,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1201
+            <span className="dot"/>Trading Simulator V9.1202
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5880,26 +5882,32 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               zIndex:15,paddingTop:6,paddingBottom:6}}
           >
             {[
-              {id:'builder',    icon:'▦', label:'Builder'},
-              {id:'config',     icon:'📈', label:'Backtest de un valor'},
-              {id:'editor',     icon:'✏️', label:'Editor'},
-              {id:'alarms',     icon:'🔔',label:'Alertas',   hasAlerts:alarmActiveCount>0, alertCount:alarmActiveCount},
-              {id:'watchlist',  icon:'📋',label:'Watchlist'},
+              // §140: el menú, por el camino: investigar → crear (estrategias y planes) → seguir; al final, lo que queda por trasladar.
+              {grupo:'Investigar'},
               {id:'tesis',      icon:'💡',label:'Tesis'},
-              {id:'fundamentals',icon:'🏦',label:'Fundamentals'},
               {id:'screener',   icon:'🔎',label:'Screener'},
-              {id:'multi',      icon:'📊',label:'Backtesting'},
-              {id:'optimiza',   icon:'🎯',label:'Optimización'},
+              {id:'watchlist',  icon:'📋',label:'Watchlist'},
+              {id:'fundamentals',icon:'🏦',label:'Fundamentals'},
+              {grupo:'Crear'},
+              {id:'builder',    icon:'▦', label:'Estrategias', zona:'estrategias'},
+              {id:'planes',     icon:'🧩',label:'Planes', zona:'planes'},
+              {grupo:'Seguir'},
               {id:'tradelog',   icon:'📒',label:'TradeLog',  accent:'#9b72ff'},
               {id:'risk',       icon:'⚖️', label:'Risk Mgmt', accent:'#378add'},
-            ].map(item=>(
-              <button key={item.id}
-                onClick={()=>{ if(item.id===sidePanel) setSidePanel(item.id); else salirDeTesis(()=>setSidePanel(item.id)) }}
+              {id:'alarms',     icon:'🔔',label:'Alertas',   hasAlerts:alarmActiveCount>0, alertCount:alarmActiveCount},
+              {grupo:'Por trasladar'},
+              {id:'multi',      icon:'📊',label:'Backtesting'},
+              {id:'optimiza',   icon:'🎯',label:'Optimización'},
+              {id:'editor',     icon:'✏️', label:'Editor'},
+              {id:'config',     icon:'📈', label:'Backtest de un valor'},
+            ].map(it=>({...it,on:it.grupo?false:it.zona?(sidePanel==='builder'&&builderZona===it.zona):sidePanel===it.id})).map(item=>item.grupo?(<div key={'g-'+item.grupo} data-menu-grupo={item.grupo} style={{padding:navExpanded?'9px 8px 2px':0,margin:navExpanded?0:'5px 7px',height:navExpanded?'auto':1,background:navExpanded?'transparent':'var(--border)',fontFamily:MONO,fontSize:9,letterSpacing:'0.12em',textTransform:'uppercase',color:'var(--text3)',opacity:0.75,whiteSpace:'nowrap',overflow:'hidden',flexShrink:0}}>{navExpanded?item.grupo:''}</div>):(
+              <button key={item.id} data-menu-item={item.id}
+                onClick={()=>{ if(item.zona){ salirDeTesis(()=>{ setBuilderIr({zona:item.zona,n:Date.now()}); setSidePanel('builder') }); return } if(item.id===sidePanel) setSidePanel(item.id); else salirDeTesis(()=>setSidePanel(item.id)) }}
                 title={!navExpanded?item.label:undefined}
                 style={{display:'flex',alignItems:'center',gap:10,padding:'9px 8px',width:'100%',
-                  background:sidePanel===item.id?'var(--bg3)':'transparent',
-                  border:'none',borderLeft:sidePanel===item.id?`2px solid ${item.accent||'var(--accent)'}`:'2px solid transparent',
-                  color:sidePanel===item.id?(item.accent||'var(--accent)'):'var(--text3)',
+                  background:item.on?'var(--bg3)':'transparent',
+                  border:'none',borderLeft:item.on?`2px solid ${item.accent||'var(--accent)'}`:'2px solid transparent',
+                  color:item.on?(item.accent||'var(--accent)'):'var(--text3)',
                   fontFamily:MONO,fontSize:16,cursor:'pointer',whiteSpace:'nowrap',textAlign:'left',
                   transition:'background 0.12s,color 0.12s',position:'relative'}}
               >
@@ -8311,7 +8319,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 página recarga sus estrategias. ══ */}
             {(builderVisitado||sidePanel==='builder')&&(
               <div style={{display:sidePanel==='builder'?'contents':'none'}}>
-                <ProteccionPanel nombre="Builder"><BuilderPanel tema={temaApp} estrategias={strategies} salida={builderSalida} visible={sidePanel==='builder'} apiFetch={apiFetch} version={VERSION_APP} abrir={builderAbrir} comisiones={indComisiones} onAbrirTesis={abrirTesis} datosLista={datosListaPlan}
+                <ProteccionPanel nombre="Builder"><BuilderPanel tema={temaApp} estrategias={strategies} salida={builderSalida} visible={sidePanel==='builder'} apiFetch={apiFetch} version={VERSION_APP} abrir={builderAbrir} ir={builderIr} onZona={setBuilderZona} comisiones={indComisiones} onAbrirTesis={abrirTesis} datosLista={datosListaPlan}
                   onIrAValor={(sym)=>salirDeTesis(()=>{setSimbolo(sym);setSidePanel('watchlist')})}
                   onGuardada={()=>reloadStrategies()}
                   onAbrirEstrategia={(s,como)=>{if(como==='editor'){setEditorFila({...s});setSidePanel('editor')}}}
