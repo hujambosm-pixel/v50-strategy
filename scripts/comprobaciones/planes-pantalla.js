@@ -84,7 +84,7 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   const esperado = (v) => v > 0 ? '#7ee2a0' : v < 0 ? '#ff8b8b' : null
   ok(colorCifra(h, 'final') === esperado(c.seis.ganancia) && colorCifra(h, 'twr') === esperado(c.seis.twr) && colorCifra(h, 'caida') === esperado(c.seis.caidaPct) && !['#7ee2a0', '#ff8b8b'].includes(colorCifra(h, 'aportado')),
     `§90: colores por signo (final ${colorCifra(h, 'final')}, CAGR ${colorCifra(h, 'twr')}, caída ${colorCifra(h, 'caida')}; «Has aportado», el de siempre)`)
-  ok(!h.includes('[data-lista]'), '§90: con «Una acción», sin el estilo de la letra del bloque con lista')
+  ok(h.includes('[data-lista]') && h.includes('data-lista="valores"'), '§144: también con un valor, el selector de valores con su letra más grande (§90)')
 
 
   // ── 1b · «Año a año» y el tiempo en el ocioso, a mano (§57) ──

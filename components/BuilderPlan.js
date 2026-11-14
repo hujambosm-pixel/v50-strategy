@@ -55,7 +55,10 @@ import ComparaPlanes from './ComparaPlanes'
 import { CLAVE_COMPARAR, REFS_COMPARAR, TEXTO_SIN_PLANES, alterna, elegidosIniciales, pieza as piezaDe } from '../lib/builder/comparaPlanes'
 import { cargaUniversoMc, nDeUniverso, reglaDeUniverso } from '../lib/universoMc'
 import FiltrosPanel from './FiltrosPanel'
-import { mergeFiltros } from '../lib/filtros'
+import { mergeFiltros, hayFiltrosActivos } from '../lib/filtros'
+import { sinTildes } from '../lib/builder/buscar'
+// §144: lo que enseña el selector de valores con un plan de «una acción»: la lista manual con su único valor.
+const listaDeAccion = (x) => ({ ...(x.lista || {}), universo: 'manual', simbolos: x.activo ? [x.activo] : [] })
 import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, avisoPrueba as textoAvisoPrueba, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
   ayudaCaida, ayudaPrueba, avisoListaSimple, oroComparable, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
@@ -271,6 +274,14 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const [vistaLista, setVistaLista] = useState({ busca: '', favs: false, lista: '', seccion: { mode: true, strats: false }, mercado: false, activo: false, universoDatos: {} })
   const ponVista = (k) => (v) => setVistaLista(x => ({ ...x, [k]: typeof v === 'function' ? v(x[k]) : v }))
   const ponLista = (k) => (v) => setA(x => ({ ...x, lista: { ...x.lista, [k]: typeof v === 'function' ? v(x.lista[k]) : v } }))
+  // §144: un solo selector de valores (sin «Una acción / Una lista»). Lo que se guarda no cambia: con UN valor de la lista manual y
+  // sin filtros encendidos, el plan es el de «una acción» de siempre (donde: 'accion', activo); con varios, con el Nasdaq-100 o con
+  // algún filtro, el de «una lista». Solo se decide al tocar los valores, el universo o los filtros: un plan guardado se abre como está.
+  const ponValores = (k) => (v) => setA(x => {
+    const l0 = x.donde === 'lista' ? x.lista : listaDeAccion(x), l = { ...l0, [k]: typeof v === 'function' ? v(l0[k]) : v }
+    const uno = (l.universo || 'manual') === 'manual' && (l.simbolos || []).length === 1 && !hayFiltrosActivos(l.filtros || [])
+    return uno ? { ...x, lista: l, donde: 'accion', activo: l.simbolos[0] } : { ...x, lista: l, donde: 'lista' }
+  })
   const vivo = useRef(true)
   useEffect(() => { vivo.current = true; return () => { vivo.current = false } }, [])
   // §50: la columna de ajustes fija al bajar. En la app se desplaza la VENTANA, pero entre la columna y la ventana hay contenedores con
@@ -655,7 +666,17 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   )
 
   // ── Columna izquierda ──
-  const L = a.lista || {}
+  const L = enLista ? (a.lista || {}) : listaDeAccion(a)
+  const variosValores = enLista && ((L.universo && L.universo !== 'manual') || (L.simbolos || []).length >= 2)
+  // §144: el selector es el del Backtesting (los valores de la Watchlist); además, los marcados que no estén en ella y, al buscar, los
+  // de los precios guardados (lo que antes ofrecía el buscador de «Acción»).
+  const watchlistPlan = (() => {
+    const wl = datosLista?.watchlist || [], hay = new Set(wl.map(w => w.symbol)), mas = [], q = sinTildes(vistaLista.busca || '')
+    const pon = (simbolo, nombre) => { if (simbolo && !hay.has(simbolo)) { hay.add(simbolo); mas.push({ symbol: simbolo, name: nombre || simbolo, list_ids: [] }) } }
+    for (const sb of L.simbolos || []) pon(sb, valoresLista.find(v => v.simbolo === sb)?.nombre)
+    if (q) for (const v of valoresLista) if (sinTildes(v.simbolo).includes(q) || sinTildes(v.nombre || '').includes(q)) pon(v.simbolo, v.nombre)
+    return mas.length ? [...wl, ...mas] : wl
+  })()
   const bloques = (
     <div data-tarjeta="bloques" style={{ ...S.tarjeta, overflow: 'visible' }}>
       <div style={{ ...S.cabeceraTarjeta, borderRadius: `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0`, display: 'flex', alignItems: 'center', gap: 2 }}>Cartera<Ayuda texto={AYUDA_PLAN.cartera} etiqueta="Cartera"/><span data-subtitulo style={{ ...S.apagado, fontWeight: 400, marginLeft: 8 }}>en qué se invierte</span></div>
@@ -667,7 +688,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             <span data-parte title="Qué parte del dinero del plan va a este bloque. Por ahora, un solo bloque con todo: de 10.000 €, los 10.000 €." style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>100 %</span>
             <span style={{ minWidth: 0, flex: '1 1 auto' }}>
               <span data-resumen-bloque style={{ display: 'block', color: B.titulo, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Estrategia · {estrategia?.name || 'sin elegir'}</span>
-              <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>en {enLista ? (L.universo && L.universo !== 'manual' ? 'el Nasdaq-100' : `una lista de ${(L.simbolos || []).length} valores`) : a.activo} · ocioso en {(OCIOSOS_FIJOS.find(([k]) => k === a.ocioso)?.[1] || a.ocioso || '—')}</span>
+              <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>en {enLista ? (L.universo && L.universo !== 'manual' ? 'el Nasdaq-100' : (L.simbolos || []).length === 1 ? L.simbolos[0] : `${(L.simbolos || []).length} valores`) : a.activo} · ocioso en {(OCIOSOS_FIJOS.find(([k]) => k === a.ocioso)?.[1] || a.ocioso || '—')}</span>
             </span>
             <span aria-hidden="true" style={{ color: B.secundario, flex: 'none' }}>{bloqueAbierto ? '▾' : '▸'}</span>
           </button>
@@ -685,21 +706,19 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             {tarjetas.length > 0 && !diarias.length && <div style={{ color: AMARILLO, marginTop: 6 }}>Todas tus estrategias de tarjetas son semanales: los planes, por ahora, solo con velas diarias.</div>}
           </div>
           <div>
-            <Etiqueta texto="Dónde se aplica" ayuda={AYUDA_PLAN.dondeSeAplica}/>
-            <Segmentos etiquetaGrupo="Dónde se aplica" valor={enLista ? 'lista' : 'accion'} onCambia={v => cambia('donde', v)} opciones={[['accion', 'Una acción'], ['lista', 'Una lista']]}/>
-            {!enLista && <div style={{ marginTop: 10 }}><BuscadorValor valores={valoresLista} valor={a.activo} onCambia={s => cambia('activo', s)} etiqueta="Acción"/></div>}
+            <Etiqueta texto="Valores · dónde se aplica" ayuda={AYUDA_PLAN.dondeSeAplica}/>
             {/* §80: el universo y el selector de valores del Backtesting (elementos 13 y 14), tal cual. */}
-            {enLista && <div data-lista="valores" className="bp-mc" style={{ marginTop: 10 }}>
-              <PanelUniverso mcUniverso={L.universo} mcUniversoDatos={vistaLista.universoDatos} setMcUniverso={ponLista('universo')} setMcUniversoDatos={ponVista('universoDatos')}/>
+            {<div data-lista="valores" data-donde={enLista ? 'lista' : 'accion'} className="bp-mc">
+              <PanelUniverso mcUniverso={L.universo} mcUniversoDatos={vistaLista.universoDatos} setMcUniverso={ponValores('universo')} setMcUniversoDatos={ponVista('universoDatos')}/>
               <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 330 }}>
                 <SelectorValores mcListFilter={vistaLista.lista} mcOnlyFavs={vistaLista.favs} mcSearch={vistaLista.busca} mcSelected={L.simbolos} mcUniverso={L.universo} rankingData={datosLista?.rankingData || {}}
-                  setMcListFilter={ponVista('lista')} setMcOnlyFavs={ponVista('favs')} setMcSearch={ponVista('busca')} setMcSelected={ponLista('simbolos')} watchlist={datosLista?.watchlist || []} wlLists={datosLista?.wlLists || []}/>
+                  setMcListFilter={ponVista('lista')} setMcOnlyFavs={ponVista('favs')} setMcSearch={ponVista('busca')} setMcSelected={ponValores('simbolos')} watchlist={watchlistPlan} wlLists={datosLista?.wlLists || []}/>
               </div>
             </div>}
           </div>
           {/* §80: el reparto dentro de la lista (elementos 5–10 y 12) y los filtros (3 y 4), con lo de este bloque. */}
-          {enLista && <div>
-            <Etiqueta texto="Reparto dentro de la lista" ayuda={AYUDA_PLAN.reparto}/>
+          {variosValores && <div>
+            <Etiqueta texto="Reparto entre los valores" ayuda={AYUDA_PLAN.reparto}/>
             <div data-lista="reparto" className="bp-mc">
               <PanelAsignacion unSoloModo mcStratSelected={[estId]} mcUniverso={L.universo} selectedModos={[L.modo]} setSelectedModos={() => {}} mcMode={L.modo} setMcMode={ponLista('modo')} mcSectionOpen={vistaLista.seccion} setMcSectionOpen={ponVista('seccion')}
                 mcAssumedStopPct={L.assumedStopPct} setMcAssumedStopPct={ponLista('assumedStopPct')} mcCalculoPrioridad={L.calculoPrioridad} setMcCalculoPrioridad={ponLista('calculoPrioridad')} mcCriterioUso={L.criterioUso} setMcCriterioUso={ponLista('criterioUso')}
@@ -709,13 +728,14 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
               <PanelPesos mcMode={L.modo} mcSelected={L.simbolos} mcWeights={L.pesos} setMcWeights={ponLista('pesos')}/>
             </div>
           </div>}
-          {enLista && <div>
+          {<div>
             <Etiqueta texto="Filtros" ayuda={AYUDA_PLAN.filtros}/>
             {/* §81: sin recortar: el desplegable de «Añadir filtro» sale por debajo de la caja. */}
             <div data-lista="filtros" className="bp-mc" style={{ overflow: 'visible' }}>
-              <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO" filtros={mergeFiltros(L.filtros || [])} setFiltros={ponLista('filtros')} open={vistaLista.mercado} setOpen={ponVista('mercado')} variant="mc" botonGrande/>
-              <FiltrosPanel ambito="activo" titulo="FILTROS DEL ACTIVO" filtros={mergeFiltros(L.filtros || [])} setFiltros={ponLista('filtros')} open={vistaLista.activo} setOpen={ponVista('activo')} variant="mc" botonGrande/>
+              <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO" filtros={mergeFiltros(L.filtros || [])} setFiltros={ponValores('filtros')} open={vistaLista.mercado} setOpen={ponVista('mercado')} variant="mc" botonGrande/>
+              <FiltrosPanel ambito="activo" titulo="FILTROS DEL ACTIVO" filtros={mergeFiltros(L.filtros || [])} setFiltros={ponValores('filtros')} open={vistaLista.activo} setOpen={ponVista('activo')} variant="mc" botonGrande/>
             </div>
+            {enLista && !variosValores && (L.simbolos || []).length === 1 && <div data-aviso="uno-con-filtro" style={{ ...S.apagado, marginTop: 6 }}>Con un filtro encendido, este valor se calcula como una lista de uno: por ahora, sin «Compra más acción» ni apalancamiento.</div>}
           </div>}
           {/* §142: el dinero ocioso, «Si llega una aportación…» y el apalancamiento son de CÓMO se invierte este bloque (en el plan guardado ya eran de su pieza): van aquí, no en «Tu dinero». */}
           <div>
@@ -868,7 +888,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           desplaza y cada columna (ajustes y resultados) lleva su propia barra; al comparar o sin plan abierto, se desplaza la página; en el
           móvil, nada fijo y se desplaza la ventana, como antes. */}
       {/* §90: las piezas del Backtesting en el bloque con lista, con letra más grande y más clara SOLO aquí (el Backtesting no cambia). */}
-      {enLista && <style>{[[8, 12], [9, 12], [10, 12], [11, 13], [12, 13]].map(([de, a]) => `[data-lista] [style*="font-size:${de}px"], [data-lista] [style*="font-size: ${de}px"] { font-size: ${a}px !important }`).join(' ') + ' [data-lista] { --text3: #a9c3d6; --text2: #c6dbea }'}</style>}
+      {<style>{[[8, 12], [9, 12], [10, 12], [11, 13], [12, 13]].map(([de, a]) => `[data-lista] [style*="font-size:${de}px"], [data-lista] [style*="font-size: ${de}px"] { font-size: ${a}px !important }`).join(' ') + ' [data-lista] { --text3: #a9c3d6; --text2: #c6dbea }'}</style>}
       <style>{`.bp-avisos { flex-direction: row } @media (max-width: 700px) { .bp-avisos { flex-direction: column; align-items: flex-start !important } }
 /* §80: las piezas del Backtesting, en su caja oscura de siempre. */
 .bp-mc { background: var(--bg, #080c14); border: 1px solid var(--border, #1a2d45); border-radius: 6px; overflow: hidden; color: var(--text, #e2eaf5) }
