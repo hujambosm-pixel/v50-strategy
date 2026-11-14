@@ -20,7 +20,7 @@ import handlerMultibacktest from './multibacktest'
 import { evaluaPlan, iniciosRodantes, referenciasDe } from '../../lib/planes/evalua'
 import { ejecutaPlan } from '../../lib/planes/plan'
 import { cargaDatosPlan, cargaDiarias } from '../../lib/planes/datosServidor'
-import { listaEnSuDia } from '../../lib/planes/estrategia'
+import { listaEnSuDia, cambiaFiltros, definicionEfectiva } from '../../lib/planes/estrategia'
 
 export const config = { maxDuration: 60 }
 
@@ -36,7 +36,12 @@ export function errorCuerpoLista(plan, pieza, c) {
   const valores = univ
     ? !!c.universo?.mascara && typeof c.universo.mascara === 'object' && `ndx_${c.universo.regla === 'momentum' ? 'mom' : 'vol'}_${c.universo.n}` === univ && Array.isArray(c.symbols) && JSON.stringify(c.symbols) === JSON.stringify(Object.keys(c.universo.mascara).sort())
     : c.universo == null && JSON.stringify(c.symbols) === JSON.stringify(pieza.lista?.simbolos)
-  const igual = String(c.strategyId) === String(pieza.estrategia?.id) && valores && c.modoAsig === pieza.lista?.modo
+  // §150: con filtros del plan, la petición lleva la estrategia efectiva (sin strategyId); sin ellos, el id de siempre.
+  const pEst = (() => { try { const p = pieza.estrategia?.params; return typeof p === 'string' ? JSON.parse(p || '{}') : (p || {}) } catch (_) { return {} } })()
+  const estrategiaOk = cambiaFiltros(pieza)
+    ? c.strategyId == null && JSON.stringify(c.definicionEditor) === JSON.stringify(definicionEfectiva(pieza)) && JSON.stringify(c.paramsEditor) === JSON.stringify(pEst)
+    : c.definicionEditor == null && String(c.strategyId) === String(pieza.estrategia?.id)
+  const igual = estrategiaOk && valores && c.modoAsig === pieza.lista?.modo
     && c.cfg.capitalIni === plan.dinero.capitalInicial * pieza.peso && c.cfg.fromDate === plan.periodo.desde && c.cfg.toDate === plan.periodo.hasta && c.intervalo === (pieza.velas === 'semanales' ? 'semanal' : 'diario')
     && JSON.stringify(normalizaComisiones(c.comisiones)) === JSON.stringify(comisionesDePlan(plan.costes)) && JSON.stringify(c.filtros || []) === JSON.stringify(pieza.lista?.filtros || [])
   return igual ? null : 'La petición de la lista no corresponde a este plan.'

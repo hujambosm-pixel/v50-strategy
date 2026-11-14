@@ -24,7 +24,9 @@ import { cfgBaseMc, cuerpoMc, pesosNormalizadosMc } from '../../lib/peticionMc'
 import { leeRespuestaMc } from '../../lib/respuestaMc'
 import { mergeLista } from '../../lib/planes/lista'
 import { estadoUniversoMc, nDeUniverso, nombreUniverso, reglaDeUniverso } from '../../lib/universoMc'
-import { costesDe, creaCalculador, fechasDe, textoComision, velasDelPlan } from '../../lib/builder/planPantalla'
+import { costesDe, creaCalculador, fechasDe, filtrosDelPlan, textoComision, velasDelPlan } from '../../lib/builder/planPantalla'
+import { fotoDe } from '../../lib/pruebaAzar'
+import { definicionEfectiva } from '../../lib/planes/estrategia'
 const McMonthlyGainsChart = dynamic(() => import('../McMonthlyGainsChart'), { ssr: false })
 
 // Los valores de partida de pages/index.js (los useState del panel de «Backtest de un valor» y del Backtesting).
@@ -57,13 +59,18 @@ export function peticionPorDentro({ a, estrategia, wlData = {}, universoDatos = 
     scoreMap: Object.fromEntries(simbolos.map(sym => [sym, wlData?.[sym.toUpperCase()]?.active?.scoreMetricas ?? null])) })
   const isNoStrategy = (estrategia.name || '').includes('No Strategy'), comisiones = comisionesDePlan(costesDe(a))
   const intervalo = intervaloDe(a, estrategia)
+  // §150: con filtros del plan, el Backtesting calcula con la ESTRATEGIA EFECTIVA (la foto + las filas del plan, con o sin sus filtros
+  // propios), que va en la petición (definicionEditor + paramsEditor, sin strategyId). Sin filtros del plan, la petición de siempre.
+  const fp = filtrosDelPlan(a), foto = fp ? fotoDe(estrategia) : null
+  const conFiltros = (c) => { if (!fp) return c; let p = foto.params; try { p = typeof p === 'string' ? JSON.parse(p || '{}') : (p || {}) } catch (_) { p = {} }
+    return { ...c, strategyId: null, definicionEditor: definicionEfectiva({ estrategia: foto, filtros: fp, velas: velasDelPlan(a, estrategia) }), paramsEditor: p } }
   if (estU) {   // §111: el cuerpo del universo dinámico de runBacktesting, con las claves en su orden
     const u = estU.universo
-    return { ...cuerpoMc({ symbols: u.simbolos, modoAsig: 'concentrado', weights: {}, cfg, strategyId: estrategia.id, isNoStrategy, filtros: l.filtros, intervalo, comisiones }),
+    return { ...conFiltros(cuerpoMc({ symbols: u.simbolos, modoAsig: 'concentrado', weights: {}, cfg, strategyId: estrategia.id, isNoStrategy, filtros: l.filtros, intervalo, comisiones })),
       universo: { regla: reglaDeUniverso(l.universo), n: nDeUniverso(l.universo), mascara: u.mascara, elegidos: u.elegidos } }
   }
-  return cuerpoMc({ symbols: l.simbolos, modoAsig: l.modo, weights: pesosNormalizadosMc(l.modo, l.simbolos, l.pesos), cfg, strategyId: estrategia.id,
-    isNoStrategy, filtros: l.filtros, intervalo, comisiones })
+  return conFiltros(cuerpoMc({ symbols: l.simbolos, modoAsig: l.modo, weights: pesosNormalizadosMc(l.modo, l.simbolos, l.pesos), cfg, strategyId: estrategia.id,
+    isNoStrategy, filtros: l.filtros, intervalo, comisiones }))
 }
 // Por qué no hay petición (para la línea de aviso).
 export function motivoSinPeticion({ a, estrategia, universoDatos = {} }) {
