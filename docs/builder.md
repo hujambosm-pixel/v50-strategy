@@ -2934,3 +2934,16 @@ Decidido por Sergi el 14/11: el plan no distingue entre un valor y varios; se ma
 - lib/builder/planPantalla.js: el «?» de «Valores · dónde se aplica». lib/planes/lista.js: el error sin valores dice «marca al menos un valor.».
 - Comprobaciones: plan-lista.js (pantalla y montaje rehechos para el selector único) y planes-pantalla.js.
 - Pendiente (apuntado): demostrar con precios reales que una lista de un valor da lo mismo que «una acción» con ocioso e impuestos, para retirar una de las dos calculadoras; apalancamiento y «Compra más acción» con varios valores.
+
+## 145. Plan: velas diarias o semanales (con un valor)
+Decidido por Sergi el 14/11 («el plan manda sobre la estrategia», parte 2): el plan elige con qué velas calcula la estrategia. De entrada, las de la estrategia; si el plan pone otras, TODOS sus indicadores, señales y stops se calculan con las del plan. La estrategia guardada no cambia. Sin cambiar las velas, ningún plan cambia de cifras (los guardados llevan `velas: 'diarias'`).
+- lib/planes/estrategia.js: `velas` de la pieza admite 'diarias' y 'semanales' (VELAS_PLAN, velasDePieza). operacionesDe, con semanales: las semanas se hacen con las diarias cerradas HASTA el último día del plan (semanalesDesdeDiarias; también las de los índices de la regla), mismo intérprete del paso 1 con intervalo 'semanal', y cada operación se sitúa en su DÍA (enSuDia / diaDeLaSemana), porque el dinero del plan se lleva día a día:
+  - al precio de apertura de la semana → la primera sesión, a su apertura;
+  - compra «al cierre» de la vela de la señal → la última sesión, a su cierre;
+  - a un nivel (orden de compra o stop) → la primera sesión cuyo rango contiene ese precio; si queda en el hueco entre dos sesiones, la que abre al otro lado, a SU apertura (regla de lib/precioEnVela.js: un precio tiene que haber existido en su vela).
+  Lo demás (ocioso, aportaciones, impuestos, apalancamiento, valoración diaria) no cambia.
+- Por ahora, semanales SOLO con un valor y sin filtros del plan: con una lista (varios valores, Nasdaq-100 o filtro encendido), validaPiezaEstrategia lo dice y el plan no se calcula ni se guarda. Siguiente parte: semanales con varios valores (/api/multibacktest ya sabe '1wk').
+- lib/planes/datosServidor.js: con una pieza en semanales, 30 años de historia diaria antes del periodo (el calentamiento son semanas), en vez de 6.
+- lib/builder/planPantalla.js: ajuste `velas` (null = las de la estrategia; 'diarias' / 'semanales' = las que manda el plan), velasDeEstrategia, velasDelPlan; planDe guarda las velas con que se calcula y ajustesDe devuelve null si coinciden con las de la estrategia; «?» nuevo (AYUDA_PLAN.velas); «Copiar para Claude» dice las velas.
+- components/BuilderPlan.js: «Velas en este plan» («Diarias · las de la estrategia» / «Semanales») con una línea azul cuando el plan manda otras; las estrategias de tarjetas semanales ya se pueden elegir en un plan.
+- Comprobación nueva plan-velas.js (en comunes.sh): tres casos a mano con velas semanales (compra el lunes a la apertura de la semana y vende el lunes; stop tocado un miércoles; miércoles que abre bajo el stop → a su apertura), diarias idéntico con y sin el campo, el día de la semana, la validación y la pantalla.

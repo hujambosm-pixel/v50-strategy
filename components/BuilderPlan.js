@@ -61,7 +61,7 @@ import { sinTildes } from '../lib/builder/buscar'
 const listaDeAccion = (x) => ({ ...(x.lista || {}), universo: 'manual', simbolos: x.activo ? [x.activo] : [] })
 import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, avisoPrueba as textoAvisoPrueba, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
-  ayudaCaida, ayudaPrueba, avisoListaSimple, oroComparable, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
+  ayudaCaida, ayudaPrueba, avisoListaSimple, oroComparable, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, velasDeEstrategia, velasDelPlan, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS } from '../lib/builder/planPantalla'
 
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0', AZUL = '#58a6ff', GRIS_FRANJA = '#3a4656'
@@ -205,7 +205,8 @@ const Tarjeta = ({ id, titulo, ayuda, children }) => (
 
 export default function BuilderPlan({ estrategias = [], estrategiaId = null, planId = null, apiFetch, version = null, cargaSimbolos = null, onVolver, onPaso1, onPaso2, salida = null, enlaceTesis = null, deps = null, inicial = null, datosLista = null, onIrAValor = null, tema = 'oscuro', nuevo = false, comparar = false }) {
   const tarjetas = useMemo(() => estrategias.filter(esDeTarjetas).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es')), [estrategias])
-  const diarias = useMemo(() => tarjetas.filter(s => !esSemanal(s)), [tarjetas])
+  // §145: el plan admite estrategias de velas diarias y semanales (antes, solo las diarias: de ahí el nombre).
+  const diarias = tarjetas
   const deCodigo = useMemo(() => estrategias.filter(esDeCodigo).length, [estrategias])
   // Las pestañas (§54): en `orden`, las claves abiertas: los planes guardados («g<id>») y los nuevos sin guardar («n<k>»); null: se están leyendo. La abierta se edita en a / estId / version;
   // un plan nuevo al que se deja de mirar espera en `edic` (un guardado no: con cambios, antes de irse se pregunta).
@@ -667,6 +668,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
 
   // ── Columna izquierda ──
   const L = enLista ? (a.lista || {}) : listaDeAccion(a)
+  const velasEst = velasDeEstrategia(estrategia), velasPlan = velasDelPlan(a, estrategia)
   const variosValores = enLista && ((L.universo && L.universo !== 'manual') || (L.simbolos || []).length >= 2)
   // §144: el selector es el del Backtesting (los valores de la Watchlist); además, los marcados que no estén en ella y, al buscar, los
   // de los precios guardados (lo que antes ofrecía el buscador de «Acción»).
@@ -697,13 +699,19 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             <Etiqueta texto="Estrategia" ayuda={AYUDA_PLAN.estrategia}/>
             {tarjetas.length ? <select aria-label="Estrategia" value={estId} onChange={e => { setEstId(e.target.value); setCualVersion('actual') }} style={{ ...campo, maxWidth: '100%' }}>
               {fotoG && String(fotoG.id) === estId && !tarjetas.some(s => String(s.id) === estId) && <option value={estId}>{`${fotoG.name} ${ETIQUETA_BORRADA}`}</option>}
-              {tarjetas.map(s => { const sem = esSemanal(s), ps = [ETIQUETA_PRUEBA[estadosLista[s.id]], sem ? 'semanal: llegará más adelante' : null].filter(Boolean)
+              {tarjetas.map(s => { const sem = esSemanal(s), ps = [ETIQUETA_PRUEBA[estadosLista[s.id]], sem ? 'semanal' : null].filter(Boolean)
                 return <option key={s.id} value={String(s.id)} disabled={sem}>{`${s.name}${ps.length ? ` (${ps.join(' · ')})` : ''}`}</option> })}
               {/* §50: al final, en gris y sin poder elegirse, cuántas de código hay (no sirven aquí). */}
               {deCodigo > 0 && <option data-codigo={deCodigo} value="" disabled style={{ color: B.apagado }}>{textoCodigo(deCodigo)}</option>}
             </select> : <div style={S.secundario}>No tienes estrategias de tarjetas. Crea una en «Estrategias».</div>}
             {estrategia && !estBorrada && <div style={{ marginTop: 6 }}><button data-boton="abrir-estrategia" type="button" style={{ ...S.enlace, fontSize: 13 }} onClick={() => pide({ tipo: 'paso1' })} title="Abre esta estrategia para verla o cambiarla; si el plan tiene cambios sin guardar, pregunta antes">Abrir la estrategia ›</button></div>}
             {tarjetas.length > 0 && !diarias.length && <div style={{ color: AMARILLO, marginTop: 6 }}>Todas tus estrategias de tarjetas son semanales: los planes, por ahora, solo con velas diarias.</div>}
+          </div>
+          {/* §145: con qué velas calcula este plan la estrategia: las suyas o las que mande el plan. */}
+          <div data-velas-plan={velasPlan}>
+            <Etiqueta texto="Velas en este plan" ayuda={AYUDA_PLAN.velas}/>
+            <Segmentos etiquetaGrupo="Velas en este plan" valor={velasPlan} onCambia={v => cambia('velas', v === velasEst ? null : v)} opciones={[['diarias', velasEst === 'diarias' ? 'Diarias · las de la estrategia' : 'Diarias'], ['semanales', velasEst === 'semanales' ? 'Semanales · las de la estrategia' : 'Semanales']]}/>
+            {velasPlan !== velasEst && <div data-aviso="otras-velas" style={{ color: B.enlace, marginTop: 6 }}>En este plan la estrategia se calcula con velas {velasPlan}, no con las {velasEst} en que se creó: sus medias e indicadores cuentan {velasPlan === 'semanales' ? 'semanas' : 'días'}.</div>}
           </div>
           <div>
             <Etiqueta texto="Valores · dónde se aplica" ayuda={AYUDA_PLAN.dondeSeAplica}/>
@@ -815,7 +823,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       </>)}
     <PlanPorDentro a={a} estrategia={estPorDentro} motivo={motivoEstPorDentro} estrategias={estrategias} apiFetch={apiFetch} version={version} visible={vistaDer === 'dentro'} onIrAValor={onIrAValor} wlData={datosLista?.wlData || null} calcula={deps?.calculaPorDentro || null} universoDatos={universoDatos}/>
   </>) : !cifras ? (
-    <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{!estrategia ? 'Elige una estrategia de tarjetas de velas diarias.' : calc.calculando || clave ? 'Calculando tu plan…' : 'Sin resultado todavía.'}</div>
+    <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{!estrategia ? 'Elige una estrategia de tarjetas.' : calc.calculando || clave ? 'Calculando tu plan…' : 'Sin resultado todavía.'}</div>
   ) : vistaDinero(cifras, false)
   function vistaDinero(cifras, conLista) {
   const s = cifras.seis
