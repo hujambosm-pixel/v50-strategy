@@ -279,6 +279,13 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   const Ml = require(R + '/lib/builder/misListas.js')
   const sinLeer = await Ml.construyeMisEstrategias({ estrategias: [lista[3]], planes: [], pruebasAzar: null })
   ok(sinLeer[0].azar === null && sinLeer[0].toca.texto === 'Probarla contra el azar' && sinLeer[0].toca.accion.tipo === 'azar', 'sin las pruebas del paso 2: «—» y lleva al paso 2')
+  // §148: a una semanal le toca «Usar en un plan» (los planes ya las admiten; la prueba contra el azar, no); a la misma en diarias y sin prueba, probarla.
+  { const pS = (() => { try { return typeof lista[3].params === 'string' ? JSON.parse(lista[3].params || '{}') : (lista[3].params || {}) } catch (_) { return {} } })()
+    const sem = { ...lista[3], params: { ...pS, intervalo: 'semanal' } }, dia = { ...lista[3], params: { ...pS, intervalo: 'diario' } }
+    const [fS] = await Ml.construyeMisEstrategias({ estrategias: [sem], planes: [], pruebasAzar: [] }), [fD] = await Ml.construyeMisEstrategias({ estrategias: [dia], planes: [], pruebasAzar: [] })
+    ok(fS.toca.texto === 'Usar en un plan' && fS.toca.accion?.tipo === 'plan' && fD.toca.texto === 'Probarla contra el azar', `una semanal: «Usar en un plan»; la misma en diarias y sin prueba: probarla (${fS.toca.texto} / ${fD.toca.texto})`)
+    const fE = require('fs').readFileSync(path.join(R, 'components/BuilderEditor.js'), 'utf8') + require('fs').readFileSync(path.join(R, 'components/BuilderPlan.js'), 'utf8')
+    ok(!fE.includes('por ahora, solo con') && !require('fs').readFileSync(path.join(R, 'lib/builder/misListas.js'), 'utf8').includes('llegarán más adelante'), 'ya no queda ningún «las semanales, más adelante» en el creador, el plan ni la lista') }
   for (const x of ['components/BuilderPrueba.js', 'components/BuilderCurvas.js', 'lib/builder/pruebaGuiada.js', 'lib/builder/curvasPrueba.js', 'lib/builder/miTrabajo.js']) ok(!require('fs').existsSync(path.join(R, x)), `${x}, retirado`)
   const fuenteP = require('fs').readFileSync(path.join(R, 'components/BuilderPanel.js'), 'utf8')
   ok(!fuenteP.includes('editor_lotes') && !fuenteP.includes('lab_pruebas'), 'el Builder ya no lee lotes de la base')

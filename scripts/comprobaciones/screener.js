@@ -410,16 +410,18 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     const dos = [pestanaDe({ id: 7, nombre: 'Siete', vista: v1 }), pestanaDe({ id: 8, nombre: 'Ocho', vista: v1 })]
     let abiertas = 0
     const m = D.monta(React.createElement(P, { inicial: { empresas: E, vistas: dos, tesis: [] }, abrirVista: { id: 8, n: 1 }, onVistaAbierta: () => { abiertas++ } }), RDC)
-    await D.espera(40)
+    // §148: esperar a lo que se busca (20 s como máximo), no 40 ms fijos: con el equipo cargado no bastaban (fallo intermitente del 14/11).
+    const hasta = async (cond, max = 20000) => { const t0 = Date.now(); do { await D.espera(5); try { if (cond()) { await D.espera(5); return true } } catch (_) {} } while (Date.now() - t0 < max); return false }
+    await hasta(() => m.raiz.conAtributo('data-nombre-vista')[0]?.value === 'Ocho' && abiertas === 1)
     ok(m.raiz.conAtributo('data-nombre-vista')[0]?.value === 'Ocho' && abiertas === 1, `abrir la vista 8 desde una tesis: se ve «Ocho» (${m.raiz.conAtributo('data-nombre-vista')[0]?.value})`)
     m.quita()
     const m2 = D.monta(React.createElement(P, { inicial: { empresas: E, vistas: dos, tesis: [] }, abrirVista: { id: 99, n: 2 }, onVistaAbierta: () => {} }), RDC)
-    await D.espera(40)
+    await hasta(() => m2.raiz.conAtributo('data-aviso-vista')[0]?.textContent.includes('ya no existe'))
     ok(m2.raiz.conAtributo('data-aviso-vista')[0]?.textContent.includes('ya no existe') && m2.raiz.conAtributo('data-nombre-vista')[0]?.value === 'Siete', 'una vista borrada: lo dice y se queda en la que estaba')
     m2.quita()
     // Con cambios sin guardar en la vista de ahora, la ventana de siempre antes de cambiar.
     const m3 = D.monta(React.createElement(P, { inicial: { empresas: E, vistas: [{ ...dos[0], nombre: 'Siete cambiada' }, dos[1]], tesis: [] }, abrirVista: { id: 8, n: 3 }, onVistaAbierta: () => {} }), RDC)
-    await D.espera(40)
+    await hasta(() => m3.raiz.conAtributo('data-p', 'salir')[0])
     ok(m3.raiz.conAtributo('data-p', 'salir')[0] && m3.raiz.conAtributo('data-nombre-vista')[0]?.value === 'Siete cambiada', 'con cambios sin guardar, pregunta antes de abrir la otra')
     m3.quita()
   }

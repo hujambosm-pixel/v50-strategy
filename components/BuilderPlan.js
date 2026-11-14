@@ -705,7 +705,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
               {deCodigo > 0 && <option data-codigo={deCodigo} value="" disabled style={{ color: B.apagado }}>{textoCodigo(deCodigo)}</option>}
             </select> : <div style={S.secundario}>No tienes estrategias de tarjetas. Crea una en «Estrategias».</div>}
             {estrategia && !estBorrada && <div style={{ marginTop: 6 }}><button data-boton="abrir-estrategia" type="button" style={{ ...S.enlace, fontSize: 13 }} onClick={() => pide({ tipo: 'paso1' })} title="Abre esta estrategia para verla o cambiarla; si el plan tiene cambios sin guardar, pregunta antes">Abrir la estrategia ›</button></div>}
-            {tarjetas.length > 0 && !diarias.length && <div style={{ color: AMARILLO, marginTop: 6 }}>Todas tus estrategias de tarjetas son semanales: los planes, por ahora, solo con velas diarias.</div>}
+            {/* §148: fuera el aviso de que los planes eran solo de velas diarias: desde §145 las semanales también entran. */}
           </div>
           {/* §145: con qué velas calcula este plan la estrategia: las suyas o las que mande el plan. */}
           <div data-velas-plan={velasPlan}>

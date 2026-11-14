@@ -2971,3 +2971,14 @@ Pedido al pasar las comprobaciones de §146: para compilar y pasar comunes.sh la
 - lanzador.vbs y ventana.ps1 aceptan la acción `parar-app` (títulos «Apagando solo la app…» y «✓ App apagada (la base sigue encendida)»).
 - instala.ps1 crea además el acceso directo del Escritorio «Parar solo la app». Para volver a encenderla, el de siempre («Trading Simulator»: lo que ya está encendido se deja como está).
 - Solo scripts del lanzador: la app no cambia.
+
+## 148. Limpieza: las semanales ya entran en los planes (textos) y comprobación del screener más estable
+
+Dos restos de §145–§146 y un fallo intermitente visto el 14/11.
+
+- lib/builder/misListas.js: en «Estrategias», a una estrategia semanal le toca «Usar en un plan» (antes «—», con la nota de que las semanales llegarían más adelante a los planes). Como la prueba contra el azar solo admite velas diarias, a las semanales no se les propone «Probarla contra el azar»; su tooltip lo dice.
+- components/BuilderEditor.js: el botón «Usar en un plan» del creador ya no se apaga con las semanales.
+- components/BuilderPlan.js: fuera el aviso amarillo de que los planes eran solo de velas diarias (ya no podía salir).
+- scripts/comprobaciones/screener.js: «abrir una vista desde una tesis», «una vista borrada» y «con cambios sin guardar» esperan a lo que buscan (20 s como máximo) en vez de 40 ms fijos; con el equipo cargado no bastaban.
+- scripts/comprobaciones/planes-montaje.js: dos comprobaciones nuevas (a una semanal le toca «Usar en un plan»; no queda ningún texto de «más adelante»).
+- Ninguna cifra cambia: solo textos, un botón y comprobaciones.

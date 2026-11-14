@@ -40,7 +40,7 @@ import ConLimpiar from './LimpiarBusqueda'
 import ProteccionPanel from './ProteccionPanel'
 import { propagaEnlaces, estadoEnlaces, enlazaUso, AYUDA_ENLACE, opcionesCasillas } from '../lib/builder/enlaces'
 import { conCasillas, hayCambios, listaCambios, resumenCambios } from '../lib/builder/barraCambios'
-import { esSemanal } from '../lib/builder/planPantalla'
+// §148: ya no se importa esSemanal: «Usar en un plan» vale también para las semanales.
 
 const AZUL = '#58a6ff', NARANJA = '#f0883e', MORADO = '#a371f7', ROJO = '#ff8b8b', AMARILLO = '#f2cc60'
 // V9.1049: Protección con su color, un verde azulado (ni el rojo de los errores ni el amarillo de los avisos; contraste alto sobre el
@@ -458,7 +458,7 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
       <CabeceraPasos actual={1} estrategia={est.nombre.trim() || null} onVolver={(donde) => guardiaTesis(() => onVolver?.(donde))} enlace={enlaceTesis?.('estrategia', fila?.id, guardiaTesis)} onPaso={onPaso2 ? (n) => guardiaTesis(() => { const f = guardada.current || fila; if (n === 2 && f?.id) onPaso2(f) }) : null}
         desactivados={nueva ? { 2: 'Guárdala primero: se valida la estrategia tal como está guardada' } : {}}
         onUsar={onPaso3 ? () => guardiaTesis(() => { const f = guardada.current || fila; if (f?.id) onPaso3(f) }) : null}
-        usarMotivo={!onPaso3 ? null : nueva ? 'Guárdala primero: el plan usa la estrategia tal como está guardada' : esSemanal(fila) ? 'Los planes, por ahora, solo con estrategias de velas diarias' : null}/>
+        usarMotivo={!onPaso3 ? null : nueva ? 'Guárdala primero: el plan usa la estrategia tal como está guardada' : null}/>
       {/* V9.1073: la fila del título, fija arriba al desplazarse (con la barra de los cambios). */}
       <div data-fila-titulo style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 20, background: B.fondo, padding: '6px 0' }}>
         {/* §139: el título ES el nombre (se escribe encima); al lado, las velas y la versión. Ya no hay «Paso 1 · Crear la estrategia» ni caja del nombre. */}
