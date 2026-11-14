@@ -234,6 +234,23 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
     `/api/plan con lista: ${jp ? jp.evaluacion.plan.medidas.valorNeto.toFixed(2) + ' € y «por dentro» ' + jp.finalPorDentro.toFixed(2) + ' €; comparaciones ' + jp.evaluacion.referencias.map(x => x.id).join(', ') : rp.status + ' ' + String(rp.cuerpo).slice(0, 200)}`)
   const r400 = await E.llama(HP, { plan: Pa.planDe({ ...aP, apalancamiento: 2 }, est), curvas: true, cuerpoLista: cuerpoP }), r400b = await E.llama(HP, { plan: planP, curvas: true, cuerpoLista: { ...cuerpoP, symbols: ['AAPL'] } })
   ok(r400.status === 400 && JSON.parse(r400.cuerpo).error === Pl.AVISO_LISTA_SIMPLE && r400b.status === 400 && /no corresponde/.test(JSON.parse(r400b.cuerpo).error), '/api/plan rechaza un plan apalancado y una petición de lista que no es la del plan')
+  // §146: /api/plan con la lista y velas SEMANALES: pide el Backtesting semanal, sitúa cada candidato en su día con las diarias de la
+  // caché y calcula. No tiene que cuadrar al céntimo con «por dentro» (allí lo de una semana pasa a la vez), pero sí parecerse; cada
+  // operación cae en una sesión de su valor, al precio de la semana o al de apertura/cierre de ese día, y nunca sale antes de entrar.
+  for (const modo of ['concentrado', 'compartido']) {
+    const aS = { ...aP, velas: 'semanales', lista: Li.mergeLista({ simbolos: SIMB, modo, maxPosiciones: 4 }) }
+    const cS = PD.peticionPorDentro({ a: aS, estrategia: est }), pS = Pl.planListaCalculable(Pa.planDe(aS, est)).plan
+    const rS = await E.llama(HP, { plan: pS, curvas: true, cuerpoLista: cS }), jS = rS.status === 200 ? JSON.parse(rS.cuerpo) : null
+    const opsS = jS?.evaluacion.plan.ejecucion.estrategias?.e?.operaciones || []
+    const DS = require(R + '/lib/planes/datosServidor.js'), dd = await DS.cargaDiarias(SIMB, { desde: pS.periodo.desde, hasta: pS.periodo.hasta, supaUrl: process.env.NEXT_PUBLIC_SUPABASE_URL, headers: {} })
+    const vela = (s, f) => (dd.velas?.[s] || []).find(b => b.date === f)
+    const enSuVela = opsS.every(o => { const ve = vela(o.symbol, o.entryDate), vs = vela(o.symbol, o.exitDate); return ve && vs && o.exitDate >= o.entryDate && o.entryPrice >= ve.low - 1e-6 && o.entryPrice <= ve.high + 1e-6 && o.exitPrice >= vs.low - 1e-6 && o.exitPrice <= vs.high + 1e-6 })
+    const vn = jS?.evaluacion.plan.medidas.valorNeto, rel = jS ? Math.abs(vn / jS.finalPorDentro - 1) : null
+    ok(!!jS && cS.intervalo === 'semanal' && opsS.length > 50 && enSuVela && rel < 0.25,
+      `/api/plan con lista y velas semanales (${modo}): ${jS ? vn.toFixed(2) + ' € y «por dentro» ' + jS.finalPorDentro.toFixed(2) + ` € (${(rel * 100).toFixed(1)} % de diferencia); ${opsS.length} operaciones, todas dentro de la vela de su día` : rS.status + ' ' + String(rS.cuerpo).slice(0, 300)}`)
+    const rMal = await E.llama(HP, { plan: pS, curvas: true, cuerpoLista: cuerpoP })
+    ok(rMal.status === 400 && /no corresponde/.test(JSON.parse(rMal.cuerpo).error), `y rechaza la petición diaria para un plan semanal (${modo})`)
+  }
   // §112: /api/plan con el Nasdaq-100: calcula (y cuadra con «por dentro»), sin la fila de la lista a partes iguales; rechaza otra petición
   // (otro universo o una lista manual) y un ocioso que es un valor del universo.
   {

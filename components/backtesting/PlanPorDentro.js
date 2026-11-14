@@ -3,7 +3,7 @@
 // la MISMA petición (lib/peticionMc.js), el MISMO motor (/api/multibacktest), el MISMO estado y los MISMOS cálculos
 // (useCarteraPorDentro.js) y los MISMOS paneles (CarteraPorDentro.js). Lo propio del plan:
 //   · la lista, el reparto y los filtros salen del bloque (a.lista, lib/planes/lista.js); el periodo y el dinero inicial, de «Tu dinero»
-//     (× el 100 % del bloque: hoy un plan tiene un solo bloque); sin aportaciones; velas diarias;
+//     (× el 100 % del bloque: hoy un plan tiene un solo bloque); sin aportaciones; con las velas del plan (diarias o semanales, §146);
 //   · con las comisiones del plan (fase 5, docs/builder.md §86): su % con el mínimo por orden (lib/comisiones.js, comisionesDePlan), y lo
 //     dice en una línea; los «Comprar y mantener» de aquí siguen sin comisión, como en el Backtesting (excepción temporal de Sergi);
 //   · se calcula SOLA mientras la pestaña está abierta, ~1 s después del último cambio (decisión de Sergi del 06/11);
@@ -24,7 +24,7 @@ import { cfgBaseMc, cuerpoMc, pesosNormalizadosMc } from '../../lib/peticionMc'
 import { leeRespuestaMc } from '../../lib/respuestaMc'
 import { mergeLista } from '../../lib/planes/lista'
 import { estadoUniversoMc, nDeUniverso, nombreUniverso, reglaDeUniverso } from '../../lib/universoMc'
-import { costesDe, creaCalculador, fechasDe, textoComision } from '../../lib/builder/planPantalla'
+import { costesDe, creaCalculador, fechasDe, textoComision, velasDelPlan } from '../../lib/builder/planPantalla'
 const McMonthlyGainsChart = dynamic(() => import('../McMonthlyGainsChart'), { ssr: false })
 
 // Los valores de partida de pages/index.js (los useState del panel de «Backtest de un valor» y del Backtesting).
@@ -40,6 +40,8 @@ export function estadoUniversoPlan({ a, estrategia, universoDatos = {} }) {
   const per = fechasDe(a || {})
   return estadoUniversoMc({ universo: l.universo, datos: universoDatos?.[l.universo], fromDate: per?.desde || null, toDate: per?.hasta || null, estrategias: estrategia?.id ? [estrategia.id] : [] })
 }
+// §146: el intervalo del Backtesting que corresponde a las velas del plan.
+export const intervaloDe = (a, estrategia) => velasDelPlan(a, estrategia) === 'semanales' ? 'semanal' : 'diario'
 export function peticionPorDentro({ a, estrategia, wlData = {}, universoDatos = {} }) {
   if (!estrategia?.id || a?.donde !== 'lista') return null
   const l = mergeLista(a.lista), per = fechasDe(a), capital = Number(a.capital) || 0
@@ -54,13 +56,14 @@ export function peticionPorDentro({ a, estrategia, wlData = {}, universoDatos = 
     momentumN: l.momentumN, rsWindow: l.rsWindow, rsGateThr: l.rsGateThr, momGateThr: l.momGateThr, proxGateThr: l.proxGateThr, calculoPrioridad: l.calculoPrioridad,
     scoreMap: Object.fromEntries(simbolos.map(sym => [sym, wlData?.[sym.toUpperCase()]?.active?.scoreMetricas ?? null])) })
   const isNoStrategy = (estrategia.name || '').includes('No Strategy'), comisiones = comisionesDePlan(costesDe(a))
+  const intervalo = intervaloDe(a, estrategia)
   if (estU) {   // §111: el cuerpo del universo dinámico de runBacktesting, con las claves en su orden
     const u = estU.universo
-    return { ...cuerpoMc({ symbols: u.simbolos, modoAsig: 'concentrado', weights: {}, cfg, strategyId: estrategia.id, isNoStrategy, filtros: l.filtros, intervalo: 'diario', comisiones }),
+    return { ...cuerpoMc({ symbols: u.simbolos, modoAsig: 'concentrado', weights: {}, cfg, strategyId: estrategia.id, isNoStrategy, filtros: l.filtros, intervalo, comisiones }),
       universo: { regla: reglaDeUniverso(l.universo), n: nDeUniverso(l.universo), mascara: u.mascara, elegidos: u.elegidos } }
   }
   return cuerpoMc({ symbols: l.simbolos, modoAsig: l.modo, weights: pesosNormalizadosMc(l.modo, l.simbolos, l.pesos), cfg, strategyId: estrategia.id,
-    isNoStrategy, filtros: l.filtros, intervalo: 'diario', comisiones })
+    isNoStrategy, filtros: l.filtros, intervalo, comisiones })
 }
 // Por qué no hay petición (para la línea de aviso).
 export function motivoSinPeticion({ a, estrategia, universoDatos = {} }) {
@@ -117,7 +120,7 @@ export default function PlanPorDentro({ a, estrategia, estrategias = VACIO, apiF
   const mcComisiones = useMemo(() => JSON.parse(claveCom), [claveCom])
   const anios = per?.desde && per?.hasta ? Math.max(1, Math.round((new Date(per.hasta) - new Date(per.desde)) / (365.25 * 24 * 3600 * 1000))) : 5
   const h = useCarteraPorDentro({ capitalIni: capital, currentStratId: idEst, filtrosBackend: l.filtros, mcCapitalIni: capital, mcComisiones, mcFromDate: per?.desde || null,
-    mcIntervalo: 'diario', mcIsModoCompare: false, mcMultiResults: VACIO, mcPeriodMode: 'range', mcResult, mcStratSelected, mcToDate: per?.hasta || null, mcYears: anios, strategies: estrategias })
+    mcIntervalo: intervaloDe(a, estrategia), mcIsModoCompare: false, mcMultiResults: VACIO, mcPeriodMode: 'range', mcResult, mcStratSelected, mcToDate: per?.hasta || null, mcYears: anios, strategies: estrategias })
   const { mcDisplayResults, mcPorActivo, mcSeriesActivos, mcPantallaCompleta, mcEquityContainerRef, mcArribaRef, mcHeaderRef, mcEquityPrevRef, mcEquityH, setMcEquityH,
     setMcShowGantt, setGanttDiscarded, mcChartsSyncRef, mcChartRefsMap } = h
   // Como runBacktesting al lanzar un cálculo nuevo («Single mode run»): fuera el Gantt y su caché, y la parrilla empieza de cero.
@@ -240,14 +243,14 @@ export default function PlanPorDentro({ a, estrategia, estrategias = VACIO, apiF
   return (
     <div data-por-dentro style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div data-linea-por-dentro style={{ fontSize: 13, color: 'var(--text2, #8ab8d4)' }}>
-        {motivo || `Calculado como el Backtesting con ${capital.toLocaleString('es-ES')} € (tu dinero inicial), sin aportaciones y ${costesDe(a || {}) ? `con las comisiones del plan (${textoComision(a)}; «Comprar y mantener», sin comisión)` : 'sin comisiones (el plan no tiene)'}.`}
+        {motivo || `Calculado como el Backtesting con ${capital.toLocaleString('es-ES')} € (tu dinero inicial),${intervaloDe(a, estrategia) === 'semanal' ? ' con velas semanales,' : ''} sin aportaciones y ${costesDe(a || {}) ? `con las comisiones del plan (${textoComision(a)}; «Comprar y mantener», sin comisión)` : 'sin comisiones (el plan no tiene)'}.`}
       </div>
       {calc.error && !calc.calculando && <div data-error-por-dentro style={{ color: '#ff4d6d', fontSize: 13 }}>No se pudo calcular: {calc.error}</div>}
       {mcLoading && <div data-calculando-por-dentro style={{ fontSize: 13, color: 'var(--accent, #00d4ff)' }}>Calculando la cartera por dentro…</div>}
       {mcResult && <div className="bp-mc" data-cartera-por-dentro style={{ overflow: 'visible' }}>
         <CarteraPorDentro {...h} {...{ ALTO_FRANJA_RENDIMIENTO, MC_TODAS, McMonthlyGainsChart, VERSION_APP: version, apiFetch, atrM: P.atrM, atrP: P.atrP, capitalDeRespuesta, capitalIni: capital, chartSyncRef,
           currentStratId: idEst, emaL: P.emaL, emaR: P.emaR, filtrosBackend: l.filtros, mcAssumedStopPct: l.assumedStopPct, mcCapital: P.mcCapital, mcCapitalIni: capital, mcComisiones,
-          mcFromDate: per?.desde || null, mcIntervalo: 'diario', mcIsModoCompare: false, mcListFilter: '', mcMaxAccumRisk: l.maxAccumRisk, mcMaxPortfolioPct: l.maxPortfolioPct,
+          mcFromDate: per?.desde || null, mcIntervalo: intervaloDe(a, estrategia), mcIsModoCompare: false, mcListFilter: '', mcMaxAccumRisk: l.maxAccumRisk, mcMaxPortfolioPct: l.maxPortfolioPct,
           mcMaxPosiciones: l.maxPosiciones, mcMode: l.modo, mcMultiResults: VACIO, mcPeriodMode: 'range', mcPrioridad: l.prioridad, mcResult, mcRiskPerTrade: l.riskPerTrade,
           mcSelected: l.simbolos, mcStratSelected, mcToDate: per?.hasta || null, mcVisibleActivo, mcWeights: l.pesos, mcYears: anios, reentry: P.reentry, setSidePanel, setSimbolo,
           sinPerdidas: P.sinPerdidas, sp500EmaL: P.sp500EmaL, sp500EmaR: P.sp500EmaR, strategies: estrategias, tipoFiltro: P.tipoFiltro, tipoStop: P.tipoStop }}/>

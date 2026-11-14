@@ -19,13 +19,16 @@ import { comisionesDePlan, normalizaComisiones } from '../../lib/comisiones'
 import handlerMultibacktest from './multibacktest'
 import { evaluaPlan, iniciosRodantes, referenciasDe } from '../../lib/planes/evalua'
 import { ejecutaPlan } from '../../lib/planes/plan'
-import { cargaDatosPlan } from '../../lib/planes/datosServidor'
+import { cargaDatosPlan, cargaDiarias } from '../../lib/planes/datosServidor'
+import { listaEnSuDia } from '../../lib/planes/estrategia'
 
 export const config = { maxDuration: 60 }
 
 // §89: con «Una lista», la pantalla manda también cuerpoLista, la MISMA petición de «La cartera por dentro» (peticionPorDentro). Aquí se
 // comprueba que corresponde a este plan y se pide a /api/multibacktest (en este mismo proceso, con la sesión de la persona) con
 // conCandidatos: los candidatos de cada valor, que el motor del plan reparte con su dinero.
+// §146: con velas semanales del plan, la petición es la semanal del Backtesting; sus candidatos (fechados en el lunes de su semana) se
+// sitúan en su día con las velas diarias de cada valor (de la caché, que /api/multibacktest acaba de rellenar): listaEnSuDia.
 // §112: con el Nasdaq-100, los valores son los del universo en el periodo (las claves de la máscara, en orden) y el universo es el del bloque.
 export function errorCuerpoLista(plan, pieza, c) {
   if (!c || typeof c !== 'object' || !c.cfg) return 'Falta la petición de la lista (cuerpoLista).'
@@ -34,7 +37,7 @@ export function errorCuerpoLista(plan, pieza, c) {
     ? !!c.universo?.mascara && typeof c.universo.mascara === 'object' && `ndx_${c.universo.regla === 'momentum' ? 'mom' : 'vol'}_${c.universo.n}` === univ && Array.isArray(c.symbols) && JSON.stringify(c.symbols) === JSON.stringify(Object.keys(c.universo.mascara).sort())
     : c.universo == null && JSON.stringify(c.symbols) === JSON.stringify(pieza.lista?.simbolos)
   const igual = String(c.strategyId) === String(pieza.estrategia?.id) && valores && c.modoAsig === pieza.lista?.modo
-    && c.cfg.capitalIni === plan.dinero.capitalInicial * pieza.peso && c.cfg.fromDate === plan.periodo.desde && c.cfg.toDate === plan.periodo.hasta && c.intervalo === 'diario'
+    && c.cfg.capitalIni === plan.dinero.capitalInicial * pieza.peso && c.cfg.fromDate === plan.periodo.desde && c.cfg.toDate === plan.periodo.hasta && c.intervalo === (pieza.velas === 'semanales' ? 'semanal' : 'diario')
     && JSON.stringify(normalizaComisiones(c.comisiones)) === JSON.stringify(comisionesDePlan(plan.costes)) && JSON.stringify(c.filtros || []) === JSON.stringify(pieza.lista?.filtros || [])
   return igual ? null : 'La petición de la lista no corresponde a este plan.'
 }
@@ -73,6 +76,11 @@ export default async function handler(req, res) {
       const r = await pideMultibacktest(req, { ...req.body.cuerpoLista, conCandidatos: true })
       if (r.status !== 200 || !r.json?.candidatosAzar) return res.status(r.status === 401 ? 401 : 500).json({ error: r.json?.error || `La lista no se pudo calcular (HTTP ${r.status}).` })
       c.datos.lista = r.json.candidatosAzar
+      if (pLista.velas === 'semanales') {   // §146
+        const dd = await cargaDiarias(c.datos.lista.activos.map(ac => ac.symbol), { desde: plan.periodo.desde, hasta: plan.periodo.hasta, supaUrl: SUPA_URL, headers })
+        if (dd.error) return res.status(500).json({ error: dd.error })
+        c.datos.lista = listaEnSuDia(c.datos.lista, dd.velas, { hasta: plan.periodo.hasta, alCierre: pLista.estrategia?.definition?.entrada?.orden?.tipo === 'cierre' })
+      }
       const cc = r.json.compoundCurve || []
       finalPorDentro = cc.length ? cc[cc.length - 1].value : null
     }

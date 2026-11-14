@@ -10,8 +10,10 @@
 //     b) el miércoles de la semana 4 el precio baja a 95: toca el stop (105 × 0,92 = 96,6) ese día → vende el miércoles 01/04 a 96,6.
 //     c) el miércoles de la semana 4 ABRE a 94, por debajo del stop (el martes no bajó de 113): vende el miércoles a su apertura, 94.
 //     Con velas DIARIAS (o sin el campo), el plan de siempre: idéntico con y sin `velas: 'diarias'`.
-// 2 · diaDeLaSemana y la validación (semanales solo con un valor).
+// 2 · diaDeLaSemana y la validación.
+// 4 · §146: semanales con VARIOS valores, a mano: los candidatos semanales de dos valores, situados en su día (listaEnSuDia).
 // 3 · La pantalla: los ajustes (velas: null = las de la estrategia), planDe / ajustesDe y «Velas en este plan».
+process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'clave-falsa-del-arnes'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
 let fallos = 0
@@ -84,7 +86,7 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   ok(Es.diaDeLaSemana([], 100) === null && Es.diaDeLaSemana(null, 100) === null, 'sin días, nada')
   ok(P.validaPlan(plan({ velas: 'mensuales' })).some(e => e.includes('diarias o semanales')), 'unas velas desconocidas no son válidas')
   const Li = require(R + '/lib/planes/lista.js')
-  ok(P.validaPlan(plan({ velas: 'semanales', donde: 'lista', lista: Li.mergeLista({ simbolos: ['TEST', 'OTRO'] }) })).some(e => e.includes('solo velas diarias')), 'semanales con varios valores: todavía no, y lo dice')
+  ok(P.validaPlan(plan({ velas: 'semanales', donde: 'lista', lista: Li.mergeLista({ simbolos: ['TEST', 'OTRO'] }) })).every(e => !e.includes('velas')), '§146: semanales con varios valores: ya se puede')
   ok(P.validaPlan(plan({ velas: 'diarias', donde: 'lista', lista: Li.mergeLista({ simbolos: ['TEST', 'OTRO'] }) })).every(e => !e.includes('velas')), 'diarias con varios valores: como siempre')
 
   // ── 3 · La pantalla ──
@@ -116,6 +118,68 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   D.pulsa(boton('Diarias · las de la estrategia')); await hasta(() => !m.raiz.conAtributo('data-aviso', 'otras-velas').length)
   ok(m.raiz.conAtributo('data-velas-plan', 'diarias').length === 1 && !m.raiz.conAtributo('data-aviso', 'otras-velas').length, 'y al volver a las de la estrategia, se va')
   m.quita()
+
+  // ── 4 · Semanales con VARIOS valores (§146), a mano ──
+  // Dos valores, A y B, del lunes 02/03/2020 al miércoles 18/03/2020 (el plan acaba a mitad de la tercera semana). Los candidatos, como
+  // los da el Backtesting semanal (fechados en el lunes):
+  //   A: entra la semana del 02/03 a 10 (la apertura de la semana) y sale la del 09/03 por un stop a 9, que se toca el MIÉRCOLES 11/03
+  //      (el martes no bajó de 10). Otra entrada de A la semana del 16/03 a 15 (una orden de compra): hasta el miércoles 18 no pasó de 12
+  //      → no ha ocurrido dentro del plan: fuera.
+  //   B: entra la semana del 09/03 a 20 (apertura) y sigue abierta: el Backtesting la cierra al cierre de su última semana (30, el
+  //      viernes 20/03, después del final del plan) → en el plan, el miércoles 18/03 a su cierre, 25.
+  // Capital compartido (n = 2), 1.000 €, sin comisiones: el lunes 02/03 A con 1.000 / 2 = 500 € → 50 acciones; el lunes 09/03 B con
+  // (500 libres + 500 de A) / 2 = 500 € → 25 acciones; el miércoles 11/03 A sale a 9: 450 €; el 18/03 B a 25: 625 €. Final 1.075 €.
+  // Capital concentrado, máx. 1: el lunes 09/03 A sigue abierta (su stop salta el miércoles): B NO entra. Final 100 × 9 = 900 €.
+  // (En «La cartera por dentro», semanal, la venta de A y la compra de B son de la misma semana y B sí entraría: por eso con semanales
+  // no hay línea «Comprobación».)
+  {
+    const diasDe = (k, n = 5) => Array.from({ length: n }, (_, j) => dia(LUNES0, 7 * k + j)), F = [...diasDe(0), ...diasDe(1), ...diasDe(2, 3)]
+    const velasDe = (xs) => xs.map(([open, high, low, close], i) => ({ date: F[i], open, high, low, close, volume: 1 }))
+    const dA = velasDe([[10, 10.5, 10, 10.5], [10.5, 11, 10.5, 11], [11, 11, 11, 11], [11, 11, 11, 11], [11, 11, 11, 11],
+      [11, 11.5, 10.5, 11], [11, 11, 10, 10.5], [10.5, 10.5, 8.8, 9], [9, 9, 9, 9], [9, 9, 9, 9], [9, 10, 9, 10], [10, 11, 10, 11], [11, 12, 11, 12]])
+    const dB = velasDe([[20, 20, 20, 20], [20, 20, 20, 20], [20, 20, 20, 20], [20, 20, 20, 20], [20, 20, 20, 20],
+      [20, 21, 20, 21], [21, 21, 21, 21], [21, 22, 21, 22], [22, 22, 22, 22], [22, 22, 22, 22], [22, 23, 22, 23], [23, 24, 23, 24], [24, 25, 24, 25]])
+    const L = [dia(LUNES0, 0), dia(LUNES0, 7), dia(LUNES0, 14)]
+    const semanal = (modo) => ({ opciones: { modo, n: 2, maxPosiciones: 1, prioridad: 'alfabetico' }, activos: [
+      { symbol: 'A', fechas: L, abre: [10, 11, 9], cierra: [11, 9, 13], candidatos: [
+        { symbol: 'A', entryDate: L[0], entryPx: 10, exitDate: L[1], exitPx: 9, pasaPuerta: true, _virtualClose: false },
+        { symbol: 'A', entryDate: L[2], entryPx: 15, exitDate: L[2], exitPx: 13, pasaPuerta: true, _virtualClose: true }] },
+      { symbol: 'B', fechas: L, abre: [20, 20, 22], cierra: [20, 22, 30], candidatos: [
+        { symbol: 'B', entryDate: L[1], entryPx: 20, exitDate: L[2], exitPx: 30, pasaPuerta: true, _virtualClose: true }] }] })
+    const hasta = F[F.length - 1]
+    const enDia = Es.listaEnSuDia(semanal('compartido'), { A: dA, B: dB }, { hasta })
+    const cs = (k) => JSON.stringify(enDia.activos[k].candidatos.map(t => [t.entryDate, t.entryPx, t.exitDate, t.exitPx]))
+    ok(cs(0) === JSON.stringify([['2020-03-02', 10, '2020-03-11', 9]]), 'lista semanal → A: entra el lunes 02/03 a 10 y su stop (9) salta el miércoles 11/03; la entrada a 15 de la última semana no ha ocurrido: fuera (' + cs(0) + ')')
+    ok(cs(1) === JSON.stringify([['2020-03-09', 20, '2020-03-18', 25]]), 'lista semanal → B: entra el lunes 09/03 a 20 y lo abierto se cierra el último día del plan, miércoles 18/03, a su cierre (25), no a 30 (' + cs(1) + ')')
+    ok(enDia.activos[0].fechas.length === 13 && enDia.activos[0].fechas[7] === '2020-03-11' && enDia.activos[0].cierra[7] === 9 && enDia.activos[0].abre[0] === 10 && enDia.opciones.modo === 'compartido', 'y las velas de cada valor pasan a ser las de cada día (13 sesiones)')
+    const planL = (modo) => ({ ...plan({ velas: 'semanales', donde: 'lista', lista: Li.mergeLista({ simbolos: ['A', 'B'], modo, maxPosiciones: 1 }), activo: 'A', ocioso: 'LIQUIDEZ' }), dinero: { capitalInicial: 1000, aportaciones: { frecuencia: 'ninguna' }, extraordinarias: [] }, periodo: { desde: F[0], hasta } })
+    const datosL = (modo) => ({ fechas: F, qqq: F.map(() => null), etf: F.map(() => null), spy: F.map(() => null), lista: Es.listaEnSuDia(semanal(modo), { A: dA, B: dB }, { hasta }) })
+    ok(P.validaPlan(planL('compartido')).length === 0, 'semanales con varios valores: el plan ya es válido ' + P.validaPlan(planL('compartido')).join(' '))
+    const rc = P.ejecutaPlan(planL('compartido'), datosL('compartido'))
+    ok(cerca(rc.valorNeto, 1075) && rc.costes.ordenes === 4, 'compartido a mano: 50 × 9 + 25 × 25 = 1.075 € con 4 órdenes (' + rc.valorNeto + ', ' + rc.costes.ordenes + ')')
+    ok(cerca(rc.serie[6].patrimonio, 50 * 10.5 + 25 * 21) && cerca(rc.serie[7].patrimonio, 450 + 25 * 22), 'se valora cada DÍA: martes 10/03, 50 × 10,5 + 25 × 21 = 1.050 €; miércoles 11/03 (A ya vendida), 450 + 25 × 22 = 1.000 €')
+    const rk = P.ejecutaPlan(planL('concentrado'), datosL('concentrado'))
+    ok(cerca(rk.valorNeto, 900) && rk.estrategias.e.operaciones.length === 1, 'concentrado máx. 1 a mano: el lunes 09/03 A sigue abierta y B no entra: 100 × 9 = 900 € (' + rk.valorNeto + ')')
+    // Entrada «al cierre» de la vela: el viernes a su cierre. Y un lunes festivo: la apertura de la semana es la del martes.
+    const alC = Es.listaEnSuDia(semanal('compartido'), { A: dA, B: dB }, { hasta, alCierre: true })
+    ok(alC.activos[0].candidatos[0].entryDate === '2020-03-06' && alC.activos[0].candidatos[0].entryPx === 11, 'con compra «al cierre», A entra el viernes 06/03 a su cierre (11)')
+    const sinLunes = Es.listaEnSuDia({ opciones: {}, activos: [{ symbol: 'B', fechas: L, abre: [20, 21, 22], cierra: [20, 22, 30], candidatos: [{ symbol: 'B', entryDate: L[1], entryPx: 21, exitDate: L[2], exitPx: 30, _virtualClose: true }] }] }, { B: dB.filter(b => b.date !== L[1]) }, { hasta })
+    ok(sinLunes.activos[0].candidatos[0].entryDate === '2020-03-10' && sinLunes.activos[0].fechas.length === 12, 'si el lunes no hay sesión, la apertura de la semana es la del martes 10/03')
+    let err = null; try { Es.listaEnSuDia(semanal('compartido'), { A: dA }, { hasta }) } catch (e) { err = e.message }
+    ok(err === 'Faltan las velas diarias de B.', 'sin las diarias de un valor, lo dice')
+    // La petición y la comprobación.
+    const PD = require(R + '/components/backtesting/PlanPorDentro.js'), Api = require(R + '/pages/api/plan.js')
+    const est = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params: { ema: 2 } }
+    const aL = (velas) => ({ ...Pa.AJUSTES_PLAN, activo: 'AAPL', donde: 'lista', lista: Li.mergeLista({ simbolos: ['AAPL', 'MSFT'] }), velas })
+    const cS = PD.peticionPorDentro({ a: aL('semanales'), estrategia: est }), cD = PD.peticionPorDentro({ a: aL(null), estrategia: est })
+    ok(cS?.intervalo === 'semanal' && cD?.intervalo === 'diario' && Lt.jsonCanonico({ ...cS, intervalo: 'diario' }) === Lt.jsonCanonico(cD), 'la petición de la lista: «semanal» con velas semanales y, en lo demás, idéntica a la diaria')
+    const pS2 = Pa.planDe(aL('semanales'), est), pD2 = Pa.planDe(aL(null), est)
+    ok(Api.errorCuerpoLista(pS2, pS2.piezas[0], cS) === null && Api.errorCuerpoLista(pD2, pD2.piezas[0], cD) === null && Api.errorCuerpoLista(pS2, pS2.piezas[0], cD) !== null && Api.errorCuerpoLista(pD2, pD2.piezas[0], cS) !== null, '/api/plan solo acepta la petición con las velas de su plan')
+    const sinNada = (p) => ({ ...p, impuestos: { regimen: 'ninguno' }, dinero: { ...p.dinero, aportaciones: { frecuencia: 'ninguna' } }, piezas: [{ ...p.piezas[0], ocioso: 'LIQUIDEZ' }] })
+    ok(Pa.oroComparable(sinNada(pD2)) === true && Pa.oroComparable(sinNada(pS2)) === false, 'la línea «Comprobación» solo con velas diarias')
+    const txt = Pa.textoParaClaudePlan({ ajustes: aL('semanales'), estrategia: est, plan: pS2, cifras: null, estado: null, resultadoPrueba: null, version: 'V' })
+    ok(txt.includes('una lista') && txt.includes('velas semanales'), '«Copiar para Claude» dice las velas del plan también con lista')
+  }
 
   console.log(fallos ? `FALLOS: ${fallos}` : 'plan-velas: todo bien')
   process.exit(fallos ? 1 : 0)
