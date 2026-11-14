@@ -11,7 +11,7 @@
 import { fetchData, fetchDataConMotivo, runCodeJsAsset, buildAlignedCloses, buildAlignedWeekly, calcEMA } from './multibacktest'
 import { usaFuerzaRelativa, percentilesParaBarras } from '../../lib/fuerzaRelativa'
 import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
-import { fuenteDeFila, tickerFiltroMercado } from '../../lib/editor/fuente'
+import { fuenteDeFila, tickersReferencia } from '../../lib/editor/fuente'
 import { conHistoriaFuente } from '../../lib/editor/historia'
 import { marcaBloqueadas } from '../../lib/graficoEstrategia'
 import { velasCalentamiento } from '../../lib/periodo'
@@ -182,9 +182,8 @@ async function handlerAssetDetail(req, res) {
       _rsPer = pf ? percentilesParaBarras(barrasConCal, pf, esSemanal) : barrasConCal.map(() => null)
     }
     // Estrategia del editor con filtro de mercado (V9.1014): las velas de su ticker.
-    const _tickerFm = tickerFiltroMercado(codeJs)
-    let _refFm = null
-    if (_tickerFm) { try { _refFm = await fetchData(_tickerFm, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, _cal) } catch (_) {} }
+    const _tsFm = tickersReferencia(codeJs), _refsFm = {}   // §149: también los de las filas de filtro extra
+    for (const _t of _tsFm) { try { _refsFm[_t] = await fetchData(_t, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, _cal) || [] } catch (_) { _refsFm[_t] = [] } }
     const { indicators = {}, filterZones: zonasSandbox = [], grafico = null } =
       // Esta ruta descarta las operaciones y solo usa las series de indicadores, asi que la
       // comision no cambia nada de lo que devuelve. Se pasa igual para que el sandbox corra con la
@@ -192,7 +191,7 @@ async function handlerAssetDetail(req, res) {
       // no habria que acordarse de esto.
       codeJs ? runCodeJsAsset(barrasConCal, sp500Data, codeJs, cfg.capitalIni ?? 10000, cfg.years ?? 5, effectiveCfg,
                               { desde: _d.periodo.desde, iDesde: _d.iDesde ?? 0, hasta: _d.periodo.hasta,
-                                grafico: true, conocidasGrafico: CONOCIDAS_GRAFICO, ...(_rsPer ? { rsPercentil: _rsPer } : {}), ...(_tickerFm ? { referencias: { [_tickerFm]: _refFm || [] } } : {}) }, comisiones)
+                                grafico: true, conocidasGrafico: CONOCIDAS_GRAFICO, ...(_rsPer ? { rsPercentil: _rsPer } : {}), ...(_tsFm.length ? { referencias: _refsFm } : {}) }, comisiones)
              : { indicators: {}, filterZones: [] }
 
     paso = 'filtros'

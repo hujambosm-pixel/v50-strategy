@@ -25,7 +25,7 @@ import { admiteEntrada, bhUniverso } from '../../lib/universoDinamico'
 import { buildAlignedCloses, buildAlignedWeekly } from '../../lib/alineaSeries'
 import { usaFuerzaRelativa, percentilesParaBarras } from '../../lib/fuerzaRelativa'
 import { proveedorFuerzaRelativa } from '../../lib/fuerzaRelativaServidor'
-import { fuenteDeFila, esFuenteEditor, runDeEditor, tickerFiltroMercado } from '../../lib/editor/fuente'
+import { fuenteDeFila, esFuenteEditor, runDeEditor, tickersReferencia } from '../../lib/editor/fuente'
 import { conHistoriaFuente } from '../../lib/editor/historia'
 import { preparaGuardado } from '../../lib/editor/guardar'
 
@@ -1909,10 +1909,10 @@ async function handlePortfolioMode(req, res) {
         const synSym = `${ticker}#${orderTag}`
         // La estrategia ve la serie CON calentamiento; solo cuentan las entradas dentro del periodo.
         const _rsPer = usaFuerzaRelativa(s.codeJs) ? await rsPercentilDe(proveedorFuerzaRelativa(req), ticker, dataCal, assetInterval === '1wk') : null
-        const _tFm = tickerFiltroMercado(s.codeJs)
-        if (_tFm && !(_tFm in _refsFm)) { try { _refsFm[_tFm] = await fetchData(_tFm, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, _cal) || [] } catch (_) { _refsFm[_tFm] = [] } }
+        const _tsFm = tickersReferencia(s.codeJs)   // §149: el del filtro de mercado y los de las filas de filtro extra
+        for (const _tFm of _tsFm) if (!(_tFm in _refsFm)) { try { _refsFm[_tFm] = await fetchData(_tFm, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, _cal) || [] } catch (_) { _refsFm[_tFm] = [] } }
         const { trades: rawTrades, heredadas } = runCodeJsAsset(dataCal, sp500Data, s.codeJs, slotCapital, cfg.years ?? 5, s.effectiveCfg,
-          { desde: per.desde, iDesde: descargas[ticker].iDesde ?? 0, ...(_rsPer ? { rsPercentil: _rsPer } : {}), ...(_tFm ? { referencias: { [_tFm]: _refsFm[_tFm] } } : {}) }, _com)
+          { desde: per.desde, iDesde: descargas[ticker].iDesde ?? 0, ...(_rsPer ? { rsPercentil: _rsPer } : {}), ...(_tsFm.length ? { referencias: Object.fromEntries(_tsFm.map(t => [t, _refsFm[t]])) } : {}) }, _com)
         // Enriquecer cada trade con metadata de estrategia
         const trades = rawTrades.map(t => ({
           ...t,
@@ -2359,9 +2359,8 @@ async function handlerMultibacktest(req, res) {
     const slotCapital = cfg.capitalIni / n
 
     // Estrategia del editor con filtro de mercado (V9.1014): las velas de su ticker, una vez.
-    const _tFm = tickerFiltroMercado(codeJs)
-    let _refFm = null
-    if (_tFm) { try { _refFm = await fetchData(_tFm, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, _cal) || [] } catch (_) { _refFm = [] } }
+    const _tsFm = tickersReferencia(codeJs), _refsFm = {}   // §149: también los de las filas de filtro extra
+    for (const _tFm of _tsFm) { try { _refsFm[_tFm] = await fetchData(_tFm, cfg.years ?? 5, cfg.fromDate ?? null, cfg.toDate ?? null, assetInterval, _cal) || [] } catch (_) { _refsFm[_tFm] = [] } }
     // rsPercentil (V9.1005): solo si el code_js nombra el campo; un activo tras otro (la distribución se lee una vez).
     const _rsPor = {}
     if (codeJs && usaFuerzaRelativa(codeJs)) {
@@ -2379,7 +2378,7 @@ async function handlerMultibacktest(req, res) {
       if (codeJs) {
         // Motor code_js: sandbox por activo con slotCapital = capital total / nº activos
         const { trades, heredadas } = runCodeJsAsset(dataCal, sp500Data, codeJs, slotCapital, cfg.years ?? 5, effectiveCfg,
-          { desde: per.desde, iDesde: descargas[sym].iDesde ?? 0, ...(_rsPor[sym] ? { rsPercentil: _rsPor[sym] } : {}), ...(_tFm ? { referencias: { [_tFm]: _refFm } } : {}) }, _com)
+          { desde: per.desde, iDesde: descargas[sym].iDesde ?? 0, ...(_rsPor[sym] ? { rsPercentil: _rsPor[sym] } : {}), ...(_tsFm.length ? { referencias: _refsFm } : {}) }, _com)
         const capitalReinv = trades.length ? trades[trades.length-1].capitalTras : slotCapital
         const gananciaSimple = trades.reduce((s,t) => s + t.pnlSimple, 0)
         return { symbol: sym, data, dataCal, _heredadas: heredadas ?? [], trades, capitalReinv, gananciaSimple, startDate, blockEvents: {} }
