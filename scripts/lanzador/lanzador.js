@@ -1,7 +1,7 @@
 // scripts/lanzador/lanzador.js
 //
 // LANZADOR de Trading Simulator en este PC (docs/builder.md §134). Lo usan los accesos directos del
-// Escritorio «Trading Simulator» y «Parar Trading Simulator» (ventana.ps1); también a mano:
+// Escritorio «Trading Simulator», «Parar Trading Simulator» y «Parar solo la app» (ventana.ps1); también a mano:
 //
 //   node scripts/lanzador/lanzador.js arrancar [--sin-navegador]
 //        Docker Desktop → Supabase local → postgres-meta → la app (next start; antes `npm run build`
@@ -10,6 +10,9 @@
 //   node scripts/lanzador/lanzador.js parar
 //        Copia diaria si aún no hay de hoy → para la app → postgres-meta → Supabase (los datos se
 //        quedan en Docker) → Docker Desktop (libera la memoria de WSL).
+//   node scripts/lanzador/lanzador.js parar-app
+//        Solo la app (docs/builder.md §147): Docker y la base de datos siguen encendidos. Para compilar
+//        y pasar las comprobaciones (comunes.sh) sin apagarlo todo. Sin copia: la base no se toca.
 //   node scripts/lanzador/lanzador.js estado      qué está encendido (JSON)
 //   node scripts/lanzador/lanzador.js meta        solo postgres-meta (lo enciende o lo rehace; §136)
 //
@@ -226,15 +229,8 @@ if ($c) { $p = Get-CimInstance Win32_Process -Filter "ProcessId=$($c.OwningProce
   return { pid: Number(pid), cmd: resto.join('|') };
 }
 
-async function parar() {
-  // 1) Copia diaria antes de apagar (si aún no hay de hoy).
-  if (dockerVivo() && C.contenedorEncendido(C.CONT_DB) && !C.copiasCompletas(C.DIARIAS).includes(C.hoyLocal())) {
-    paso('Haciendo la copia de hoy antes de apagar…');
-    const r = spawnSync(process.execPath, [path.join(C.REPO, 'scripts', 'copias', 'copiaDiaria.js')], { windowsHide: true, encoding: 'utf8' });
-    paso(r.status === 0 ? '   ✓ Copia hecha' : `   ✗ La copia falló (se sigue apagando): ${(r.stdout + r.stderr).trim()}`);
-  }
-
-  // 2) La app
+// Apaga la app (solo si lo que escucha en el 3000 es el next de este proyecto).
+async function pararApp() {
   const p = procesoApp();
   if (!p) paso('La app ya estaba apagada');
   else if (!/next/i.test(p.cmd) || !p.cmd.toLowerCase().includes(path.basename(C.REPO).toLowerCase())) {
@@ -245,6 +241,18 @@ async function parar() {
     await hasta(async () => !(await puertoAbierto(PUERTO_APP)), 15, 500);
     paso('   ✓ App apagada');
   }
+}
+
+async function parar() {
+  // 1) Copia diaria antes de apagar (si aún no hay de hoy).
+  if (dockerVivo() && C.contenedorEncendido(C.CONT_DB) && !C.copiasCompletas(C.DIARIAS).includes(C.hoyLocal())) {
+    paso('Haciendo la copia de hoy antes de apagar…');
+    const r = spawnSync(process.execPath, [path.join(C.REPO, 'scripts', 'copias', 'copiaDiaria.js')], { windowsHide: true, encoding: 'utf8' });
+    paso(r.status === 0 ? '   ✓ Copia hecha' : `   ✗ La copia falló (se sigue apagando): ${(r.stdout + r.stderr).trim()}`);
+  }
+
+  // 2) La app
+  await pararApp();
 
   if (!dockerVivo()) { paso('Docker ya estaba apagado'); return; }
 
@@ -276,12 +284,17 @@ async function main() {
       console.log(`OK: Trading Simulator está encendido en ${URL_APP}`);
       return 0;
     }
+    if (orden === 'parar-app') {
+      await pararApp();
+      console.log('OK: La app está apagada. La base de datos sigue encendida.');
+      return 0;
+    }
     if (orden === 'parar') {
       await parar();
       console.log('OK: Todo apagado. Tus datos se quedan guardados.');
       return 0;
     }
-    console.error('Uso: node scripts/lanzador/lanzador.js arrancar [--sin-navegador] | parar | estado | meta');
+    console.error('Uso: node scripts/lanzador/lanzador.js arrancar [--sin-navegador] | parar | parar-app | estado | meta');
     return 2;
   } catch (e) {
     console.log('FALLO: ' + e.message);

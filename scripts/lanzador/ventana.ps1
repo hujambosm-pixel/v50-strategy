@@ -4,10 +4,11 @@
 # Escritorio a través de lanzador.vbs (sin consola):
 #   -Accion arrancar   «Trading Simulator»: enciende todo y abre la app en el navegador
 #   -Accion parar      «Parar Trading Simulator»: copia de hoy, apaga la app, la base y Docker
+#   -Accion parar-app  «Parar solo la app» (§147): apaga solo la app; la base y Docker siguen encendidos
 # Todo el trabajo lo hace lanzador.js. Si sale bien, la ventana se cierra sola a los 4 segundos.
 # Solo para comprobarla: -Captura <png> (dibuja la ventana al terminar y se cierra) y -SinNavegador.
 
-param([ValidateSet('arrancar', 'parar')][string]$Accion = 'arrancar', [string]$Captura, [switch]$SinNavegador)
+param([ValidateSet('arrancar', 'parar', 'parar-app')][string]$Accion = 'arrancar', [string]$Captura, [switch]$SinNavegador)
 
 $ErrorActionPreference = 'Stop'
 $script = Join-Path $PSScriptRoot 'lanzador.js'
@@ -33,7 +34,7 @@ $titulo = New-Object System.Windows.Forms.Label
 $titulo.Location = New-Object System.Drawing.Point(20, 16)
 $titulo.Size = New-Object System.Drawing.Size(510, 28)
 $titulo.Font = New-Object System.Drawing.Font('Segoe UI', 12, [System.Drawing.FontStyle]::Bold)
-$titulo.Text = if ($Accion -eq 'arrancar') { 'Encendiendo Trading Simulator…' } else { 'Apagando Trading Simulator…' }
+$titulo.Text = if ($Accion -eq 'arrancar') { 'Encendiendo Trading Simulator…' } elseif ($Accion -eq 'parar-app') { 'Apagando solo la app…' } else { 'Apagando Trading Simulator…' }
 $f.Controls.Add($titulo)
 
 $log = New-Object System.Windows.Forms.TextBox
@@ -105,7 +106,7 @@ $timer.Add_Tick({
       $btn.Enabled = $true
       $f.AcceptButton = $btn
       if ($script:bien) {
-        $titulo.Text = if ($Accion -eq 'arrancar') { '✓ Trading Simulator encendido' } else { '✓ Trading Simulator apagado' }
+        $titulo.Text = if ($Accion -eq 'arrancar') { '✓ Trading Simulator encendido' } elseif ($Accion -eq 'parar-app') { '✓ App apagada (la base sigue encendida)' } else { '✓ Trading Simulator apagado' }
         $titulo.ForeColor = [System.Drawing.Color]::FromArgb(22, 128, 61)
         if ($Captura) { $timer.Stop(); Captura; return }
         $script:cuenta = 20   # 20 × 200 ms = 4 s

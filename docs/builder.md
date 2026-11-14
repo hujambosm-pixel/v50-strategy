@@ -2962,3 +2962,12 @@ Parte 2b de «el plan manda sobre la estrategia» (decisión de Sergi del 14/11)
 - Ninguna cifra cambia: con velas diarias no se toca nada (la petición es idéntica byte a byte; la prueba de oro sigue 18/18 y 3/3).
 - Comprobaciones: plan-velas.js, apartado 4 (a mano, dos valores inventados, del lunes 02/03/2020 al miércoles 18/03/2020: compartido 50 × 9 + 25 × 25 = 1.075 €; concentrado máx. 1, 100 × 9 = 900 € porque el lunes A sigue abierta y B no entra; lo abierto se cierra el miércoles 18 a 25 y no a 30; una entrada a 15 que no llegó a darse, fuera; compra «al cierre», el viernes; lunes festivo, el martes; la petición, la ruta y la línea «Comprobación»). plan-tu-dinero-lista.js: /api/plan con la lista Degiro de la foto en semanales (concentrado máx. 4: 89.748,57 € frente a 84.663,33 € «por dentro», 152 operaciones; compartido: 71.109,24 € frente a 71.937,47 €, 365 operaciones; todas dentro de la vela de su día) y rechaza la petición diaria para un plan semanal.
 - Pendiente: los filtros del plan con el catálogo de condiciones (parte 3) y el apalancamiento y «Compra más acción» con varios valores (parte 4).
+
+## 147. Lanzador: «Parar solo la app»
+
+Pedido al pasar las comprobaciones de §146: para compilar y pasar comunes.sh la app tiene que estar parada pero Supabase encendido, y «Parar Trading Simulator» lo apaga todo (luego había que volver a encender Docker y la base, unos minutos).
+
+- scripts/lanzador/lanzador.js: orden `parar-app` (función pararApp, el mismo paso «la app» que ya hacía `parar`, sin cambios: solo apaga lo que escucha en el 3000 si es el next de este proyecto). No hace copia ni toca Docker, la base ni postgres-meta. `parar` hace lo mismo que antes.
+- lanzador.vbs y ventana.ps1 aceptan la acción `parar-app` (títulos «Apagando solo la app…» y «✓ App apagada (la base sigue encendida)»).
+- instala.ps1 crea además el acceso directo del Escritorio «Parar solo la app». Para volver a encenderla, el de siempre («Trading Simulator»: lo que ya está encendido se deja como está).
+- Solo scripts del lanzador: la app no cambia.
