@@ -55,6 +55,8 @@ import ComparaPlanes from './ComparaPlanes'
 import { CLAVE_COMPARAR, REFS_COMPARAR, TEXTO_SIN_PLANES, alterna, elegidosIniciales, pieza as piezaDe } from '../lib/builder/comparaPlanes'
 import { cargaUniversoMc, nDeUniverso, reglaDeUniverso } from '../lib/universoMc'
 import FiltrosPanel from './FiltrosPanel'
+import FiltrosDelPlan from './FiltrosDelPlan'
+import { filtrosPropios, respetaPropios, usoDeLaEstrategia } from '../lib/builder/filtrosPlan'
 import { mergeFiltros, hayFiltrosActivos } from '../lib/filtros'
 import { sinTildes } from '../lib/builder/buscar'
 // §144: lo que enseña el selector de valores con un plan de «una acción»: la lista manual con su único valor.
@@ -670,6 +672,15 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const L = enLista ? (a.lista || {}) : listaDeAccion(a)
   const velasEst = velasDeEstrategia(estrategia), velasPlan = velasDelPlan(a, estrategia)
   const variosValores = enLista && ((L.universo && L.universo !== 'manual') || (L.simbolos || []).length >= 2)
+  // §152: «La estrategia, tal como la usa este plan», siempre a la vista: en azul, lo que el plan cambia respecto a la estrategia guardada.
+  const dondeUso = enLista ? (L.universo && L.universo !== 'manual' ? 'en el Nasdaq-100' : (L.simbolos || []).length === 1 ? `en ${L.simbolos[0]}` : `en ${(L.simbolos || []).length} valores`) : `en ${a.activo}`
+  const uso = estrategia && actual ? (
+    <div data-uso-estrategia title="En azul, lo que este plan cambia respecto a la estrategia guardada (la estrategia no se toca)" style={{ ...S.secundario, fontSize: 13, marginBottom: 10 }}>
+      La estrategia, tal como la usa este plan:{' '}
+      {usoDeLaEstrategia({ nombre: estrategia.name, velasEst, velasPlan, donde: dondeUso, propios: filtrosPropios(estrategia), respeta: respetaPropios(a.filtros), nPlan: (a.filtros?.filas || []).length })
+        .map((p, k) => <span key={k}>{k ? ' · ' : ''}<span data-cambia={p.azul ? 'si' : undefined} style={{ color: p.azul ? AZUL : B.texto, fontWeight: k ? 400 : 600 }}>{p.t}</span></span>)}
+    </div>
+  ) : null
   // §144: el selector es el del Backtesting (los valores de la Watchlist); además, los marcados que no estén en ella y, al buscar, los
   // de los precios guardados (lo que antes ofrecía el buscador de «Acción»).
   const watchlistPlan = (() => {
@@ -736,6 +747,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
               <PanelPesos mcMode={L.modo} mcSelected={L.simbolos} mcWeights={L.pesos} setMcWeights={ponLista('pesos')}/>
             </div>
           </div>}
+          {/* §152: los filtros del plan, con el catálogo de condiciones (los de la estrategia, respetados o no, y los añadidos aquí). */}
+          {estrategia && <FiltrosDelPlan estrategia={estrategia} filtros={a.filtros} onCambia={v => cambia('filtros', v)} velasPlan={velasPlan} valores={valoresLista} inicial={inicial?.filtrosPlan || null}/>}
           {<div>
             <Etiqueta texto="Filtros" ayuda={AYUDA_PLAN.filtros}/>
             {/* §81: sin recortar: el desplegable de «Añadir filtro» sale por debajo de la caja. */}
@@ -890,6 +903,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
         onLog={x => setComp(c => ({ ...c, log: x }))} onModo={x => setComp(c => ({ ...c, modo: x }))} onVolver={() => setComparando(false)}
         onAbrir={id => { const c = claveDe(id); if (c === actual) setComparando(false); else pide({ tipo: 'anadir', id }) }} onDuplicar={id => pideDuplicar(claveDe(id))}/> : <>
       {avisos}
+      {uso}
       {errorCalculo}
       </>}
       {/* §49, §50 y §143: en escritorio (≥ 1000 px), esta página tiene el alto de la ventana menos lo de encima; con el plan abierto no se

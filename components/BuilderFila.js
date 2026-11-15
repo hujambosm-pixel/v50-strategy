@@ -67,6 +67,8 @@ export function Menu({ f, onCambia, abiertoInicial = false, onSubir = null, onBa
 // debajo (la de las filas de índice).
 // onValor(nombre, v) (V9.1053): cuando el número de la casilla es un parámetro con nombre («$ema»), se cambia su valor y la fila
 // sigue diciendo «$ema»; así, si se vuelve a dejar como estaba, la estrategia es la guardada, byte a byte.
+// §152 (para los filtros del plan; el creador no los pasa): opcionesDeQuien ([{ v, t }]: otras opciones del selector «de quién»), ayudaQuien
+// (su «?») extra (algo más en la línea, tras los números: con qué velas se mira) y enVarias (la línea puede partirse: la columna del plan es estrecha).
 // V9.1067: el botón 🔗 de un uso enlazable (lib/builder/enlaces.js): enlazado (pulsar lo suelta) o suelto (pulsar lo enlaza); con su «?».
 export function BotonEnlace({ estado, onClick }) {
   if (!estado) return null
@@ -80,7 +82,7 @@ export function BotonEnlace({ estado, onClick }) {
     </span>
   )
 }
-export function Fila({ f, errores, valores, tarjeta, color, onCambia, onValor, onQuita, quien, onQuien, menuAbierto = false, ayudaAbierta = false, intervalo = 'diario', asa = null, onSubir = null, onBajar = null, avisoExtra = null, enlace = null, avisoCombinacion = null }) {
+export function Fila({ f, errores, valores, tarjeta, color, onCambia, onValor, onQuita, quien, onQuien, menuAbierto = false, ayudaAbierta = false, intervalo = 'diario', asa = null, onSubir = null, onBajar = null, avisoExtra = null, enlace = null, avisoCombinacion = null, opcionesDeQuien = null, ayudaQuien = AYUDA_QUIEN, extra = null, enVarias = false }) {
   const p = f.cond.p || {}, decl = Object.fromEntries((CONDICIONES_EDITOR[f.cond.c]?.parametros || []).map(d => [d.clave, d]))
   const hay = Object.keys(errores).length > 0
   const campo = (c, j) => {
@@ -92,19 +94,20 @@ export function Fila({ f, errores, valores, tarjeta, color, onCambia, onValor, o
   }
   return (
     <div data-fila={f.cond.c} data-error={hay ? 'si' : undefined} style={{ border: `1px solid ${hay ? ROJO : B.borde}`, borderLeft: `3px solid ${hay ? ROJO : color}`, borderRadius: B.radioBoton, padding: '6px 8px', marginTop: 8, background: B.fondo }}>
-      <div data-linea style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+      <div data-linea style={enVarias ? { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', rowGap: 4 } : { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflowX: 'auto', whiteSpace: 'nowrap' }}>
         {asa && <span data-asa draggable {...asa} title="Arrastra para mover la fila" aria-label="Mover la fila" style={{ cursor: 'grab', color: B.apagado, fontSize: 16, lineHeight: 1, padding: '0 2px', flexShrink: 0, userSelect: 'none' }}>{ASA}</span>}
         {onQuien && (
           <span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
             <select style={{ ...mini, color: MORADO }} aria-label="De quién" value={quien} onChange={e => onQuien(e.target.value)}>
-              {opcionesQuien(quien).map(t => <option key={t} value={t} disabled={t !== 'valor' && soloDelValor(f.cond.c)}>{nombreQuien(t)}</option>)}
+              {(opcionesDeQuien || opcionesQuien(quien).map(t => ({ v: t, t: nombreQuien(t) }))).map(o => <option key={o.v} value={o.v} disabled={o.v !== 'valor' && soloDelValor(f.cond.c)}>{o.t}</option>)}
             </select>
-            <Ayuda texto={AYUDA_QUIEN} etiqueta="De quién"/>
+            <Ayuda texto={ayudaQuien} etiqueta="De quién"/>
           </span>
         )}
         {f.env === 'NO' && <span data-no style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}><span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#3b1d22', color: ROJO }}>NO</span><Ayuda texto={AYUDA_NO} etiqueta="NO"/></span>}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: B.titulo, fontWeight: 600, flexShrink: 0 }}>{plantillaFila(f.cond.c).map(campo)}</span>
         {enlace}
+        {extra}
         {f.env === 'cruza' && !tieneLado(f.cond.c) && <span style={{ fontSize: 12, color: B.secundario, flexShrink: 0 }}>(solo la vela en que empieza)</span>}
         <span style={{ marginLeft: 'auto', paddingLeft: 8, color: B.apagado, fontSize: 12 }}>{notaFila(f, valores, tarjeta, intervalo)}</span>
         <span style={{ flexShrink: 0 }}><Ayuda texto={ayudaFila(f)} etiqueta={nombreCond(f.cond.c)} abiertoInicial={ayudaAbierta}/></span>
