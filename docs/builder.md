@@ -3035,3 +3035,15 @@ Parte 3c de «el plan manda» (boceto bocetos/plan-valores-velas-filtros.html, a
 - De momento el panel de filtros antiguo (el del Backtesting) sigue debajo; se quita en el commit siguiente (§153).
 - Ninguna cifra cambia: sin filtros del plan, el ajuste es null y el plan es el de siempre (planes 4, 6 y 7; batería).
 - Comprobación nueva plan-filtros-pantalla.js (en comunes.sh): ida y vuelta de las 32 condiciones del catálogo (con velas del plan y semanales) y el plan válido con cada una; a mano, la fila HECHA CON LA PANTALLA «REF: cierre sobre su SMA (3)» compra en d14 a 110 y acaba en 10.000 × 142 / 110 = 12.909,09 € (igual que escrita a mano), y la semanal, a 114; la caja montada (pregunta, interruptor, de quién, otro símbolo, velas, número mal escrito, quitar, repetida, plan en semanales, filtros no separables); dentro del plan: se recalcula con la fila y sigue siendo de «una acción».
+
+## 153. Plan: fuera el panel de filtros antiguo (el del Backtesting)
+
+Cierra la parte 3c. Los filtros del plan son ya solo los de la caja «Filtros · cuándo se puede comprar» (§152), del catálogo de condiciones.
+
+- components/BuilderPlan.js: fuera los dos `FiltrosPanel` («FILTROS DE MERCADO» y «FILTROS DEL ACTIVO») y su aviso «se calcula como una lista de uno». Con UN valor, poner un filtro del plan ya NO lo convierte en lista: sigue siendo el plan de «una acción», con su apalancamiento y «Compra más acción» (los filtros del plan viven en el ajuste `filtros`, no en `lista.filtros`).
+- `lista.filtros` (los del panel antiguo) se queda en el formato guardado, vacío. Ningún plan guardado los usa (4, 6 y 7). Por si alguno los llevara encendidos, el bloque lo dice en una línea amarilla con «Quitarlo» (se siguen aplicando hasta entonces, por el motor del Backtesting, como antes).
+- lib/builder/planPantalla.js: fuera el «?» del panel antiguo (AYUDA_PLAN.filtros) y, en el «?» de «Velas en este plan», la frase «por ahora, las semanales solo con un valor y sin filtros del plan» (ya no es verdad desde §146 y §150).
+- El Backtesting suelto no cambia: conserva su panel de filtros (components/FiltrosPanel.js y lib/filtros.js no se tocan).
+- OJO, ya decidido por Sergi (14/11): los filtros del plan forman parte de la SEÑAL, como «Solo opero cuando…»; el panel antiguo BORRABA operaciones ya calculadas. Con filtros, las cifras de un plan no cuadran con las del Backtesting suelto con «el mismo» filtro.
+- Ninguna cifra cambia sin filtros (planes 4, 6 y 7; batería; prueba de oro de la lista).
+- plan-lista.js adaptada: ya no espera el panel antiguo; sí la caja nueva, un solo «+ Añadir filtro» y el aviso de filtros antiguos encendidos.

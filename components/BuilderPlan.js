@@ -54,10 +54,9 @@ import PlanPorDentro, { peticionPorDentro, motivoSinPeticion } from './backtesti
 import ComparaPlanes from './ComparaPlanes'
 import { CLAVE_COMPARAR, REFS_COMPARAR, TEXTO_SIN_PLANES, alterna, elegidosIniciales, pieza as piezaDe } from '../lib/builder/comparaPlanes'
 import { cargaUniversoMc, nDeUniverso, reglaDeUniverso } from '../lib/universoMc'
-import FiltrosPanel from './FiltrosPanel'
 import FiltrosDelPlan from './FiltrosDelPlan'
 import { filtrosPropios, respetaPropios, usoDeLaEstrategia } from '../lib/builder/filtrosPlan'
-import { mergeFiltros, hayFiltrosActivos } from '../lib/filtros'
+import { hayFiltrosActivos } from '../lib/filtros'
 import { sinTildes } from '../lib/builder/buscar'
 // §144: lo que enseña el selector de valores con un plan de «una acción»: la lista manual con su único valor.
 const listaDeAccion = (x) => ({ ...(x.lista || {}), universo: 'manual', simbolos: x.activo ? [x.activo] : [] })
@@ -274,12 +273,13 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const [comp, setComp] = useState(() => ({ elegidos: inicial?.compararElegidos || null, refs: REFS_COMPARAR.map(r => r.id), log: true, modo: null, plegado: !!inicial?.compararPlegado }))
   const [resComp, setResComp] = useState(inicial?.resComp || {})
   // §80: «Una lista». Lo que se guarda va en a.lista (lib/planes/lista.js); esto es solo de la vista (buscar, ★, la lista de la Watchlist, qué está desplegado).
-  const [vistaLista, setVistaLista] = useState({ busca: '', favs: false, lista: '', seccion: { mode: true, strats: false }, mercado: false, activo: false, universoDatos: {} })
+  const [vistaLista, setVistaLista] = useState({ busca: '', favs: false, lista: '', seccion: { mode: true, strats: false }, universoDatos: {} })
   const ponVista = (k) => (v) => setVistaLista(x => ({ ...x, [k]: typeof v === 'function' ? v(x[k]) : v }))
   const ponLista = (k) => (v) => setA(x => ({ ...x, lista: { ...x.lista, [k]: typeof v === 'function' ? v(x.lista[k]) : v } }))
   // §144: un solo selector de valores (sin «Una acción / Una lista»). Lo que se guarda no cambia: con UN valor de la lista manual y
-  // sin filtros encendidos, el plan es el de «una acción» de siempre (donde: 'accion', activo); con varios, con el Nasdaq-100 o con
-  // algún filtro, el de «una lista». Solo se decide al tocar los valores, el universo o los filtros: un plan guardado se abre como está.
+  // el plan es el de «una acción» de siempre (donde: 'accion', activo); con varios o con el Nasdaq-100, el de «una lista». Solo se decide
+  // al tocar los valores o el universo: un plan guardado se abre como está. §153: los filtros del plan (a.filtros, del catálogo) NO lo
+  // convierten en lista: con un valor conservan el apalancamiento y «Compra más acción» (solo un filtro del panel antiguo, ya retirado, lo haría).
   const ponValores = (k) => (v) => setA(x => {
     const l0 = x.donde === 'lista' ? x.lista : listaDeAccion(x), l = { ...l0, [k]: typeof v === 'function' ? v(l0[k]) : v }
     const uno = (l.universo || 'manual') === 'manual' && (l.simbolos || []).length === 1 && !hayFiltrosActivos(l.filtros || [])
@@ -735,7 +735,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
               </div>
             </div>}
           </div>
-          {/* §80: el reparto dentro de la lista (elementos 5–10 y 12) y los filtros (3 y 4), con lo de este bloque. */}
+          {/* §80: el reparto dentro de la lista (elementos 5–10 y 12), con lo de este bloque. */}
           {variosValores && <div>
             <Etiqueta texto="Reparto entre los valores" ayuda={AYUDA_PLAN.reparto}/>
             <div data-lista="reparto" className="bp-mc">
@@ -749,15 +749,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           </div>}
           {/* §152: los filtros del plan, con el catálogo de condiciones (los de la estrategia, respetados o no, y los añadidos aquí). */}
           {estrategia && <FiltrosDelPlan estrategia={estrategia} filtros={a.filtros} onCambia={v => cambia('filtros', v)} velasPlan={velasPlan} valores={valoresLista} inicial={inicial?.filtrosPlan || null}/>}
-          {<div>
-            <Etiqueta texto="Filtros" ayuda={AYUDA_PLAN.filtros}/>
-            {/* §81: sin recortar: el desplegable de «Añadir filtro» sale por debajo de la caja. */}
-            <div data-lista="filtros" className="bp-mc" style={{ overflow: 'visible' }}>
-              <FiltrosPanel ambito="mercado" titulo="FILTROS DE MERCADO" filtros={mergeFiltros(L.filtros || [])} setFiltros={ponValores('filtros')} open={vistaLista.mercado} setOpen={ponVista('mercado')} variant="mc" botonGrande/>
-              <FiltrosPanel ambito="activo" titulo="FILTROS DEL ACTIVO" filtros={mergeFiltros(L.filtros || [])} setFiltros={ponValores('filtros')} open={vistaLista.activo} setOpen={ponVista('activo')} variant="mc" botonGrande/>
-            </div>
-            {enLista && !variosValores && (L.simbolos || []).length === 1 && <div data-aviso="uno-con-filtro" style={{ ...S.apagado, marginTop: 6 }}>Con un filtro encendido, este valor se calcula como una lista de uno: por ahora, sin «Compra más acción» ni apalancamiento.</div>}
-          </div>}
+          {/* §153: fuera el panel de filtros del Backtesting: los filtros del plan son los de arriba (catálogo). Un plan que aún llevara encendido alguno de los antiguos lo dice y deja quitarlos. */}
+          {hayFiltrosActivos(L.filtros || []) && <div data-aviso="filtros-antiguos" style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>⚠ Este plan lleva {(L.filtros || []).filter(f => f.activo).length === 1 ? 'un filtro' : 'filtros'} del panel antiguo, que ya no se edita aquí: se sigue aplicando.<button type="button" data-boton="quitar-filtros-antiguos" style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }} onClick={() => ponValores('filtros')([])}>Quitarlo</button></div>}
           {/* §142: el dinero ocioso, «Si llega una aportación…» y el apalancamiento son de CÓMO se invierte este bloque (en el plan guardado ya eran de su pieza): van aquí, no en «Tu dinero». */}
           <div>
             <Etiqueta texto="Dinero ocioso · mientras no hay señal, espera en" ayuda={AYUDA_PLAN.ocioso}/>
