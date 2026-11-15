@@ -3009,3 +3009,12 @@ Parte 3b de «el plan manda sobre la estrategia». El plan ya sabe calcular con 
 - Ninguna cifra cambia: sin el campo, todo idéntico (planes 4, 6 y 7, batería, prueba de oro de la lista).
 - Comprobación nueva plan-filtros.js (en comunes.sh), a mano con 10.000 € y las 30 sesiones de filtros-extra.js: sin filtros compra a 104 y acaba en 13.653,85 €; con una fila de otro símbolo, a 110 y 12.909,09 €; con dos símbolos, a 118; con una fila semanal, a 114. PRUEBA DE ORO: la fila puesta en el plan da el mismo patrimonio cada día que el mismo filtro puesto en la estrategia. Filtros propios: respetados, o apagados (queda como la estrategia sin filtros). Ida y vuelta de los ajustes y la petición de la lista.
 - Sin hacer: probar con precios reales el camino de varios valores con filtros (necesita la app y la sesión: se hará al programar la pantalla, 3c).
+
+## 151. La fila de condición, en su archivo (components/BuilderFila.js)
+
+Primer paso de la pantalla de los filtros del plan (3c). En pantalla NO cambia nada.
+
+- components/BuilderFila.js (nuevo): `Numero`, `Menu`, `BotonEnlace` y `Fila`, sacados TAL CUAL de components/BuilderEditor.js (las mismas 103 líneas, solo con `export` delante), con sus estilos (`entrada`, `mini`), `ASA`, `esParametro` y `val`. El creador los importa de ahí y pierde las importaciones que ya solo usaba la fila.
+- Para qué: que el bloque del plan pinte sus filtros con la MISMA fila del creador («Solo opero cuando…»), sin copiarla.
+- Comprobado: el creador se pinta idéntico antes y después (20 montajes: filtro de índice y de «este valor», NO, cruza, parámetro con nombre, un número mal escrito, menú «…» y «?» abiertos), y catalogo.js, version-paso2.js y comunes.sh entero.
+- Ninguna cifra cambia (no se toca ningún cálculo).
