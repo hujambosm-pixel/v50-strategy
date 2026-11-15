@@ -97,7 +97,7 @@ const hasta = async (cond, max = 20000) => { const t0 = Date.now(); do { await D
   const elige = async (n, v) => { D.propsDe(n).onChange({ target: { value: v } }); await D.espera(20) }
   // a) sin filtros propios
   let x = await monta(est())
-  ok(!!boton(x.r, 'data-caja', 'sin-propios') && texto(x.r).includes('Esta estrategia no lleva filtros propios') && !!tiene(x.r, 'data-sin-filtros'), 'sin filtros propios: lo dice, y «Ninguno.» en los del plan')
+  ok(!boton(x.r, 'data-caja', 'sin-propios') && !boton(x.r, 'data-caja', 'estrategia') && !texto(x.r).includes('no lleva filtros propios') && !texto(x.r).includes('Ninguno.') && !!boton(x.r, 'data-caja', 'plan'), '§154: sin filtros propios, solo la caja azul: ni frase ni «Ninguno.»')
   ok(!!x.r.busca(n => n.nodeName === 'BUTTON' && n.getAttribute('aria-label') === 'Ayuda: Filtros · cuándo se puede comprar'), 'el «?» de la caja de filtros')
   D.pulsa(boton(x.r, 'data-boton', 'anadir-filtro')); await D.espera(30)
   ok(!boton(document.body, 'data-pregunta', 'filtros-propios') && !!document.body.busca(n => n.getAttribute('data-catalogo-plan') != null), 'sin propios, «+ Añadir filtro» abre el catálogo sin preguntar')

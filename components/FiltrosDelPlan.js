@@ -1,6 +1,7 @@
 // components/FiltrosDelPlan.js — la caja «Filtros · cuándo se puede comprar» del bloque del plan (docs/builder.md §152; boceto
 // bocetos/plan-valores-velas-filtros.html, aprobado el 14/11). Dos cajas:
-//   · morada, «De la estrategia»: su «Solo opero cuando…», solo para leer, con «Se respetan / No se aplican» en este plan;
+//   · morada, «De la estrategia»: su «Solo opero cuando…», solo para leer, con «Se respetan / No se aplican» en este plan (§154: si la
+//     estrategia no lleva filtros propios, no sale nada: ni caja ni frase);
 //   · azul, «Añadidos en este plan»: filas del catálogo de condiciones, las MISMAS del creador de estrategias (components/BuilderFila.js),
 //     con de quién (este valor, un índice u otro símbolo) y con qué velas se mira.
 // Al añadir el primer filtro, si la estrategia ya lleva los suyos, pregunta qué hacer con ellos. No calcula nada: solo cambia el ajuste
@@ -71,9 +72,9 @@ export default function FiltrosDelPlan({ estrategia, filtros, onCambia, velasPla
             </div>
           ) : <div data-no-separables style={{ ...S.apagado, marginTop: 8 }}>Forman parte de su regla y aquí no se pueden apagar: se respetan siempre.</div>}
         </div>
-      ) : <div data-caja="sin-propios" style={{ ...caja(B.borde), color: B.secundario }}>Esta estrategia no lleva filtros propios.</div>}
+      ) : null}
 
-      <div data-caja="plan" style={{ ...caja(AZUL), marginTop: 8 }}>
+      <div data-caja="plan" style={{ ...caja(AZUL), marginTop: propios.hay ? 8 : 0 }}>
         <div><strong style={{ color: B.titulo }}>Añadidos en este plan</strong> <span style={S.secundario}>· cualquier condición del catálogo</span></div>
         {filas.map((f, k) => f.rara ? (
           <div key={k} data-fila-rara style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, color: B.secundario }}>
@@ -103,7 +104,6 @@ export default function FiltrosDelPlan({ estrategia, filtros, onCambia, velasPla
             )}
           </div>
         ))}
-        {!filas.length && <div data-sin-filtros style={{ ...S.secundario, marginTop: 6 }}>Ninguno.</div>}
         <div style={{ marginTop: 10 }}><button type="button" data-boton="anadir-filtro" style={{ ...S.boton, padding: '6px 11px', fontSize: 13 }} onClick={pulsaMas}>+ Añadir filtro</button></div>
       </div>
 

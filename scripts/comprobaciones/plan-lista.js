@@ -76,7 +76,7 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   const datosLista = { watchlist: [{ symbol: 'AAPL', name: 'Apple', list_ids: [1] }, { symbol: 'MSFT', name: 'Microsoft', list_ids: [1] }, { symbol: 'NVDA', name: 'Nvidia', list_ids: [2] }], wlLists: [{ id: 1, name: 'Tecnológicas' }, { id: 2, name: 'Chips' }], rankingData: {} }
   const prueba = (veredicto) => [{ id: 1, estrategia_id: 'x', estrategia_foto: PA.fotoDe(est), valor: 'AAPL', velas: 'diarias', creada_en: '2026-10-30T10:00:00Z', resultado: { veredicto } }]
   let calculos = 0
-  const props = (o = {}, ini = {}) => ({ estrategias: [est], estrategiaId: 'x', datosLista, deps: { ctx: null, calcula: async () => { calculos++; throw new Error('no debe calcular') } }, inicial: { planes: [], pestana: 'n1', simbolos: ['AAPL'], pruebas: prueba('pasa'), resultadoPrueba: { periodos: [] }, ...ini }, ...o })
+  const props = (o = {}, ini = {}) => ({ estrategias: [est], estrategiaId: 'x', datosLista, deps: { ctx: null, calcula: async () => { calculos++; throw new Error('no debe calcular') } }, inicial: { planes: [], pestana: 'n1', simbolos: ['AAPL'], pruebas: prueba('pasa'), resultadoPrueba: { periodos: [] }, valoresAbiertos: true, ...ini }, ...o })
   const html = (ini) => renderToString(React.createElement(BP, props({}, ini))).split('<!-- -->').join('')
   const hA = html({ ajustes: { activo: 'AAPL' } })
   ok(hA.includes('data-lista="valores"') && hA.includes('data-donde="accion"') && hA.includes('1 seleccionados') && hA.includes('Estrategia: prueba del paso 2 ✓ Pasa (AAPL)') && !hA.includes('MODO DE ASIGNACIÓN') && !hA.includes('data-lista="reparto"'), '§144: con un valor: el selector con «1 seleccionados», sin reparto, y «Estrategia: prueba del paso 2 ✓ Pasa (AAPL)»')
@@ -94,6 +94,26 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   ok(!hL.includes('data-aviso="filtros-antiguos"') && html({ ajustes: { ...aL, lista: { ...aL.lista, filtros: [{ tipo: 'indiceEma', ambito: 'mercado', activo: true, params: { periodo: 200 } }] } } }).includes('data-aviso="filtros-antiguos"'), '§153: un plan con un filtro del panel antiguo encendido lo dice (y deja quitarlo); sin ellos, nada')
   ok(html({ ajustes: aL, pruebas: prueba('noPasa') }).includes('Estrategia: prueba del paso 2 ✕ No pasa (AAPL)'), '«Estrategia: prueba del paso 2 ✕ No pasa (AAPL)»')
   ok(html({ ajustes: aL, pruebas: [] }).includes('Estrategia: sin prueba del paso 2'), '«Estrategia: sin prueba del paso 2»')
+  // §154: el selector de valores, plegado en una línea; «Cambiar ▾» lo abre con los marcados arriba.
+  { const hP = html({ ajustes: { activo: 'AAPL' }, valoresAbiertos: null }), hPL = html({ ajustes: aL, valoresAbiertos: null })
+    ok(hP.includes('data-resumen-valores') && hP.includes('data-abierto="no"') && !hP.includes('data-lista="valores"') && !hP.includes('seleccionados') && />AAPL<\/span>/.test(hP) && hP.includes('Cambiar ▾'), '§154: con un valor, el selector plegado: «AAPL» y «Cambiar ▾», sin la lista')
+    ok(hPL.includes('data-abierto="no"') && !hPL.includes('data-lista="valores"') && hPL.includes(`${aL.lista.simbolos.length} valores · ${aL.lista.simbolos.slice(0, 4).join(', ')}`) && hPL.includes('data-lista="reparto"'), `§154: con varios, «${aL.lista.simbolos.length} valores · ${aL.lista.simbolos.join(', ')}» y el reparto a la vista`)
+    const hU = html({ ajustes: { ...aL, lista: { ...aL.lista, universo: 'ndx_vol_10', simbolos: [], modo: 'concentrado' } }, valoresAbiertos: null })
+    ok(hU.includes('data-abierto="no"') && hU.includes('Nasdaq-100 · 10 más volátiles') && !hU.includes('data-lista="valores"'), '§154: con el Nasdaq-100, plegado con su nombre')
+    const hN = html({ ajustes: { ...aL, lista: { ...aL.lista, simbolos: [] } }, valoresAbiertos: null })
+    ok(hN.includes('data-abierto="si"') && hN.includes('data-lista="valores"') && hN.includes('Ningún valor marcado') && hN.includes('Hecho ▴'), '§154: sin ningún valor marcado, la lista sale abierta')
+    const mP = D.monta(React.createElement(BP, props({}, { ajustes: { ...aL, lista: { ...aL.lista, simbolos: ['NVDA'] } }, valoresAbiertos: null })), RDC); await D.espera(60)
+    const btn = () => mP.raiz.busca(n => n.getAttribute('data-boton') === 'cambiar-valores'), lista = () => mP.raiz.conAtributo('data-lista', 'valores')[0]
+    const simbolosVistos = () => lista().todos(n => n.nodeName === 'DIV' && typeof D.propsDe(n)?.onMouseOver === 'function').map(n => n.childNodes[1].childNodes[0].textContent)
+    ok(!lista() && btn().textContent === 'Cambiar ▾', '§154: montado con un valor: plegado')
+    D.pulsa(btn()); await hasta(() => !!lista())
+    const orden = simbolosVistos()
+    ok(!!lista() && btn().textContent === 'Hecho ▴' && orden[0] === 'NVDA' && orden.length > 1, `§154: «Cambiar ▾» abre la lista con el marcado arriba (${orden.join(' ')})`)
+    D.pulsa(lista().todos(n => n.nodeName === 'DIV' && typeof D.propsDe(n)?.onMouseOver === 'function')[1]); await D.espera(40)
+    ok(simbolosVistos().join() === orden.join() && mP.raiz.textContent.includes('2 seleccionados'), '§154: al marcar otro, la lista no salta de orden')
+    D.pulsa(btn()); await hasta(() => !lista())
+    ok(!lista() && mP.raiz.busca(n => n.getAttribute('data-marcados') != null).textContent.startsWith('2 valores · NVDA'), `§154: «Hecho ▴» la pliega y la línea dice lo marcado («${mP.raiz.busca(n => n.getAttribute('data-marcados') != null).textContent}»)`)
+    mP.quita(); await D.espera(5) }
   // §144: montada, con estado: de un valor a varios, cambiar el reparto, volver a uno, encender un filtro.
   const m = D.monta(React.createElement(BP, props({}, { ajustes: { activo: 'AAPL' } })), RDC); await D.espera(60)
   const donde = () => m.raiz.conAtributo('data-lista', 'valores')[0]?.getAttribute('data-donde')

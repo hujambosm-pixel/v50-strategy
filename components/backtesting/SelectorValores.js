@@ -6,7 +6,7 @@ import { MONO } from '../../lib/utils'
 // El buscador no distingue mayúsculas ni acentos (norma de buscadores; V9.1148).
 import { sinTildes } from '../../lib/builder/buscar'
 
-export default function SelectorValores({ mcListFilter, mcOnlyFavs, mcSearch, mcSelected, mcUniverso, rankingData, setMcListFilter, setMcOnlyFavs, setMcSearch, setMcSelected, watchlist, wlLists }) {
+export default function SelectorValores({ mcListFilter, mcOnlyFavs, mcSearch, mcSelected, mcUniverso, rankingData, setMcListFilter, setMcOnlyFavs, setMcSearch, setMcSelected, watchlist, wlLists, primero = null }) {   // primero (§154, solo el plan): símbolos que salen arriba de la lista (los marcados al abrirla)
   return (
     <div style={{display:mcUniverso==='manual'?'flex':'none',flexDirection:'column',flex:1,minHeight:0}}>
       {/* Filtros */}
@@ -58,6 +58,7 @@ export default function SelectorValores({ mcListFilter, mcOnlyFavs, mcSearch, mc
         const matchList=!mcListFilter||(w.list_ids||[]).some(lid=>{const l=wlLists.find(x=>x.id===lid);return l&&l.name===mcListFilter})
         return matchSearch&&matchFav&&matchList
       }).sort((a,b)=>{
+        if(primero){const pa=primero.includes(a.symbol), pb=primero.includes(b.symbol); if(pa!==pb) return pa?-1:1}
         const ra=rankingData[(a.symbol||'').toUpperCase()]?.rank, rb=rankingData[(b.symbol||'').toUpperCase()]?.rank
         if(ra!=null&&rb!=null) return ra-rb
         if(ra!=null) return -1

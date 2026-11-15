@@ -53,7 +53,7 @@ import PlanPorDentro, { peticionPorDentro, motivoSinPeticion } from './backtesti
 // §128: «Comparar planes» (opción A: cada plan tal como está guardado).
 import ComparaPlanes from './ComparaPlanes'
 import { CLAVE_COMPARAR, REFS_COMPARAR, TEXTO_SIN_PLANES, alterna, elegidosIniciales, pieza as piezaDe } from '../lib/builder/comparaPlanes'
-import { cargaUniversoMc, nDeUniverso, reglaDeUniverso } from '../lib/universoMc'
+import { cargaUniversoMc, nDeUniverso, nombreUniverso, reglaDeUniverso } from '../lib/universoMc'
 import FiltrosDelPlan from './FiltrosDelPlan'
 import { filtrosPropios, respetaPropios, usoDeLaEstrategia } from '../lib/builder/filtrosPlan'
 import { hayFiltrosActivos } from '../lib/filtros'
@@ -274,6 +274,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const [resComp, setResComp] = useState(inicial?.resComp || {})
   // §80: «Una lista». Lo que se guarda va en a.lista (lib/planes/lista.js); esto es solo de la vista (buscar, ★, la lista de la Watchlist, qué está desplegado).
   const [vistaLista, setVistaLista] = useState({ busca: '', favs: false, lista: '', seccion: { mode: true, strats: false }, universoDatos: {} })
+  // §154: el selector de valores, plegado en una línea («AAPL», «12 valores · …») con «Cambiar ▾»; null = lo de por defecto (abierto solo
+  // si aún no hay ningún valor marcado). primeros: los marcados al abrirlo, que salen arriba de la lista (no saltan al marcar o desmarcar).
+  const [valoresAbiertos, setValoresAbiertos] = useState(inicial?.valoresAbiertos ?? null)
+  const [primeros, setPrimeros] = useState(null)
   const ponVista = (k) => (v) => setVistaLista(x => ({ ...x, [k]: typeof v === 'function' ? v(x[k]) : v }))
   const ponLista = (k) => (v) => setA(x => ({ ...x, lista: { ...x.lista, [k]: typeof v === 'function' ? v(x.lista[k]) : v } }))
   // §144: un solo selector de valores (sin «Una acción / Una lista»). Lo que se guarda no cambia: con UN valor de la lista manual y
@@ -382,7 +386,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   }, [estado?.fila?.id])
 
   // ── Los planes guardados y las pestañas ──
-  const aplica = (e) => { setA(e.a); setEstId(e.estId); setCualVersion(e.version); setOtroForzado(false) }
+  const aplica = (e) => { setA(e.a); setEstId(e.estId); setCualVersion(e.version); setOtroForzado(false); setValoresAbiertos(inicial?.valoresAbiertos ?? null); setPrimeros(null) }
   // Leídos los planes y las pestañas guardadas (null: esta persona no tiene fila todavía), qué se abre al entrar.
   const entra = (xs, guardadas) => {
     const o = ordenInicial(guardadas, xs)
@@ -690,6 +694,9 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     if (q) for (const v of valoresLista) if (sinTildes(v.simbolo).includes(q) || sinTildes(v.nombre || '').includes(q)) pon(v.simbolo, v.nombre)
     return mas.length ? [...wl, ...mas] : wl
   })()
+  const esUniverso = !!L.universo && L.universo !== 'manual', marcados = L.simbolos || []
+  const abiertoValores = valoresAbiertos ?? (!esUniverso && marcados.length === 0)
+  const resumenValores = esUniverso ? nombreUniverso(nDeUniverso(L.universo), reglaDeUniverso(L.universo)) : !marcados.length ? 'Ningún valor marcado' : marcados.length === 1 ? marcados[0] : `${marcados.length} valores · ${marcados.slice(0, 4).join(', ')}${marcados.length > 4 ? '…' : ''}`
   const bloques = (
     <div data-tarjeta="bloques" style={{ ...S.tarjeta, overflow: 'visible' }}>
       <div style={{ ...S.cabeceraTarjeta, borderRadius: `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0`, display: 'flex', alignItems: 'center', gap: 2 }}>Cartera<Ayuda texto={AYUDA_PLAN.cartera} etiqueta="Cartera"/><span data-subtitulo style={{ ...S.apagado, fontWeight: 400, marginLeft: 8 }}>en qué se invierte</span></div>
@@ -727,11 +734,16 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           <div>
             <Etiqueta texto="Valores · dónde se aplica" ayuda={AYUDA_PLAN.dondeSeAplica}/>
             {/* §80: el universo y el selector de valores del Backtesting (elementos 13 y 14), tal cual. */}
-            {<div data-lista="valores" data-donde={enLista ? 'lista' : 'accion'} className="bp-mc">
+            {/* §154: plegado, una línea con lo marcado; «Cambiar ▾» abre el selector de siempre ahí mismo y «Hecho ▴» lo cierra. */}
+            <div data-resumen-valores data-abierto={abiertoValores ? 'si' : 'no'} data-donde={enLista ? 'lista' : 'accion'} style={{ display: 'flex', alignItems: 'center', gap: 10, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '6px 10px', background: B.fondo }}>
+              <span data-marcados title={esUniverso ? resumenValores : marcados.join(', ') || undefined} style={{ flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, color: esUniverso || marcados.length ? B.titulo : AMARILLO }}>{resumenValores}</span>
+              <button type="button" data-boton="cambiar-valores" aria-expanded={abiertoValores} title={abiertoValores ? 'Plegar la lista de valores' : 'Abrir la lista para marcar o desmarcar valores'} style={{ ...S.boton, padding: '4px 10px', fontSize: 13, flex: 'none' }} onClick={() => { if (!abiertoValores) setPrimeros([...marcados]); setValoresAbiertos(!abiertoValores) }}>{abiertoValores ? 'Hecho ▴' : 'Cambiar ▾'}</button>
+            </div>
+            {abiertoValores && <div data-lista="valores" data-donde={enLista ? 'lista' : 'accion'} className="bp-mc" style={{ marginTop: 6 }}>
               <PanelUniverso mcUniverso={L.universo} mcUniversoDatos={vistaLista.universoDatos} setMcUniverso={ponValores('universo')} setMcUniversoDatos={ponVista('universoDatos')}/>
               <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 330 }}>
                 <SelectorValores mcListFilter={vistaLista.lista} mcOnlyFavs={vistaLista.favs} mcSearch={vistaLista.busca} mcSelected={L.simbolos} mcUniverso={L.universo} rankingData={datosLista?.rankingData || {}}
-                  setMcListFilter={ponVista('lista')} setMcOnlyFavs={ponVista('favs')} setMcSearch={ponVista('busca')} setMcSelected={ponValores('simbolos')} watchlist={watchlistPlan} wlLists={datosLista?.wlLists || []}/>
+                  setMcListFilter={ponVista('lista')} setMcOnlyFavs={ponVista('favs')} setMcSearch={ponVista('busca')} setMcSelected={ponValores('simbolos')} watchlist={watchlistPlan} wlLists={datosLista?.wlLists || []} primero={primeros}/>
               </div>
             </div>}
           </div>

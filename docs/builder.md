@@ -3047,3 +3047,15 @@ Cierra la parte 3c. Los filtros del plan son ya solo los de la caja «Filtros ·
 - OJO, ya decidido por Sergi (14/11): los filtros del plan forman parte de la SEÑAL, como «Solo opero cuando…»; el panel antiguo BORRABA operaciones ya calculadas. Con filtros, las cifras de un plan no cuadran con las del Backtesting suelto con «el mismo» filtro.
 - Ninguna cifra cambia sin filtros (planes 4, 6 y 7; batería; prueba de oro de la lista).
 - plan-lista.js adaptada: ya no espera el panel antiguo; sí la caja nueva, un solo «+ Añadir filtro» y el aviso de filtros antiguos encendidos.
+
+## 154. Plan: el selector de valores, plegado, y la caja de filtros sin frases de relleno
+
+Pedido por Sergi al ver §152–§153 (15/11): el bloque ocupaba demasiado alto.
+
+- «Valores · dónde se aplica»: PLEGADO en una línea con lo marcado («AAPL», «12 valores · AAPL, AMZN, ASML, GOOGL…», «Nasdaq-100 · 10 más volátiles»; el tooltip dice todos) y el botón «Cambiar ▾». Al pulsarlo se abre ahí mismo el selector de siempre (universo, buscador, ★, listas, «Todos / Ninguno») y «Hecho ▴» lo cierra. Opción A de las tres propuestas (frente a una ventana aparte o la lista más baja): al marcar se sigue viendo cómo cambian las cifras.
+- Sin ningún valor marcado (un plan recién vaciado), la lista sale abierta y la línea dice «Ningún valor marcado» en amarillo.
+- Al abrir la lista, los valores MARCADOS salen arriba (antes había que bajar para encontrarlos); el orden se fija al abrir, así que no saltan al marcar o desmarcar. components/backtesting/SelectorValores.js: prop opcional `primero` (el Backtesting no la pasa: idéntico, backtesting-panel.js 400/400).
+- Al cambiar de plan, el selector vuelve a plegarse. Solo es de la vista: no se guarda nada nuevo.
+- Caja de filtros: fuera «Esta estrategia no lleva filtros propios» (sin filtros propios no sale nada: ni caja ni frase) y fuera «Ninguno.» en la caja azul vacía (basta «+ Añadir filtro»).
+- Ninguna cifra cambia (solo pantalla).
+- Comprobaciones: plan-lista.js (plegado con uno, con varios y con el Nasdaq-100; abierto sin valores; «Cambiar ▾» abre con el marcado arriba, marcar otro no cambia el orden, «Hecho ▴» pliega), plan-filtros-pantalla.js y planes-pantalla.js adaptadas. Para las de siempre, que miran la lista abierta: `inicial.valoresAbiertos: true`.
