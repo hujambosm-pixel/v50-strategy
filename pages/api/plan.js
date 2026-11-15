@@ -1,7 +1,9 @@
 // pages/api/plan.js — ejecuta un PLAN DE INVERSIÓN (lib/planes/; docs/planes-inversion.md). Solo el motor: la pantalla
 // definitiva irá en el futuro «Builder» guiado (decisión 9). Sirve para probarlo desde la app o con «Copiar para Claude».
 //
-//   POST { plan, rodantes?: { duracion?: 10, hastaElFinal?: false, desde?, hasta? }, curvas?: false }
+//   POST { plan, rodantes?: { duracion?: 10, hastaElFinal?: false, desde?, hasta? }, curvas?: false, libro?: false }
+//   libro (docs/builder.md §155): evaluacion.plan.ejecucion.libro, el detalle del cálculo (movimientos, lo ganado por símbolo, operaciones
+//   con su resultado, dónde está el dinero cada día y la suma que da «Tienes al final»). Sin pedirlo, la respuesta de siempre.
 //   → { evaluacion: { plan: { medidas, ejecucion }, referencias: [...], comparaciones: [...], descorrelacion? }, rodantes?, curvas?, ordenesReferencias?, huella, tiempos }
 //   curvas (docs/builder.md §48, la pantalla del paso 3): con una pieza «estrategia», el patrimonio y el VL de cada día de las referencias
 //   OCIOSO_LIQUIDEZ y ACTIVO ({ id: { patrimonio: [...], vl: [...] } }, en las fechas de la serie del plan), con el mismo motor y los mismos
@@ -59,7 +61,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' })
   const auth = await exigeAuth('plan', req)
   if (!auth.ok) return res.status(401).json({ error: 'no autenticado' })
-  const { plan, rodantes = null, curvas = false } = req.body || {}
+  const { plan, rodantes = null, curvas = false, libro = false } = req.body || {}
   const errores = validaPlan(plan)
   if (rodantes && !(rodantes.duracion == null || (Number.isInteger(rodantes.duracion) && rodantes.duracion >= 1 && rodantes.duracion <= 30))) errores.push('La duración de los inicios rodantes, de 1 a 30 años.')
   if (errores.length) return res.status(400).json({ error: errores.join(' '), errores })
@@ -90,7 +92,7 @@ export default async function handler(req, res) {
       finalPorDentro = cc.length ? cc[cc.length - 1].value : null
     }
     const t1 = Date.now()
-    const evaluacion = evaluaPlan(plan, c.datos, { detalle: true })
+    const evaluacion = evaluaPlan(plan, c.datos, { detalle: true, libro: libro === true })
     const ro = rodantes ? iniciosRodantes(plan, c.datos, { desde: rodantes.desde || plan.periodo.desde, hasta: rodantes.hasta || plan.periodo.hasta, duracion: rodantes.duracion ?? 10, hastaElFinal: !!rodantes.hastaElFinal }) : null
     const ej = curvas && plan.piezas.some(x => x.tipo === 'estrategia') ? referenciasDe(plan).filter(x => ['OCIOSO_LIQUIDEZ', 'ACTIVO', 'QQQ', 'SPY'].includes(x.id)).map(x => [x.id, ejecutaPlan(x.plan, c.datos, { detalle: false })]) : null
     const cu = ej ? Object.fromEntries(ej.map(([id, r]) => [id, { patrimonio: r.serie.map(p => p.patrimonio), vl: r.serie.map(p => p.vl) }])) : null

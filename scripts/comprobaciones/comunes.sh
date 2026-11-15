@@ -80,5 +80,7 @@ paso plan-filtros node "$DIR/plan-filtros.js" < /dev/null
 tail -1 "$SAL/plan-filtros.txt"
 paso plan-filtros-pantalla node "$DIR/plan-filtros-pantalla.js" < /dev/null
 tail -1 "$SAL/plan-filtros-pantalla.txt"
+paso plan-detalle node "$DIR/plan-detalle.js" < /dev/null
+tail -1 "$SAL/plan-detalle.txt"
 echo "comparado con $REF · salidas en scripts/comprobaciones/salida/ · fallos: $fallos"
 exit $([ $fallos -eq 0 ] && echo 0 || echo 1)
