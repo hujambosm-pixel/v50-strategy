@@ -18,6 +18,8 @@
 //     §158 (parte 3b): el historial (orden, buscador, «Ver más», Gantt, Excel), las operaciones con la forma del Backtesting y «Copiar para
 //     Claude», a mano y en la pantalla.
 //     §159 (parte 4a): «Todos los movimientos» (qué pasa en palabras, signo, dinero al cierre), a mano y en la pantalla.
+//     §160 (parte 4b): las velas de un valor con sus operaciones (recorte a las fechas, índices de compra y venta, no más de 4 lecturas a
+//     la vez) y la «Vista de gráficos», a mano y en la pantalla.
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-del-arnes'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ
@@ -129,6 +131,11 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
       `movimientos a mano: ${mvs.map(m => m.que).join(' · ')}`)
     ok(De.filtraMovimientos(mvs).map(m => m.k).join() === '4,3,2,1,0' && De.filtraMovimientos(mvs, 'b').map(m => m.que).join(' | ') === 'Vende B · 24,95 × 18,00 € | Compra B · 24,95 × 20,00 €' && De.filtraMovimientos(mvs, 'dinero').length === 1,
       'movimientos a mano: el más reciente arriba; buscando «b», los dos de B; buscando «dinero», el inicial')
+    // §160. Las velas de A recortadas a F[1]..F[3] (3 de 4) y su operación: compra en la vela 0 (03/01), venta en la 2 (07/01). B no sale con A.
+    const velasA = F.map((date, k) => ({ date, open: A.abre[k], high: A.cierra[k], low: A.abre[k], close: A.cierra[k] }))
+    const vA = De.velasDe({ velas: velasA }, F[1], F[3]), oA2 = De.opsEnVelas(vA, po.ops, 'A')
+    ok(vA.length === 3 && vA[0].date === F[1] && De.velasDe(velasA, F[0], F[0]).length === 1 && oA2.length === 1 && oA2[0].e === 0 && oA2[0].x === 2 && oA2[0].entryPrice === 10 && oA2[0].exitPrice === 12 && De.opsEnVelas(vA, po.ops, 'B')[0].x === 1 && De.opsEnVelas(vA.slice(1), po.ops, 'A')[0].e === null,
+      'velas a mano: recortadas a las fechas del plan; la operación de A, de la vela 0 (a 10) a la 2 (a 12); fuera de las velas, null')
   }
   {
     // Con ocioso y aportaciones (el caso de §91): concentrado máx. 1, 1.000 € + 300 €/mes, ocioso O, 1 € por orden. Día 1, al cierre: 999 €
@@ -285,8 +292,11 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     const datosLista = { watchlist: SIMB.map(s => ({ symbol: s, name: s, list_ids: [1] })), wlLists: [{ id: 1, name: 'Degiro' }], rankingData: {} }
     const aPant = ajustes('concentrado')   // 300 €/mes, impuestos, oro (GLD), 0,185 € por orden
     let ultima = null, conLibro = true, ido = null
+    // §160: las velas de la foto, contando cuántas se piden y cuántas a la vez.
+    const pedidasVelas = []; let velasALaVez = 0, maxVelasALaVez = 0
+    const cargaVelas = async (s) => { pedidasVelas.push(s); velasALaVez++; maxVelasALaVez = Math.max(maxVelasALaVez, velasALaVez); await D.espera(5); velasALaVez--; return { velas: E.velasFoto(s) } }
     const calcula = async (p, c) => { const r = await E.llama(HP, { plan: p, curvas: true, cuerpoLista: c, ...(conLibro ? { libro: true } : {}) }); const j = JSON.parse(r.cuerpo); if (r.status !== 200) throw new Error(j.error); ultima = j; return j }
-    const monta = (inicial) => D.monta(React.createElement(BP, { estrategias: [est], estrategiaId: est.id, datosLista, onIrAValor: (s) => { ido = s }, deps: { ctx: null, calcula, calculaPorDentro: async () => { throw new Error('no') } },
+    const monta = (inicial) => D.monta(React.createElement(BP, { estrategias: [est], estrategiaId: est.id, datosLista, onIrAValor: (s) => { ido = s }, deps: { ctx: null, calcula, cargaVelas, calculaPorDentro: async () => { throw new Error('no') } },
       inicial: { planes: [], pestana: 'n1', simbolos: ['AAPL'], pruebas: [], resultadoPrueba: { periodos: [] }, ajustes: aPant, ...inicial } }), RDC)
     const b = monta({ vistaDer: 'detalle' })
     for (let k = 0; k < 120 && !b.raiz.conAtributo('data-vista-detalle').length; k++) await D.espera(250)
@@ -321,7 +331,23 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     ok(b.raiz.conAtributo('data-elegida')[0]?.getAttribute('data-linea-valor') === d0.filas[1].simbolo && b.raiz.conAtributo('data-valor', d0.filas[1].simbolo)[0].getAttribute('aria-selected') === 'true', `al pulsar ${d0.filas[1].simbolo} en la leyenda, su línea queda resaltada y su fila marcada`)
     D.pulsa(modoB('plan')); await D.espera(30)
     D.pulsa(b.raiz.conAtributo('data-elige-valor', d0.filas[0].simbolo)[0]); await D.espera(30)
-    ok(b.raiz.conAtributo('data-elegida')[0]?.getAttribute('data-linea-valor') === d0.filas[0].simbolo, `al pulsar ${d0.filas[0].simbolo} en la tabla, pasa a «Valor a valor» con su línea resaltada`)
+    // §160: pulsar un valor de la tabla enseña sus velas con sus operaciones, en lugar del gráfico; «← Volver» lo devuelve.
+    for (let k = 0; k < 80 && !b.raiz.conAtributo('data-grafico', 'velas-valor').length; k++) await D.espera(50)
+    const gvv = b.raiz.conAtributo('data-grafico', 'velas-valor')[0], nOpsSym = d0.porOperacion.ops.filter(o => o.simbolo === d0.filas[0].simbolo).length
+    ok(!!gvv && Number(gvv.getAttribute('data-operaciones')) === nOpsSym && Number(gvv.getAttribute('data-velas')) === ej.serie.length && !b.raiz.conAtributo('data-tarjeta', 'detalle-crece').length && pedidasVelas.join() === d0.filas[0].simbolo
+      && b.raiz.conAtributo('data-op-velas', 'gana').length + b.raiz.conAtributo('data-op-velas', 'pierde').length === nOpsSym,
+      `al pulsar ${d0.filas[0].simbolo} en la tabla: sus velas (${gvv?.getAttribute('data-velas')}) con sus ${nOpsSym} operaciones, en lugar de «Cómo crece»`)
+    D.pulsa(b.raiz.conAtributo('data-volver-velas')[0]); await D.espera(30)
+    ok(b.raiz.conAtributo('data-tarjeta', 'detalle-crece').length === 1 && !b.raiz.conAtributo('data-grafico', 'velas-valor').length, '«← Volver al gráfico del plan»')
+    // «Vista de gráficos»: cerrada no pide nada; abierta, un gráfico por valor, nunca más de 4 lecturas a la vez y una sola por valor.
+    ok(pedidasVelas.length === 1 && !b.raiz.conAtributo('data-vista-graficos').length, '«Vista de gráficos» cerrada: no pide velas')
+    D.pulsa(b.raiz.conAtributo('data-abre-vista-graficos')[0])
+    for (let k = 0; k < 120 && b.raiz.conAtributo('data-grafico', 'velas-valor').length < conOps; k++) await D.espera(50)
+    ok(b.raiz.conAtributo('data-grafico-pequeno').length === conOps && b.raiz.conAtributo('data-grafico', 'velas-valor').length === conOps && pedidasVelas.length === conOps && new Set(pedidasVelas).size === conOps && maxVelasALaVez <= 4,
+      `«Vista de gráficos»: ${conOps} gráficos, ${pedidasVelas.length} lecturas (una por valor; la ya leída no se repite) y como mucho ${maxVelasALaVez} a la vez`)
+    D.pulsa(b.raiz.conAtributo('data-grafico-pequeno', d0.filas[2].simbolo)[0].todos(n => n.getAttribute?.('data-grafico') === 'velas-valor')[0].parentNode); await D.espera(30)
+    ok(b.raiz.conAtributo('data-tarjeta', 'detalle-velas')[0]?.textContent.startsWith(`${d0.filas[2].simbolo} · sus velas`), `pulsar el gráfico pequeño de ${d0.filas[2].simbolo} lo abre en grande`)
+    D.pulsa(b.raiz.conAtributo('data-volver-velas')[0]); D.pulsa(b.raiz.conAtributo('data-abre-vista-graficos')[0]); await D.espera(30)
     D.pulsa(b.raiz.conAtributo('data-ir-valor', d0.filas[0].simbolo)[0]); ok(ido === d0.filas[0].simbolo, 'el «↗» de un valor pide ir a ese valor')
     // §157: con precios reales, cada año de «Ganancias mensuales» es el de «Año a año» y todos los años suman la ganancia neta.
     const anios = Pa.cifrasPlan(ultima, Pl.planListaCalculable(Pa.planDe(aPant, est)).plan).anios
@@ -352,7 +378,7 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     D.pulsa(b.raiz.conAtributo('data-vista-historial', 'gantt')[0]); await D.espera(60)
     ok(b.raiz.conAtributo('data-gantt-detalle').length === 1 && !filasH().length && !b.raiz.textContent.includes('Mostrar descartados'), 'pantalla, «Gantt»: el del Backtesting, sin la casilla «Mostrar descartados»')
     D.pulsa(b.raiz.conAtributo('data-vista-historial', 'tabla')[0]); await D.espera(30)
-    ok(b.raiz.busca(n => n.nodeName === 'BUTTON' && /Copiar para Claude/.test(n.textContent)) != null && !b.raiz.conAtributo('data-detalle-falta')[0].textContent.includes('historial'), 'pantalla: «Copiar para Claude» y la línea de lo que falta ya sin el historial')
+    ok(b.raiz.busca(n => n.nodeName === 'BUTTON' && /Copiar para Claude/.test(n.textContent)) != null && !b.raiz.conAtributo('data-detalle-falta').length, 'pantalla: «Copiar para Claude» y ya sin la línea de lo que falta')
     // §159: «Todos los movimientos». El primero es el último del plan (los impuestos al vender todo); 50 por página; buscando «gld», solo el oro.
     D.pulsa(b.raiz.conAtributo('data-vista-historial', 'movimientos')[0]); await D.espera(30)
     const filasM = () => b.raiz.conAtributo('data-movimiento'), nMov = L.movimientos.length, nGld = L.movimientos.filter(m => m.simbolo === 'GLD').length
