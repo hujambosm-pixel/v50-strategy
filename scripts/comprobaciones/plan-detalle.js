@@ -21,6 +21,8 @@
 //     §160 (parte 4b): las velas de un valor con sus operaciones (recorte a las fechas, índices de compra y venta, no más de 4 lecturas a
 //     la vez) y la «Vista de gráficos», a mano y en la pantalla.
 //     §161 (parte 4c): «Detalle» con un solo valor (sin tabla por valor ni «Valor a valor» ni «Vista de gráficos»; sus velas a la vista).
+//     §162 (parte 5a): la fila de cifras, las columnas por valor como el Backtesting (aportó %, CAGR de su aportación, peor caída, dinero
+//     en él) y el buscador en toda la fila, a mano y en la pantalla.
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-del-arnes'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ
@@ -101,6 +103,20 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     ok(d.cabecera.valores === 2 && d.cabecera.conOperaciones === 2 && d.cabecera.operaciones === 2 && d.cabecera.ordenes === 4 && d.cabecera.ordenesValores === 4 && d.cabecera.ordenesOcioso === 0 && d.cabecera.ordenesOtras === 0 && d.cabecera.desde === F[0] && d.cabecera.hasta === F[3] && d.cabecera.velas === 'diarias'
       && d.suma.cuadra && d.suma.aportado === 1000 && cerca(d.suma.valores, 49.9) && cerca(d.suma.costes, 4) && cerca(d.suma.final, 1045.9) && d.curvas.series.length === 2 && d.curvas.series[0].v === L.curvas.A,
       'detalle a mano: la línea de arriba (2 valores, 2 operaciones, 4 órdenes) y la suma 1.000 + 49,90 − 4 = 1.045,90 €')
+    // §162. Sobre 1.000 € puestos: A aportó 99,80 € (+9,98 %) y B −49,90 € (−4,99 %). La peor caída de B: de 0 a −49,90 € → −49,90 / 1.000 = −4,99 %;
+    // A no cae. Dinero en A: 0 · 548,90 · 573,85 · 0 € (49,9 × 11 y 49,9 × 11,5) → media 280,69 € y, en % de cada día, (548,90 / 1.022,95 + 573,85 / 1.021,95) / 4.
+    // Las cifras: ganancia 45,90 € (+4,59 %), 1 de 2 ganan, tiempo con algo invertido 2 de 4 días (50 %).
+    const anios = (Date.parse(F[3]) - Date.parse(F[0])) / (365.25 * 864e5)
+    ok(cerca(fA.aportoPct, 0.0998) && cerca(fB.aportoPct, -0.0499) && cerca(fA.cagr, Math.pow(1.0998, 1 / anios) - 1, 1e-9) && cerca(d.total.aportoPct, 0.0499) && fA.caidaEur === 0 && cerca(fB.caidaEur, -49.9) && cerca(fB.caidaPct, -0.0499)
+      && cerca(fA.enElEur, (548.9 + 573.85) / 4) && cerca(fA.enEl, (548.9 / 1022.95 + 573.85 / 1021.95) / 4) && cerca(fB.enEl, (474.05 / 1022.95) / 4) && cerca(fA.enEl + fB.enEl, d.total.enValores),
+      `columnas por valor a mano: A +9,98 %, B −4,99 % y su caída −49,90 € (−4,99 %); dinero en A de media ${fA.enElEur.toFixed(2)} € (${(fA.enEl * 100).toFixed(2)} %), y A + B = el total`)
+    const ci = d.cifras
+    ok(cerca(ci.ganancia, 45.9) && cerca(ci.gananciaPct, 0.0459) && ci.ganan === 1 && ci.operaciones === 2 && ci.tiempoInvertido === 0.5 && ci.dias === 4 && cerca(ci.enValores, mv) && cerca(ci.enValoresEur, (1022.95 + 573.85) / 4),
+      `la fila de cifras a mano: ganancia 45,90 € (+4,59 %), 1 de 2 ganan, 2 de 4 días con algo invertido, de media ${ci.enValoresEur.toFixed(2)} € en valores`)
+    // El buscador en toda la fila: «12,00» (precio de venta de A), «10,00» (su precio de compra; «49,9» encuentra las dos: A tiene 49,90 acciones y B −49,90 €), «07/01» (su fecha de venta); en los movimientos, «18» y «1.000».
+    ok(De.historial(d.porOperacion.ops, '12,00').map(o => o.simbolo).join() === 'A' && De.historial(d.porOperacion.ops, '10,00').map(o => o.simbolo).join() === 'A' && De.historial(d.porOperacion.ops, '49,9').length === 2 && De.historial(d.porOperacion.ops, '07/01').map(o => o.simbolo).join() === 'A' && De.historial(d.porOperacion.ops, 'b 18').map(o => o.simbolo).join() === 'B'
+      && De.filtraMovimientos(d.movimientos, '18').map(m => m.que).join() === 'Vende B · 24,95 × 18,00 €' && De.filtraMovimientos(d.movimientos, '1.000').map(m => m.que).join() === 'Dinero inicial' && De.filtraMovimientos(d.movimientos, '1000').length === 1,
+      'el buscador mira toda la fila: precios, acciones, fechas e importes (con o sin el punto de los miles), varias palabras a la vez')
     ok(De.detallePlan({ evaluacion: { plan: { medidas: {}, ejecucion: Pl.ejecutaPlan(planA('compartido'), datosA('compartido')) } } }, planA('compartido')) === null, 'detalle: sin libro en la respuesta, nada (null)')
     // §157. Todo en enero de 2020: 1.000 € → 1.045,90 € → +4,59 % y +45,90 €; el año, lo mismo.
     const me = d.mensuales
@@ -319,7 +335,7 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
       && cerca(sum(d0.filas, f => f.aporto), L.puente.ganadoValores, 1e-6) && sum(d0.filas, f => f.operaciones) === L.operaciones.length && d0.filas.every(f => f.dentro > 0 && f.dentro < 1),
       `pantalla, «Qué aportó cada valor»: ${filasV.length} valores, de más a menos (el primero, ${d0.filas[0].simbolo} ${d0.filas[0].aporto.toFixed(2)} €); sus «Aportó» suman lo ganado en los valores y sus operaciones, las ${L.operaciones.length} del plan`)
     const oc = b.raiz.conAtributo('data-fila-ocioso')[0]?.textContent || ''
-    ok(oc.includes('Dinero ocioso · oro (GLD)') && oc.includes(Pa.euros(Math.abs(L.puente.ganadoOcioso), 0)) && oc.includes(`${Pa.numero(d0.ocioso.ordenes, 0)} órdenes`) && oc.includes('del dinero, de media') && d0.cabecera.ordenesValores + d0.cabecera.ordenesOcioso === ej.costes.ordenes && cerca(d0.total.enValores + d0.ocioso.media + d0.ocioso.liquidez, 1, 1e-9),
+    ok(oc.includes('Dinero ocioso · oro (GLD)') && oc.includes(Pa.euros(Math.abs(L.puente.ganadoOcioso), 0)) && oc.includes(`${Pa.numero(d0.ocioso.ordenes, 0)} órdenes`) && oc.includes(Pa.pct(d0.ocioso.media, 0)) && d0.cabecera.ordenesValores + d0.cabecera.ordenesOcioso === ej.costes.ordenes && cerca(d0.total.enValores + d0.ocioso.media + d0.ocioso.liquidez, 1, 1e-9),
       `pantalla, la fila del ocioso: «${oc}» (órdenes de la estrategia ${d0.cabecera.ordenesValores} + del ocioso ${d0.cabecera.ordenesOcioso} = ${ej.costes.ordenes})`)
     const cabT = b.raiz.conAtributo('data-detalle-cabecera')[0]?.todos(n => n.nodeName === 'SPAN')[0]?.textContent || ''
     ok(cabT.includes(`${SIMB.length} valores`) && cabT.includes('velas diarias') && cabT.includes(`${Pa.numero(L.operaciones.length, 0)} operaciones`) && cabT.includes(`${Pa.numero(ej.costes.ordenes, 0)} órdenes`) && cabT.includes(Pa.fechaCorta(ej.serie[0].date)), `pantalla, la línea de arriba: «${cabT}»`)
@@ -384,6 +400,11 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     ok(b.raiz.conAtributo('data-gantt-detalle').length === 1 && !filasH().length && !b.raiz.textContent.includes('Mostrar descartados'), 'pantalla, «Gantt»: el del Backtesting, sin la casilla «Mostrar descartados»')
     D.pulsa(b.raiz.conAtributo('data-vista-historial', 'tabla')[0]); await D.espera(30)
     ok(b.raiz.busca(n => n.nodeName === 'BUTTON' && /Copiar para Claude/.test(n.textContent)) != null && !b.raiz.conAtributo('data-detalle-falta').length, 'pantalla: «Copiar para Claude» y ya sin la línea de lo que falta')
+    // §162: la fila de cifras y las columnas nuevas.
+    const fc = b.raiz.conAtributo('data-fila-cifras')[0], cols = b.raiz.conAtributo('data-tabla', 'detalle-valores')[0].todos(n => n.hasAttribute('data-columna')).map(n => n.getAttribute('data-columna'))
+    ok(!!fc && fc.todos(n => n.hasAttribute('data-cifra-detalle')).length === 7 && fc.textContent.includes(Pa.pct(m.twrNeto)) && cols.join() === 'Aportó,Aportó %,CAGR de su aportación,Operaciones,Ganadoras,Profit Factor,Peor caída,Dinero en él,Tiempo dentro'
+      && b.raiz.conAtributo('data-en-el', d0.filas[0].simbolo)[0]?.getAttribute('title') === `De media, ${Pa.euros(d0.filas[0].enElEur, 0)} en ${d0.filas[0].simbolo}` && cerca(sum(d0.filas, f => f.enEl), d0.total.enValores, 1e-9) && cerca(sum(d0.filas, f => f.aportoPct), d0.total.aportoPct, 1e-9),
+      `pantalla, la fila de cifras (7) y las columnas por valor (${cols.length}); los «Dinero en él» y los «Aportó %» suman el total`)
     // §159: «Todos los movimientos». El primero es el último del plan (los impuestos al vender todo); 50 por página; buscando «gld», solo el oro.
     D.pulsa(b.raiz.conAtributo('data-vista-historial', 'movimientos')[0]); await D.espera(30)
     const filasM = () => b.raiz.conAtributo('data-movimiento'), nMov = L.movimientos.length, nGld = L.movimientos.filter(m => m.simbolo === 'GLD').length
@@ -392,6 +413,10 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     D.escribe(b.raiz.conAtributo('data-busca-historial')[0], 'gld'); await D.espera(30)
     ok(filasM().length === Math.min(50, nGld) && filasM().every(n => /oro \(GLD\)/.test(n.textContent)) && (b.raiz.conAtributo('data-historial-filtro')[0]?.textContent || '').startsWith(`${Pa.numero(nGld, 0)} de ${Pa.numero(nMov, 0)} movimientos`),
       `buscando «gld» en los movimientos: ${nGld} del oro`)
+    // §162: el caso de Sergi: «39» encuentra los movimientos con 39 en cualquier parte de la fila (p. ej. un precio de 397,00 €).
+    D.escribe(b.raiz.conAtributo('data-busca-historial')[0], '39'); await D.espera(30)
+    const n39 = d0.movimientos.filter(mm => De.textoDeMovimiento(mm).includes('39')).length
+    ok(n39 > 0 && filasM().length === Math.min(50, n39) && filasM().every(n => n.textContent.replace(/\./g, '').includes('39')), `buscando «39» en los movimientos: ${n39} (antes, 0)`)
     D.pulsa(b.raiz.conAtributo('data-limpiar-busqueda')[0]); D.pulsa(b.raiz.conAtributo('data-vista-historial', 'tabla')[0]); await D.espera(30)
     ok(filasH().length === 50 && !filasM().length, 'de vuelta a «Operaciones»')
     D.pulsa(b.raiz.conAtributo('data-pliega-valores')[0]); await D.espera(30)

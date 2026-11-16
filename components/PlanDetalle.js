@@ -3,7 +3,7 @@
 // lib/builder/detallePlan.js con el libro del motor. Parte 2: la línea de arriba, la línea que suma, «Qué aportó cada valor» (con la fila
 // del dinero ocioso) y «Cómo crece» («El plan», con el mismo gráfico de «Tu dinero» y los «comprar y mantener» del plan, y «Valor a
 // valor»). §157 (parte 3a): ganancias mensuales, dónde está tu dinero cada día y resultados por operación. §158 (parte 3b): el
-// historial (tabla con buscador, Gantt y Excel del Backtesting) y «Copiar para Claude». §159 (parte 4a): «Todos los movimientos». §161 (parte 4c): también con un solo valor (sin la tabla por valor; sus velas a la vista). §160 (parte 4b): las velas de cada valor (pulsando un valor de la tabla) y la «Vista de gráficos».
+// historial (tabla con buscador, Gantt y Excel del Backtesting) y «Copiar para Claude». §159 (parte 4a): «Todos los movimientos». §162 (parte 5a): fila de cifras, columnas por valor como el Backtesting y buscador en toda la fila. §161 (parte 4c): también con un solo valor (sin la tabla por valor; sus velas a la vista). §160 (parte 4b): las velas de cada valor (pulsando un valor de la tabla) y la «Vista de gráficos».
 // «La cartera por dentro» sigue mientras Sergi no compruebe que «Detalle» lo tiene todo.
 //   detalle: lo de detallePlan · cifras: lo de cifrasPlan (las filas de los «comprar y mantener») · graficoPlan: el gráfico de «Tu dinero»
 //   ya montado (lo pone BuilderPlan) · onIrAValor(símbolo): el «↗» · viejas: el cálculo es el anterior (se atenúa).
@@ -24,6 +24,7 @@ const num = { ...celda, textAlign: 'right', whiteSpace: 'nowrap', fontVariantNum
 const cab = { ...celda, color: B.secundario, fontWeight: 600, fontSize: 12, background: B.cabecera }
 const cabNum = { ...cab, textAlign: 'right' }
 const signo = (v) => Number.isFinite(v) && v > 0 ? VERDE : Number.isFinite(v) && v < 0 ? ROJO : undefined
+export const pctSigno = (v, d = 1) => !Number.isFinite(v) ? '—' : `${v > 0 ? '+' : ''}${pct(v, d)}`
 export const conSigno = (v, d = 0) => !Number.isFinite(v) ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${euros(Math.abs(v), d)}`
 const boton = (on) => ({ fontFamily: B.letra, fontSize: 13, padding: '4px 11px', cursor: 'pointer', borderRadius: 6, border: `1px solid ${on ? B.siguienteBorde : B.borde}`, background: on ? B.siguienteFondo : B.fondo, color: on ? B.titulo : B.texto, fontWeight: on ? 700 : 400 })
 
@@ -301,6 +302,24 @@ function VistaGraficos({ filas, ops, cargaVelas, cache, desde, hasta, onElegir }
   )
 }
 
+// §162 · Las cifras de arriba de «Detalle».
+function FilaCifras({ c }) {
+  const caja = { background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: 8, padding: '7px 10px', minWidth: 0 }
+  const peq = { color: B.secundario, fontSize: 12, display: 'flex', alignItems: 'center', gap: 2 }
+  const una = (id, titulo, valor, color, sub = null, titulo2 = null) => <div data-cifra-detalle={id} style={caja} title={titulo2 || undefined}><div style={peq}>{titulo}</div><div style={{ fontSize: 17, fontWeight: 700, color: color || B.titulo }}>{valor}</div>{sub && <div style={{ ...S.apagado }}>{sub}</div>}</div>
+  return (
+    <div data-fila-cifras style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginTop: 10 }}>
+      {una('cagr', <>CAGR del plan<Ayuda texto={AYUDA_DETALLE.cifras} etiqueta="Las cifras de «Detalle»"/></>, pct(c.cagr), signo(c.cagr))}
+      {una('ganancia', 'Ganancia', pctSigno(c.gananciaPct, 0), signo(c.ganancia), conSigno(c.ganancia, 0))}
+      {una('caida', 'Peor caída', pct(c.caidaPct, 1), ROJO, conSigno(c.caidaEur, 0))}
+      {una('ganadoras', 'Ganadoras', pct(c.ganadoras, 1), null, `${numero(c.ganan, 0)} de ${numero(c.operaciones, 0)}`)}
+      {una('pf', 'Profit Factor', c.pf == null ? '—' : numero(c.pf, 2), c.pf == null ? null : c.pf >= 1 ? VERDE : ROJO)}
+      {una('en-valores', 'Dinero en valores', pct(c.enValores, 0), null, 'de media', `De media, ${euros(c.enValoresEur, 0)} en valores`)}
+      {una('tiempo', 'Tiempo con algo invertido', pct(c.tiempoInvertido, 0), null, `${numero(Math.round(c.tiempoInvertido * c.dias), 0)} de ${numero(c.dias, 0)} días`)}
+    </div>
+  )
+}
+
 const Tarjeta = ({ id, titulo, ayuda, derecha = null, children }) => (
   <div data-tarjeta={id} style={{ ...S.tarjeta, marginTop: 14 }}>
     <div style={{ ...S.cabeceraTarjeta, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>{titulo}{ayuda && <Ayuda texto={ayuda} etiqueta={typeof titulo === 'string' ? titulo : id}/>}{derecha && <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center', fontWeight: 400 }}>{derecha}</span>}</div>
@@ -347,27 +366,34 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
         <Ayuda etiqueta="La suma del plan" texto={`${AYUDA_DETALLE.suma} En este plan, al céntimo: ${euros(s.aportado, 2)} ${s.valores < 0 ? '−' : '+'} ${euros(Math.abs(s.valores), 2)} ${sinOcioso ? '' : `${s.ocioso < 0 ? '−' : '+'} ${euros(Math.abs(s.ocioso), 2)} `}− ${euros(s.costes, 2)} − ${euros(s.impuestos, 2)} = ${euros(s.final, 2)}.`}/>
       </div>
 
+      {/* §162: la fila de cifras (las de la tabla del Backtesting que más se miran) */}
+      {detalle.cifras && <FilaCifras c={detalle.cifras}/>}
+
       {!unValor && <Tarjeta id="detalle-valores" titulo="Qué aportó cada valor" ayuda={`${AYUDA_DETALLE.tabla} ${AYUDA_DETALLE.ocioso}`}>
         <div style={{ overflowX: 'auto' }}><table data-tabla="detalle-valores" style={{ borderCollapse: 'collapse', width: '100%' }}>
-          <thead><tr><th style={cab}>Valor</th>{['Aportó', 'Operaciones', 'Ganadoras', 'Profit Factor', 'Tiempo dentro'].map(h => <th key={h} style={cabNum}>{h}</th>)}</tr></thead>
+          <thead><tr><th style={cab}>Valor</th>{[['Aportó', AYUDA_DETALLE.tabla], ['Aportó %', AYUDA_DETALLE.aportoPct], ['CAGR de su aportación', AYUDA_DETALLE.cagrValor], ['Operaciones'], ['Ganadoras'], ['Profit Factor'], ['Peor caída', AYUDA_DETALLE.caidaValor], ['Dinero en él', AYUDA_DETALLE.enEl], ['Tiempo dentro']].map(([h, a]) => <th key={h} data-columna={h} style={cabNum}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{h}{a && <Ayuda texto={a} etiqueta={h}/>}</span></th>)}</tr></thead>
           <tbody>
             <tr data-fila-total style={{ fontWeight: 700, color: B.titulo }}>
               <td style={celda}><button type="button" data-pliega-valores aria-expanded={abierta} onClick={() => setAbierta(x => !x)} title={abierta ? 'Ocultar los valores' : 'Ver los valores'} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.titulo, fontFamily: B.letra, fontSize: 'inherit', fontWeight: 700 }}>{abierta ? '▾' : '▸'} {filas.length === 1 ? filas[0].simbolo : `Los ${numero(filas.length, 0)} valores`}</button></td>
-              <td style={{ ...num, color: signo(total.aporto) }}>{conSigno(total.aporto)}</td><td style={num}>{numero(total.operaciones, 0)}</td><td style={num}>{pct(total.ganadoras, 1)}</td><td style={num}>{total.pf == null ? '—' : numero(total.pf, 2)}</td>
-              <td style={{ ...num, fontWeight: 400, color: B.secundario }}>{pct(total.enValores, 0)} del dinero, de media</td>
+              <td style={{ ...num, color: signo(total.aporto) }}>{conSigno(total.aporto)}</td><td style={{ ...num, color: signo(total.aportoPct) }}>{pctSigno(total.aportoPct)}</td><td style={{ ...num, color: signo(total.cagr) }}>{pct(total.cagr)}</td>
+              <td style={num}>{numero(total.operaciones, 0)}</td><td style={num}>{pct(total.ganadoras, 1)}</td><td style={num}>{total.pf == null ? '—' : numero(total.pf, 2)}</td><td style={num}></td>
+              <td style={num} title={`De media, ${euros(total.enValoresEur, 0)} en valores`}>{pct(total.enValores, 0)}</td><td style={num}>{pct(detalle.cifras?.tiempoInvertido, 0)}</td>
             </tr>
             {abierta && filas.length > 1 && filas.map(f => <tr key={f.simbolo} data-valor={f.simbolo} aria-selected={f.simbolo === elegido} style={f.simbolo === elegido ? { background: B.cabecera } : undefined}>
               <td style={{ ...celda, paddingLeft: 24 }}>
                 <button type="button" data-elige-valor={f.simbolo} onClick={() => abreVelas(f.simbolo)} title={`Pulsa para ver las velas de ${f.simbolo} con sus operaciones`} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.texto, fontFamily: B.letra, fontSize: 'inherit', fontWeight: f.simbolo === elegido ? 700 : 400 }}>{f.simbolo}</button>
                 {onIrAValor && <button type="button" data-ir-valor={f.simbolo} onClick={() => onIrAValor(f.simbolo)} title={`Abrir ${f.simbolo} en la Watchlist`} style={{ background: 'none', border: 'none', padding: '0 0 0 6px', cursor: 'pointer', color: B.enlace, fontSize: 13 }}>↗</button>}
               </td>
-              <td style={{ ...num, color: signo(f.aporto) }}>{conSigno(f.aporto)}</td><td style={num}>{numero(f.operaciones, 0)}</td><td style={num}>{pct(f.ganadoras, 1)}</td><td style={num}>{f.pf == null ? '—' : numero(f.pf, 2)}</td><td style={num}>{pct(f.dentro, 0)}</td>
+              <td style={{ ...num, color: signo(f.aporto) }}>{conSigno(f.aporto)}</td><td style={{ ...num, color: signo(f.aportoPct) }}>{pctSigno(f.aportoPct)}</td><td style={{ ...num, color: signo(f.cagr) }}>{pct(f.cagr)}</td>
+              <td style={num}>{numero(f.operaciones, 0)}</td><td style={num}>{pct(f.ganadoras, 1)}</td><td style={num}>{f.pf == null ? '—' : numero(f.pf, 2)}</td>
+              <td style={{ ...num, color: f.caidaEur < 0 ? ROJO : undefined }} title={f.caidaEur < 0 ? `${conSigno(f.caidaEur, 0)} de lo ganado con ${f.simbolo}` : 'Sin caídas'}>{f.caidaPct == null || !(f.caidaEur < 0) ? '—' : pct(f.caidaPct, 1)}</td>
+              <td style={num} data-en-el={f.simbolo} title={`De media, ${euros(f.enElEur, 0)} en ${f.simbolo}`}>{pct(f.enEl, 1)}</td><td style={num}>{pct(f.dentro, 0)}</td>
             </tr>)}
             <tr data-fila-ocioso style={{ fontWeight: 700, color: B.titulo }}>
               <td style={celda}>Dinero ocioso · {nombreOc}</td>
-              <td style={{ ...num, color: signo(ocioso.aporto) }}>{sinOcioso ? euros(0, 0) : conSigno(ocioso.aporto)}</td>
-              <td style={{ ...num, fontWeight: 400, color: B.secundario }}>{sinOcioso ? 'sin órdenes' : `${numero(ocioso.ordenes, 0)} órdenes`}</td><td style={num}></td><td style={num}></td>
-              <td style={{ ...num, fontWeight: 400, color: B.secundario }}>{pct(sinOcioso ? ocioso.liquidez : (ocioso.media || 0), 0)} del dinero, de media{!sinOcioso && ocioso.liquidez >= 0.005 ? ` (+ ${pct(ocioso.liquidez, 0)} en liquidez)` : ''}</td>
+              <td style={{ ...num, color: signo(ocioso.aporto) }}>{sinOcioso ? euros(0, 0) : conSigno(ocioso.aporto)}</td><td style={{ ...num, color: signo(ocioso.aporto) }}>{sinOcioso ? '' : pctSigno(s.aportado > 0 ? ocioso.aporto / s.aportado : null)}</td><td style={num}></td>
+              <td style={{ ...num, fontWeight: 400, color: B.secundario }}>{sinOcioso ? 'sin órdenes' : `${numero(ocioso.ordenes, 0)} órdenes`}</td><td style={num}></td><td style={num}></td><td style={num}></td>
+              <td style={{ ...num, fontWeight: 400, color: B.secundario }} title={sinOcioso ? 'En liquidez, de media' : `En el ocioso, de media${ocioso.liquidez >= 0.005 ? `; además, ${pct(ocioso.liquidez, 0)} en liquidez` : ''}`}>{pct(sinOcioso ? ocioso.liquidez : (ocioso.media || 0), 0)}</td><td style={num}></td>
             </tr>
           </tbody>
         </table></div>

@@ -3137,3 +3137,14 @@ Boceto bocetos/detalle-plan.html, pestaña 2.
 - «Comparar planes» usa la misma llamada: también trae el libro (con un valor ocupa poco).
 - Comprobación `scripts/comprobaciones/plan-detalle.js` ampliada: a mano (unValor, su símbolo y la suma 10.000 + 857,14 = 10.857,14 €) y en la pantalla con AAPL, oro, 300 €/mes e impuestos (pestañas, suma = «Tienes al final», sus 123 operaciones en las velas, lo que no sale, mensuales e historial, y vuelta a «Tu dinero» con la misma cifra).
 - Ninguna cifra cambia.
+
+## 162. Un solo cálculo, parte 5a: buscador en toda la fila, fila de cifras y columnas por valor como el Backtesting
+
+Boceto bocetos/detalle-final.html, aceptado por Sergi el 16/11 (tres recomendaciones + «CAGR por valor se queda» + «Dinero en él» en una sola columna en %, con los € en el tooltip).
+
+- FALLO ARREGLADO (visto por Sergi): el buscador del historial solo miraba el valor (y el texto con ≥ 3 letras): «39» no encontraba un precio de 397,00 €. Ahora mira TODA la fila (valor, fechas dd/mm/aaaa, qué pasa, acciones, precios, importes, resultado y %), sin tildes ni mayúsculas, sin el punto de los miles («1.000» = «1000») y con varias palabras a la vez («b 18»). `textoDeOperacion`, `textoDeMovimiento` y `coincideBusqueda` de lib/builder/detallePlan.js. Con la lista de la prueba, «39» encuentra 330 movimientos (antes, 0).
+- Fila de cifras (`FilaCifras`, `detalle.cifras`) debajo de la suma: CAGR del plan, ganancia (% y €), peor caída (% y €), ganadoras (N de M), Profit Factor, dinero en valores de media (€ en el tooltip) y tiempo con algo invertido (días con al menos una operación abierta ÷ días del plan).
+- Tabla por valor, columnas como el Backtesting: Aportó, «Aportó %» (sobre lo que pusiste; sin aportaciones, el dinero inicial: el G.Comp % del Backtesting; suman el total), «CAGR de su aportación» (((base + aportó) / base)^(1/años) − 1, la fórmula del Backtesting), Operaciones, Ganadoras, Profit Factor, «Peor caída» del valor (en % de lo puesto hasta el pico + lo ganado con él en el pico; los € en el tooltip), «Dinero en él» (de media, la parte del patrimonio de cada día en ese valor; € en el tooltip; los valores suman el total: el Cap. inv. del Backtesting, pero con el valor de lo que se tiene, no su coste) y Tiempo dentro. Cada columna nueva con su «?».
+- Motor: el libro apunta además `enValor` (lo que vale lo que se tiene de cada valor y del ocioso al cierre de cada día). Sin pedir el libro, la salida es la de siempre.
+- Comprobación `scripts/comprobaciones/plan-detalle.js` ampliada: a mano (A +9,98 %, B −4,99 % y su caída −49,90 €; dinero en A de media 280,69 €; cifras: ganancia 45,90 €, 2 de 4 días con algo invertido; el buscador con precios, fechas, importes y varias palabras) y en la pantalla (7 cifras, 9 columnas, «Dinero en él» y «Aportó %» suman el total, «39» en los movimientos).
+- Ninguna cifra cambia.
