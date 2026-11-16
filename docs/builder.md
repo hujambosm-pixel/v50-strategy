@@ -3208,3 +3208,13 @@ Con el OK de Sergi (16/11: «Si se repara todo esto, puedes seguir»), tras comp
 - Se queda de components/backtesting/PlanPorDentro.js la PETICIÓN de los candidatos (`peticionPorDentro`, `motivoSinPeticion`, `intervaloDe`), que «Tu dinero» con varios valores manda a /api/plan; el componente sigue en el archivo hasta retirar el Backtesting suelto (sin uso en el plan). /api/plan sigue devolviendo `finalPorDentro` (lo usan las pruebas de oro de plan-tu-dinero-lista.js).
 - Comprobaciones adaptadas: plan-por-dentro.js (apartado 3: «Tu dinero» y «Detalle», sin «por dentro» ni peticiones aparte), plan-detalle.js (dos pestañas; sin la línea «Comprobación») y plan-velas.js (fuera la prueba de oroComparable).
 - Ninguna cifra cambia.
+
+## 169. «Comparar con otras estrategias», parte a: ids como texto y copias sin guardar (16/11)
+
+Primera parte de «Comparar con otras estrategias» (boceto bocetos/detalle-final.html, pestaña 3; Sergi dijo «sí, los cinco» el 16/11). Sin pantalla nueva todavía: prepara «Comparar planes» para aceptar copias sin guardar.
+
+- lib/builder/comparaPlanes.js: los ids se comparan como TEXTO (`mismoId`): los planes guardados tienen un número y las copias, «v-<id de la estrategia>». `elegidosIniciales` y `alterna` devuelven cada id tal como es (un 4 sigue siendo 4). `copiaConEstrategia(a, estrategia, nombrePlan)` = `planDe` con los ajustes de AHORA del plan abierto (con lo no guardado) y otra estrategia; solo cambia la estrategia. Nombre «<plan> · con <estrategia>». `copiasDe`, `esCopia`, `paraRecordar` (lo que se guarda en el navegador, sin copias) y `TITULO_COPIA`.
+- components/BuilderPlan.js: `comp.copias` (ids de estrategias de tarjetas; de momento solo llega por `inicial.compararCopias`, la pantalla para elegirlas es la parte b); `copiasComp` y `todosComp` (guardados + copias) alimentan las fichas, las peticiones y la línea de la prueba del paso 2. Una copia se calcula con la misma llamada y la misma caché que un plan guardado.
+- components/ComparaPlanes.js: ids como texto; en una copia, en lugar de «Abrir» y «⧉», la etiqueta amarilla «sin guardar» (tooltip TITULO_COPIA). «Guardar como plan» llega en la parte d.
+- Comprobación: comparar-planes.js, apartado 5 (13 nuevas). A mano: la copia del plan A con su misma estrategia acaba en 10.694,29 €, igual que el plan A.
+- Ninguna cifra cambia.

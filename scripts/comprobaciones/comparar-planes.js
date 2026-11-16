@@ -5,6 +5,7 @@
 //   3 · La respuesta de /api/plan con el VL de QQQ y SPY (§128) no cambia ninguna cifra de la pestaña.
 //   4 · Montada: tarjetas, avisos, ★, fichas, QQQ/SPY, modos del gráfico, «Volver al plan», «Abrir», y los dos tonos;
 //       §135: sin cabecera de pasos ni pestañas al comparar, y «Ocultar ▲» (una línea por plan, mismas cifras, gráfico de 470 px).
+//   5 · §169: ids como texto y copias sin guardar del plan abierto con otra estrategia (la copia con su misma estrategia = el plan).
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://falso.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-de-la-prueba'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
@@ -157,6 +158,33 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   m = monta({ tema: 'claro' }); await D.espera(60)
   const raiz = q('data-comparar')[0]
   ok(raiz.getAttribute('data-tema') === 'claro' && String(raiz.getAttribute('style') || '').includes('--sc-fondo') || raiz.getAttribute('data-tema') === 'claro', 'el tono claro llega a la comparación (data-tema="claro")')
+  m.quita(); await D.espera(5)
+
+  // ── 5 · §169: ids como texto y COPIAS SIN GUARDAR (el plan de ahora con otra estrategia) ──
+  ok(K.mismoId(4, '4') && !K.mismoId(4, 'v-4') && !K.mismoId(null, 'null'), '§169: los ids se comparan como texto (4 = «4»; 4 ≠ «v-4»)')
+  ok(JSON.stringify(K.elegidosIniciales([{ id: 1 }, { id: 'v-y' }], ['1', 'v-y'], [])) === '[1,"v-y"]' && JSON.stringify(K.elegidosIniciales([{ id: 1 }, { id: 2 }], ['v-y'], [2])) === '[2]', '§169: elegidos con números y copias; cada id tal como es (1 sigue siendo número); una copia que ya no existe se salta')
+  ok(JSON.stringify(K.alterna([1, 'v-y'], 'v-y')) === '[1]' && JSON.stringify(K.alterna([1], 'v-y')) === '[1,"v-y"]' && JSON.stringify(K.alterna(['1'], 1)) === '["1"]' && JSON.stringify(K.paraRecordar([1, 'v-y', 6])) === '[1,6]', '§169: fichas con copias; lo recordado en el navegador, sin las copias')
+  const ESTR2 = { id: 'y', name: 'EMA3', definition: EMA, params: { ema: 3 } }, aA = Pa.ajustesDe(pA)
+  { const c = K.copiaConEstrategia(aA, ESTR2, 'Plan A'), base = Pa.planDe(aA, ESTR), sin = (p) => JSON.stringify({ ...p, piezas: p.piezas.map(x => ({ ...x, estrategia: null })) })
+    ok(c.id === 'v-y' && c.nombre === 'Plan A · con EMA3' && c.copia === true && c.plan.piezas[0].estrategia.id === 'y', '§169: la copia: id «v-y», nombre «Plan A · con EMA3», con la estrategia EMA3')
+    ok(sin(c.plan) === sin(base), '§169: la copia solo cambia la estrategia (dinero, periodo, valor, ocioso, impuestos y comisión, iguales)')
+    ok(K.copiasDe(aA, ['y', 'zz'], [ESTR, ESTR2], 'Plan A').map(x => x.id).join() === 'v-y', '§169: una estrategia que ya no existe no da copia') }
+  // Montada: el plan A abierto, comparado con dos copias suyas: con su MISMA estrategia (EMA2) y con EMA3. A mano: la copia con EMA2
+  // es el plan A tal cual → 10.694,29 € (compra a 105, vende a 114, 19 % de impuestos sobre 857,14 €).
+  const calcula2 = async (p) => { pedidos.push(JSON.stringify(p)); await D.espera(5); return resp.get(JSON.stringify(p)) || conResp(p, datosMano(fs)) }
+  m = D.monta(h(BPlan, { estrategias: [ESTR, ESTR2], deps: { ctx: null, calcula: calcula2 }, tema: 'oscuro', inicial: { planes: filas, orden: ['g1', 'g2'], pestana: 'g1', simbolos: ['TEST'], pruebas: [], anchoPestanas: 1400, comparando: true, compararElegidos: [1, 'v-x', 'v-y'], compararCopias: ['x', 'y'] } }), RDC)
+  await D.espera(120)
+  ok(q('data-tarjeta-plan').map(n => n.getAttribute('data-tarjeta-plan')).join() === '1,v-x,v-y', '§169: tarjetas del plan A guardado y de sus dos copias')
+  ok(q('data-elige-plan').map(n => n.getAttribute('data-elige-plan')).join() === '1,2,3,v-x,v-y' && q('data-elige-plan', 'v-y')[0].textContent.includes('Plan A · con EMA3'), '§169: las copias, detrás de los planes guardados en las fichas, con su nombre')
+  ok(q('data-copia-sin-guardar').length === 2 && q('data-abrir-plan').map(n => n.getAttribute('data-abrir-plan')).join() === '1' && q('data-duplicar-plan').length === 1, '§169: en las copias, «sin guardar» en lugar de «Abrir» y «⧉»')
+  { const fin = (id) => q('data-tarjeta-plan', id)[0]?.conAtributo('data-valor', 'final')[0]?.textContent || ''
+    const esperado = Pa.cifrasPlan(conResp(Pa.planDe(aA, ESTR), datosMano(fs)), Pa.planDe(aA, ESTR)).seis.final
+    ok(cerca(esperado, FIN_PLAN) && fin('v-x') === fin('1') && fin('v-x').includes('10.694'), `§169: la copia con su misma estrategia acaba como el plan A, 10.694,29 € (${fin('v-x')} / ${fin('1')})`)
+    ok(fin('v-y').length > 0 && !fin('v-y').includes('Calculando') && q('data-estado-plan').length === 0, `§169: la copia con EMA3 se calcula (${fin('v-y')})`) }
+  D.pulsa(q('data-elige-plan', 'v-y')[0]); await D.espera(10)
+  ok(q('data-tarjeta-plan').map(n => n.getAttribute('data-tarjeta-plan')).join() === '1,v-x', '§169: quitar una copia de las fichas')
+  D.pulsa(q('data-elige-plan', 'v-y')[0]); await D.espera(10)
+  ok(q('data-tarjeta-plan').map(n => n.getAttribute('data-tarjeta-plan')).join() === '1,v-x,v-y', '§169: y volver a ponerla')
   m.quita(); await D.espera(5)
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTodo bien')

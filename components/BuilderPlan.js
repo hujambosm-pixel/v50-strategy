@@ -56,7 +56,7 @@ import PlanDetalle, { Ampliable, AmpliadoCtx } from './PlanDetalle'
 import { AYUDA_DETALLE, detallePlan } from '../lib/builder/detallePlan'
 // §128: «Comparar planes» (opción A: cada plan tal como está guardado).
 import ComparaPlanes from './ComparaPlanes'
-import { CLAVE_COMPARAR, REFS_COMPARAR, TEXTO_SIN_PLANES, alterna, elegidosIniciales, pieza as piezaDe } from '../lib/builder/comparaPlanes'
+import { CLAVE_COMPARAR, REFS_COMPARAR, TEXTO_SIN_PLANES, alterna, copiasDe, elegidosIniciales, mismoId, paraRecordar, pieza as piezaDe } from '../lib/builder/comparaPlanes'
 import { cargaUniversoMc, nDeUniverso, nombreUniverso, reglaDeUniverso } from '../lib/universoMc'
 import FiltrosDelPlan from './FiltrosDelPlan'
 import { filtrosPropios, respetaPropios, usoDeLaEstrategia } from '../lib/builder/filtrosPlan'
@@ -280,7 +280,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // §128: «Comparar planes». comparando: se ve la comparación en lugar del plan abierto (que sigue con sus cambios). Lo elegido, recordado
   // en este navegador (CLAVE_COMPARAR); el modo del gráfico (null = el de por defecto), solo en esta visita. resComp: { id: estado de su cálculo }.
   const [comparando, setComparando] = useState(!!inicial?.comparando || !!comparar)   // §140: comparar: se entra comparando (desde la portada de Planes)
-  const [comp, setComp] = useState(() => ({ elegidos: inicial?.compararElegidos || null, refs: REFS_COMPARAR.map(r => r.id), log: true, modo: null, plegado: !!inicial?.compararPlegado }))
+  // §169: copias: ids de las estrategias con las que se compara el plan abierto (copias sin guardar; ver copiasComp).
+  const [comp, setComp] = useState(() => ({ elegidos: inicial?.compararElegidos || null, refs: REFS_COMPARAR.map(r => r.id), log: true, modo: null, plegado: !!inicial?.compararPlegado, copias: inicial?.compararCopias || [] }))
   const [resComp, setResComp] = useState(inicial?.resComp || {})
   // §80: «Una lista». Lo que se guarda va en a.lista (lib/planes/lista.js); esto es solo de la vista (buscar, ★, la lista de la Watchlist, qué está desplegado).
   const [vistaLista, setVistaLista] = useState({ busca: '', favs: false, lista: '', seccion: { mode: true, strats: false }, universoDatos: {} })
@@ -572,15 +573,19 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
 
   // ── §128: «Comparar planes» (los planes GUARDADOS, tal como están guardados; mismo motor y misma respuesta que su pestaña) ──
   const compLeido = useRef(false), enCurso = useRef(new Set())
+  // §169: las copias sin guardar del plan abierto (sus ajustes de AHORA con otra estrategia) van detrás de los planes guardados.
+  const copiasComp = useMemo(() => comparando && actual ? copiasDe(a, comp.copias, tarjetas, nombreDe(actual)) : [], [comparando, actual, a, comp.copias, tarjetas, pestanas])
+  const todosComp = useMemo(() => [...(planes || []), ...copiasComp], [planes, copiasComp])
+  const idsTodosComp = todosComp.map(p => String(p.id)).join()
   // Al entrar: lo recordado en este navegador (una vez) y, de los elegidos, los que siguen existiendo.
   useEffect(() => {
     if (!comparando || !planes) return
     let g = null
     if (!compLeido.current) { compLeido.current = true; if (!inicial?.compararElegidos) try { g = JSON.parse(window.localStorage.getItem(CLAVE_COMPARAR)) } catch (_) {} }
     setComp(c => ({ ...c, ...(g && Array.isArray(g.refs) ? { refs: g.refs.filter(id => REFS_COMPARAR.some(r => r.id === id)) } : {}), ...(g && typeof g.log === 'boolean' ? { log: g.log } : {}), ...(g && typeof g.plegado === 'boolean' ? { plegado: g.plegado } : {}),
-      elegidos: elegidosIniciales(planes, c.elegidos || g?.elegidos, idsDe(orden || [])) }))
-  }, [comparando, planes])
-  useEffect(() => { if (!comp.elegidos || inicial?.compararElegidos) return; try { window.localStorage.setItem(CLAVE_COMPARAR, JSON.stringify({ elegidos: comp.elegidos, refs: comp.refs, log: comp.log, plegado: comp.plegado })) } catch (_) {} }, [comp.elegidos, comp.refs, comp.log, comp.plegado])
+      elegidos: elegidosIniciales(todosComp, c.elegidos || g?.elegidos, idsDe(orden || [])) }))
+  }, [comparando, planes, idsTodosComp])
+  useEffect(() => { if (!comp.elegidos || inicial?.compararElegidos) return; try { window.localStorage.setItem(CLAVE_COMPARAR, JSON.stringify({ elegidos: paraRecordar(comp.elegidos), refs: comp.refs, log: comp.log, plegado: comp.plegado })) } catch (_) {} }, [comp.elegidos, comp.refs, comp.log, comp.plegado])
   // Lo que se pide de cada plan: el plan guardado; con una lista, como su pestaña (planListaCalculable y la petición de «La cartera por
   // dentro», que solo sabe calcular con la estrategia de AHORA: si su regla ha cambiado, se dice por qué no se calcula).
   const peticionComparar = (f) => {
@@ -595,7 +600,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     const cl = planListaCalculable(p0), m = motivoListaNoCalculable(cl.plan, cuerpo.symbols)
     return m ? { motivo: m } : { clave: JSON.stringify({ plan: cl.plan, cuerpoLista: cuerpo }), plan: cl.plan, cuerpoLista: cuerpo }
   }
-  const filasComp = useMemo(() => comparando && comp.elegidos && planes ? comp.elegidos.map(id => planes.find(p => Number(p.id) === Number(id))).filter(Boolean) : [], [comparando, comp.elegidos, planes])
+  const filasComp = useMemo(() => comparando && comp.elegidos && planes ? comp.elegidos.map(id => todosComp.find(p => mismoId(p.id, id))).filter(Boolean) : [], [comparando, comp.elegidos, planes, todosComp])
   // Con el Nasdaq-100, su universo se lee de la base, como en la pestaña (una vez por universo).
   const universosComp = [...new Set(filasComp.map(f => piezaDe(f.plan)).filter(x => x?.donde === 'lista' && nDeUniverso(x.lista?.universo || 'manual')).map(x => x.lista.universo))].filter(u => !universoDatos[u]).join()
   useEffect(() => {
@@ -624,7 +629,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   }, [clavesComp])
   // La línea de la prueba del paso 2 de la estrategia de cada plan (la de su foto), como arriba en su pestaña.
   const pruebaComp = (id) => {
-    const f = (planes || []).find(p => Number(p.id) === Number(id)), foto = f && fotoDelPlan(f.plan)
+    const f = todosComp.find(p => mismoId(p.id, id)), foto = f && fotoDelPlan(f.plan)
     if (!foto || !todasPruebas) return null
     const e = estadoPrueba(todasPruebas.filter(p => String(p.estrategia_id) === String(foto.id)), reglaDe(foto))
     return e ? { texto: textoAvisoPrueba(e), clave: e.clave } : null
@@ -921,7 +926,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       {/* §135: al comparar, sin la cabecera de pasos (es de la estrategia) ni las pestañas de planes (se eligen con los círculos). */}
       {!comparando && <CabeceraPasos zona="plan" plan={nombreDe(actual) || null} onVolver={(donde) => pide({ tipo: 'volver', donde })}/>}
       {comparando ? falloPlanes && <div data-fallo-planes style={{ color: ROJO, marginBottom: 10 }}>✕ {falloPlanes}</div> : pestanasPlanes}
-      {comparando ? <ComparaPlanes planes={planes || []} elegidos={comp.elegidos || []} refs={comp.refs} resultados={resComp} prueba={pruebaComp} log={comp.log} modo={comp.modo} plegado={comp.plegado} tema={tema}
+      {comparando ? <ComparaPlanes planes={todosComp} elegidos={comp.elegidos || []} refs={comp.refs} resultados={resComp} prueba={pruebaComp} log={comp.log} modo={comp.modo} plegado={comp.plegado} tema={tema}
         onPlegar={x => setComp(c => ({ ...c, plegado: x }))}
         onElegir={id => setComp(c => ({ ...c, elegidos: alterna(c.elegidos || [], id) }))} onRef={id => setComp(c => ({ ...c, refs: c.refs.includes(id) ? c.refs.filter(x => x !== id) : [...c.refs, id] }))}
         onLog={x => setComp(c => ({ ...c, log: x }))} onModo={x => setComp(c => ({ ...c, modo: x }))} onVolver={() => setComparando(false)}

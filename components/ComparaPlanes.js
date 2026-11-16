@@ -11,7 +11,7 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import { B, S, varsTema, CSS_TABLA } from '../lib/screener/colores'
 import Ayuda from './BuilderAyuda'
 import { marcasLog, separaEtiquetas } from '../lib/builder/escalaGrafico'
-import { AYUDA_COMPARAR, FILAS_COMPARAR, MAX_COMPARAR, NOTA_EUROS_FUERA, REFS_COMPARAR, TEXTO_SIN_PLANES, avisoCelda, cifrasComparacion, comparable, diferencias,
+import { AYUDA_COMPARAR, FILAS_COMPARAR, MAX_COMPARAR, TITULO_COPIA, mismoId, NOTA_EUROS_FUERA, REFS_COMPARAR, TEXTO_SIN_PLANES, avisoCelda, cifrasComparacion, comparable, diferencias,
   lineasGrafico, mejores, modoGrafico, notaCrecimiento, puntosFrente, tablaAnios, textoBloque, textoDinero, textoPeriodo, textoRef } from '../lib/builder/comparaPlanes'
 import { euros, pct } from '../lib/builder/planPantalla'
 
@@ -75,11 +75,15 @@ function Grafico({ lineas, log, alto = 330 }) {
   )
 }
 
+// §169: en una copia sin guardar, en lugar de «Abrir» y «⧉», una etiqueta (no existe en la base; «Guardar como plan» llegará después).
+const SinGuardar = () => <span data-copia-sin-guardar title={TITULO_COPIA} style={{ fontSize: 12, color: v('amarillo'), border: `1px solid ${v('amarillo')}`, borderRadius: 4, padding: '1px 6px', cursor: 'help' }}>sin guardar</span>
+
 export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], resultados = {}, prueba = () => null, log = true, modo = null, plegado = false, tema = 'oscuro',
   onElegir, onPlegar, onRef, onLog, onModo, onAbrir, onDuplicar, onVolver }) {
   const col = COLORES[tema === 'claro' ? 'claro' : 'oscuro']
-  const elegidas = useMemo(() => elegidos.map(id => planes.find(p => Number(p.id) === Number(id))).filter(Boolean), [planes, elegidos])
-  const colorDe = (id) => col.p[Math.max(0, planes.findIndex(p => Number(p.id) === Number(id))) % col.p.length]
+  // §169: ids como texto (los guardados son números; las copias sin guardar, «v-…»).
+  const elegidas = useMemo(() => elegidos.map(id => planes.find(p => mismoId(p.id, id))).filter(Boolean), [planes, elegidos])
+  const colorDe = (id) => col.p[Math.max(0, planes.findIndex(p => mismoId(p.id, id))) % col.p.length]
   const dif = useMemo(() => diferencias(elegidas), [elegidas])
   const calculados = useMemo(() => elegidas.map(p => {
     const r = resultados[p.id]
@@ -115,9 +119,9 @@ export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], r
                 {av && <span style={{ color: v('amarillo'), cursor: 'help' }}>⚠ </span>}{hay ? valorCifra(f.k, x) : '—'}{esMej && <span style={{ color: v('amarillo') }}> ★</span>}</td> })}
             {refsVis.map(rf => { const b = cc.c.refs[rf.id]
               return <td key={rf.id} data-puntos={rf.id} title={textoRef(rf, p.plan, b, cc.c.valores.twr) || undefined} style={{ ...celda, textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: !b ? B.apagado : cc.c.valores.twr >= b.twr ? v('verde') : v('rojo') }}>{b ? puntosFrente(cc.c.valores.twr, b.twr) : '—'}</td> })}</>}
-          <td style={{ ...celda, whiteSpace: 'nowrap', textAlign: 'right' }}>
+          <td style={{ ...celda, whiteSpace: 'nowrap', textAlign: 'right' }}>{p.copia ? <SinGuardar/> : <>
             <button type="button" data-abrir-plan={p.id} title="Abrir este plan en su pestaña" onClick={() => onAbrir?.(p.id)} style={{ ...btn(false), padding: '3px 8px', fontSize: 12, marginRight: 4 }}>Abrir</button>
-            <button type="button" data-duplicar-plan={p.id} title="Duplicar este plan" aria-label="Duplicar este plan" onClick={() => onDuplicar?.(p.id)} style={{ ...btn(false), padding: '3px 8px', fontSize: 12 }}>⧉</button></td>
+            <button type="button" data-duplicar-plan={p.id} title="Duplicar este plan" aria-label="Duplicar este plan" onClick={() => onDuplicar?.(p.id)} style={{ ...btn(false), padding: '3px 8px', fontSize: 12 }}>⧉</button></>}</td>
         </tr> })}</tbody>
     </table></div>)
 
@@ -131,9 +135,9 @@ export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], r
             <div style={{ color: B.secundario, fontSize: 12 }}>{textoBloque(p.plan)}</div>
             <div data-condiciones style={{ fontSize: 12, marginTop: 2, color: distinto ? v('amarillo') : B.texto, fontWeight: distinto ? 600 : 400 }}>{textoPeriodo(p.plan)} · {textoDinero(p.plan)}</div>
           </div>
-          <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
+          <div style={{ display: 'flex', gap: 4, flex: 'none' }}>{p.copia ? <SinGuardar/> : <>
             <button type="button" data-abrir-plan={p.id} title="Abrir este plan en su pestaña" onClick={() => onAbrir?.(p.id)} style={{ ...btn(false), padding: '3px 8px', fontSize: 12 }}>Abrir</button>
-            <button type="button" data-duplicar-plan={p.id} title="Duplicar este plan" aria-label="Duplicar este plan" onClick={() => onDuplicar?.(p.id)} style={{ ...btn(false), padding: '3px 8px', fontSize: 12 }}>⧉</button>
+            <button type="button" data-duplicar-plan={p.id} title="Duplicar este plan" aria-label="Duplicar este plan" onClick={() => onDuplicar?.(p.id)} style={{ ...btn(false), padding: '3px 8px', fontSize: 12 }}>⧉</button></>}
           </div>
         </div>
         {!cc ? <div data-estado-plan={r?.estado || 'calculando'} style={{ padding: 12, fontSize: 13, color: r?.estado === 'error' ? v('rojo') : r?.estado === 'motivo' ? B.texto : B.secundario }}>
@@ -168,8 +172,8 @@ export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], r
       {planes.length < 2 ? <div data-sin-planes style={{ color: B.secundario }}>{TEXTO_SIN_PLANES}</div> : <>
         <div data-elegir style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
           <span style={{ color: B.secundario, fontSize: 13 }}>Planes (hasta {MAX_COMPARAR}):</span>
-          {planes.map(p => { const on = elegidos.map(Number).includes(Number(p.id)), lleno = !on && elegidos.length >= MAX_COMPARAR
-            return <Ficha key={p.id} on={on} color={colorDe(p.id)} texto={p.nombre} data={{ 'data-elige-plan': p.id }} titulo={lleno ? `Como mucho ${MAX_COMPARAR}: quita uno antes` : on && elegidos.length === 1 ? 'Al menos uno' : undefined} onClick={() => onElegir?.(Number(p.id))}/> })}
+          {planes.map(p => { const on = elegidos.some(x => mismoId(x, p.id)), lleno = !on && elegidos.length >= MAX_COMPARAR
+            return <Ficha key={p.id} on={on} color={colorDe(p.id)} texto={p.nombre} data={{ 'data-elige-plan': p.id }} titulo={lleno ? `Como mucho ${MAX_COMPARAR}: quita uno antes` : on && elegidos.length === 1 ? 'Al menos uno' : p.copia ? TITULO_COPIA : undefined} onClick={() => onElegir?.(p.id)}/> })}
           <span aria-hidden="true" style={{ width: 1, height: 20, background: B.borde, margin: '0 4px' }}/>
           <span style={{ color: B.secundario, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 2 }}>Sin estrategia:<Ayuda texto={AYUDA_COMPARAR.refs} etiqueta="Sin estrategia"/></span>
           {REFS_COMPARAR.map(r => <Ficha key={r.id} on={refs.includes(r.id)} color={col[r.id]} texto={r.nombre} data={{ 'data-elige-ref': r.id }} onClick={() => onRef?.(r.id)}/>)}
