@@ -3148,3 +3148,13 @@ Boceto bocetos/detalle-final.html, aceptado por Sergi el 16/11 (tres recomendaci
 - Motor: el libro apunta además `enValor` (lo que vale lo que se tiene de cada valor y del ocioso al cierre de cada día). Sin pedir el libro, la salida es la de siempre.
 - Comprobación `scripts/comprobaciones/plan-detalle.js` ampliada: a mano (A +9,98 %, B −4,99 % y su caída −49,90 €; dinero en A de media 280,69 €; cifras: ganancia 45,90 €, 2 de 4 días con algo invertido; el buscador con precios, fechas, importes y varias palabras) y en la pantalla (7 cifras, 9 columnas, «Dinero en él» y «Aportó %» suman el total, «39» en los movimientos).
 - Ninguna cifra cambia.
+
+## 163. Un solo cálculo, parte 5b: el «%» de señales que entran, contado por el motor del plan
+
+Pedido por Sergi el 16/11: mantener el «100 %» junto a «Ops» de la «Comparativa» del Backtesting con su tooltip, pero FIEL al cálculo del plan.
+
+- Motor (lib/planes/plan.js, solo con el libro y con lista): `libro.senales` = { generadas, ejecutadas, motivos: { slots, filtro, dinero, yaDentro }, descartadas: [{ simbolo, entryDate, exitDate, motivo, ret, cap, hipotetico }], porSimbolo }. Cada candidato del Backtesting cuenta al llegar su día; si no entra, con su motivo: sin hueco libre (concentrado con todos los puestos ocupados), no pasa el filtro de la prioridad (pasaPuerta), sin dinero libre ese día, o ya tenías ese valor; y lo que habría ganado con el dinero que le tocaba ese día (cap × (salida / entrada − 1)). Solo apunta: ninguna decisión cambia.
+- `resumenSenales` y `textoSenales` (lib/builder/detallePlan.js): % que entraron; de las que no, ganadoras, Profit Factor y lo que habrían ganado o perdido (estimación, sin el efecto en cadena), con una línea que dice que está contado con el dinero de ESTE plan (ocioso, aportaciones, impuestos).
+- Pantalla: en «Qué aportó cada valor», junto a las operaciones del total, el «%» (verde si entraron todas; naranja si no) con ese tooltip; en cada valor, al pasar el ratón por sus operaciones, «De N señales de X, entraron M». Con un solo valor no sale (la estrategia entra en todas sus señales).
+- Comprobación `scripts/comprobaciones/plan-detalle.js` ampliada: a mano (compartido 2 de 2; concentrado máx. 1: entra A y B no por falta de hueco, B habría perdido un 10 %; A fuera por el filtro); con la lista Degiro real, generadas = candidatos y ejecutadas = operaciones (concentrado: 1.699 = 777 + 836 sin hueco + 86 sin dinero); y el «%» con su tooltip en la pantalla.
+- Ninguna cifra cambia.

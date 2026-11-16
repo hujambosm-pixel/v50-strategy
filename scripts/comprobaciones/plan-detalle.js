@@ -23,6 +23,8 @@
 //     §161 (parte 4c): «Detalle» con un solo valor (sin tabla por valor ni «Valor a valor» ni «Vista de gráficos»; sus velas a la vista).
 //     §162 (parte 5a): la fila de cifras, las columnas por valor como el Backtesting (aportó %, CAGR de su aportación, peor caída, dinero
 //     en él) y el buscador en toda la fila, a mano y en la pantalla.
+//     §163 (parte 5b): las señales que cuenta el motor del plan (generadas, ejecutadas, motivos, cómo les habría ido), a mano, con la lista
+//     Degiro real (generadas = candidatos; ejecutadas = operaciones) y su «%» con el tooltip en la pantalla.
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-del-arnes'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ
@@ -117,6 +119,18 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     ok(De.historial(d.porOperacion.ops, '12,00').map(o => o.simbolo).join() === 'A' && De.historial(d.porOperacion.ops, '10,00').map(o => o.simbolo).join() === 'A' && De.historial(d.porOperacion.ops, '49,9').length === 2 && De.historial(d.porOperacion.ops, '07/01').map(o => o.simbolo).join() === 'A' && De.historial(d.porOperacion.ops, 'b 18').map(o => o.simbolo).join() === 'B'
       && De.filtraMovimientos(d.movimientos, '18').map(m => m.que).join() === 'Vende B · 24,95 × 18,00 €' && De.filtraMovimientos(d.movimientos, '1.000').map(m => m.que).join() === 'Dinero inicial' && De.filtraMovimientos(d.movimientos, '1000').length === 1,
       'el buscador mira toda la fila: precios, acciones, fechas e importes (con o sin el punto de los miles), varias palabras a la vez')
+    // §163. Compartido con dos puestos: entran las dos señales (A y B): 2 de 2, 100 %, «Entraron todas».
+    ok(L.senales.generadas === 2 && L.senales.ejecutadas === 2 && d.senales.pct === 1 && d.senales.descartadas === 0 && De.textoSenales(d.senales).includes('Entraron: 2 (100 %)') && De.textoSenales(d.senales).endsWith('Entraron todas.'),
+      'señales a mano, compartido: 2 de 2 entran (100 %)')
+    // Concentrado con 1 puesto: entra A (alfabético) y B se queda fuera por no haber hueco; B habría perdido 18 / 20 − 1 = −10 %.
+    { const rc = Pl.ejecutaPlan(planA('concentrado'), datosA('concentrado'), { libro: true }), sc = De.resumenSenales(rc.libro.senales)
+      ok(sc.generadas === 2 && sc.ejecutadas === 1 && sc.motivos.slots === 1 && sc.pct === 0.5 && rc.libro.senales.descartadas[0].simbolo === 'B' && cerca(rc.libro.senales.descartadas[0].ret, -0.1) && sc.ganadorasDesc === 0 && sc.porSimbolo.A.ejecutadas === 1 && sc.porSimbolo.B.ejecutadas === 0
+        && De.textoSenales(sc).includes('sin hueco libre (ya estaban ocupados todos los puestos): 1') && De.textoSenales(sc).includes('ganadoras: 0,0 %'),
+        `señales a mano, concentrado máx. 1: entra A y B no (sin hueco), 1 de 2 (50 %); B habría perdido un 10 %`)
+      // Con A fuera por el filtro de la prioridad (pasaPuerta false), entra B: 1 de 2, motivo «filtro».
+      const dp = datosA('concentrado'); dp.lista.activos = [{ ...A, candidatos: [{ ...A.candidatos[0], pasaPuerta: false }] }, B]
+      const sp = De.resumenSenales(Pl.ejecutaPlan(planA('concentrado'), dp, { libro: true }).libro.senales)
+      ok(sp.motivos.filtro === 1 && sp.ejecutadas === 1 && sp.porSimbolo.B.ejecutadas === 1, 'señales a mano: A fuera por el filtro de la prioridad, entra B') }
     ok(De.detallePlan({ evaluacion: { plan: { medidas: {}, ejecucion: Pl.ejecutaPlan(planA('compartido'), datosA('compartido')) } } }, planA('compartido')) === null, 'detalle: sin libro en la respuesta, nada (null)')
     // §157. Todo en enero de 2020: 1.000 € → 1.045,90 € → +4,59 % y +45,90 €; el año, lo mismo.
     const me = d.mensuales
@@ -285,6 +299,10 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     const velasGLD = E.velasFoto('GLD')
     const r = coherente(`lista Degiro real, ${modo}, con oro, 300 €/mes, impuestos y 0,185 €`, plan, { fechas, qqq: fechas.map(() => null), etf: fechas.map(() => null), spy: fechas.map(() => null), lista: j.candidatosAzar, velas: { GLD: velasGLD } }, { minOps: 100 })
     const porValor = {}; for (const o of r.libro.operaciones) porValor[o.simbolo] = (porValor[o.simbolo] || 0) + o.resultado
+    // §163: con precios reales, las señales generadas son todos los candidatos del Backtesting; las ejecutadas, las operaciones del plan.
+    { const S = r.libro.senales, nC = j.candidatosAzar.activos.reduce((s, a) => s + (a.candidatos || []).length, 0), M = S.motivos
+      ok(S.generadas === nC && S.ejecutadas === r.libro.operaciones.length && S.generadas === S.ejecutadas + M.slots + M.filtro + M.dinero + M.yaDentro && S.descartadas.length === S.generadas - S.ejecutadas && Object.values(S.porSimbolo).reduce((s, x) => s + x.ejecutadas, 0) === S.ejecutadas,
+        `señales con precios reales (${modo}): ${S.generadas} candidatos = ${S.ejecutadas} ejecutadas + ${M.slots} sin hueco + ${M.filtro} filtro + ${M.dinero} sin dinero + ${M.yaDentro} ya dentro`) }
     ok(Object.keys(porValor).every(s => SIMB.includes(s) && cerca(porValor[s], r.libro.porSimbolo[s].ganado, 1e-6)) && r.libro.porSimbolo.GLD?.rol === 'ocioso' && r.libro.puente.impuestos > 0,
       `lista real ${modo}: lo ganado por cada valor = la suma de sus operaciones (${Object.keys(porValor).length} valores, ${r.libro.operaciones.length} operaciones; ocioso ${r.libro.puente.ganadoOcioso.toFixed(2)} €; impuestos ${r.libro.puente.impuestos.toFixed(2)} €)`)
   }
@@ -405,6 +423,10 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     ok(!!fc && fc.todos(n => n.hasAttribute('data-cifra-detalle')).length === 7 && fc.textContent.includes(Pa.pct(m.twrNeto)) && cols.join() === 'Aportó,Aportó %,CAGR de su aportación,Operaciones,Ganadoras,Profit Factor,Peor caída,Dinero en él,Tiempo dentro'
       && b.raiz.conAtributo('data-en-el', d0.filas[0].simbolo)[0]?.getAttribute('title') === `De media, ${Pa.euros(d0.filas[0].enElEur, 0)} en ${d0.filas[0].simbolo}` && cerca(sum(d0.filas, f => f.enEl), d0.total.enValores, 1e-9) && cerca(sum(d0.filas, f => f.aportoPct), d0.total.aportoPct, 1e-9),
       `pantalla, la fila de cifras (7) y las columnas por valor (${cols.length}); los «Dinero en él» y los «Aportó %» suman el total`)
+    // §163: el «%» de señales en la fila del total, con su tooltip.
+    const bs = b.raiz.conAtributo('data-senales')[0]
+    ok(!!bs && bs.textContent === `${Math.round(d0.senales.pct * 100)} %` && bs.getAttribute('title') === De.textoSenales(d0.senales) && bs.getAttribute('title').startsWith(`Señales de compra de la estrategia: ${d0.senales.generadas.toLocaleString('es-ES')}`),
+      `pantalla, el «%» de señales: «${bs?.textContent}» con su tooltip («${(bs?.getAttribute('title') || '').split('\n').slice(0, 3).join(' · ')}»)`)
     // §159: «Todos los movimientos». El primero es el último del plan (los impuestos al vender todo); 50 por página; buscando «gld», solo el oro.
     D.pulsa(b.raiz.conAtributo('data-vista-historial', 'movimientos')[0]); await D.espera(30)
     const filasM = () => b.raiz.conAtributo('data-movimiento'), nMov = L.movimientos.length, nGld = L.movimientos.filter(m => m.simbolo === 'GLD').length

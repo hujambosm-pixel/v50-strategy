@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import Ayuda from './BuilderAyuda'
 import { separaEtiquetas } from '../lib/builder/escalaGrafico'
-import { AYUDA_DETALLE, filtraMovimientos, historial, nombreOcioso, opsEnVelas, textoDetalle, tradesBacktesting, velasDe } from '../lib/builder/detallePlan'
+import { AYUDA_DETALLE, textoSenales, filtraMovimientos, historial, nombreOcioso, opsEnVelas, textoDetalle, tradesBacktesting, velasDe } from '../lib/builder/detallePlan'
 import ConLimpiar from './LimpiarBusqueda'
 import BotonCopiar from './BotonCopiar'
 import GanttChart from './GanttChart'
@@ -376,7 +376,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
             <tr data-fila-total style={{ fontWeight: 700, color: B.titulo }}>
               <td style={celda}><button type="button" data-pliega-valores aria-expanded={abierta} onClick={() => setAbierta(x => !x)} title={abierta ? 'Ocultar los valores' : 'Ver los valores'} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.titulo, fontFamily: B.letra, fontSize: 'inherit', fontWeight: 700 }}>{abierta ? '▾' : '▸'} {filas.length === 1 ? filas[0].simbolo : `Los ${numero(filas.length, 0)} valores`}</button></td>
               <td style={{ ...num, color: signo(total.aporto) }}>{conSigno(total.aporto)}</td><td style={{ ...num, color: signo(total.aportoPct) }}>{pctSigno(total.aportoPct)}</td><td style={{ ...num, color: signo(total.cagr) }}>{pct(total.cagr)}</td>
-              <td style={num}>{numero(total.operaciones, 0)}</td><td style={num}>{pct(total.ganadoras, 1)}</td><td style={num}>{total.pf == null ? '—' : numero(total.pf, 2)}</td><td style={num}></td>
+              <td style={num}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>{numero(total.operaciones, 0)}{detalle.senales && <span data-senales title={textoSenales(detalle.senales)} style={{ fontSize: 10, fontWeight: 400, cursor: 'help', borderRadius: 3, padding: '1px 4px', color: detalle.senales.pct >= 0.995 ? VERDE : '#ff9f43', background: detalle.senales.pct >= 0.995 ? 'rgba(126,226,160,0.10)' : 'rgba(255,159,67,0.12)' }}>{Math.round(detalle.senales.pct * 100)} %</span>}</span></td><td style={num}>{pct(total.ganadoras, 1)}</td><td style={num}>{total.pf == null ? '—' : numero(total.pf, 2)}</td><td style={num}></td>
               <td style={num} title={`De media, ${euros(total.enValoresEur, 0)} en valores`}>{pct(total.enValores, 0)}</td><td style={num}>{pct(detalle.cifras?.tiempoInvertido, 0)}</td>
             </tr>
             {abierta && filas.length > 1 && filas.map(f => <tr key={f.simbolo} data-valor={f.simbolo} aria-selected={f.simbolo === elegido} style={f.simbolo === elegido ? { background: B.cabecera } : undefined}>
@@ -385,7 +385,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
                 {onIrAValor && <button type="button" data-ir-valor={f.simbolo} onClick={() => onIrAValor(f.simbolo)} title={`Abrir ${f.simbolo} en la Watchlist`} style={{ background: 'none', border: 'none', padding: '0 0 0 6px', cursor: 'pointer', color: B.enlace, fontSize: 13 }}>↗</button>}
               </td>
               <td style={{ ...num, color: signo(f.aporto) }}>{conSigno(f.aporto)}</td><td style={{ ...num, color: signo(f.aportoPct) }}>{pctSigno(f.aportoPct)}</td><td style={{ ...num, color: signo(f.cagr) }}>{pct(f.cagr)}</td>
-              <td style={num}>{numero(f.operaciones, 0)}</td><td style={num}>{pct(f.ganadoras, 1)}</td><td style={num}>{f.pf == null ? '—' : numero(f.pf, 2)}</td>
+              <td style={num} title={(() => { const ps = detalle.senales?.porSimbolo?.[f.simbolo]; return ps ? `De ${ps.generadas} señales de ${f.simbolo}, entraron ${ps.ejecutadas}` : undefined })()}>{numero(f.operaciones, 0)}</td><td style={num}>{pct(f.ganadoras, 1)}</td><td style={num}>{f.pf == null ? '—' : numero(f.pf, 2)}</td>
               <td style={{ ...num, color: f.caidaEur < 0 ? ROJO : undefined }} title={f.caidaEur < 0 ? `${conSigno(f.caidaEur, 0)} de lo ganado con ${f.simbolo}` : 'Sin caídas'}>{f.caidaPct == null || !(f.caidaEur < 0) ? '—' : pct(f.caidaPct, 1)}</td>
               <td style={num} data-en-el={f.simbolo} title={`De media, ${euros(f.enElEur, 0)} en ${f.simbolo}`}>{pct(f.enEl, 1)}</td><td style={num}>{pct(f.dentro, 0)}</td>
             </tr>)}
