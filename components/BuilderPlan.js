@@ -27,7 +27,7 @@
 // §54: la cabecera B (CabeceraPasos) y las PESTAÑAS DE PLANES (components/BuilderPestanas.js, lib/builder/pestanasPlan.js): una por plan abierto, con su orden guardado en la base
 // (builder_pestanas); con cambios sin guardar, cualquier salida pregunta (la misma ventana que en Tesis). Esto deja atrás lo de «una pestaña por plan guardado» de la parte 2 y la «×» de §49.
 //   planId: el plan que se pide abrir (desde una tesis). salida: un ref; la página pregunta por él antes de salir del Builder. inicial, además: orden, pregunta ({ tipo }), ventana ('nuevo' | { duplica }), borrando (la clave), avisoPlan, anchoPestanas.
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useContext } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import { CabeceraPasos } from './BuilderPanel'
 import BuilderPestanas from './BuilderPestanas'
@@ -51,7 +51,7 @@ import PanelUniverso from './backtesting/PanelUniverso'
 import SelectorValores from './backtesting/SelectorValores'
 import PlanPorDentro, { peticionPorDentro, motivoSinPeticion } from './backtesting/PlanPorDentro'
 // §156: la pestaña «Detalle» (un solo cálculo, parte 2): el mismo cálculo de «Tu dinero», por dentro.
-import PlanDetalle from './PlanDetalle'
+import PlanDetalle, { Ampliable, AmpliadoCtx } from './PlanDetalle'
 import { AYUDA_DETALLE, detallePlan } from '../lib/builder/detallePlan'
 // §128: «Comparar planes» (opción A: cada plan tal como está guardado).
 import ComparaPlanes from './ComparaPlanes'
@@ -135,7 +135,8 @@ const nombreLinea = (l, activo) => l.k === 'activo' && activo ? `${l.t} ${activo
 function GraficoPlan({ curva, activo, finales = {}, visibles = LINEAS_DEFECTO, proporcion = false }) {
   const [ref, W] = useAncho()
   const [hov, setHov] = useState(null)
-  const IZQ = 76, DER = 200, H1 = 375, ARR = 22, FR = proporcion ? 40 : 14, n = curva.fechas.length
+  const amp = useContext(AmpliadoCtx)   // §166: a pantalla completa, más alto
+  const IZQ = 76, DER = 200, H1 = amp?.alto ? Math.max(375, amp.alto - 120) : 375, ARR = 22, FR = proporcion ? 40 : 14, n = curva.fechas.length
   const lineas = LINEAS_PLAN.filter(l => curva[l.k]?.length && (l.k === 'plan' || visibles[l.k])).map(l => ({ ...l, t: `${nombreLinea(l, activo)}${Number.isFinite(finales[l.k]) ? ` ${euros(finales[l.k], 0)}` : ''}`, v: curva[l.k] }))
   const vals = lineas.flatMap(l => l.v).filter(v => Number.isFinite(v) && v > 0)
   if (!vals.length || n < 2) return null
@@ -881,7 +882,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
         <span data-impuestos>{euros(s.impuestos, 0)}</span> · <span data-comisiones>{euros(s.costes, 0)}</span></span>}/>
     </div>
     <Tarjeta id="grafico" titulo="Cómo crece tu dinero" ayuda={conLista ? `${AYUDA_PLAN.graficoLista} ${AYUDA_PLAN.franjaLista}` : `${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franja}`}>
-      <GraficoPlan curva={conLista ? { ...cifras.curva, ...(sinOcioso ? { ociosoLiquidez: null } : {}) } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? 'de la lista' : activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles} proporcion={conLista}/>
+      <Ampliable titulo="Cómo crece tu dinero"><GraficoPlan curva={conLista ? { ...cifras.curva, ...(sinOcioso ? { ociosoLiquidez: null } : {}) } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? 'de la lista' : activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles} proporcion={conLista}/></Ampliable>
       <Leyenda curva={conLista ? { ...cifras.curva, ...(sinOcioso ? { ociosoLiquidez: null } : {}) } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? 'de la lista' : activoRes} visibles={lineasVisibles} onMarca={marcaLinea} proporcion={conLista}/>
     </Tarjeta>
     <Tarjeta id="anios" titulo="Año a año" ayuda={AYUDA_PLAN.anios}>

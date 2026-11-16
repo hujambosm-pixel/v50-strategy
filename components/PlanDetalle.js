@@ -3,11 +3,11 @@
 // lib/builder/detallePlan.js con el libro del motor. Parte 2: la línea de arriba, la línea que suma, «Qué aportó cada valor» (con la fila
 // del dinero ocioso) y «Cómo crece» («El plan», con el mismo gráfico de «Tu dinero» y los «comprar y mantener» del plan, y «Valor a
 // valor»). §157 (parte 3a): ganancias mensuales, dónde está tu dinero cada día y resultados por operación. §158 (parte 3b): el
-// historial (tabla con buscador, Gantt y Excel del Backtesting) y «Copiar para Claude». §159 (parte 4a): «Todos los movimientos». §162 (parte 5a): fila de cifras, columnas por valor como el Backtesting y buscador en toda la fila. §161 (parte 4c): también con un solo valor (sin la tabla por valor; sus velas a la vista). §160 (parte 4b): las velas de cada valor (pulsando un valor de la tabla) y la «Vista de gráficos»; §164 (parte 5c): con el gráfico del Backtesting, y del historial o de una barra a su operación.
+// historial (tabla con buscador, Gantt y Excel del Backtesting) y «Copiar para Claude». §159 (parte 4a): «Todos los movimientos». §162 (parte 5a): fila de cifras, columnas por valor como el Backtesting y buscador en toda la fila. §161 (parte 4c): también con un solo valor (sin la tabla por valor; sus velas a la vista). §160 (parte 4b): las velas de cada valor (pulsando un valor de la tabla) y la «Vista de gráficos»; §164 (parte 5c): con el gráfico del Backtesting, y del historial o de una barra a su operación. §166 (parte 5e): «⤢ Ampliar» en cada gráfico.
 // «La cartera por dentro» sigue mientras Sergi no compruebe que «Detalle» lo tiene todo.
 //   detalle: lo de detallePlan · cifras: lo de cifrasPlan (las filas de los «comprar y mantener») · graficoPlan: el gráfico de «Tu dinero»
 //   ya montado (lo pone BuilderPlan) · onIrAValor(símbolo): el «↗» · viejas: el cálculo es el anterior (se atenúa).
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import Ayuda from './BuilderAyuda'
 import { separaEtiquetas } from '../lib/builder/escalaGrafico'
@@ -42,6 +42,31 @@ function useAncho(defecto = 760) {
   }, [])
   return [ref, w]
 }
+// §166 (parte 5e) · AMPLIAR un gráfico: «⤢ Ampliar» encima de él lo abre a pantalla completa (Esc o «✕ Cerrar» para volver). Dentro, los
+// gráficos leen el alto disponible de AmpliadoCtx (y el ancho lo miden ellos): salen más altos y más anchos, con más detalle de fechas.
+export const AmpliadoCtx = createContext(null)
+export const altoAmpliado = (amp, normal, menos = 0) => amp?.alto ? Math.max(normal, amp.alto - menos) : normal
+export function Ampliable({ titulo, children }) {
+  const [on, setOn] = useState(false)
+  useEffect(() => {
+    if (!on) return
+    const k = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOn(false) } }
+    window.addEventListener('keydown', k, true)
+    return () => window.removeEventListener('keydown', k, true)
+  }, [on])
+  const alto = on && typeof window !== 'undefined' ? Math.max(300, (window.innerHeight || 800) - 150) : null
+  return (
+    <div data-ampliable={titulo}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 2 }}><button type="button" data-amplia={titulo} onClick={() => setOn(true)} title="Ver este gráfico a pantalla completa (Esc para volver)" style={{ fontFamily: B.letra, fontSize: 12, padding: '2px 8px', borderRadius: 5, cursor: 'pointer', border: `1px solid ${B.borde}`, background: B.fondo, color: B.secundario }}>⤢ Ampliar</button></div>
+      {!on && children}
+      {on && <div data-ampliado={titulo} role="dialog" aria-label={`${titulo} a pantalla completa`} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(8,12,18,0.97)', padding: '16px 24px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}><b style={{ color: B.titulo, fontSize: 16 }}>{titulo}</b>
+          <button type="button" data-cierra-ampliado onClick={() => setOn(false)} style={{ marginLeft: 'auto', fontFamily: B.letra, fontSize: 13, padding: '5px 12px', borderRadius: 6, cursor: 'pointer', border: `1px solid ${B.borde}`, background: B.tarjeta, color: B.texto }}>✕ Cerrar (Esc)</button></div>
+        <AmpliadoCtx.Provider value={{ alto }}><div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>{children}</div></AmpliadoCtx.Provider>
+      </div>}
+    </div>
+  )
+}
 // Marcas «redondas» de un eje normal (1, 2 o 5 por su potencia de 10), unas 5.
 export function marcasLineales(lo, hi, cuantas = 5) {
   if (!(hi > lo)) return [lo]
@@ -56,7 +81,8 @@ export function marcasLineales(lo, hi, cuantas = 5) {
 export function GraficoValores({ curvas, elegido = null, onElegir = null, ocioso = 'LIQUIDEZ' }) {
   const [ref, W] = useAncho()
   const [hov, setHov] = useState(null)
-  const n = curvas.fechas.length, IZQ = 76, DER = 150, H = 330, ARR = 16, ABJ = 24
+  const amp = useContext(AmpliadoCtx)
+  const n = curvas.fechas.length, IZQ = 76, DER = 150, H = altoAmpliado(amp, 330, 60), ARR = 16, ABJ = 24
   const orden = [...curvas.series].filter(s => s.rol === 'valor').sort((a, b) => Math.abs(b.v[n - 1]) - Math.abs(a.v[n - 1]))
   const colorDe = new Map(orden.map((s, k) => [s.simbolo, k < COLORES_VALORES.length ? COLORES_VALORES[k] : GRIS]))
   const series = curvas.series.map(s => ({ ...s, color: s.rol === 'ocioso' ? AMARILLO : colorDe.get(s.simbolo), nombre: s.rol === 'ocioso' ? `Ocioso · ${nombreOcioso(s.simbolo)}` : s.simbolo }))
@@ -116,7 +142,8 @@ export function TablaMensual({ anios }) {
 export function GraficoDondeEsta({ donde, ocioso = 'LIQUIDEZ' }) {
   const [ref, W] = useAncho()
   const [hov, setHov] = useState(null)
-  const { fechas, dias, media } = donde, n = dias.length, IZQ = 46, DER = 10, H = 150, ARR = 6, ABJ = 22
+  const amp = useContext(AmpliadoCtx)
+  const { fechas, dias, media } = donde, n = dias.length, IZQ = 46, DER = 10, H = altoAmpliado(amp, 150, 40), ARR = 6, ABJ = 22
   if (n < 2) return null
   const paso = Math.max(1, Math.ceil(n / 700)), idx = []; for (let i = 0; i < n; i += paso) idx.push(i); if (idx[idx.length - 1] !== n - 1) idx.push(n - 1)
   const x = (i) => IZQ + i / (n - 1) * (W - IZQ - DER), y = (f) => ARR + (1 - f) * (H - ARR - ABJ)
@@ -149,7 +176,8 @@ export function GraficoDondeEsta({ donde, ocioso = 'LIQUIDEZ' }) {
 export function BarrasOperaciones({ datos, onPulsa = null }) {
   const [ref, W] = useAncho()
   const [hov, setHov] = useState(null)
-  const { ops } = datos, n = ops.length, IZQ = 62, DER = 10, H = 130, ARR = 6, ABJ = 6
+  const amp = useContext(AmpliadoCtx)
+  const { ops } = datos, n = ops.length, IZQ = 62, DER = 10, H = altoAmpliado(amp, 130, 30), ARR = 6, ABJ = 6
   if (!n) return <div data-sin-operaciones style={S.secundario}>Sin operaciones.</div>
   let lo = 0, hi = 0; for (const o of ops) { if (o.resultado < lo) lo = o.resultado; if (o.resultado > hi) hi = o.resultado }
   if (hi === lo) hi = lo + 1
@@ -231,7 +259,8 @@ export function Historial({ ops, movs = [], desde, hasta, nombre = 'plan', inici
 // la rueda para acercar, arrastrar, las etiquetas y el globo de cada operación), con las operaciones de ESTE plan. Él mismo pide sus velas
 // (/api/chartdata) cuando se ve. foco: { n, from, to } = centrar en esas fechas y resaltar la operación n de ese valor (la del historial).
 const aniosHasta = (desde) => Math.max(1, Math.ceil((Date.now() - Date.parse(desde + 'T00:00:00Z')) / (365.25 * 864e5)) + 1)
-export function VelasValor({ sim, ops, desde, hasta, alto = 400, foco = null, etiquetas = true }) {
+export function VelasValor({ sim, ops, desde, hasta, alto: altoNormal = 400, foco = null, etiquetas = true }) {
+  const alto = altoAmpliado(useContext(AmpliadoCtx), altoNormal)
   const senales = useMemo(() => senalesGrafico(ops, sim, nombreSenales), [ops, sim])
   const rango = useMemo(() => foco ? { from: foco.from, to: foco.to } : { from: desde, to: hasta }, [foco?.from, foco?.to, desde, hasta])
   const n = senales[0]?.trades.length || 0
@@ -357,7 +386,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
       <div ref={crece}/>
       {simVelas && <Tarjeta id="detalle-velas" titulo={`${simVelas} · sus velas con las operaciones del plan`} ayuda={AYUDA_DETALLE.velas}
         derecha={unValor ? null : <button type="button" data-volver-velas onClick={() => { setVerValor(null); setFoco(null) }} style={boton(false)}>← Volver al gráfico del plan</button>}>
-        <VelasValor sim={simVelas} ops={detalle.porOperacion?.ops || []} desde={c.desde} hasta={c.hasta} alto={420} foco={foco && foco.sim === simVelas ? foco : null}/>
+        <Ampliable titulo={`${simVelas} · sus velas con las operaciones del plan`}><VelasValor sim={simVelas} ops={detalle.porOperacion?.ops || []} desde={c.desde} hasta={c.hasta} alto={420} foco={foco && foco.sim === simVelas ? foco : null}/></Ampliable>
         {foco && foco.sim === simVelas && <div data-foco-linea style={{ ...S.secundario, fontSize: 12, marginTop: 4, display: 'flex', gap: 10, alignItems: 'center' }}>Centrado en la operación del {fechaCorta(foco.entryDate)} al {fechaCorta(foco.exitDate)} ({conSigno(foco.resultado, 2)}). Con la rueda del ratón te alejas.<button type="button" data-todo-periodo onClick={() => setFoco(null)} style={boton(false)}>Ver todo el periodo</button></div>}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12, color: B.secundario, marginTop: 6 }}><span><span style={{ color: VERDE }}>▲</span> compra</span><span><span style={{ color: VERDE }}>▼</span> / <span style={{ color: ROJO }}>▼</span> venta</span><span><span style={{ color: VERDE }}>━</span> operación que gana</span><span><span style={{ color: ROJO }}>━</span> operación que pierde</span>
           {(() => { const f = filas.find(x => x.simbolo === simVelas); return f ? <span style={{ marginLeft: 'auto' }}>aportó <b style={{ color: signo(f.aporto) }}>{conSigno(f.aporto)}</b> · {numero(f.operaciones, 0)} operaciones · {pct(f.ganadoras, 1)} ganan</span> : null })()}</div>
@@ -367,20 +396,20 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
           <button type="button" data-modo-crece="plan" aria-pressed={modo === 'plan'} onClick={() => setModo('plan')} style={boton(modo === 'plan')}>El plan</button>
           <button type="button" data-modo-crece="valores" aria-pressed={modo === 'valores'} onClick={() => setModo('valores')} style={boton(modo === 'valores')}>Valor a valor</button></span>}>
         {modo === 'plan' || unValor ? <>
-          {graficoPlan}
+          <Ampliable titulo="Cómo crece · el plan">{graficoPlan}</Ampliable>
           {bh.length > 0 && <div style={{ overflowX: 'auto', marginTop: 10 }}><table data-tabla="detalle-bh" style={{ borderCollapse: 'collapse', width: '100%' }}>
             <thead><tr><th style={cab}>Los «comprar y mantener», con las reglas de tu plan</th>{['Tienes al final', 'CAGR', 'Peor caída'].map(h => <th key={h} style={cabNum}>{h}</th>)}</tr></thead>
             <tbody>{bh.map(x => <tr key={x.id} data-fila-bh={x.id} style={x.id === 'PLAN' ? { fontWeight: 700, color: B.titulo } : { color: B.secundario }}>
               <td style={celda}>{x.nombre}</td><td style={num}>{euros(x.final, 0)}</td><td style={{ ...num, color: signo(x.twr) }}>{pct(x.twr)}</td><td style={{ ...num, color: signo(x.caida) }}>{pct(x.caida)}</td></tr>)}</tbody>
           </table></div>}
-        </> : <GraficoValores curvas={detalle.curvas} elegido={elegido} onElegir={setElegido} ocioso={ocioso.simbolo}/>}
+        </> : <Ampliable titulo="Cómo crece · valor a valor"><GraficoValores curvas={detalle.curvas} elegido={elegido} onElegir={setElegido} ocioso={ocioso.simbolo}/></Ampliable>}
       </Tarjeta>}
       {/* §157 (parte 3a) */}
-      {detalle.mensuales?.length > 0 && <Tarjeta id="detalle-mensual" titulo="Ganancias mensuales" ayuda={AYUDA_DETALLE.mensuales}><TablaMensual anios={detalle.mensuales}/></Tarjeta>}
-      {detalle.donde && <Tarjeta id="detalle-donde" titulo="Dónde está tu dinero cada día" ayuda={AYUDA_DETALLE.dondeEsta}><GraficoDondeEsta donde={detalle.donde} ocioso={ocioso.simbolo}/></Tarjeta>}
+      {detalle.mensuales?.length > 0 && <Tarjeta id="detalle-mensual" titulo="Ganancias mensuales" ayuda={AYUDA_DETALLE.mensuales}><Ampliable titulo="Ganancias mensuales"><TablaMensual anios={detalle.mensuales}/></Ampliable></Tarjeta>}
+      {detalle.donde && <Tarjeta id="detalle-donde" titulo="Dónde está tu dinero cada día" ayuda={AYUDA_DETALLE.dondeEsta}><Ampliable titulo="Dónde está tu dinero cada día"><GraficoDondeEsta donde={detalle.donde} ocioso={ocioso.simbolo}/></Ampliable></Tarjeta>}
       {detalle.porOperacion && <Tarjeta id="detalle-por-operacion" titulo="Resultados por operación" ayuda={AYUDA_DETALLE.porOperacion}
         derecha={<span data-resumen-operaciones style={{ color: B.secundario, fontSize: 13 }}>{numero(detalle.porOperacion.ops.length, 0)} · <span style={{ color: VERDE }}>{numero(detalle.porOperacion.ganan, 0)} ganan</span> · <span style={{ color: ROJO }}>{numero(detalle.porOperacion.pierden, 0)} pierden</span></span>}>
-        <BarrasOperaciones datos={detalle.porOperacion} onPulsa={abreOperacion}/></Tarjeta>}
+        <Ampliable titulo="Resultados por operación"><BarrasOperaciones datos={detalle.porOperacion} onPulsa={abreOperacion}/></Ampliable></Tarjeta>}
       {/* §158 (parte 3b) */}
       {detalle.porOperacion && <Tarjeta id="detalle-historial" titulo={`Historial · ${numero(detalle.porOperacion.ops.length, 0)} operaciones`} ayuda={`${AYUDA_DETALLE.historial} ${AYUDA_DETALLE.movimientos}`}>
         <Historial ops={detalle.porOperacion.ops} movs={detalle.movimientos || []} onOperacion={abreOperacion} desde={detalle.cabecera.desde} hasta={detalle.cabecera.hasta} nombre={nombre || 'plan'} inicial={inicial?.historial || null}/></Tarjeta>}

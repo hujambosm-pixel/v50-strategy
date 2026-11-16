@@ -25,7 +25,7 @@
 //     en él) y el buscador en toda la fila, a mano y en la pantalla.
 //     §163 (parte 5b): las señales que cuenta el motor del plan (generadas, ejecutadas, motivos, cómo les habría ido), a mano, con la lista
 //     Degiro real (generadas = candidatos; ejecutadas = operaciones) y su «%» con el tooltip en la pantalla.
-//     §165 (parte 5d): ocultar el panel de la izquierda y volverlo a ver.
+//     §165 (parte 5d): ocultar el panel de la izquierda y volverlo a ver. §166 (parte 5e): «⤢ Ampliar» a pantalla completa.
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-del-arnes'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ
@@ -388,6 +388,14 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     D.pulsa(b.raiz.conAtributo('data-ver-grande', d0.filas[2].simbolo)[0]); await D.espera(30)
     ok(b.raiz.conAtributo('data-tarjeta', 'detalle-velas')[0]?.textContent.startsWith(`${d0.filas[2].simbolo} · sus velas`), `«Ver en grande» de ${d0.filas[2].simbolo} lo abre arriba`)
     D.pulsa(b.raiz.conAtributo('data-volver-velas')[0]); D.pulsa(b.raiz.conAtributo('data-abre-vista-graficos')[0]); await D.espera(30)
+    // §166: «⤢ Ampliar»: el gráfico se abre a pantalla completa, más alto; «✕ Cerrar» lo devuelve. Con «Dónde está tu dinero».
+    { const gd0 = b.raiz.conAtributo('data-grafico', 'donde-esta')[0], h0 = Number(gd0?.getAttribute('height'))
+      D.pulsa(b.raiz.conAtributo('data-amplia', 'Dónde está tu dinero cada día')[0]); await D.espera(30)
+      const amp = b.raiz.conAtributo('data-ampliado', 'Dónde está tu dinero cada día')[0], h1 = Number(amp?.todos(n => n.getAttribute('data-grafico') === 'donde-esta')[0]?.getAttribute('height'))
+      ok(!!amp && h1 > h0 + 100 && b.raiz.conAtributo('data-grafico', 'donde-esta').length === 1, `«⤢ Ampliar» abre «Dónde está tu dinero» a pantalla completa, más alto (${h0} → ${h1} px)`)
+      D.pulsa(b.raiz.conAtributo('data-cierra-ampliado')[0]); await D.espera(30)
+      ok(!b.raiz.conAtributo('data-ampliado').length && Number(b.raiz.conAtributo('data-grafico', 'donde-esta')[0]?.getAttribute('height')) === h0, '«✕ Cerrar» lo devuelve a su sitio')
+      ok(['Cómo crece · el plan', 'Ganancias mensuales', 'Dónde está tu dinero cada día', 'Resultados por operación'].every(x => b.raiz.conAtributo('data-amplia', x).length === 1), 'cada gráfico de «Detalle» tiene su «⤢ Ampliar»') }
     // §165: ocultar el panel de la izquierda: queda una franja «▶ Cartera · Tu dinero» (el panel sigue montado, oculto); pulsándola vuelve.
     { const izq = () => b.raiz.conAtributo('data-columna', 'izquierda')[0]
       D.pulsa(b.raiz.conAtributo('data-oculta-panel')[0]); await D.espera(30)

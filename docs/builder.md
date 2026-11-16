@@ -3179,3 +3179,13 @@ Pedido por Sergi el 16/11 (opción A del boceto bocetos/detalle-final.html, acep
 - Plegado, el panel sigue montado (con display: none), así no se pierde nada de lo que esté abierto o a medio escribir.
 - Comprobación `scripts/comprobaciones/plan-detalle.js`: ocultar (franja, panel oculto y montado) y volver a ver.
 - Ninguna cifra cambia.
+
+## 166. Un solo cálculo, parte 5e: ampliar los gráficos a pantalla completa
+
+Pedido por Sergi el 16/11 (opción A del boceto bocetos/detalle-final.html, aceptada).
+
+- `Ampliable` (components/PlanDetalle.js): «⤢ Ampliar» encima de cada gráfico lo abre a pantalla completa; «✕ Cerrar (Esc)» o la tecla Esc lo devuelven. Dentro, los gráficos leen el alto disponible de `AmpliadoCtx` (alto de la ventana − 150 px) y miden su ancho: salen más altos y más anchos, con más detalle de fechas.
+- Con «⤢ Ampliar»: en «Tu dinero», «Cómo crece tu dinero»; en «Detalle», «Cómo crece» (el plan y valor a valor), las velas de un valor (el gráfico del Backtesting, con su rueda para acercar), «Ganancias mensuales», «Dónde está tu dinero cada día» y «Resultados por operación».
+- `altoAmpliado(amp, normal, menos)`: el alto de cada gráfico cuando está ampliado (nunca menos que el normal).
+- Comprobación `scripts/comprobaciones/plan-detalle.js`: «Dónde está tu dinero» ampliado pasa de 168 a 628 px y «✕ Cerrar» lo devuelve; cada gráfico de «Detalle» tiene su «⤢ Ampliar».
+- Ninguna cifra cambia.
