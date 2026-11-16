@@ -2,8 +2,8 @@
 // Enseña por dentro el MISMO cálculo de «Tu dinero» (un solo cálculo): no pide nada ni calcula nada del plan; pinta lo que prepara
 // lib/builder/detallePlan.js con el libro del motor. Parte 2: la línea de arriba, la línea que suma, «Qué aportó cada valor» (con la fila
 // del dinero ocioso) y «Cómo crece» («El plan», con el mismo gráfico de «Tu dinero» y los «comprar y mantener» del plan, y «Valor a
-// valor»). Lo demás del boceto (ganancias mensuales, dónde está tu dinero, resultados por operación, historial, velas de un valor)
-// llega en las partes siguientes; mientras, sigue la pestaña «La cartera por dentro».
+// valor»). §157 (parte 3a): ganancias mensuales, dónde está tu dinero cada día y resultados por operación. Lo demás del boceto
+// (historial, Gantt, Excel, velas de un valor) llega en la parte 3b; mientras, sigue la pestaña «La cartera por dentro».
 //   detalle: lo de detallePlan · cifras: lo de cifrasPlan (las filas de los «comprar y mantener») · graficoPlan: el gráfico de «Tu dinero»
 //   ya montado (lo pone BuilderPlan) · onIrAValor(símbolo): el «↗» · viejas: el cálculo es el anterior (se atenúa).
 import { useEffect, useRef, useState } from 'react'
@@ -90,6 +90,79 @@ export function GraficoValores({ curvas, elegido = null, onElegir = null, ocioso
   )
 }
 
+// §157 · Ganancias mensuales: una fila por año, 12 meses y «Año». Color según el signo, más intenso cuanto más se movió.
+const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+const fondoDe = (p) => !Number.isFinite(p) || p === 0 ? 'transparent' : `rgba(${p > 0 ? '63,185,80' : '248,81,73'},${(0.12 + Math.min(0.55, Math.abs(p) * 4)).toFixed(2)})`
+export function TablaMensual({ anios }) {
+  const c = { padding: '5px 4px', borderBottom: `1px solid ${B.borde}`, textAlign: 'right', fontSize: 12, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }
+  return (
+    <div style={{ overflowX: 'auto' }}><table data-tabla="detalle-mensual" style={{ borderCollapse: 'collapse', width: '100%' }}>
+      <thead><tr><th style={{ ...cab, padding: '5px 6px' }}>Año</th>{MESES.map(m => <th key={m} style={{ ...cabNum, padding: '5px 4px' }}>{m}</th>)}<th style={{ ...cabNum, padding: '5px 6px' }}>Año</th></tr></thead>
+      <tbody>{anios.map(f => <tr key={f.anio} data-mes-anio={f.anio}>
+        <td style={{ ...c, textAlign: 'left', color: B.secundario, paddingLeft: 6 }}>{f.anio}</td>
+        {f.meses.map((x, k) => <td key={k} data-mes={`${f.anio}-${k + 1}`} title={x ? `${MESES[k]} ${f.anio}: ${pct(x.pct)} · ${conSigno(x.euros, 0)}` : undefined} style={{ ...c, background: x ? fondoDe(x.pct) : 'transparent', color: x ? B.titulo : B.apagado }}>{x ? numero(x.pct * 100, 1) : ''}</td>)}
+        <td data-mes-total={f.anio} title={`${f.anio}: ${pct(f.pct)} · ${conSigno(f.euros, 0)}`} style={{ ...c, fontWeight: 700, color: signo(f.pct) || B.texto, paddingRight: 6 }}>{pct(f.pct, 1)}</td>
+      </tr>)}</tbody>
+    </table></div>
+  )
+}
+// §157 · Dónde está tu dinero cada día: tres franjas apiladas (valores abajo, ocioso, liquidez arriba), en % del dinero de ese día.
+export function GraficoDondeEsta({ donde, ocioso = 'LIQUIDEZ' }) {
+  const [ref, W] = useAncho()
+  const [hov, setHov] = useState(null)
+  const { fechas, dias, media } = donde, n = dias.length, IZQ = 46, DER = 10, H = 150, ARR = 6, ABJ = 22
+  if (n < 2) return null
+  const paso = Math.max(1, Math.ceil(n / 700)), idx = []; for (let i = 0; i < n; i += paso) idx.push(i); if (idx[idx.length - 1] !== n - 1) idx.push(n - 1)
+  const x = (i) => IZQ + i / (n - 1) * (W - IZQ - DER), y = (f) => ARR + (1 - f) * (H - ARR - ABJ)
+  const banda = (abajo, arriba) => `${idx.map(i => `${x(i).toFixed(1)},${y(arriba(dias[i])).toFixed(1)}`).join(' ')} ${[...idx].reverse().map(i => `${x(i).toFixed(1)},${y(abajo(dias[i])).toFixed(1)}`).join(' ')}`
+  const anios = []; fechas.forEach((f, i) => { if (i === 0 || f.slice(0, 4) !== fechas[i - 1].slice(0, 4)) anios.push([i, f.slice(0, 4)]) })
+  const cada = Math.max(1, Math.ceil(anios.length / Math.max(1, Math.floor((W - IZQ - DER) / 44))))
+  const sinOc = ocioso === 'LIQUIDEZ', d = hov != null ? dias[hov] : null
+  const resumen = `Dónde está tu dinero cada día, de media: en valores el ${pct(media.valores, 0)}${sinOc ? '' : `, en el ocioso el ${pct(media.ocioso, 0)}`} y en liquidez el ${pct(media.liquidez, 0)}.`
+  return (
+    <div ref={ref} style={{ width: '100%' }}>
+      <svg data-grafico="donde-esta" data-dias={n} width={W} height={H + 18} role="img" aria-label={resumen} style={{ display: 'block', fontFamily: B.letra }}>
+        <polygon data-banda="valores" points={banda(() => 0, z => z.valores)} fill={AZUL} opacity={0.85}/>
+        <polygon data-banda="ocioso" points={banda(z => z.valores, z => z.valores + z.ocioso)} fill={AMARILLO} opacity={0.6}/>
+        <polygon data-banda="liquidez" points={banda(z => z.valores + z.ocioso, () => 1)} fill={GRIS} opacity={0.7}/>
+        {[0, 0.5, 1].map(t => <text key={t} x={IZQ - 6} y={y(t) + 4} textAnchor="end" fontSize={11} fill={B.apagado}>{pct(t, 0)}</text>)}
+        {anios.filter((_, k) => k % cada === 0).map(([i, a]) => <text key={a} x={x(i)} y={H - 6} fontSize={11} fill={B.apagado}>{a}</text>)}
+        {d && <><line x1={x(hov)} x2={x(hov)} y1={ARR} y2={H - ABJ} stroke={B.titulo} strokeWidth={1}/>
+          <text data-donde-dato x={IZQ} y={H + 13} fontSize={12} fill={B.texto}>{`${fechaCorta(fechas[hov])} · en valores ${pct(d.valores, 0)}${sinOc ? '' : ` · en el ocioso ${pct(d.ocioso, 0)}`} · en liquidez ${pct(d.liquidez, 0)}`}</text></>}
+        <rect x={IZQ} y={ARR} width={Math.max(0, W - IZQ - DER)} height={H - ARR - ABJ} fill="transparent" onMouseLeave={() => setHov(null)} onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); const i = Math.round((e.clientX - r.left) / Math.max(1, r.width) * (n - 1)); setHov(Math.max(0, Math.min(n - 1, i))) }}/>
+      </svg>
+      <div data-leyenda-donde style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12, color: B.secundario, marginTop: 4 }}>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: AZUL, marginRight: 5 }}/>en valores · {pct(media.valores, 0)} de media</span>
+        {!sinOc && <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: AMARILLO, marginRight: 5 }}/>en el ocioso ({nombreOcioso(ocioso)}) · {pct(media.ocioso, 0)}</span>}
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: GRIS, marginRight: 5 }}/>en liquidez · {pct(media.liquidez, 0)}</span>
+      </div>
+    </div>
+  )
+}
+// §157 · Resultados por operación: una barra por operación (verde gana, roja pierde), en euros.
+export function BarrasOperaciones({ datos }) {
+  const [ref, W] = useAncho()
+  const [hov, setHov] = useState(null)
+  const { ops } = datos, n = ops.length, IZQ = 62, DER = 10, H = 130, ARR = 6, ABJ = 6
+  if (!n) return <div data-sin-operaciones style={S.secundario}>Sin operaciones.</div>
+  let lo = 0, hi = 0; for (const o of ops) { if (o.resultado < lo) lo = o.resultado; if (o.resultado > hi) hi = o.resultado }
+  if (hi === lo) hi = lo + 1
+  const ancho = (W - IZQ - DER) / n, hueco = ancho >= 4 ? Math.min(2, ancho * 0.3) : 0
+  const y = (v) => ARR + (1 - (v - lo) / (hi - lo)) * (H - ARR - ABJ), y0 = y(0)
+  const o = hov != null ? ops[hov] : null
+  return (
+    <div ref={ref} style={{ width: '100%' }}>
+      <svg data-grafico="por-operacion" data-barras={n} width={W} height={H + 18} role="img" aria-label={`${n} operaciones: ${datos.ganan} ganan y ${datos.pierden} pierden.`} style={{ display: 'block', fontFamily: B.letra }}>
+        {[hi, 0, lo].filter((t, k, a) => a.indexOf(t) === k).map(t => <text key={t} x={IZQ - 6} y={y(t) + 4} textAnchor="end" fontSize={11} fill={B.apagado}>{conSigno(t)}</text>)}
+        <line x1={IZQ} x2={W - DER} y1={y0} y2={y0} stroke="#3a4656"/>
+        {ops.map((op, i) => { const yv = y(op.resultado); return <rect key={i} x={IZQ + i * ancho + hueco / 2} width={Math.max(0.6, ancho - hueco)} y={Math.min(yv, y0)} height={Math.max(0.6, Math.abs(yv - y0))} fill={op.resultado >= 0 ? VERDE : ROJO} opacity={hov == null || hov === i ? 1 : 0.55}/> })}
+        {o && <text data-operacion-dato x={IZQ} y={H + 13} fontSize={12} fill={B.texto}>{`${o.simbolo} · ${fechaCorta(o.entryDate)} → ${fechaCorta(o.exitDate)}${o.abierta ? ' (seguía abierta)' : ''} · ${conSigno(o.resultado, 2)} · ${o.pct == null ? '—' : `${o.pct > 0 ? '+' : ''}${pct(o.pct, 1)}`}`}</text>}
+        <rect x={IZQ} y={ARR} width={Math.max(0, W - IZQ - DER)} height={H - ARR - ABJ} fill="transparent" onMouseLeave={() => setHov(null)} onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); const i = Math.floor((e.clientX - r.left) / Math.max(1, r.width) * n); setHov(Math.max(0, Math.min(n - 1, i))) }}/>
+      </svg>
+    </div>
+  )
+}
+
 const Tarjeta = ({ id, titulo, ayuda, derecha = null, children }) => (
   <div data-tarjeta={id} style={{ ...S.tarjeta, marginTop: 14 }}>
     <div style={{ ...S.cabeceraTarjeta, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>{titulo}{ayuda && <Ayuda texto={ayuda} etiqueta={typeof titulo === 'string' ? titulo : id}/>}{derecha && <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center', fontWeight: 400 }}>{derecha}</span>}</div>
@@ -165,7 +238,13 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
           </table></div>}
         </> : <GraficoValores curvas={detalle.curvas} elegido={elegido} onElegir={setElegido} ocioso={ocioso.simbolo}/>}
       </Tarjeta>
-      <div data-detalle-falta style={{ ...S.apagado, marginTop: 12 }}>Las ganancias mensuales, el historial de operaciones y los gráficos de cada valor llegarán a esta pestaña; mientras, siguen en «La cartera por dentro».</div>
+      {/* §157 (parte 3a) */}
+      {detalle.mensuales?.length > 0 && <Tarjeta id="detalle-mensual" titulo="Ganancias mensuales" ayuda={AYUDA_DETALLE.mensuales}><TablaMensual anios={detalle.mensuales}/></Tarjeta>}
+      {detalle.donde && <Tarjeta id="detalle-donde" titulo="Dónde está tu dinero cada día" ayuda={AYUDA_DETALLE.dondeEsta}><GraficoDondeEsta donde={detalle.donde} ocioso={ocioso.simbolo}/></Tarjeta>}
+      {detalle.porOperacion && <Tarjeta id="detalle-por-operacion" titulo="Resultados por operación" ayuda={AYUDA_DETALLE.porOperacion}
+        derecha={<span data-resumen-operaciones style={{ color: B.secundario, fontSize: 13 }}>{numero(detalle.porOperacion.ops.length, 0)} · <span style={{ color: VERDE }}>{numero(detalle.porOperacion.ganan, 0)} ganan</span> · <span style={{ color: ROJO }}>{numero(detalle.porOperacion.pierden, 0)} pierden</span></span>}>
+        <BarrasOperaciones datos={detalle.porOperacion}/></Tarjeta>}
+      <div data-detalle-falta style={{ ...S.apagado, marginTop: 12 }}>El historial de operaciones, el Gantt, el Excel y los gráficos de cada valor llegarán a esta pestaña; mientras, siguen en «La cartera por dentro».</div>
     </div>
   )
 }

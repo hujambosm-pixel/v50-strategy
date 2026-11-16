@@ -13,6 +13,8 @@
 //     (cada día: lo aportado + lo ganado hasta hoy − las comisiones y los impuestos pagados hasta hoy = el patrimonio); lo que prepara
 //     lib/builder/detallePlan.js, a mano; y la pantalla montada con /api/plan de verdad detrás: la línea que suma, la tabla por valor con
 //     la fila del ocioso, «El plan» / «Valor a valor» y la vuelta a «Tu dinero».
+//     §157 (parte 3a): ganancias mensuales (a mano; con precios reales, cada año = «Año a año» y todos suman la ganancia neta), dónde está
+//     el dinero cada día y resultados por operación, a mano y en la pantalla.
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-del-arnes'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ
@@ -94,6 +96,18 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
       && d.suma.cuadra && d.suma.aportado === 1000 && cerca(d.suma.valores, 49.9) && cerca(d.suma.costes, 4) && cerca(d.suma.final, 1045.9) && d.curvas.series.length === 2 && d.curvas.series[0].v === L.curvas.A,
       'detalle a mano: la línea de arriba (2 valores, 2 operaciones, 4 órdenes) y la suma 1.000 + 49,90 − 4 = 1.045,90 €')
     ok(De.detallePlan({ evaluacion: { plan: { medidas: {}, ejecucion: Pl.ejecutaPlan(planA('compartido'), datosA('compartido')) } } }, planA('compartido')) === null, 'detalle: sin libro en la respuesta, nada (null)')
+    // §157. Todo en enero de 2020: 1.000 € → 1.045,90 € → +4,59 % y +45,90 €; el año, lo mismo.
+    const me = d.mensuales
+    ok(me.length === 1 && me[0].anio === '2020' && cerca(me[0].meses[0].pct, 0.0459) && cerca(me[0].meses[0].euros, 45.9) && me[0].meses.slice(1).every(x => x === null) && cerca(me[0].pct, 0.0459) && cerca(me[0].euros, 45.9),
+      `mensuales a mano: enero de 2020 +4,59 % y +45,90 € (${(me[0].meses[0].pct * 100).toFixed(4)} %, ${me[0].meses[0].euros.toFixed(2)} €)`)
+    // Dónde está: día 1 todo en liquidez; día 2 todo en valores; día 3, 573,85 / 1.021,95 en valores y 448,10 / 1.021,95 en liquidez; día 4 todo en liquidez.
+    const de = d.donde.dias
+    ok(de.length === 4 && de[0].liquidez === 1 && cerca(de[1].valores, 1) && cerca(de[2].valores, 573.85 / 1021.95) && cerca(de[2].liquidez, 448.1 / 1021.95) && cerca(de[3].liquidez, 1) && cerca(d.donde.media.valores, mv) && de.every(z => cerca(z.valores + z.ocioso + z.liquidez, 1)),
+      `dónde está a mano: 0 · 100 · ${(573.85 / 1021.95 * 100).toFixed(2)} · 0 % en valores (media ${(d.donde.media.valores * 100).toFixed(2)} %)`)
+    // Por operación: por fecha de venta, B (−49,90 €, −49,90 / 499 = −10 %) y luego A (+99,80 €, +20 %).
+    const po = d.porOperacion
+    ok(po.ops.map(o => o.simbolo).join() === 'B,A' && cerca(po.ops[0].pct, -0.1) && cerca(po.ops[1].pct, 0.2) && po.ganan === 1 && po.pierden === 1 && po.mejor.simbolo === 'A' && po.peor.simbolo === 'B',
+      `por operación a mano: B −10 % y A +20 %, 1 gana y 1 pierde (${po.ops.map(o => `${o.simbolo} ${(o.pct * 100).toFixed(1)} %`).join(', ')})`)
   }
   {
     // Con ocioso y aportaciones (el caso de §91): concentrado máx. 1, 1.000 € + 300 €/mes, ocioso O, 1 € por orden. Día 1, al cierre: 999 €
@@ -113,7 +127,12 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     // §156: el ocioso O día a día: 0 · 0 · 1.098,90 − 999 − 299 + 299 = 99,90 · 127,08; 3 órdenes del ocioso + su venta final = 4 de las 6.
     { const De = require(R + '/lib/builder/detallePlan.js'), dd = De.detallePlan({ evaluacion: { plan: { medidas: { valorNeto: r.valorNeto }, ejecucion: r } } }, p)
       ok([0, 0, 99.9, gO].every((v, k) => cerca(L.curvas.O[k], v)) && dd.ocioso.simbolo === 'O' && dd.ocioso.ordenes === 4 && cerca(dd.ocioso.aporto, gO) && dd.cabecera.ordenesValores === 2 && dd.cabecera.ordenes === 6 && dd.filas.length === 1 && dd.curvas.series.length === 2 && dd.curvas.series[1].rol === 'ocioso' && dd.suma.cuadra,
-        `a mano, el ocioso día a día: 0 · 0 · 99,90 · 127,08 € y 4 de las 6 órdenes son suyas (${L.curvas.O.map(v => v.toFixed(2)).join(' · ')}; ${dd.ocioso.ordenes} de ${dd.cabecera.ordenes})`) }
+        `a mano, el ocioso día a día: 0 · 0 · 99,90 · 127,08 € y 4 de las 6 órdenes son suyas (${L.curvas.O.map(v => v.toFixed(2)).join(' · ')}; ${dd.ocioso.ordenes} de ${dd.cabecera.ordenes})`)
+      // §157. Enero: entran 1.000 € y acaba con 999 € (el oro, tras 1 € de comisión): −1 €, −0,1 %. Febrero: 1.640,46 − 999 − 300 aportados = +341,46 €.
+      // El año: −1 + 341,46 = 340,46 € = 1.640,46 − 1.300 aportados. Día 1: 999 € en el oro → 100 % en el ocioso.
+      const mm = dd.mensuales[0]
+      ok(dd.mensuales.length === 1 && cerca(mm.meses[0].euros, -1) && cerca(mm.meses[0].pct, -0.001) && cerca(mm.meses[1].euros, r.valorNeto - 999 - 300) && cerca(mm.euros, r.valorNeto - 1300) && cerca(mm.pct, (1 + mm.meses[0].pct) * (1 + mm.meses[1].pct) - 1) && cerca(dd.donde.dias[0].ocioso, 1),
+        `mensuales a mano con aportación: enero −1,00 € (−0,10 %), febrero ${mm.meses[1].euros.toFixed(2)} €, el año ${mm.euros.toFixed(2)} € = final − aportado`) }
     ok(txt === 'aportacion · compra O · venta O · compra A · aportacion · compra O · venta A · ventaFinal O' && L.movimientos[1].rol === 'ocioso' && L.porSimbolo.O.rol === 'ocioso' && cerca(L.porSimbolo.O.valorFinal, 299 / 55 * 60), `a mano: los movimientos, en orden (${txt})`)
     ok(cerca(L.reparto[0].ocioso, 999) && L.reparto[0].valores === 0 && cerca(L.reparto[2].valores, 109.69 * 11) && cerca(L.reparto[2].ocioso, 299) && cerca(L.reparto[2].liquidez, 0),
       `a mano: el día 1 hay 999 € en el ocioso; el día 3, 1.206,59 € en valores y 299 € en el ocioso (${L.reparto[2].valores.toFixed(2)}, ${L.reparto[2].ocioso.toFixed(2)})`)
@@ -277,6 +296,19 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     D.pulsa(b.raiz.conAtributo('data-elige-valor', d0.filas[0].simbolo)[0]); await D.espera(30)
     ok(b.raiz.conAtributo('data-elegida')[0]?.getAttribute('data-linea-valor') === d0.filas[0].simbolo, `al pulsar ${d0.filas[0].simbolo} en la tabla, pasa a «Valor a valor» con su línea resaltada`)
     D.pulsa(b.raiz.conAtributo('data-ir-valor', d0.filas[0].simbolo)[0]); ok(ido === d0.filas[0].simbolo, 'el «↗» de un valor pide ir a ese valor')
+    // §157: con precios reales, cada año de «Ganancias mensuales» es el de «Año a año» y todos los años suman la ganancia neta.
+    const anios = Pa.cifrasPlan(ultima, Pl.planListaCalculable(Pa.planDe(aPant, est)).plan).anios
+    ok(d0.mensuales.length === anios.length && d0.mensuales.every((f, k) => f.anio === anios[k].anio && cerca(f.pct, anios[k].plan, 1e-9)) && cerca(sum(d0.mensuales, f => f.euros), m.valorNeto - ej.aportado, 1e-6),
+      `mensuales con precios reales: ${anios.length} años iguales a «Año a año» (2016: ${(d0.mensuales[0].pct * 100).toFixed(2)} %) y suman ${sum(d0.mensuales, f => f.euros).toFixed(2)} € = ganancia neta`)
+    const celdas = b.raiz.conAtributo('data-mes').filter(n => n.textContent !== '').length, meses = sum(d0.mensuales, f => f.meses.filter(Boolean).length)
+    ok(b.raiz.conAtributo('data-mes-anio').length === anios.length && celdas === meses && b.raiz.conAtributo('data-mes-total', '2016')[0]?.textContent === Pa.pct(d0.mensuales[0].pct, 1),
+      `pantalla, «Ganancias mensuales»: ${anios.length} años y ${celdas} meses; 2016 = ${b.raiz.conAtributo('data-mes-total', '2016')[0]?.textContent}`)
+    const gd = b.raiz.conAtributo('data-grafico', 'donde-esta')[0], ley = b.raiz.conAtributo('data-leyenda-donde')[0]?.textContent || ''
+    ok(Number(gd?.getAttribute('data-dias')) === ej.serie.length && gd.todos(n => n.hasAttribute('data-banda')).length === 3 && ley.includes(`en valores · ${Pa.pct(d0.donde.media.valores, 0)} de media`) && ley.includes(`en el ocioso (oro (GLD)) · ${Pa.pct(d0.donde.media.ocioso, 0)}`) && cerca(d0.donde.media.valores, d0.total.enValores, 1e-9),
+      `pantalla, «Dónde está tu dinero cada día»: ${gd?.getAttribute('data-dias')} días; «${ley}»`)
+    const gb = b.raiz.conAtributo('data-grafico', 'por-operacion')[0], ro = b.raiz.conAtributo('data-resumen-operaciones')[0]?.textContent || ''
+    ok(Number(gb?.getAttribute('data-barras')) === L.operaciones.length && d0.porOperacion.ganan + d0.porOperacion.pierden <= L.operaciones.length && ro.includes(`${Pa.numero(d0.porOperacion.ganan, 0)} ganan`) && ro.includes(`${Pa.numero(d0.porOperacion.pierden, 0)} pierden`) && d0.porOperacion.ops.every((o, k, a) => !k || o.exitDate >= a[k - 1].exitDate),
+      `pantalla, «Resultados por operación»: ${gb?.getAttribute('data-barras')} barras por fecha de venta; «${ro}»`)
     D.pulsa(b.raiz.conAtributo('data-pliega-valores')[0]); await D.espera(30)
     ok(!b.raiz.conAtributo('data-valor').length && b.raiz.conAtributo('data-fila-total').length === 1 && b.raiz.conAtributo('data-fila-ocioso').length === 1, 'al plegar, quedan el total y el ocioso')
     // De vuelta a «Tu dinero»: el mismo cálculo (no se pide otra vez) y la misma cifra.
