@@ -3218,3 +3218,13 @@ Primera parte de «Comparar con otras estrategias» (boceto bocetos/detalle-fina
 - components/ComparaPlanes.js: ids como texto; en una copia, en lugar de «Abrir» y «⧉», la etiqueta amarilla «sin guardar» (tooltip TITULO_COPIA). «Guardar como plan» llega en la parte d.
 - Comprobación: comparar-planes.js, apartado 5 (13 nuevas). A mano: la copia del plan A con su misma estrategia acaba en 10.694,29 €, igual que el plan A.
 - Ninguna cifra cambia.
+
+## 170. «Comparar con otras estrategias», parte b: el botón y su desplegable (17/11)
+
+Boceto bocetos/detalle-final.html, pestaña 3 (puntos 1, 2 y 5 aceptados por Sergi el 16/11).
+
+- components/MenuCompararEstrategias.js (nuevo): botón «Comparar con otras estrategias ▾» junto a «Comparar planes» (solo con estrategia en el plan); desplegable opaco con tus estrategias de tarjetas MENOS la del plan, por nombre, con casillas, hasta 3 (MAX_COPIAS); buscador con ✕ si hay más de 6; «?» con ejemplo (AYUDA_COPIAS); «Cancelar» y «Comparar (N)». Se cierra al pulsar fuera o con Esc.
+- lib/builder/comparaPlanes.js: `MAX_COPIAS` (= MAX_COMPARAR − 1), `ID_AHORA` y `copiaDeAhora` («<plan> · tal como está»: el plan de la pantalla tal cual), `eleccionCopias` (la base es el plan guardado si no tiene cambios; si los tiene o es nuevo, «tal como está»; detrás, una copia por estrategia), `AYUDA_COPIAS`.
+- components/BuilderPlan.js: `comp.conAhora`; «Comparar (N)» entra en la comparación con la base y las copias elegidas; al salir de la comparación, las copias se olvidan (al volver con «Comparar planes» salen solo los guardados) y nunca se recuerdan en el navegador.
+- Comprobación: comparar-planes.js, apartado 6 (15 nuevas). A mano: «Plan A · tal como está» acaba en 10.694,29 €, igual que el plan A.
+- Ninguna cifra cambia.

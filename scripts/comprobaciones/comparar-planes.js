@@ -6,6 +6,7 @@
 //   4 · Montada: tarjetas, avisos, ★, fichas, QQQ/SPY, modos del gráfico, «Volver al plan», «Abrir», y los dos tonos;
 //       §135: sin cabecera de pasos ni pestañas al comparar, y «Ocultar ▲» (una línea por plan, mismas cifras, gráfico de 470 px).
 //   5 · §169: ids como texto y copias sin guardar del plan abierto con otra estrategia (la copia con su misma estrategia = el plan).
+//   6 · §170: el botón «Comparar con otras estrategias ▾»: menú sin la del plan, hasta 3, base «tal como está», las copias se olvidan al volver.
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://falso.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-de-la-prueba'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
@@ -186,6 +187,40 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   D.pulsa(q('data-elige-plan', 'v-y')[0]); await D.espera(10)
   ok(q('data-tarjeta-plan').map(n => n.getAttribute('data-tarjeta-plan')).join() === '1,v-x,v-y', '§169: y volver a ponerla')
   m.quita(); await D.espera(5)
+
+  // ── 6 · §170: el botón «Comparar con otras estrategias ▾» del plan ──
+  ok(K.MAX_COPIAS === 3, '§170: hasta 3 copias (con la base, 4 planes)')
+  ok(JSON.stringify(K.eleccionCopias({ idGuardado: 7, hayCambios: false, ids: ['y', 'z'] })) === JSON.stringify({ copias: ['y', 'z'], conAhora: false, elegidos: [7, 'v-y', 'v-z'] }), '§170: plan guardado sin cambios: la base es el plan guardado (7) + una copia por estrategia')
+  ok(JSON.stringify(K.eleccionCopias({ idGuardado: 7, hayCambios: true, ids: ['y'] })) === JSON.stringify({ copias: ['y'], conAhora: true, elegidos: ['v-ahora', 'v-y'] }) && K.eleccionCopias({ idGuardado: null, ids: ['y', 'a', 'b', 'c'] }).elegidos.join() === 'v-ahora,v-y,v-a,v-b', '§170: con cambios sin guardar o plan nuevo, la base es «tal como está»; como mucho 3 copias')
+  ok(K.copiaDeAhora(pA, 'Plan A').nombre === 'Plan A · tal como está' && K.copiaDeAhora(pA, 'Plan A').plan === pA && K.copiaDeAhora(null, 'x') === null, '§170: «Plan A · tal como está» lleva el plan de la pantalla tal cual')
+  { const otra = (id, ema) => ({ id, name: `EMA${ema}`, definition: EMA, params: { ema } })
+    const ESTRS = [ESTR, ESTR2, otra('w', 4), otra('u', 5), otra('t', 6)]
+    m = D.monta(h(BPlan, { estrategias: ESTRS, deps: { ctx: null, calcula: calcula2 }, tema: 'oscuro', inicial: { planes: filas, orden: ['g1', 'g2'], pestana: 'g1', simbolos: ['TEST'], pruebas: [], anchoPestanas: 1400 } }), RDC)
+    await D.espera(80)
+    const bE = q('data-boton', 'comparar-estrategias')[0]
+    ok(bE && !bE.hasAttribute('disabled') && bE.textContent === 'Comparar con otras estrategias ▾' && q('data-menu', 'comparar-estrategias').length === 0, '§170: el botón, junto a «Comparar planes», con el menú cerrado')
+    D.pulsa(bE); await D.espera(10)
+    const opciones = () => q('data-estrategia-comparar').map(n => n.getAttribute('data-estrategia-comparar')).join()
+    ok(q('data-menu', 'comparar-estrategias').length === 1 && opciones() === 'y,w,u,t', `§170: el menú, con tus estrategias de tarjetas MENOS la del plan, por nombre (${opciones()})`)
+    ok(q('data-boton', 'comparar-marcadas')[0].hasAttribute('disabled') && q('data-boton', 'comparar-marcadas')[0].textContent === 'Comparar (0)', '§170: sin marcar ninguna, «Comparar (0)» apagado')
+    const casilla = (id) => q('data-estrategia-comparar', id)[0].conAtributo('type', 'checkbox')[0]
+    const marca = async (id) => { D.propsDe(casilla(id)).onChange?.({ target: casilla(id) }); await D.espera(10) }
+    await marca('y'); await marca('w'); await marca('u')
+    ok(q('data-boton', 'comparar-marcadas')[0].textContent === 'Comparar (3)' && casilla('t').hasAttribute('disabled'), '§170: con 3 marcadas, la cuarta no se puede marcar')
+    await marca('u'); await marca('w')
+    ok(q('data-boton', 'comparar-marcadas')[0].textContent === 'Comparar (1)' && !casilla('t').hasAttribute('disabled'), '§170: desmarcar libera sitio')
+    D.pulsa(q('data-boton', 'comparar-marcadas')[0]); await D.espera(120)
+    // El plan A abierto está hecho a mano (no con planDe): cuenta como cambiado → la base es «Plan A · tal como está».
+    ok(q('data-comparar').length === 1 && q('data-tarjeta-plan').map(n => n.getAttribute('data-tarjeta-plan')).join() === 'v-ahora,v-y', `§170: «Comparar (1)»: a comparar, la base «tal como está» + la copia con EMA3 (${q('data-tarjeta-plan').map(n => n.getAttribute('data-tarjeta-plan')).join()})`)
+    const fin = (id) => q('data-tarjeta-plan', id)[0]?.conAtributo('data-valor', 'final')[0]?.textContent || ''
+    ok(q('data-elige-plan', 'v-ahora')[0]?.textContent.includes('Plan A · tal como está') && fin('v-ahora').includes('10.694'), `§170: «Plan A · tal como está» acaba como el plan A, 10.694,29 € (${fin('v-ahora')})`)
+    ok(q('data-copia-sin-guardar').length === 2, '§170: las dos, «sin guardar»')
+    D.pulsa(q('data-boton', 'volver-plan')[0]); await D.espera(30)
+    ok(q('data-comparar').length === 0 && q('data-columna', 'izquierda').length === 1, '§170: «← Volver al plan»')
+    D.pulsa(q('data-boton', 'comparar')[0]); await D.espera(60)
+    ok(q('data-elige-plan').map(n => n.getAttribute('data-elige-plan')).join() === '1,2,3' && q('data-copia-sin-guardar').length === 0, '§170: al volver a «Comparar planes», las copias ya no están (solo los guardados)')
+    ok(!(localStorage.getItem(K.CLAVE_COMPARAR) || '').includes('v-'), '§170: en el navegador no se recuerda ninguna copia')
+    m.quita(); await D.espera(5) }
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTodo bien')
   process.exit(fallos ? 1 : 0)

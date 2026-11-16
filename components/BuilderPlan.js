@@ -56,7 +56,8 @@ import PlanDetalle, { Ampliable, AmpliadoCtx } from './PlanDetalle'
 import { AYUDA_DETALLE, detallePlan } from '../lib/builder/detallePlan'
 // §128: «Comparar planes» (opción A: cada plan tal como está guardado).
 import ComparaPlanes from './ComparaPlanes'
-import { CLAVE_COMPARAR, REFS_COMPARAR, TEXTO_SIN_PLANES, alterna, copiasDe, elegidosIniciales, mismoId, paraRecordar, pieza as piezaDe } from '../lib/builder/comparaPlanes'
+import { CLAVE_COMPARAR, REFS_COMPARAR, TEXTO_SIN_PLANES, alterna, copiaDeAhora, copiasDe, eleccionCopias, elegidosIniciales, mismoId, paraRecordar, pieza as piezaDe } from '../lib/builder/comparaPlanes'
+import MenuCompararEstrategias from './MenuCompararEstrategias'
 import { cargaUniversoMc, nDeUniverso, nombreUniverso, reglaDeUniverso } from '../lib/universoMc'
 import FiltrosDelPlan from './FiltrosDelPlan'
 import { filtrosPropios, respetaPropios, usoDeLaEstrategia } from '../lib/builder/filtrosPlan'
@@ -281,7 +282,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // en este navegador (CLAVE_COMPARAR); el modo del gráfico (null = el de por defecto), solo en esta visita. resComp: { id: estado de su cálculo }.
   const [comparando, setComparando] = useState(!!inicial?.comparando || !!comparar)   // §140: comparar: se entra comparando (desde la portada de Planes)
   // §169: copias: ids de las estrategias con las que se compara el plan abierto (copias sin guardar; ver copiasComp).
-  const [comp, setComp] = useState(() => ({ elegidos: inicial?.compararElegidos || null, refs: REFS_COMPARAR.map(r => r.id), log: true, modo: null, plegado: !!inicial?.compararPlegado, copias: inicial?.compararCopias || [] }))
+  const [comp, setComp] = useState(() => ({ elegidos: inicial?.compararElegidos || null, refs: REFS_COMPARAR.map(r => r.id), log: true, modo: null, plegado: !!inicial?.compararPlegado, copias: inicial?.compararCopias || [], conAhora: !!inicial?.compararAhora }))
   const [resComp, setResComp] = useState(inicial?.resComp || {})
   // §80: «Una lista». Lo que se guarda va en a.lista (lib/planes/lista.js); esto es solo de la vista (buscar, ★, la lista de la Watchlist, qué está desplegado).
   const [vistaLista, setVistaLista] = useState({ busca: '', favs: false, lista: '', seccion: { mode: true, strats: false }, universoDatos: {} })
@@ -574,7 +575,11 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // ── §128: «Comparar planes» (los planes GUARDADOS, tal como están guardados; mismo motor y misma respuesta que su pestaña) ──
   const compLeido = useRef(false), enCurso = useRef(new Set())
   // §169: las copias sin guardar del plan abierto (sus ajustes de AHORA con otra estrategia) van detrás de los planes guardados.
-  const copiasComp = useMemo(() => comparando && actual ? copiasDe(a, comp.copias, tarjetas, nombreDe(actual)) : [], [comparando, actual, a, comp.copias, tarjetas, pestanas])
+  //   §170: conAhora: delante, el plan tal como está (si tiene cambios sin guardar o es nuevo), la base de «Comparar con otras estrategias».
+  const copiasComp = useMemo(() => comparando && actual ? [...(comp.conAhora ? [copiaDeAhora(plan, nombreDe(actual))].filter(Boolean) : []), ...copiasDe(a, comp.copias, tarjetas, nombreDe(actual))] : [], [comparando, actual, a, plan, comp.copias, comp.conAhora, tarjetas, pestanas])
+  // §170: al salir de la comparación, las copias se olvidan (la próxima vez, «Comparar planes» enseña solo los guardados).
+  useEffect(() => { if (!comparando) setComp(c => c.copias.length || c.conAhora ? { ...c, copias: [], conAhora: false, elegidos: c.elegidos && paraRecordar(c.elegidos) } : c) }, [comparando])
+  const comparaEstrategias = (ids) => { setComp(c => ({ ...c, ...eleccionCopias({ idGuardado: fila?.id ?? null, hayCambios, ids }) })); setComparando(true) }
   const todosComp = useMemo(() => [...(planes || []), ...copiasComp], [planes, copiasComp])
   const idsTodosComp = todosComp.map(p => String(p.id)).join()
   // Al entrar: lo recordado en este navegador (una vez) y, de los elegidos, los que siguen existiendo.
@@ -657,6 +662,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
         {sinGuardar && <button data-boton="descartar" style={{ ...S.boton, padding: '6px 12px' }} disabled={guardando} onClick={descartaCambios}>Descartar cambios</button>}
         {hayCambios && <button data-boton="guardar-cambios" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={`Guardado por última vez el ${fechaCorta(fila.updated_at)}`} onClick={guardaAbierta}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>}
         {nuevaActual && <button data-boton="guardar" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={!ctx ? 'Sin conexión con la base de datos: no se pueden guardar planes' : undefined} onClick={() => { limpiaDialogos(); setVentana('nuevo') }}>Guardar este plan</button>}
+        {estrategia && <MenuCompararEstrategias estrategias={tarjetas} actualId={estrategia.id} inicial={inicial?.menuCopias || null} onComparar={comparaEstrategias}/>}
         {botonComparar}
       </span>
     </div>
