@@ -348,7 +348,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // §128: la llamada a /api/plan, en un ref para que «Comparar planes» pida con la misma (varios planes a la vez, sin el calculador).
   const pideApi = useRef(null)
   if (!pideApi.current) pideApi.current = deps?.calcula || (async (p, cuerpoLista = null) => {
-    const r = await api.current('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: p, curvas: true, ...(cuerpoLista ? { cuerpoLista, libro: true } : {}) }) })   // §156: con lista, también el libro (la pestaña «Detalle»)
+    const r = await api.current('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: p, curvas: true, libro: true, ...(cuerpoLista ? { cuerpoLista } : {}) }) })   // §156/§161: siempre con el libro (la pestaña «Detalle», con lista o con un valor)
     const j = await r.json().catch(() => ({}))
     if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
     return j
@@ -852,7 +852,13 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     <PlanPorDentro a={a} estrategia={estPorDentro} motivo={motivoEstPorDentro} estrategias={estrategias} apiFetch={apiFetch} version={version} visible={vistaDer === 'dentro'} onIrAValor={onIrAValor} wlData={datosLista?.wlData || null} calcula={deps?.calculaPorDentro || null} universoDatos={universoDatos}/>
   </>) : !cifras ? (
     <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{!estrategia ? 'Elige una estrategia de tarjetas.' : calc.calculando || clave ? 'Calculando tu plan…' : 'Sin resultado todavía.'}</div>
-  ) : vistaDinero(cifras, false)
+  ) : (<>   {/* §161: con un solo valor, «Tu dinero» y «Detalle» (sin «La cartera por dentro», que es del Backtesting con lista) */}
+    <div data-pestanas-der role="group" aria-label="Qué ver del plan" style={{ display: 'flex', borderBottom: `1px solid ${B.borde}` }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('detalle', 'Detalle', AYUDA_DETALLE.pestana)}</div>
+    {vistaDer === 'detalle' ? <PlanDetalle detalle={detalle} cifras={cifras} viejas={cifrasViejas} onIrAValor={onIrAValor} inicial={inicial?.detalle || null} nombre={nombreDe(actual) || null} version={version} cargaVelas={cargaVelasDetalle}
+        graficoPlan={<><GraficoPlan curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles}/>
+          <Leyenda curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes} visibles={lineasVisibles} onMarca={marcaLinea}/></>}/>
+      : vistaDinero(cifras, false)}
+  </>)
   function vistaDinero(cifras, conLista) {
   const s = cifras.seis
   // §90: sin aportaciones (solo el dinero inicial), la TIR es el mismo número que el CAGR: ni su cifra ni su columna.

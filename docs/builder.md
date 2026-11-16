@@ -3127,3 +3127,13 @@ Decidido con Sergi el 15/11 (boceto bocetos/detalle-plan.html): el historial de 
 - Fuera la línea «… llegarán a esta pestaña»: lo del boceto con varios valores ya está. Queda «Detalle» con un solo valor (parte 4c).
 - Comprobación `scripts/comprobaciones/plan-detalle.js` ampliada: a mano (recorte de velas e índices de compra y venta) y en la pantalla con la lista Degiro (TSLA: 2.514 velas y sus 48 operaciones; volver; la vista cerrada no pide nada; abierta, 11 gráficos con 11 lecturas, como mucho 4 a la vez; pulsar uno pequeño lo abre en grande).
 - Ninguna cifra cambia.
+
+## 161. Un solo cálculo, parte 4c: «Detalle» también con un solo valor
+
+Boceto bocetos/detalle-plan.html, pestaña 2.
+
+- La pantalla pide `/api/plan` SIEMPRE con `libro: true` (antes, solo con lista). Con un solo valor, la columna derecha tiene ahora dos pestañas: «Tu dinero» y «Detalle» (sin «La cartera por dentro», que es el Backtesting con lista).
+- `detallePlan` dice `unValor` y `simbolo`. En «Detalle» con un valor: la línea de arriba «1 valor (AAPL) · …», la suma, sus velas con sus operaciones a la vista (sin «← Volver»), «Cómo crece» solo con «El plan» (el gráfico de «Tu dinero» con su Buy&Hold del valor y la tabla de los «comprar y mantener»), y debajo lo mismo que con varios: ganancias mensuales, dónde está tu dinero, resultados por operación e historial con «Todos los movimientos». Sin la tabla «Qué aportó cada valor», sin «Valor a valor» y sin «Vista de gráficos» (con un valor no aportan nada).
+- «Comparar planes» usa la misma llamada: también trae el libro (con un valor ocupa poco).
+- Comprobación `scripts/comprobaciones/plan-detalle.js` ampliada: a mano (unValor, su símbolo y la suma 10.000 + 857,14 = 10.857,14 €) y en la pantalla con AAPL, oro, 300 €/mes e impuestos (pestañas, suma = «Tienes al final», sus 123 operaciones en las velas, lo que no sale, mensuales e historial, y vuelta a «Tu dinero» con la misma cifra).
+- Ninguna cifra cambia.

@@ -20,6 +20,7 @@
 //     §159 (parte 4a): «Todos los movimientos» (qué pasa en palabras, signo, dinero al cierre), a mano y en la pantalla.
 //     §160 (parte 4b): las velas de un valor con sus operaciones (recorte a las fechas, índices de compra y venta, no más de 4 lecturas a
 //     la vez) y la «Vista de gráficos», a mano y en la pantalla.
+//     §161 (parte 4c): «Detalle» con un solo valor (sin tabla por valor ni «Valor a valor» ni «Vista de gráficos»; sus velas a la vista).
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-del-arnes'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ
@@ -198,6 +199,10 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     ok(L.operaciones.length === 1 && cerca(o.compras, 10000) && cerca(o.ventas, 10000 * 114 / 105) && cerca(o.resultado, 10000 * 9 / 105) && o.entryPrice === 105 && o.exitPrice === 114 && cerca(L.puente.ganadoValores, 10000 * 9 / 105) && cerca(L.puente.ganadoOcioso, 0) && L.puente.costes === 0,
       `un valor a mano: una operación, 10.000 € a 105 → 10.857,14 € a 114: gana 857,14 € (${o.resultado.toFixed(2)})`)
     ok(r.estrategias.e.operaciones.length === L.operaciones.length && o.entryDate === r.estrategias.e.operaciones[0].entryDate && o.exitDate === r.estrategias.e.operaciones[0].exitDate, 'un valor a mano: la operación del libro es la de la estrategia (mismas fechas)')
+    // §161: con un valor, detallePlan dice unValor y su símbolo; 1 valor, 1 operación, la suma 10.000 + 857,14 = 10.857,14 €.
+    { const du = require(R + '/lib/builder/detallePlan.js').detallePlan({ evaluacion: { plan: { medidas: { valorNeto: r.valorNeto }, ejecucion: r } } }, planUno(seguidas))
+      ok(du.unValor === true && du.simbolo === 'TEST' && du.cabecera.valores === 1 && du.filas.length === 1 && du.total.operaciones === 1 && cerca(du.suma.final, 10000 + 10000 * 9 / 105) && du.suma.cuadra,
+        `detalle con un valor: unValor, TEST, 1 operación y la suma ${du.suma.final.toFixed(2)} €`) }
     // Con 0,1 % de comisión (mínimo 1 €) en cada orden: la suma sigue cuadrando y los costes van aparte de lo ganado.
     const rc = coherente('un valor a mano, con comisión', planUno(seguidas, { costes: { comisionPct: 0.1, comisionMinEur: 1, horquillaPct: { QQQ: 0, ETF: 0, SPY: 0 } } }), datosMano(seguidas))
     ok(rc.libro.puente.costes > 0 && cerca(rc.libro.puente.aportado + rc.libro.puente.ganadoValores + rc.libro.puente.ganadoOcioso - rc.libro.puente.costes, rc.valorNeto, 1e-6), `con comisión: ${rc.libro.puente.costes.toFixed(2)} € de costes, aparte de lo ganado`)
@@ -409,6 +414,22 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     ok(s3?.getAttribute('data-cuadra') === 'si' && !s3.todos(n => n.getAttribute('data-suma') === 'ocioso').length && oc3.includes('Dinero ocioso · liquidez') && oc3.includes('sin órdenes') && Math.abs(ultima.evaluacion.plan.medidas.valorNeto - ultima.finalPorDentro) < 0.005 && b3.raiz.conAtributo('data-oro').length === 1,
       `con el ocioso en liquidez, sin aportaciones ni impuestos: la suma sin el trozo del ocioso, y el final (${ultima.evaluacion.plan.medidas.valorNeto.toFixed(2)} €) es el de «La cartera por dentro» (${ultima.finalPorDentro.toFixed(2)} €)`)
     b3.quita()
+    // §161: con UN valor (AAPL, oro, 300 €/mes, impuestos): pestañas «Tu dinero» y «Detalle» (sin «La cartera por dentro»); en «Detalle»,
+    // la suma = «Tienes al final», sus velas a la vista (sin «Volver»), «Cómo crece» solo con «El plan» y sin tabla por valor ni «Vista de gráficos».
+    pedidasVelas.length = 0
+    const aUno = { ...Pa.AJUSTES_PLAN, comisionTipo: 'fija', comisionFija: 0.185, periodo: 'todo', capital: 10000, aportacion: 300, impuestos: 'ES-ahorro', ocioso: 'GLD', activo: 'AAPL' }
+    const b4 = monta({ vistaDer: 'detalle', ajustes: aUno })
+    for (let k = 0; k < 120 && !(b4.raiz.conAtributo('data-vista-detalle').length && b4.raiz.conAtributo('data-grafico', 'velas-valor').length); k++) await D.espera(250)
+    const p4 = (id) => b4.raiz.busca(n => n.nodeName === 'BUTTON' && n.getAttribute?.('data-vista-der') === id), L4 = ultima?.evaluacion.plan.ejecucion.libro, m4 = ultima?.evaluacion.plan.medidas
+    const s4 = b4.raiz.conAtributo('data-detalle-suma')[0], fin4 = s4?.todos(n => n.getAttribute('data-suma') === 'final')[0]?.textContent, g4 = b4.raiz.conAtributo('data-grafico', 'velas-valor')[0]
+    ok(!!p4('dinero') && !!p4('detalle') && !p4('dentro') && !ultima.finalPorDentro && !!L4 && s4?.getAttribute('data-cuadra') === 'si' && fin4 === Pa.euros(m4.valorNeto, 0)
+      && (b4.raiz.conAtributo('data-detalle-cabecera')[0]?.textContent || '').startsWith('1 valor (AAPL)') && Number(g4?.getAttribute('data-operaciones')) === L4.operaciones.length && pedidasVelas.join() === 'AAPL'
+      && !b4.raiz.conAtributo('data-volver-velas').length && !b4.raiz.conAtributo('data-tarjeta', 'detalle-valores').length && !b4.raiz.conAtributo('data-modo-crece').length && b4.raiz.conAtributo('data-grafico', 'plan').length === 1 && !b4.raiz.conAtributo('data-tarjeta', 'detalle-vista-graficos').length
+      && b4.raiz.conAtributo('data-tabla', 'detalle-mensual').length === 1 && b4.raiz.conAtributo('data-operacion').length === Math.min(50, L4.operaciones.length),
+      `con UN valor: «Tu dinero» y «Detalle»; la suma ${fin4} = «Tienes al final»; AAPL con sus ${L4?.operaciones.length} operaciones a la vista; «El plan» sin «Valor a valor»; mensuales e historial`)
+    D.pulsa(p4('dinero')); await D.espera(60)
+    ok(b4.raiz.conAtributo('data-cifras').length === 1 && b4.raiz.conAtributo('data-cifra', 'final')[0]?.todos(n => n.hasAttribute('data-valor'))[0]?.textContent === fin4, `y «Tu dinero» con el mismo «Tienes al final» (${fin4})`)
+    b4.quita()
   }
   console.log(fallos ? `plan-detalle: ${fallos} fallos` : 'plan-detalle: todas bien')
   process.exit(fallos ? 1 : 0)

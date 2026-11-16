@@ -3,7 +3,7 @@
 // lib/builder/detallePlan.js con el libro del motor. Parte 2: la línea de arriba, la línea que suma, «Qué aportó cada valor» (con la fila
 // del dinero ocioso) y «Cómo crece» («El plan», con el mismo gráfico de «Tu dinero» y los «comprar y mantener» del plan, y «Valor a
 // valor»). §157 (parte 3a): ganancias mensuales, dónde está tu dinero cada día y resultados por operación. §158 (parte 3b): el
-// historial (tabla con buscador, Gantt y Excel del Backtesting) y «Copiar para Claude». §159 (parte 4a): «Todos los movimientos». §160 (parte 4b): las velas de cada valor (pulsando un valor de la tabla) y la «Vista de gráficos».
+// historial (tabla con buscador, Gantt y Excel del Backtesting) y «Copiar para Claude». §159 (parte 4a): «Todos los movimientos». §161 (parte 4c): también con un solo valor (sin la tabla por valor; sus velas a la vista). §160 (parte 4b): las velas de cada valor (pulsando un valor de la tabla) y la «Vista de gráficos».
 // «La cartera por dentro» sigue mientras Sergi no compruebe que «Detalle» lo tiene todo.
 //   detalle: lo de detallePlan · cifras: lo de cifrasPlan (las filas de los «comprar y mantener») · graficoPlan: el gráfico de «Tu dinero»
 //   ya montado (lo pone BuilderPlan) · onIrAValor(símbolo): el «↗» · viejas: el cálculo es el anterior (se atenúa).
@@ -320,6 +320,8 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
   const crece = useRef(null)
   if (!detalle) return <div data-sin-detalle style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>Este cálculo no trae el detalle. Cambia cualquier ajuste del plan y se calculará de nuevo.</div>
   const { cabecera: c, suma: s, filas, total, ocioso } = detalle
+  // §161: con un solo valor, sin la tabla por valor, sin «Valor a valor» ni «Vista de gráficos», y sus velas siempre a la vista.
+  const unValor = !!detalle.unValor, simVelas = unValor ? detalle.simbolo : verValor
   const nombreOc = nombreOcioso(ocioso.simbolo), sinOcioso = ocioso.simbolo === 'LIQUIDEZ'
   const parte = (id, color, texto) => <span data-suma={id} style={{ color, whiteSpace: 'nowrap' }}>{texto}</span>
   const elige = (sim) => { setElegido(sim); setModo('valores') }
@@ -328,7 +330,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
   return (
     <div data-vista-detalle data-cifras-viejas={viejas ? 'si' : undefined} title={viejas ? 'Calculando con tus ajustes de ahora: estas cifras son del cálculo anterior.' : undefined} style={{ display: 'flex', flexDirection: 'column', opacity: viejas ? 0.4 : 1, transition: 'opacity 0.15s' }}>
       <div data-detalle-cabecera style={{ ...S.secundario, fontSize: 13, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', marginTop: 10 }}>
-        <span>{c.valores === 1 ? '1 valor' : `${numero(c.valores, 0)} valores`}{c.conOperaciones < c.valores ? ` (${numero(c.conOperaciones, 0)} con operaciones)` : ''} · velas {c.velas} · {fechaCorta(c.desde)} → {fechaCorta(c.hasta)} · {numero(c.operaciones, 0)} operaciones · {numero(c.ordenes, 0)} órdenes</span>
+        <span>{unValor ? `1 valor (${detalle.simbolo})` : c.valores === 1 ? '1 valor' : `${numero(c.valores, 0)} valores`}{c.conOperaciones < c.valores ? ` (${numero(c.conOperaciones, 0)} con operaciones)` : ''} · velas {c.velas} · {fechaCorta(c.desde)} → {fechaCorta(c.hasta)} · {numero(c.operaciones, 0)} operaciones · {numero(c.ordenes, 0)} órdenes</span>
         <Ayuda etiqueta="Órdenes" texto={`${AYUDA_DETALLE.ordenes} En este plan: ${numero(c.ordenesValores, 0)} de la estrategia${c.ordenesOcioso ? ` + ${numero(c.ordenesOcioso, 0)} del dinero ocioso` : ''}${c.ordenesOtras ? ` + ${numero(c.ordenesOtras, 0)} más` : ''} = ${numero(c.ordenes, 0)} órdenes y ${euros(s.costes, 2)} de comisiones.`}/>
         <span style={{ marginLeft: 'auto' }}><BotonCopiar obtenerTexto={() => textoDetalle(detalle, { nombre, version })} titulo="Copia el detalle del plan en texto, para pegarlo en una conversación con Claude"/></span>
       </div>
@@ -345,7 +347,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
         <Ayuda etiqueta="La suma del plan" texto={`${AYUDA_DETALLE.suma} En este plan, al céntimo: ${euros(s.aportado, 2)} ${s.valores < 0 ? '−' : '+'} ${euros(Math.abs(s.valores), 2)} ${sinOcioso ? '' : `${s.ocioso < 0 ? '−' : '+'} ${euros(Math.abs(s.ocioso), 2)} `}− ${euros(s.costes, 2)} − ${euros(s.impuestos, 2)} = ${euros(s.final, 2)}.`}/>
       </div>
 
-      <Tarjeta id="detalle-valores" titulo="Qué aportó cada valor" ayuda={`${AYUDA_DETALLE.tabla} ${AYUDA_DETALLE.ocioso}`}>
+      {!unValor && <Tarjeta id="detalle-valores" titulo="Qué aportó cada valor" ayuda={`${AYUDA_DETALLE.tabla} ${AYUDA_DETALLE.ocioso}`}>
         <div style={{ overflowX: 'auto' }}><table data-tabla="detalle-valores" style={{ borderCollapse: 'collapse', width: '100%' }}>
           <thead><tr><th style={cab}>Valor</th>{['Aportó', 'Operaciones', 'Ganadoras', 'Profit Factor', 'Tiempo dentro'].map(h => <th key={h} style={cabNum}>{h}</th>)}</tr></thead>
           <tbody>
@@ -369,20 +371,20 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
             </tr>
           </tbody>
         </table></div>
-      </Tarjeta>
+      </Tarjeta>}
 
       <div ref={crece}/>
-      {verValor ? <Tarjeta id="detalle-velas" titulo={`${verValor} · sus velas con las operaciones del plan`} ayuda={AYUDA_DETALLE.velas}
-        derecha={<button type="button" data-volver-velas onClick={() => setVerValor(null)} style={boton(false)}>← Volver al gráfico del plan</button>}>
-        <VelasDeValor sim={verValor} ops={detalle.porOperacion?.ops || []} cargaVelas={carga.current.g} cache={cache.current} desde={c.desde} hasta={c.hasta} alto={330}/>
+      {simVelas && <Tarjeta id="detalle-velas" titulo={`${simVelas} · sus velas con las operaciones del plan`} ayuda={AYUDA_DETALLE.velas}
+        derecha={unValor ? null : <button type="button" data-volver-velas onClick={() => setVerValor(null)} style={boton(false)}>← Volver al gráfico del plan</button>}>
+        <VelasDeValor sim={simVelas} ops={detalle.porOperacion?.ops || []} cargaVelas={carga.current.g} cache={cache.current} desde={c.desde} hasta={c.hasta} alto={330}/>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12, color: B.secundario, marginTop: 6 }}><span><span style={{ color: VERDE }}>▲</span> compra</span><span><span style={{ color: VERDE }}>▼</span> / <span style={{ color: ROJO }}>▼</span> venta</span><span><span style={{ color: VERDE }}>━</span> operación que gana</span><span><span style={{ color: ROJO }}>━</span> operación que pierde</span>
-          {(() => { const f = filas.find(x => x.simbolo === verValor); return f ? <span style={{ marginLeft: 'auto' }}>aportó <b style={{ color: signo(f.aporto) }}>{conSigno(f.aporto)}</b> · {numero(f.operaciones, 0)} operaciones · {pct(f.ganadoras, 1)} ganan</span> : null })()}</div>
-      </Tarjeta>
-      : <Tarjeta id="detalle-crece" titulo="Cómo crece" ayuda={modo === 'valores' ? AYUDA_DETALLE.valorAValor : AYUDA_DETALLE.bh}
-        derecha={<span role="group" aria-label="Qué se dibuja" style={{ display: 'inline-flex', gap: 6 }}>
+          {(() => { const f = filas.find(x => x.simbolo === simVelas); return f ? <span style={{ marginLeft: 'auto' }}>aportó <b style={{ color: signo(f.aporto) }}>{conSigno(f.aporto)}</b> · {numero(f.operaciones, 0)} operaciones · {pct(f.ganadoras, 1)} ganan</span> : null })()}</div>
+      </Tarjeta>}
+      {(!verValor || unValor) && <Tarjeta id="detalle-crece" titulo="Cómo crece" ayuda={modo === 'valores' && !unValor ? AYUDA_DETALLE.valorAValor : AYUDA_DETALLE.bh}
+        derecha={unValor ? null : <span role="group" aria-label="Qué se dibuja" style={{ display: 'inline-flex', gap: 6 }}>
           <button type="button" data-modo-crece="plan" aria-pressed={modo === 'plan'} onClick={() => setModo('plan')} style={boton(modo === 'plan')}>El plan</button>
           <button type="button" data-modo-crece="valores" aria-pressed={modo === 'valores'} onClick={() => setModo('valores')} style={boton(modo === 'valores')}>Valor a valor</button></span>}>
-        {modo === 'plan' ? <>
+        {modo === 'plan' || unValor ? <>
           {graficoPlan}
           {bh.length > 0 && <div style={{ overflowX: 'auto', marginTop: 10 }}><table data-tabla="detalle-bh" style={{ borderCollapse: 'collapse', width: '100%' }}>
             <thead><tr><th style={cab}>Los «comprar y mantener», con las reglas de tu plan</th>{['Tienes al final', 'CAGR', 'Peor caída'].map(h => <th key={h} style={cabNum}>{h}</th>)}</tr></thead>
@@ -401,7 +403,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
       {detalle.porOperacion && <Tarjeta id="detalle-historial" titulo={`Historial · ${numero(detalle.porOperacion.ops.length, 0)} operaciones`} ayuda={`${AYUDA_DETALLE.historial} ${AYUDA_DETALLE.movimientos}`}>
         <Historial ops={detalle.porOperacion.ops} movs={detalle.movimientos || []} desde={detalle.cabecera.desde} hasta={detalle.cabecera.hasta} nombre={nombre || 'plan'} inicial={inicial?.historial || null}/></Tarjeta>}
       {/* §160 (parte 4b) */}
-      {filas.length > 0 && <Tarjeta id="detalle-vista-graficos" titulo="Vista de gráficos" ayuda={AYUDA_DETALLE.vistaGraficos}
+      {filas.length > 0 && !unValor && <Tarjeta id="detalle-vista-graficos" titulo="Vista de gráficos" ayuda={AYUDA_DETALLE.vistaGraficos}
         derecha={<button type="button" data-abre-vista-graficos aria-expanded={vistaG} onClick={() => setVistaG(x => !x)} style={boton(vistaG)}>{vistaG ? 'Ocultar ▴' : `Ver un gráfico por valor (${numero(filas.length, 0)}) ▾`}</button>}>
         {vistaG ? <VistaGraficos filas={filas} ops={detalle.porOperacion?.ops || []} cargaVelas={carga.current.g} cache={cache.current} desde={c.desde} hasta={c.hasta} onElegir={abreVelas}/>
           : <div style={S.secundario}>Cerrada: al abrirla se leen las velas de cada valor.</div>}
