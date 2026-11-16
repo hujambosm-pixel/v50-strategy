@@ -3098,3 +3098,13 @@ Tres paneles más en la pestaña «Detalle» (components/PlanDetalle.js), con el
 - La línea final dice ahora que faltan el historial, el Gantt, el Excel y los gráficos de cada valor (parte 3b).
 - Comprobación `scripts/comprobaciones/plan-detalle.js` ampliada: a mano (enero de 2020 +4,59 % y +45,90 €; con aportación, enero −1 € y el año = final − aportado; dónde está 0 · 100 · 56,15 · 0 % en valores; B −10 % y A +20 %); con precios reales (lista Degiro, oro, 300 €/mes, impuestos), los 10 años de «Ganancias mensuales» = «Año a año» y suman la ganancia neta; y en la pantalla, los tres paneles con sus cifras.
 - Ninguna cifra cambia.
+
+## 158. Un solo cálculo, parte 3b: historial, Gantt, Excel y «Copiar para Claude» en «Detalle»
+
+- «Historial · N operaciones» (components/PlanDetalle.js, `Historial`): «Tabla» con las operaciones del libro, la más reciente arriba (por fecha de venta), 50 cada vez con «Ver 50 más»; columnas valor, compra, venta (con «· abierta» si seguía abierta el último día), acciones, precios de compra y de venta, resultado en € y en % (sobre lo que costó comprarla). Buscador por valor con la ✕ (sin mayúsculas ni tildes); con búsqueda, «N de M · resultado». Pulsar un valor lo busca.
+- «📅 Gantt»: el `GanttChart` del Backtesting tal cual, con las operaciones en su forma (`tradesBacktesting` de lib/builder/detallePlan.js: capital de entrada = lo comprado, resultado y %, días; la abierta al final como `_virtualClose`) y modo «pool». Prop nueva opcional `sinDescartados` en GanttChart: oculta la casilla «Mostrar descartados» (el plan no tiene descartadas); sin ella, el Backtesting sigue igual.
+- «📊 Excel»: `exportHistorial` del Backtesting tal cual (se carga al pulsarlo), con las operaciones que se ven (todas o las del valor buscado).
+- «📋 Copiar para Claude» en la línea de arriba: `textoDetalle` (la suma, la tabla por valor con el ocioso, los años de «Ganancias mensuales» y el resumen de operaciones), sin recalcular.
+- Quedan para la parte 4: las velas de cada valor con sus operaciones, la «Vista de gráficos», «Todos los movimientos» y «Detalle» con un solo valor. La línea final de la pestaña lo dice.
+- Comprobación `scripts/comprobaciones/plan-detalle.js` ampliada: a mano (orden y buscador del historial; A 499 € → +99,80 €, +20 %, 4 días; el texto de «Copiar para Claude»); en la pantalla con la lista Degiro, 50 filas con la última venta arriba, «Ver 50 más», buscar un valor con su resultado y la ✕, Gantt sin «Mostrar descartados» y el botón de copiar. Excel probado aparte con dos operaciones inventadas.
+- Ninguna cifra cambia.

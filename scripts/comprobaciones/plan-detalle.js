@@ -15,6 +15,8 @@
 //     la fila del ocioso, «El plan» / «Valor a valor» y la vuelta a «Tu dinero».
 //     §157 (parte 3a): ganancias mensuales (a mano; con precios reales, cada año = «Año a año» y todos suman la ganancia neta), dónde está
 //     el dinero cada día y resultados por operación, a mano y en la pantalla.
+//     §158 (parte 3b): el historial (orden, buscador, «Ver más», Gantt, Excel), las operaciones con la forma del Backtesting y «Copiar para
+//     Claude», a mano y en la pantalla.
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-del-arnes'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ
@@ -108,6 +110,16 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     const po = d.porOperacion
     ok(po.ops.map(o => o.simbolo).join() === 'B,A' && cerca(po.ops[0].pct, -0.1) && cerca(po.ops[1].pct, 0.2) && po.ganan === 1 && po.pierden === 1 && po.mejor.simbolo === 'A' && po.peor.simbolo === 'B',
       `por operación a mano: B −10 % y A +20 %, 1 gana y 1 pierde (${po.ops.map(o => `${o.simbolo} ${(o.pct * 100).toFixed(1)} %`).join(', ')})`)
+    // §158. El historial, la más reciente arriba: A (sale el día 4) y B (el día 3); buscando «b», solo B. Con la forma del Backtesting:
+    // A entró con 499 € y ganó 99,80 € (+20 %) en 4 días (03/01 → 07/01); B, 499 € y −49,90 € (−10 %) en 3 días.
+    const hi = De.historial(po.ops), tb = De.tradesBacktesting(po.ops)
+    ok(hi.map(o => o.simbolo).join() === 'A,B' && De.historial(po.ops, 'b').map(o => o.simbolo).join() === 'B' && De.historial(po.ops, 'zz').length === 0 && hi[0].unidades === 49.9 && hi[0].entryPrice === 10 && hi[0].exitPrice === 12,
+      `historial a mano: A y luego B; buscando «b», solo B; A 49,9 acciones de 10 a 12 €`)
+    ok(tb.length === 2 && tb[1].symbol === 'A' && tb[1]._capitalAtEntry === 499 && cerca(tb[1].pnlSimple, 99.8) && cerca(tb[1].pnlPct, 20) && tb[1].dias === 4 && tb[0].dias === 3 && cerca(tb[0].pnlPct, -10) && !tb[0]._virtualClose,
+      `operaciones para el Gantt y el Excel a mano: A 499 € → +99,80 € (+20 %) en 4 días, B −10 % en 3 días`)
+    const tx = De.textoDetalle(d, { nombre: 'Inventado', version: 'V0' })
+    ok(tx.startsWith('DETALLE DEL PLAN «Inventado» (V0)') && tx.includes('LA SUMA: 1000.00 € aportado + 49.90 € ganado en los valores') && tx.includes('= 1045.90 € (cuadra con «Tu dinero»)') && tx.includes('A\t99.80 €\t1\t100.0 %') && tx.includes('2020\t4.59 %\t45.90 €') && tx.includes('OPERACIONES: 2 · 1 ganan · 1 pierden'),
+      '«Copiar para Claude» a mano: la suma, la tabla por valor, los años y las operaciones')
   }
   {
     // Con ocioso y aportaciones (el caso de §91): concentrado máx. 1, 1.000 € + 300 €/mes, ocioso O, 1 € por orden. Día 1, al cierre: 999 €
@@ -309,6 +321,23 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     const gb = b.raiz.conAtributo('data-grafico', 'por-operacion')[0], ro = b.raiz.conAtributo('data-resumen-operaciones')[0]?.textContent || ''
     ok(Number(gb?.getAttribute('data-barras')) === L.operaciones.length && d0.porOperacion.ganan + d0.porOperacion.pierden <= L.operaciones.length && ro.includes(`${Pa.numero(d0.porOperacion.ganan, 0)} ganan`) && ro.includes(`${Pa.numero(d0.porOperacion.pierden, 0)} pierden`) && d0.porOperacion.ops.every((o, k, a) => !k || o.exitDate >= a[k - 1].exitDate),
       `pantalla, «Resultados por operación»: ${gb?.getAttribute('data-barras')} barras por fecha de venta; «${ro}»`)
+    // §158: el historial. 50 filas, la primera la última venta; «Ver 50 más»; buscar el primer valor de la tabla; Gantt; Excel; copiar.
+    const filasH = () => b.raiz.conAtributo('data-operacion'), ultimaOp = d0.porOperacion.ops[d0.porOperacion.ops.length - 1]
+    ok(filasH().length === 50 && filasH()[0].getAttribute('data-operacion') === ultimaOp.simbolo && filasH()[0].textContent.includes(Pa.fechaCorta(ultimaOp.exitDate)) && !!b.raiz.conAtributo('data-mas-historial')[0] && !!b.raiz.conAtributo('data-excel-historial')[0],
+      `pantalla, el historial: 50 filas, la primera la última venta (${ultimaOp.simbolo} ${ultimaOp.exitDate}), con «Ver más» y «Excel»`)
+    D.pulsa(b.raiz.conAtributo('data-mas-historial')[0]); await D.espera(30)
+    ok(filasH().length === 100, `«Ver 50 más»: ${filasH().length} filas`)
+    const symH = d0.filas[0].simbolo, nH = d0.porOperacion.ops.filter(o => o.simbolo === symH).length
+    D.escribe(b.raiz.conAtributo('data-busca-historial')[0], symH.toLowerCase()); await D.espera(30)
+    const filtroH = b.raiz.conAtributo('data-historial-filtro')[0]?.textContent || ''
+    ok(filasH().length === Math.min(50, nH) && filasH().every(n => n.getAttribute('data-operacion') === symH) && filtroH.startsWith(`${Pa.numero(nH, 0)} de ${Pa.numero(L.operaciones.length, 0)}`) && filtroH.includes(Pa.euros(Math.abs(d0.filas[0].aporto), 0)) && !!b.raiz.conAtributo('data-limpiar-busqueda')[0],
+      `buscando «${symH.toLowerCase()}»: solo sus ${nH} operaciones y su resultado («${filtroH}»), con la ✕ para limpiar`)
+    D.pulsa(b.raiz.conAtributo('data-limpiar-busqueda')[0]); await D.espera(30)
+    ok(filasH().length === 50 && !b.raiz.conAtributo('data-historial-filtro').length, 'con la ✕, vuelven todas')
+    D.pulsa(b.raiz.conAtributo('data-vista-historial', 'gantt')[0]); await D.espera(60)
+    ok(b.raiz.conAtributo('data-gantt-detalle').length === 1 && !filasH().length && !b.raiz.textContent.includes('Mostrar descartados'), 'pantalla, «Gantt»: el del Backtesting, sin la casilla «Mostrar descartados»')
+    D.pulsa(b.raiz.conAtributo('data-vista-historial', 'tabla')[0]); await D.espera(30)
+    ok(b.raiz.busca(n => n.nodeName === 'BUTTON' && /Copiar para Claude/.test(n.textContent)) != null && !b.raiz.conAtributo('data-detalle-falta')[0].textContent.includes('historial'), 'pantalla: «Copiar para Claude» y la línea de lo que falta ya sin el historial')
     D.pulsa(b.raiz.conAtributo('data-pliega-valores')[0]); await D.espera(30)
     ok(!b.raiz.conAtributo('data-valor').length && b.raiz.conAtributo('data-fila-total').length === 1 && b.raiz.conAtributo('data-fila-ocioso').length === 1, 'al plegar, quedan el total y el ocioso')
     // De vuelta a «Tu dinero»: el mismo cálculo (no se pide otra vez) y la misma cifra.

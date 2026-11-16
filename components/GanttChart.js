@@ -224,6 +224,8 @@ export default function GanttChart({
   onRequestDiscarded,
   discardedTrades = null,
   loadingDiscarded = false,
+  // §158: sin descartadas (el «Detalle» del plan no las tiene): no sale la casilla «Mostrar descartados».
+  sinDescartados = false,
 }) {
   // ── Rango global ───────────────────────────────────────────────────────────
   const overallStart = useMemo(() => {
@@ -363,11 +365,11 @@ export default function GanttChart({
         <button style={btnSt()} onClick={zoomOut} title="Zoom out">－</button>
         <button style={btnSt()} onClick={resetZoom} title="Ver período completo">↺ Reset</button>
         <div style={{width:1, height:14, background:'#1a2d45', margin:'0 3px'}} />
-        <label style={{display:'flex', alignItems:'center', gap:5, cursor:'pointer', color:'#6b7280', fontSize:10}}>
+        {!sinDescartados && <label style={{display:'flex', alignItems:'center', gap:5, cursor:'pointer', color:'#6b7280', fontSize:10}}>
           <input type="checkbox" checked={showDiscarded} onChange={e => handleToggleDiscarded(e.target.checked)}
             style={{accentColor:'#6b7280'}} />
           Mostrar descartados
-        </label>
+        </label>}
         {loadingDiscarded && <span style={{color:'#4a7a9a', fontSize:9}}>⏳ cargando…</span>}
         {showDiscarded && discardedTrades && (
           <span style={{color:'#6b7280', fontSize:9}}>({discardedTrades.length} descartadas)</span>

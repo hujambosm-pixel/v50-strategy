@@ -2,15 +2,19 @@
 // Enseña por dentro el MISMO cálculo de «Tu dinero» (un solo cálculo): no pide nada ni calcula nada del plan; pinta lo que prepara
 // lib/builder/detallePlan.js con el libro del motor. Parte 2: la línea de arriba, la línea que suma, «Qué aportó cada valor» (con la fila
 // del dinero ocioso) y «Cómo crece» («El plan», con el mismo gráfico de «Tu dinero» y los «comprar y mantener» del plan, y «Valor a
-// valor»). §157 (parte 3a): ganancias mensuales, dónde está tu dinero cada día y resultados por operación. Lo demás del boceto
-// (historial, Gantt, Excel, velas de un valor) llega en la parte 3b; mientras, sigue la pestaña «La cartera por dentro».
+// valor»). §157 (parte 3a): ganancias mensuales, dónde está tu dinero cada día y resultados por operación. §158 (parte 3b): el
+// historial (tabla con buscador, Gantt y Excel del Backtesting) y «Copiar para Claude». Las velas de cada valor y la «Vista de gráficos»,
+// en la parte 4; mientras, sigue la pestaña «La cartera por dentro».
 //   detalle: lo de detallePlan · cifras: lo de cifrasPlan (las filas de los «comprar y mantener») · graficoPlan: el gráfico de «Tu dinero»
 //   ya montado (lo pone BuilderPlan) · onIrAValor(símbolo): el «↗» · viejas: el cálculo es el anterior (se atenúa).
 import { useEffect, useRef, useState } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import Ayuda from './BuilderAyuda'
 import { separaEtiquetas } from '../lib/builder/escalaGrafico'
-import { AYUDA_DETALLE, nombreOcioso } from '../lib/builder/detallePlan'
+import { AYUDA_DETALLE, historial, nombreOcioso, textoDetalle, tradesBacktesting } from '../lib/builder/detallePlan'
+import ConLimpiar from './LimpiarBusqueda'
+import BotonCopiar from './BotonCopiar'
+import GanttChart from './GanttChart'
 import { euros, fechaCorta, numero, pct } from '../lib/builder/planPantalla'
 
 const VERDE = '#7ee2a0', ROJO = '#ff8b8b', AZUL = '#58a6ff', AMARILLO = '#f2cc60', GRIS = '#4b5868'
@@ -163,6 +167,50 @@ export function BarrasOperaciones({ datos }) {
   )
 }
 
+// §158 · El historial: «Tabla» (50 cada vez, la más reciente arriba, con buscador por valor) o «Gantt» (el del Backtesting, tal cual), y
+// «Excel» (exportHistorial del Backtesting, tal cual; se carga al pulsarlo).
+const POR_PAGINA = 50
+export function Historial({ ops, desde, hasta, nombre = 'plan', inicial = null }) {
+  const [vista, setVista] = useState(inicial?.vista || 'tabla')
+  const [busca, setBusca] = useState(inicial?.busca || '')
+  const [cuantas, setCuantas] = useState(POR_PAGINA)
+  const [excel, setExcel] = useState(null)
+  const lista = historial(ops, busca)
+  const trades = tradesBacktesting(busca ? [...lista].reverse() : ops)
+  const descarga = async () => {
+    setExcel('…')
+    try { const { exportHistorial } = await import('../lib/exportTimeline'); exportHistorial({ mcResult: { allTrades: trades, slotCapital: null }, mcSelected: [...new Set(trades.map(t => t.symbol))], baseCfg: {}, stratName: nombre }); setExcel(null) }
+    catch (e) { setExcel(`No se pudo crear el Excel: ${e.message || e}`) }
+  }
+  const tot = lista.reduce((s, o) => s + o.resultado, 0)
+  return (<>
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+      <span role="group" aria-label="Cómo ver el historial" style={{ display: 'inline-flex', gap: 6 }}>
+        <button type="button" data-vista-historial="tabla" aria-pressed={vista === 'tabla'} onClick={() => setVista('tabla')} style={boton(vista === 'tabla')}>Tabla</button>
+        <button type="button" data-vista-historial="gantt" aria-pressed={vista === 'gantt'} onClick={() => setVista('gantt')} style={boton(vista === 'gantt')}>📅 Gantt</button></span>
+      <ConLimpiar valor={busca} onLimpia={() => { setBusca(''); setCuantas(POR_PAGINA) }}>
+        <input data-busca-historial type="text" value={busca} placeholder="Buscar valor…" aria-label="Buscar un valor en el historial" onChange={e => { setBusca(e.target.value); setCuantas(POR_PAGINA) }}
+          style={{ fontFamily: B.letra, fontSize: 13, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: 6, padding: '5px 8px', width: 150 }}/></ConLimpiar>
+      {busca && <span data-historial-filtro style={{ ...S.secundario, fontSize: 13 }}>{numero(lista.length, 0)} de {numero(ops.length, 0)} · {conSigno(tot, 0)}</span>}
+      <button type="button" data-excel-historial onClick={descarga} disabled={!lista.length} title="Descarga estas operaciones en un Excel" style={{ ...boton(false), marginLeft: 'auto' }}>📊 Excel</button>
+      {excel && excel !== '…' && <span style={{ color: ROJO, fontSize: 12 }}>{excel}</span>}
+    </div>
+    {vista === 'gantt' ? <div data-gantt-detalle style={{ height: Math.min(560, 90 + 26 * new Set(trades.map(t => t.symbol)).size), display: 'flex', flexDirection: 'column', border: `1px solid ${B.borde}`, borderRadius: 6, overflow: 'hidden' }}>
+        <GanttChart trades={trades} startDate={desde} endDate={hasta} modoAsig="compartido" sinDescartados/></div>
+      : !lista.length ? <div data-historial-vacio style={S.secundario}>Ninguna operación de «{busca}».</div>
+      : <><div style={{ overflowX: 'auto' }}><table data-tabla="detalle-historial" style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <thead><tr><th style={cab}>Valor</th><th style={cab}>Compra</th><th style={cab}>Venta</th>{['Acciones', 'Precio de compra', 'Precio de venta', 'Resultado', '%'].map(h => <th key={h} style={cabNum}>{h}</th>)}</tr></thead>
+        <tbody>{lista.slice(0, cuantas).map((o, k) => <tr key={`${o.simbolo}-${o.entryDate}-${k}`} data-operacion={o.simbolo}>
+          <td style={celda}><button type="button" onClick={() => { setBusca(o.simbolo); setCuantas(POR_PAGINA) }} title={`Ver solo las de ${o.simbolo}`} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.texto, fontFamily: B.letra, fontSize: 'inherit' }}>{o.simbolo}</button></td>
+          <td style={celda}>{fechaCorta(o.entryDate)}</td><td style={celda}>{fechaCorta(o.exitDate)}{o.abierta && <span title="Seguía abierta el último día: se cuenta vendida ese día" style={{ color: AMARILLO }}> · abierta</span>}</td>
+          <td style={num}>{numero(o.unidades, o.unidades < 10 ? 4 : 2)}</td><td style={num}>{euros(o.entryPrice, 2)}</td><td style={num}>{euros(o.exitPrice, 2)}</td>
+          <td style={{ ...num, color: signo(o.resultado) }}>{conSigno(o.resultado, 2)}</td><td style={{ ...num, color: signo(o.pct) }}>{o.pct == null ? '—' : `${o.pct > 0 ? '+' : ''}${pct(o.pct, 1)}`}</td>
+        </tr>)}</tbody>
+      </table></div>
+      {lista.length > cuantas && <div style={{ marginTop: 8 }}><button type="button" data-mas-historial onClick={() => setCuantas(c => c + POR_PAGINA)} style={boton(false)}>Ver {numero(Math.min(POR_PAGINA, lista.length - cuantas), 0)} más (quedan {numero(lista.length - cuantas, 0)})</button></div>}</>}
+  </>)
+}
+
 const Tarjeta = ({ id, titulo, ayuda, derecha = null, children }) => (
   <div data-tarjeta={id} style={{ ...S.tarjeta, marginTop: 14 }}>
     <div style={{ ...S.cabeceraTarjeta, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>{titulo}{ayuda && <Ayuda texto={ayuda} etiqueta={typeof titulo === 'string' ? titulo : id}/>}{derecha && <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center', fontWeight: 400 }}>{derecha}</span>}</div>
@@ -170,7 +218,7 @@ const Tarjeta = ({ id, titulo, ayuda, derecha = null, children }) => (
   </div>
 )
 
-export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrAValor = null, viejas = false, inicial = null }) {
+export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrAValor = null, viejas = false, inicial = null, nombre = null, version = null }) {
   const [modo, setModo] = useState(inicial?.modo || 'plan')
   const [elegido, setElegido] = useState(inicial?.elegido || null)
   const [abierta, setAbierta] = useState(true)
@@ -185,6 +233,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
       <div data-detalle-cabecera style={{ ...S.secundario, fontSize: 13, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', marginTop: 10 }}>
         <span>{c.valores === 1 ? '1 valor' : `${numero(c.valores, 0)} valores`}{c.conOperaciones < c.valores ? ` (${numero(c.conOperaciones, 0)} con operaciones)` : ''} · velas {c.velas} · {fechaCorta(c.desde)} → {fechaCorta(c.hasta)} · {numero(c.operaciones, 0)} operaciones · {numero(c.ordenes, 0)} órdenes</span>
         <Ayuda etiqueta="Órdenes" texto={`${AYUDA_DETALLE.ordenes} En este plan: ${numero(c.ordenesValores, 0)} de la estrategia${c.ordenesOcioso ? ` + ${numero(c.ordenesOcioso, 0)} del dinero ocioso` : ''}${c.ordenesOtras ? ` + ${numero(c.ordenesOtras, 0)} más` : ''} = ${numero(c.ordenes, 0)} órdenes y ${euros(s.costes, 2)} de comisiones.`}/>
+        <span style={{ marginLeft: 'auto' }}><BotonCopiar obtenerTexto={() => textoDetalle(detalle, { nombre, version })} titulo="Copia el detalle del plan en texto, para pegarlo en una conversación con Claude"/></span>
       </div>
       <div data-detalle-suma data-cuadra={s.cuadra ? 'si' : 'no'} style={{ display: 'flex', gap: '4px 9px', alignItems: 'center', flexWrap: 'wrap', background: B.cabecera, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '9px 12px', marginTop: 8, fontVariantNumeric: 'tabular-nums' }}>
         {parte('aportado', B.texto, `${euros(s.aportado, 0)} que pusiste`)}
@@ -244,7 +293,10 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
       {detalle.porOperacion && <Tarjeta id="detalle-por-operacion" titulo="Resultados por operación" ayuda={AYUDA_DETALLE.porOperacion}
         derecha={<span data-resumen-operaciones style={{ color: B.secundario, fontSize: 13 }}>{numero(detalle.porOperacion.ops.length, 0)} · <span style={{ color: VERDE }}>{numero(detalle.porOperacion.ganan, 0)} ganan</span> · <span style={{ color: ROJO }}>{numero(detalle.porOperacion.pierden, 0)} pierden</span></span>}>
         <BarrasOperaciones datos={detalle.porOperacion}/></Tarjeta>}
-      <div data-detalle-falta style={{ ...S.apagado, marginTop: 12 }}>El historial de operaciones, el Gantt, el Excel y los gráficos de cada valor llegarán a esta pestaña; mientras, siguen en «La cartera por dentro».</div>
+      {/* §158 (parte 3b) */}
+      {detalle.porOperacion && <Tarjeta id="detalle-historial" titulo={`Historial · ${numero(detalle.porOperacion.ops.length, 0)} operaciones`} ayuda={AYUDA_DETALLE.historial}>
+        <Historial ops={detalle.porOperacion.ops} desde={detalle.cabecera.desde} hasta={detalle.cabecera.hasta} nombre={nombre || 'plan'} inicial={inicial?.historial || null}/></Tarjeta>}
+      <div data-detalle-falta style={{ ...S.apagado, marginTop: 12 }}>Las velas de cada valor con sus operaciones y la «Vista de gráficos» llegarán a esta pestaña; mientras, siguen en «La cartera por dentro».</div>
     </div>
   )
 }

@@ -842,7 +842,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       : <>
         {!!calcLista?.ignorado.length && <div data-aviso-lista-simple style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>{avisoListaSimple(calcLista.ignorado, a.ocioso)}<Ayuda texto={AYUDA_PLAN.listaSimple} etiqueta="Lo que todavía no cuenta con una lista"/></div>}
         {Number.isFinite(calc.resultado?.respuesta?.finalPorDentro) && oroComparable(calc.resultado?.plan) && <div data-oro style={{ ...S.secundario, fontSize: 13 }}>Comprobación: «La cartera por dentro» acaba en {euros(calc.resultado.respuesta.finalPorDentro, 2)} y tu plan, en {euros(cifrasLista.seis.final, 2)}{Math.abs(calc.resultado.respuesta.finalPorDentro - cifrasLista.seis.final) < 0.005 ? ' ✓' : ' ✕ (deberían coincidir)'}</div>}
-        {vistaDer === 'detalle' ? <PlanDetalle detalle={detalle} cifras={cifrasLista} viejas={cifrasViejas} onIrAValor={onIrAValor} inicial={inicial?.detalle || null}
+        {vistaDer === 'detalle' ? <PlanDetalle detalle={detalle} cifras={cifrasLista} viejas={cifrasViejas} onIrAValor={onIrAValor} inicial={inicial?.detalle || null} nombre={nombreDe(actual) || null} version={version}
           graficoPlan={<><GraficoPlan curva={sinOcioso ? { ...cifrasLista.curva, ociosoLiquidez: null } : cifrasLista.curva} activo="de la lista" finales={finalesDe(cifrasLista)} visibles={lineasVisibles} proporcion/>
             <Leyenda curva={sinOcioso ? { ...cifrasLista.curva, ociosoLiquidez: null } : cifrasLista.curva} activo="de la lista" visibles={lineasVisibles} onMarca={marcaLinea} proporcion/></>}/>
           : vistaDinero(cifrasLista, true)}
