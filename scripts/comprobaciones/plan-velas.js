@@ -175,8 +175,6 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
     ok(cS?.intervalo === 'semanal' && cD?.intervalo === 'diario' && Lt.jsonCanonico({ ...cS, intervalo: 'diario' }) === Lt.jsonCanonico(cD), 'la petición de la lista: «semanal» con velas semanales y, en lo demás, idéntica a la diaria')
     const pS2 = Pa.planDe(aL('semanales'), est), pD2 = Pa.planDe(aL(null), est)
     ok(Api.errorCuerpoLista(pS2, pS2.piezas[0], cS) === null && Api.errorCuerpoLista(pD2, pD2.piezas[0], cD) === null && Api.errorCuerpoLista(pS2, pS2.piezas[0], cD) !== null && Api.errorCuerpoLista(pD2, pD2.piezas[0], cS) !== null, '/api/plan solo acepta la petición con las velas de su plan')
-    const sinNada = (p) => ({ ...p, impuestos: { regimen: 'ninguno' }, dinero: { ...p.dinero, aportaciones: { frecuencia: 'ninguna' } }, piezas: [{ ...p.piezas[0], ocioso: 'LIQUIDEZ' }] })
-    ok(Pa.oroComparable(sinNada(pD2)) === true && Pa.oroComparable(sinNada(pS2)) === false, 'la línea «Comprobación» solo con velas diarias')
     const txt = Pa.textoParaClaudePlan({ ajustes: aL('semanales'), estrategia: est, plan: pS2, cifras: null, estado: null, resultadoPrueba: null, version: 'V' })
     ok(txt.includes('una lista') && txt.includes('velas semanales'), '«Copiar para Claude» dice las velas del plan también con lista')
   }

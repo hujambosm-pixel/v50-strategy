@@ -3198,3 +3198,13 @@ Pedido por Sergi el 16/11 (opción A del boceto bocetos/detalle-final.html, acep
 - Historial: pulsar el VALOR de una fila filtraba el historial por ese valor (y Sergi creía que no llevaba a su gráfico). Ahora pulsar cualquier parte de la fila, también el valor, lleva al gráfico de ese valor centrado en esa operación; para filtrar está el buscador.
 - Comprobación `scripts/comprobaciones/plan-detalle.js`: plegados al entrar; la peor caída del total (−34,0 %, −77.746,84 € con la lista de la prueba); pulsar la fila lleva a su operación sin filtrar; la rueda apagada, activa tras un clic y apagada al salir.
 - Ninguna cifra cambia.
+
+## 168. Un solo cálculo, parte 5f: fuera «La cartera por dentro» del plan
+
+Con el OK de Sergi (16/11: «Si se repara todo esto, puedes seguir»), tras comprobar «Detalle». Cierra la ronda «un solo cálculo»: el plan tiene UNA cifra y dos pestañas, «Tu dinero» y «Detalle».
+
+- components/BuilderPlan.js: fuera la pestaña «La cartera por dentro» y su componente (PlanPorDentro), la línea «Comprobación: «La cartera por dentro» acaba en X € y tu plan, en Y €» (data-oro) y la condición de «Calculando…» que dependía de ella. Los motivos de «no se calcula» (estrategia borrada o cambiada) ya no la nombran.
+- lib/builder/planPantalla.js: fuera `oroComparable`, `AYUDA_PLAN.porDentro` y `AYUDA_PLAN.listaSinMotor`; el «?» de lo que cuenta con una lista ya no habla de la línea «Comprobación».
+- Se queda de components/backtesting/PlanPorDentro.js la PETICIÓN de los candidatos (`peticionPorDentro`, `motivoSinPeticion`, `intervaloDe`), que «Tu dinero» con varios valores manda a /api/plan; el componente sigue en el archivo hasta retirar el Backtesting suelto (sin uso en el plan). /api/plan sigue devolviendo `finalPorDentro` (lo usan las pruebas de oro de plan-tu-dinero-lista.js).
+- Comprobaciones adaptadas: plan-por-dentro.js (apartado 3: «Tu dinero» y «Detalle», sin «por dentro» ni peticiones aparte), plan-detalle.js (dos pestañas; sin la línea «Comprobación») y plan-velas.js (fuera la prueba de oroComparable).
+- Ninguna cifra cambia.

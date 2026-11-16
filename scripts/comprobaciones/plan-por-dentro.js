@@ -8,8 +8,9 @@
 //     petición, y la pestaña (montada con estado en domFalso.js) pinta los paneles del Backtesting con ese resultado.
 // 1c · §111: con el Nasdaq-100, la petición es la del universo dinámico de runBacktesting (copiado literal abajo, antesUniverso), con un
 //     universo de prueba (filas y miembros escritos aquí); y los motivos (leyendo la base, error, periodo antes de 2016).
-// 3 · En el paso 3: con «Una lista» salen las pestañas «Tu dinero» / «La cartera por dentro»; «por dentro» no se calcula hasta abrirla (§89: «Tu dinero», sí);
-//     abierta, una petición ~1 s después; cerrada, los cambios no piden nada; al volver, la petición nueva.
+// 3 · En el plan (§168): «La cartera por dentro» YA NO ESTÁ (su contenido está en «Detalle», un solo cálculo): con «Una lista» salen
+//     «Tu dinero» y «Detalle»; nunca se pide el Backtesting aparte (solo «Tu dinero», que lleva la petición de los candidatos dentro).
+//     El componente PlanPorDentro (apartados 1 y 2) se queda hasta retirar el Backtesting suelto.
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-del-arnes'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
@@ -192,18 +193,12 @@ function universoPrueba(SIMB, regla, n) {
     inicial: { planes: [], pestana: 'n1', simbolos: ['AAPL'], pruebas: [], resultadoPrueba: { periodos: [] }, ajustes: aFoto } }
   const b = D.monta(React.createElement(BP, props), RDC); await D.espera(1300)
   const pest = (id) => b.raiz.busca(n => n.nodeName === 'BUTTON' && n.getAttribute?.('data-vista-der') === id)
-  ok(!!pest('dinero') && !!pest('dentro') && pest('dinero').getAttribute('aria-pressed') === 'true', 'con lista: las pestañas «Tu dinero» (abierta) y «La cartera por dentro»')
-  ok(pedidas.length === 0 && dineros === 1, `§89: con «Tu dinero» abierta se calcula «Tu dinero» (${dineros}) y no «La cartera por dentro» (${pedidas.length})`)
-  D.pulsa(pest('dentro')); await D.espera(1300)
-  ok(pedidas.length === 1 && b.raiz.conAtributo('data-cartera-por-dentro').length === 1 && !b.raiz.conAtributo('data-sin-motor-lista').length, 'al abrir «La cartera por dentro»: una petición y sus paneles')
-  D.pulsa(pest('dinero')); await D.espera(30)
+  ok(!!pest('dinero') && !!pest('detalle') && !pest('dentro') && pest('dinero').getAttribute('aria-pressed') === 'true' && !b.raiz.conAtributo('data-cartera-por-dentro').length, '§168: con lista, las pestañas «Tu dinero» (abierta) y «Detalle»; sin «La cartera por dentro»')
+  ok(pedidas.length === 0 && dineros === 1, `con «Tu dinero» abierta se calcula «Tu dinero» (${dineros}) y nada aparte (${pedidas.length})`)
+  D.pulsa(pest('detalle')); await D.espera(1300)
   const modo = b.raiz.busca(n => n.nodeName === 'DIV' && n.textContent === 'Slots iguales' && typeof D.propsDe(n).onClick === 'function')
   D.pulsa(modo); await D.espera(1300)
-  ok(pedidas.length === 1, 'con la pestaña cerrada, cambiar el reparto no pide nada')
-  D.pulsa(pest('dentro')); await D.espera(1300)
-  ok(pedidas.length === 2 && pedidas[1].modoAsig === 'slots', `al volver, la petición nueva (${pedidas[1]?.modoAsig})`)
-  D.pulsa(pest('dinero')); await D.espera(30); D.pulsa(pest('dentro')); await D.espera(1300)
-  ok(pedidas.length === 2, 'abrirla otra vez sin cambios no repite el cálculo')
+  ok(pedidas.length === 0 && !b.raiz.conAtributo('data-cartera-por-dentro').length, 'en «Detalle», cambiar el reparto tampoco pide el Backtesting aparte')
   b.quita()
 
   console.log(fallos ? `FALLOS: ${fallos}` : 'plan-por-dentro: todo bien')

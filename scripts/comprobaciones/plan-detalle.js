@@ -348,8 +348,8 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     for (let k = 0; k < 120 && !b.raiz.conAtributo('data-vista-detalle').length; k++) await D.espera(250)
     const pest = (id) => b.raiz.busca(n => n.nodeName === 'BUTTON' && n.getAttribute?.('data-vista-der') === id)
     const De = require(R + '/lib/builder/detallePlan.js'), ej = ultima?.evaluacion.plan.ejecucion, L = ej?.libro, m = ultima?.evaluacion.plan.medidas
-    ok(!!pest('dinero') && !!pest('detalle') && !!pest('dentro') && pest('detalle').getAttribute('aria-pressed') === 'true' && b.raiz.conAtributo('data-vista-detalle').length === 1 && !b.raiz.conAtributo('data-cifras').length,
-      'pantalla: tres pestañas («Tu dinero», «Detalle», «La cartera por dentro») y, con «Detalle» abierta, su contenido y no el de «Tu dinero»')
+    ok(!!pest('dinero') && !!pest('detalle') && !pest('dentro') && pest('detalle').getAttribute('aria-pressed') === 'true' && b.raiz.conAtributo('data-vista-detalle').length === 1 && !b.raiz.conAtributo('data-cifras').length,
+      'pantalla: dos pestañas («Tu dinero» y «Detalle»; §168: sin «La cartera por dentro») y, con «Detalle» abierta, su contenido y no el de «Tu dinero»')
     const suma = b.raiz.conAtributo('data-detalle-suma')[0], trozo = (id) => suma?.todos(n => n.getAttribute('data-suma') === id)[0]?.textContent || ''
     ok(!!L && suma?.getAttribute('data-cuadra') === 'si' && trozo('final') === Pa.euros(m.valorNeto, 0) && trozo('aportado').startsWith(Pa.euros(ej.aportado, 0)) && trozo('valores').includes(Pa.euros(Math.abs(L.puente.ganadoValores), 0)) && trozo('ocioso').includes(Pa.euros(Math.abs(L.puente.ganadoOcioso), 0))
       && trozo('costes').includes(Pa.euros(L.puente.costes, 0)) && trozo('impuestos').includes(Pa.euros(L.puente.impuestos, 0)) && suma.textContent.includes('= «Tienes al final» de «Tu dinero» ✓'),
@@ -504,7 +504,7 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     const b3 = monta({ vistaDer: 'detalle', ajustes: { ...aPant, ocioso: 'LIQUIDEZ', aportacion: 0, impuestos: 'ninguno' } })
     for (let k = 0; k < 120 && !b3.raiz.conAtributo('data-vista-detalle').length; k++) await D.espera(250)
     const s3 = b3.raiz.conAtributo('data-detalle-suma')[0], oc3 = b3.raiz.conAtributo('data-fila-ocioso')[0]?.textContent || ''
-    ok(s3?.getAttribute('data-cuadra') === 'si' && !s3.todos(n => n.getAttribute('data-suma') === 'ocioso').length && oc3.includes('Dinero ocioso · liquidez') && oc3.includes('sin órdenes') && Math.abs(ultima.evaluacion.plan.medidas.valorNeto - ultima.finalPorDentro) < 0.005 && b3.raiz.conAtributo('data-oro').length === 1,
+    ok(s3?.getAttribute('data-cuadra') === 'si' && !s3.todos(n => n.getAttribute('data-suma') === 'ocioso').length && oc3.includes('Dinero ocioso · liquidez') && oc3.includes('sin órdenes') && Math.abs(ultima.evaluacion.plan.medidas.valorNeto - ultima.finalPorDentro) < 0.005 && !b3.raiz.conAtributo('data-oro').length,
       `con el ocioso en liquidez, sin aportaciones ni impuestos: la suma sin el trozo del ocioso, y el final (${ultima.evaluacion.plan.medidas.valorNeto.toFixed(2)} €) es el de «La cartera por dentro» (${ultima.finalPorDentro.toFixed(2)} €)`)
     b3.quita()
     // §161: con UN valor (AAPL, oro, 300 €/mes, impuestos): pestañas «Tu dinero» y «Detalle» (sin «La cartera por dentro»); en «Detalle»,

@@ -49,7 +49,8 @@ import PanelAsignacion from './backtesting/PanelAsignacion'
 import PanelPesos from './backtesting/PanelPesos'
 import PanelUniverso from './backtesting/PanelUniverso'
 import SelectorValores from './backtesting/SelectorValores'
-import PlanPorDentro, { peticionPorDentro, motivoSinPeticion } from './backtesting/PlanPorDentro'
+// §168: del Backtesting solo queda la petición de los candidatos (la de «Tu dinero» con varios valores); la pestaña «La cartera por dentro» ya no está.
+import { peticionPorDentro, motivoSinPeticion } from './backtesting/PlanPorDentro'
 // §156: la pestaña «Detalle» (un solo cálculo, parte 2): el mismo cálculo de «Tu dinero», por dentro.
 import PlanDetalle, { Ampliable, AmpliadoCtx } from './PlanDetalle'
 import { AYUDA_DETALLE, detallePlan } from '../lib/builder/detallePlan'
@@ -65,7 +66,7 @@ import { sinTildes } from '../lib/builder/buscar'
 const listaDeAccion = (x) => ({ ...(x.lista || {}), universo: 'manual', simbolos: x.activo ? [x.activo] : [] })
 import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, avisoPrueba as textoAvisoPrueba, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
-  ayudaCaida, ayudaPrueba, avisoListaSimple, oroComparable, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, velasDeEstrategia, velasDelPlan, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
+  ayudaCaida, ayudaPrueba, avisoListaSimple, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, velasDeEstrategia, velasDelPlan, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS } from '../lib/builder/planPantalla'
 
 const CLAVE_PANEL = 'builder_plan_panel_oculto'   // §165
@@ -324,8 +325,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // §84: el motor del Backtesting calcula con la estrategia de AHORA (por su id). Con la versión guardada de un plan, solo si su regla
   // sigue igual que la de ahora; si no, se dice por qué no se calcula.
   const estPorDentro = !estrategia ? null : !usaGuardada ? estrategia : (estrategiaActual && cambio && !cambio.cambiada && !cambio.borrada ? estrategiaActual : null)
-  const motivoEstPorDentro = !estrategia || estPorDentro ? null : estBorrada ? 'La estrategia de este plan está borrada: «La cartera por dentro» solo sabe calcular con una estrategia que siga entre las tuyas.'
-    : !cambio ? 'Comprobando la estrategia…' : 'La estrategia ha cambiado desde que guardaste este plan y «La cartera por dentro» solo sabe calcular con la de ahora: pulsa «Usar la versión actual» para verla.'
+  const motivoEstPorDentro = !estrategia || estPorDentro ? null : estBorrada ? 'La estrategia de este plan está borrada: con varios valores, el plan solo sabe calcular con una estrategia que siga entre las tuyas.'
+    : !cambio ? 'Comprobando la estrategia…' : 'La estrategia ha cambiado desde que guardaste este plan y, con varios valores, el plan solo sabe calcular con la de ahora: pulsa «Usar la versión actual» para verlo.'
   // §89 (fase 6): con «Una lista», «Tu dinero» se calcula con el plan que ya se sabe calcular (sin aportaciones, sin impuestos, ocioso en
   // liquidez, sin apalancar: planListaCalculable) y con la MISMA petición de «La cartera por dentro» (cuerpoLista), que /api/plan pasa a
   // /api/multibacktest para sacar los candidatos de cada valor.
@@ -646,7 +647,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       {enlaceTesis?.('plan', fila?.id)}
       {!enLista && <div data-aviso="a-mano" style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>⚠ {AVISO_A_MANO}<Ayuda texto={AYUDA_PLAN.aMano} etiqueta={AVISO_A_MANO}/></div>}
       {nuevaActual && <div data-aviso="sin-guardar" style={{ color: AMARILLO }}>Sin guardar: se perderá al recargar</div>}
-      {calc.calculando && (!enLista || vistaDer !== 'dentro') && <div data-calculando style={{ color: AMARILLO }}>Calculando…</div>}
+      {calc.calculando && <div data-calculando style={{ color: AMARILLO }}>Calculando…</div>}
       <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         {sinGuardar && <button data-boton="descartar" style={{ ...S.boton, padding: '6px 12px' }} disabled={guardando} onClick={descartaCambios}>Descartar cambios</button>}
         {hayCambios && <button data-boton="guardar-cambios" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={`Guardado por última vez el ${fechaCorta(fila.updated_at)}`} onClick={guardaAbierta}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>}
@@ -842,18 +843,16 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const resLista = ajustesDelResultado?.donde === 'lista'
   const cifrasLista = enLista && resLista && !motivoLista ? cifras : null
   const resultado = enLista ? (<>
-    <div data-pestanas-der role="group" aria-label="Qué ver del plan" style={{ display: 'flex', borderBottom: `1px solid ${B.borde}` }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('detalle', 'Detalle', AYUDA_DETALLE.pestana)}{pestanaDer('dentro', 'La cartera por dentro', AYUDA_PLAN.porDentro)}</div>
-    {vistaDer !== 'dentro' && (motivoLista ? <div data-sin-motor-lista style={{ ...S.tarjeta, ...S.cuerpo, color: B.texto }}>{motivoLista}</div>
+    <div data-pestanas-der role="group" aria-label="Qué ver del plan" style={{ display: 'flex', borderBottom: `1px solid ${B.borde}` }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('detalle', 'Detalle', AYUDA_DETALLE.pestana)}</div>
+    {(motivoLista ? <div data-sin-motor-lista style={{ ...S.tarjeta, ...S.cuerpo, color: B.texto }}>{motivoLista}</div>
       : !cifrasLista ? <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{calc.error ? '' : 'Calculando tu plan…'}</div>
       : <>
         {!!calcLista?.ignorado.length && <div data-aviso-lista-simple style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>{avisoListaSimple(calcLista.ignorado, a.ocioso)}<Ayuda texto={AYUDA_PLAN.listaSimple} etiqueta="Lo que todavía no cuenta con una lista"/></div>}
-        {Number.isFinite(calc.resultado?.respuesta?.finalPorDentro) && oroComparable(calc.resultado?.plan) && <div data-oro style={{ ...S.secundario, fontSize: 13 }}>Comprobación: «La cartera por dentro» acaba en {euros(calc.resultado.respuesta.finalPorDentro, 2)} y tu plan, en {euros(cifrasLista.seis.final, 2)}{Math.abs(calc.resultado.respuesta.finalPorDentro - cifrasLista.seis.final) < 0.005 ? ' ✓' : ' ✕ (deberían coincidir)'}</div>}
         {vistaDer === 'detalle' ? <PlanDetalle detalle={detalle} cifras={cifrasLista} viejas={cifrasViejas} onIrAValor={onIrAValor} inicial={inicial?.detalle || null} nombre={nombreDe(actual) || null} version={version}
           graficoPlan={<><GraficoPlan curva={sinOcioso ? { ...cifrasLista.curva, ociosoLiquidez: null } : cifrasLista.curva} activo="de la lista" finales={finalesDe(cifrasLista)} visibles={lineasVisibles} proporcion/>
             <Leyenda curva={sinOcioso ? { ...cifrasLista.curva, ociosoLiquidez: null } : cifrasLista.curva} activo="de la lista" visibles={lineasVisibles} onMarca={marcaLinea} proporcion/></>}/>
           : vistaDinero(cifrasLista, true)}
       </>)}
-    <PlanPorDentro a={a} estrategia={estPorDentro} motivo={motivoEstPorDentro} estrategias={estrategias} apiFetch={apiFetch} version={version} visible={vistaDer === 'dentro'} onIrAValor={onIrAValor} wlData={datosLista?.wlData || null} calcula={deps?.calculaPorDentro || null} universoDatos={universoDatos}/>
   </>) : !cifras ? (
     <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{!estrategia ? 'Elige una estrategia de tarjetas.' : calc.calculando || clave ? 'Calculando tu plan…' : 'Sin resultado todavía.'}</div>
   ) : (<>   {/* §161: con un solo valor, «Tu dinero» y «Detalle» (sin «La cartera por dentro», que es del Backtesting con lista) */}
