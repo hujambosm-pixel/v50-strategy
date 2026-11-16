@@ -3,7 +3,7 @@
 // lib/builder/detallePlan.js con el libro del motor. Parte 2: la línea de arriba, la línea que suma, «Qué aportó cada valor» (con la fila
 // del dinero ocioso) y «Cómo crece» («El plan», con el mismo gráfico de «Tu dinero» y los «comprar y mantener» del plan, y «Valor a
 // valor»). §157 (parte 3a): ganancias mensuales, dónde está tu dinero cada día y resultados por operación. §158 (parte 3b): el
-// historial (tabla con buscador, Gantt y Excel del Backtesting) y «Copiar para Claude». Las velas de cada valor y la «Vista de gráficos»,
+// historial (tabla con buscador, Gantt y Excel del Backtesting) y «Copiar para Claude». §159 (parte 4a): «Todos los movimientos». Las velas de cada valor y la «Vista de gráficos»,
 // en la parte 4; mientras, sigue la pestaña «La cartera por dentro».
 //   detalle: lo de detallePlan · cifras: lo de cifrasPlan (las filas de los «comprar y mantener») · graficoPlan: el gráfico de «Tu dinero»
 //   ya montado (lo pone BuilderPlan) · onIrAValor(símbolo): el «↗» · viejas: el cálculo es el anterior (se atenúa).
@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import Ayuda from './BuilderAyuda'
 import { separaEtiquetas } from '../lib/builder/escalaGrafico'
-import { AYUDA_DETALLE, historial, nombreOcioso, textoDetalle, tradesBacktesting } from '../lib/builder/detallePlan'
+import { AYUDA_DETALLE, filtraMovimientos, historial, nombreOcioso, textoDetalle, tradesBacktesting } from '../lib/builder/detallePlan'
 import ConLimpiar from './LimpiarBusqueda'
 import BotonCopiar from './BotonCopiar'
 import GanttChart from './GanttChart'
@@ -170,7 +170,9 @@ export function BarrasOperaciones({ datos }) {
 // §158 · El historial: «Tabla» (50 cada vez, la más reciente arriba, con buscador por valor) o «Gantt» (el del Backtesting, tal cual), y
 // «Excel» (exportHistorial del Backtesting, tal cual; se carga al pulsarlo).
 const POR_PAGINA = 50
-export function Historial({ ops, desde, hasta, nombre = 'plan', inicial = null }) {
+// §159: «Todos los movimientos» (movs): además de las operaciones, el ocioso, los impuestos y las aportaciones, con el dinero al cierre.
+const COLOR_MOV = { aportacion: '#79c0ff', impuesto: '#ff8b8b', ocioso: '#f2cc60', valor: undefined, otro: undefined }
+export function Historial({ ops, movs = [], desde, hasta, nombre = 'plan', inicial = null }) {
   const [vista, setVista] = useState(inicial?.vista || 'tabla')
   const [busca, setBusca] = useState(inicial?.busca || '')
   const [cuantas, setCuantas] = useState(POR_PAGINA)
@@ -183,19 +185,31 @@ export function Historial({ ops, desde, hasta, nombre = 'plan', inicial = null }
     catch (e) { setExcel(`No se pudo crear el Excel: ${e.message || e}`) }
   }
   const tot = lista.reduce((s, o) => s + o.resultado, 0)
+  const conMovs = vista === 'movimientos', listaM = conMovs ? filtraMovimientos(movs, busca) : []
   return (<>
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
       <span role="group" aria-label="Cómo ver el historial" style={{ display: 'inline-flex', gap: 6 }}>
-        <button type="button" data-vista-historial="tabla" aria-pressed={vista === 'tabla'} onClick={() => setVista('tabla')} style={boton(vista === 'tabla')}>Tabla</button>
+        <button type="button" data-vista-historial="tabla" aria-pressed={vista === 'tabla'} onClick={() => { setVista('tabla'); setCuantas(POR_PAGINA) }} style={boton(vista === 'tabla')}>Operaciones ({numero(ops.length, 0)})</button>
+        <button type="button" data-vista-historial="movimientos" aria-pressed={vista === 'movimientos'} onClick={() => { setVista('movimientos'); setCuantas(POR_PAGINA) }} title="Además de las operaciones: el dinero ocioso, los impuestos de cada julio y las aportaciones" style={boton(vista === 'movimientos')}>Todos los movimientos</button>
         <button type="button" data-vista-historial="gantt" aria-pressed={vista === 'gantt'} onClick={() => setVista('gantt')} style={boton(vista === 'gantt')}>📅 Gantt</button></span>
       <ConLimpiar valor={busca} onLimpia={() => { setBusca(''); setCuantas(POR_PAGINA) }}>
         <input data-busca-historial type="text" value={busca} placeholder="Buscar valor…" aria-label="Buscar un valor en el historial" onChange={e => { setBusca(e.target.value); setCuantas(POR_PAGINA) }}
           style={{ fontFamily: B.letra, fontSize: 13, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: 6, padding: '5px 8px', width: 150 }}/></ConLimpiar>
-      {busca && <span data-historial-filtro style={{ ...S.secundario, fontSize: 13 }}>{numero(lista.length, 0)} de {numero(ops.length, 0)} · {conSigno(tot, 0)}</span>}
-      <button type="button" data-excel-historial onClick={descarga} disabled={!lista.length} title="Descarga estas operaciones en un Excel" style={{ ...boton(false), marginLeft: 'auto' }}>📊 Excel</button>
+      {busca && !conMovs && <span data-historial-filtro style={{ ...S.secundario, fontSize: 13 }}>{numero(lista.length, 0)} de {numero(ops.length, 0)} · {conSigno(tot, 0)}</span>}
+      {busca && conMovs && <span data-historial-filtro style={{ ...S.secundario, fontSize: 13 }}>{numero(listaM.length, 0)} de {numero(movs.length, 0)} movimientos</span>}
+      {!conMovs && <button type="button" data-excel-historial onClick={descarga} disabled={!lista.length} title="Descarga estas operaciones en un Excel" style={{ ...boton(false), marginLeft: 'auto' }}>📊 Excel</button>}
       {excel && excel !== '…' && <span style={{ color: ROJO, fontSize: 12 }}>{excel}</span>}
     </div>
-    {vista === 'gantt' ? <div data-gantt-detalle style={{ height: Math.min(560, 90 + 26 * new Set(trades.map(t => t.symbol)).size), display: 'flex', flexDirection: 'column', border: `1px solid ${B.borde}`, borderRadius: 6, overflow: 'hidden' }}>
+    {conMovs ? (!listaM.length ? <div data-historial-vacio style={S.secundario}>{busca ? `Ningún movimiento de «${busca}».` : 'Sin movimientos.'}</div>
+      : <><div style={{ overflowX: 'auto' }}><table data-tabla="detalle-movimientos" style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <thead><tr><th style={cab}>Fecha</th><th style={cab}>Qué pasa</th>{['Importe', 'Comisión', 'En valores', `En el ocioso (${listaM[0].nombreOcioso})`].map(h => <th key={h} style={cabNum}>{h}</th>)}</tr></thead>
+        <tbody>{listaM.slice(0, cuantas).map(m => <tr key={m.k} data-movimiento={m.tipo}>
+          <td style={{ ...celda, whiteSpace: 'nowrap' }}>{fechaCorta(m.fecha)}</td><td style={{ ...celda, color: COLOR_MOV[m.clase] || B.texto }}>{m.que}</td>
+          <td style={{ ...num, color: m.tipo === 'impuesto' || m.tipo === 'impuestoFinal' ? ROJO : B.texto }}>{m.signo < 0 ? '−' : '+'}{euros(m.importe, 2)}</td><td style={{ ...num, color: B.secundario }}>{m.coste ? euros(m.coste, 2) : ''}</td>
+          <td style={{ ...num, color: B.secundario }}>{euros(m.enValores, 0)}</td><td style={{ ...num, color: B.secundario }}>{euros(m.enOcioso, 0)}</td></tr>)}</tbody>
+      </table></div>
+      {listaM.length > cuantas && <div style={{ marginTop: 8 }}><button type="button" data-mas-historial onClick={() => setCuantas(c => c + POR_PAGINA)} style={boton(false)}>Ver {numero(Math.min(POR_PAGINA, listaM.length - cuantas), 0)} más (quedan {numero(listaM.length - cuantas, 0)})</button></div>}</>)
+    : vista === 'gantt' ? <div data-gantt-detalle style={{ height: Math.min(560, 90 + 26 * new Set(trades.map(t => t.symbol)).size), display: 'flex', flexDirection: 'column', border: `1px solid ${B.borde}`, borderRadius: 6, overflow: 'hidden' }}>
         <GanttChart trades={trades} startDate={desde} endDate={hasta} modoAsig="compartido" sinDescartados/></div>
       : !lista.length ? <div data-historial-vacio style={S.secundario}>Ninguna operación de «{busca}».</div>
       : <><div style={{ overflowX: 'auto' }}><table data-tabla="detalle-historial" style={{ borderCollapse: 'collapse', width: '100%' }}>
@@ -294,8 +308,8 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
         derecha={<span data-resumen-operaciones style={{ color: B.secundario, fontSize: 13 }}>{numero(detalle.porOperacion.ops.length, 0)} · <span style={{ color: VERDE }}>{numero(detalle.porOperacion.ganan, 0)} ganan</span> · <span style={{ color: ROJO }}>{numero(detalle.porOperacion.pierden, 0)} pierden</span></span>}>
         <BarrasOperaciones datos={detalle.porOperacion}/></Tarjeta>}
       {/* §158 (parte 3b) */}
-      {detalle.porOperacion && <Tarjeta id="detalle-historial" titulo={`Historial · ${numero(detalle.porOperacion.ops.length, 0)} operaciones`} ayuda={AYUDA_DETALLE.historial}>
-        <Historial ops={detalle.porOperacion.ops} desde={detalle.cabecera.desde} hasta={detalle.cabecera.hasta} nombre={nombre || 'plan'} inicial={inicial?.historial || null}/></Tarjeta>}
+      {detalle.porOperacion && <Tarjeta id="detalle-historial" titulo={`Historial · ${numero(detalle.porOperacion.ops.length, 0)} operaciones`} ayuda={`${AYUDA_DETALLE.historial} ${AYUDA_DETALLE.movimientos}`}>
+        <Historial ops={detalle.porOperacion.ops} movs={detalle.movimientos || []} desde={detalle.cabecera.desde} hasta={detalle.cabecera.hasta} nombre={nombre || 'plan'} inicial={inicial?.historial || null}/></Tarjeta>}
       <div data-detalle-falta style={{ ...S.apagado, marginTop: 12 }}>Las velas de cada valor con sus operaciones y la «Vista de gráficos» llegarán a esta pestaña; mientras, siguen en «La cartera por dentro».</div>
     </div>
   )

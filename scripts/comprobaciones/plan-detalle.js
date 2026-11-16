@@ -17,6 +17,7 @@
 //     el dinero cada día y resultados por operación, a mano y en la pantalla.
 //     §158 (parte 3b): el historial (orden, buscador, «Ver más», Gantt, Excel), las operaciones con la forma del Backtesting y «Copiar para
 //     Claude», a mano y en la pantalla.
+//     §159 (parte 4a): «Todos los movimientos» (qué pasa en palabras, signo, dinero al cierre), a mano y en la pantalla.
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-del-arnes'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ
@@ -120,6 +121,14 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     const tx = De.textoDetalle(d, { nombre: 'Inventado', version: 'V0' })
     ok(tx.startsWith('DETALLE DEL PLAN «Inventado» (V0)') && tx.includes('LA SUMA: 1000.00 € aportado + 49.90 € ganado en los valores') && tx.includes('= 1045.90 € (cuadra con «Tu dinero»)') && tx.includes('A\t99.80 €\t1\t100.0 %') && tx.includes('2020\t4.59 %\t45.90 €') && tx.includes('OPERACIONES: 2 · 1 ganan · 1 pierden'),
       '«Copiar para Claude» a mano: la suma, la tabla por valor, los años y las operaciones')
+    // §159. Los 5 movimientos: el dinero inicial (+1.000 €), compra A (49,90 × 10,00 €, −499 €; al cierre 1.022,95 € en valores), compra B,
+    // vende B (+449,10 €; al cierre 573,85 € en valores y 448,10 € en liquidez, que es el «ocioso») y vende A.
+    const mvs = d.movimientos
+    ok(mvs.length === 5 && mvs[0].que === 'Dinero inicial' && mvs[0].signo === 1 && mvs[0].importe === 1000 && mvs[1].que === 'Compra A · 49,90 × 10,00 €' && mvs[1].signo === -1 && cerca(mvs[1].importe, 499) && mvs[1].coste === 1 && cerca(mvs[1].enValores, 1022.95)
+      && mvs[3].que === 'Vende B · 24,95 × 18,00 €' && mvs[3].signo === 1 && cerca(mvs[3].importe, 449.1) && cerca(mvs[3].enValores, 573.85) && cerca(mvs[3].enOcioso, 448.1) && mvs[0].nombreOcioso === 'liquidez',
+      `movimientos a mano: ${mvs.map(m => m.que).join(' · ')}`)
+    ok(De.filtraMovimientos(mvs).map(m => m.k).join() === '4,3,2,1,0' && De.filtraMovimientos(mvs, 'b').map(m => m.que).join(' | ') === 'Vende B · 24,95 × 18,00 € | Compra B · 24,95 × 20,00 €' && De.filtraMovimientos(mvs, 'dinero').length === 1,
+      'movimientos a mano: el más reciente arriba; buscando «b», los dos de B; buscando «dinero», el inicial')
   }
   {
     // Con ocioso y aportaciones (el caso de §91): concentrado máx. 1, 1.000 € + 300 €/mes, ocioso O, 1 € por orden. Día 1, al cierre: 999 €
@@ -144,7 +153,11 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
       // El año: −1 + 341,46 = 340,46 € = 1.640,46 − 1.300 aportados. Día 1: 999 € en el oro → 100 % en el ocioso.
       const mm = dd.mensuales[0]
       ok(dd.mensuales.length === 1 && cerca(mm.meses[0].euros, -1) && cerca(mm.meses[0].pct, -0.001) && cerca(mm.meses[1].euros, r.valorNeto - 999 - 300) && cerca(mm.euros, r.valorNeto - 1300) && cerca(mm.pct, (1 + mm.meses[0].pct) * (1 + mm.meses[1].pct) - 1) && cerca(dd.donde.dias[0].ocioso, 1),
-        `mensuales a mano con aportación: enero −1,00 € (−0,10 %), febrero ${mm.meses[1].euros.toFixed(2)} €, el año ${mm.euros.toFixed(2)} € = final − aportado`) }
+        `mensuales a mano con aportación: enero −1,00 € (−0,10 %), febrero ${mm.meses[1].euros.toFixed(2)} €, el año ${mm.euros.toFixed(2)} € = final − aportado`)
+      // §159: el ocioso O en palabras; el día 1 hay 999 € en el ocioso al cierre; la venta final de O, el último día.
+      const mo = dd.movimientos
+      ok(mo[1].que === 'Ocioso: compra O · 19,98 × 50,00 €' && mo[1].clase === 'ocioso' && cerca(mo[1].enOcioso, 999) && mo[4].que === 'Aportación' && mo[7].que.startsWith('Ocioso: vende O · ') && mo[7].que.endsWith('(venta final del último día)') && mo[0].nombreOcioso === 'O',
+        `movimientos a mano con ocioso: ${mo.map(m => m.que).join(' · ')}`) }
     ok(txt === 'aportacion · compra O · venta O · compra A · aportacion · compra O · venta A · ventaFinal O' && L.movimientos[1].rol === 'ocioso' && L.porSimbolo.O.rol === 'ocioso' && cerca(L.porSimbolo.O.valorFinal, 299 / 55 * 60), `a mano: los movimientos, en orden (${txt})`)
     ok(cerca(L.reparto[0].ocioso, 999) && L.reparto[0].valores === 0 && cerca(L.reparto[2].valores, 109.69 * 11) && cerca(L.reparto[2].ocioso, 299) && cerca(L.reparto[2].liquidez, 0),
       `a mano: el día 1 hay 999 € en el ocioso; el día 3, 1.206,59 € en valores y 299 € en el ocioso (${L.reparto[2].valores.toFixed(2)}, ${L.reparto[2].ocioso.toFixed(2)})`)
@@ -194,6 +207,8 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     const r = coherente('un valor a mano, con impuestos', planUno(conJulio, { impuestos: { regimen: 'ES-ahorro', reglaDosMeses: true } }), datosMano(conJulio)), L = r.libro
     const imp = L.movimientos.filter(m => m.tipo === 'impuesto')
     ok(imp.length === 1 && imp[0].fecha === '2021-07-01' && cerca(imp[0].importe, r.impuestos.pagados, 1e-9) && cerca(L.puente.impuestos, 10000 * 9 / 105 * 0.19, 1e-9), `impuestos: 857,14 € × 19 % = 162,86 €, pagados el 01/07/2021 (${imp[0]?.importe.toFixed(2)})`)
+    { const mj = require(R + '/lib/builder/detallePlan.js').movimientos(L, r.serie, 'OCI').find(m => m.tipo === 'impuesto')
+      ok(mj?.que === 'Impuestos de 2020 (se pagan en julio)' && mj.signo === -1 && mj.clase === 'impuesto', `movimientos: «${mj?.que}»`) }
   }
 
   // ── 3 · Con precios reales ──
@@ -338,6 +353,16 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     ok(b.raiz.conAtributo('data-gantt-detalle').length === 1 && !filasH().length && !b.raiz.textContent.includes('Mostrar descartados'), 'pantalla, «Gantt»: el del Backtesting, sin la casilla «Mostrar descartados»')
     D.pulsa(b.raiz.conAtributo('data-vista-historial', 'tabla')[0]); await D.espera(30)
     ok(b.raiz.busca(n => n.nodeName === 'BUTTON' && /Copiar para Claude/.test(n.textContent)) != null && !b.raiz.conAtributo('data-detalle-falta')[0].textContent.includes('historial'), 'pantalla: «Copiar para Claude» y la línea de lo que falta ya sin el historial')
+    // §159: «Todos los movimientos». El primero es el último del plan (los impuestos al vender todo); 50 por página; buscando «gld», solo el oro.
+    D.pulsa(b.raiz.conAtributo('data-vista-historial', 'movimientos')[0]); await D.espera(30)
+    const filasM = () => b.raiz.conAtributo('data-movimiento'), nMov = L.movimientos.length, nGld = L.movimientos.filter(m => m.simbolo === 'GLD').length
+    ok(filasM().length === 50 && filasM()[0].getAttribute('data-movimiento') === L.movimientos[nMov - 1].tipo && !b.raiz.conAtributo('data-excel-historial').length && !filasH().length && b.raiz.conAtributo('data-tabla', 'detalle-movimientos')[0].textContent.includes('En el ocioso (oro (GLD))'),
+      `pantalla, «Todos los movimientos»: 50 de ${nMov}, el primero «${filasM()[0]?.textContent.slice(0, 80)}», sin Excel`)
+    D.escribe(b.raiz.conAtributo('data-busca-historial')[0], 'gld'); await D.espera(30)
+    ok(filasM().length === Math.min(50, nGld) && filasM().every(n => /oro \(GLD\)/.test(n.textContent)) && (b.raiz.conAtributo('data-historial-filtro')[0]?.textContent || '').startsWith(`${Pa.numero(nGld, 0)} de ${Pa.numero(nMov, 0)} movimientos`),
+      `buscando «gld» en los movimientos: ${nGld} del oro`)
+    D.pulsa(b.raiz.conAtributo('data-limpiar-busqueda')[0]); D.pulsa(b.raiz.conAtributo('data-vista-historial', 'tabla')[0]); await D.espera(30)
+    ok(filasH().length === 50 && !filasM().length, 'de vuelta a «Operaciones»')
     D.pulsa(b.raiz.conAtributo('data-pliega-valores')[0]); await D.espera(30)
     ok(!b.raiz.conAtributo('data-valor').length && b.raiz.conAtributo('data-fila-total').length === 1 && b.raiz.conAtributo('data-fila-ocioso').length === 1, 'al plegar, quedan el total y el ocioso')
     // De vuelta a «Tu dinero»: el mismo cálculo (no se pide otra vez) y la misma cifra.

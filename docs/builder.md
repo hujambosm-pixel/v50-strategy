@@ -3108,3 +3108,12 @@ Tres paneles más en la pestaña «Detalle» (components/PlanDetalle.js), con el
 - Quedan para la parte 4: las velas de cada valor con sus operaciones, la «Vista de gráficos», «Todos los movimientos» y «Detalle» con un solo valor. La línea final de la pestaña lo dice.
 - Comprobación `scripts/comprobaciones/plan-detalle.js` ampliada: a mano (orden y buscador del historial; A 499 € → +99,80 €, +20 %, 4 días; el texto de «Copiar para Claude»); en la pantalla con la lista Degiro, 50 filas con la última venta arriba, «Ver 50 más», buscar un valor con su resultado y la ✕, Gantt sin «Mostrar descartados» y el botón de copiar. Excel probado aparte con dos operaciones inventadas.
 - Ninguna cifra cambia.
+
+## 159. Un solo cálculo, parte 4a: «Todos los movimientos» en el historial de «Detalle»
+
+Decidido con Sergi el 15/11 (boceto bocetos/detalle-plan.html): el historial de «Detalle» tiene «Operaciones (N)» (por defecto, con Gantt y Excel) y «Todos los movimientos».
+
+- `movimientos(libro, serie, ocioso)` de lib/builder/detallePlan.js: cada movimiento del libro con lo que pasa en palabras («Dinero inicial», «Aportación», «Compra AAPL · 12,00 × 215,00 €», «Ocioso: vende oro (GLD) · …», «… (venta final del último día)», «Impuestos de 2024 (se pagan en julio)», «Impuestos pendientes al vender todo el último día»), su signo (+ entra, − sale), el importe sin comisión, la comisión y, al cierre de ese día, el dinero en valores y en el ocioso (con el ocioso en liquidez, la liquidez). `filtraMovimientos`: el más reciente arriba, filtrado por valor (o por texto, con 3 letras o más).
+- Pantalla (`Historial` de components/PlanDetalle.js): botones «Operaciones (N)» / «Todos los movimientos» / «📅 Gantt»; los movimientos, 50 cada vez con «Ver 50 más», colores por tipo (aportación azul, impuestos rojo, ocioso amarillo); el buscador vale para los dos; sin Excel en los movimientos.
+- Comprobación `scripts/comprobaciones/plan-detalle.js` ampliada: a mano (los 5 movimientos de la lista A/B con sus textos, signos y dinero al cierre; el ocioso O en palabras; «Impuestos de 2020 (se pagan en julio)»), y en la pantalla con la lista Degiro (2.979 movimientos; el primero, los impuestos al vender todo; buscar «gld» deja los 1.280 del oro).
+- Ninguna cifra cambia.
