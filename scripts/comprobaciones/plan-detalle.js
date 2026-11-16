@@ -167,6 +167,11 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     const vA = De.velasDe({ velas: velasA }, F[1], F[3]), oA2 = De.opsEnVelas(vA, po.ops, 'A')
     ok(vA.length === 3 && vA[0].date === F[1] && De.velasDe(velasA, F[0], F[0]).length === 1 && oA2.length === 1 && oA2[0].e === 0 && oA2[0].x === 2 && oA2[0].entryPrice === 10 && oA2[0].exitPrice === 12 && De.opsEnVelas(vA, po.ops, 'B')[0].x === 1 && De.opsEnVelas(vA.slice(1), po.ops, 'A')[0].e === null,
       'velas a mano: recortadas a las fechas del plan; la operación de A, de la vela 0 (a 10) a la 2 (a 12); fuera de las velas, null')
+    // §164. Para el gráfico del Backtesting: A compra el 03/01 a 10 y vende el 07/01 a 12 (+20 %, 499 € → 598,80 €); su foco va del 04/12/2019 al 06/02/2020.
+    { const sg = De.senalesGrafico(po.ops, 'A')[0], fo = De.focoDeOperacion(po.ops, po.ops.find(o => o.simbolo === 'A'))
+      ok(sg.entries.length === 1 && sg.entries[0].date === F[1] && sg.entries[0].price === 10 && sg.exits[0].price === 12 && sg.trades[0].n === 1 && cerca(sg.trades[0].pnlPct, 20) && cerca(sg.trades[0].inversion, 499) && cerca(sg.trades[0].resultado, 598.8)
+        && fo.n === 1 && fo.sim === 'A' && fo.from === '2019-12-04' && fo.to === '2020-02-06' && De.focoDeOperacion(po.ops, { simbolo: 'A', entryDate: 'x', exitDate: 'y' }) === null,
+        'el gráfico del Backtesting a mano: A con su compra, su venta, +20 % (499 € → 598,80 €), y su foco del 04/12/2019 al 06/02/2020') }
   }
   {
     // Con ocioso y aportaciones (el caso de §91): concentrado máx. 1, 1.000 € + 300 €/mes, ocioso O, 1 € por orden. Día 1, al cierre: 999 €
@@ -331,11 +336,10 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     const datosLista = { watchlist: SIMB.map(s => ({ symbol: s, name: s, list_ids: [1] })), wlLists: [{ id: 1, name: 'Degiro' }], rankingData: {} }
     const aPant = ajustes('concentrado')   // 300 €/mes, impuestos, oro (GLD), 0,185 € por orden
     let ultima = null, conLibro = true, ido = null
-    // §160: las velas de la foto, contando cuántas se piden y cuántas a la vez.
-    const pedidasVelas = []; let velasALaVez = 0, maxVelasALaVez = 0
-    const cargaVelas = async (s) => { pedidasVelas.push(s); velasALaVez++; maxVelasALaVez = Math.max(maxVelasALaVez, velasALaVez); await D.espera(5); velasALaVez--; return { velas: E.velasFoto(s) } }
+    // §164: el gráfico de velas del Backtesting espera a verse (IntersectionObserver) para pedir sus velas; aquí nunca se ve.
+    if (!globalThis.IntersectionObserver) globalThis.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} }
     const calcula = async (p, c) => { const r = await E.llama(HP, { plan: p, curvas: true, cuerpoLista: c, ...(conLibro ? { libro: true } : {}) }); const j = JSON.parse(r.cuerpo); if (r.status !== 200) throw new Error(j.error); ultima = j; return j }
-    const monta = (inicial) => D.monta(React.createElement(BP, { estrategias: [est], estrategiaId: est.id, datosLista, onIrAValor: (s) => { ido = s }, deps: { ctx: null, calcula, cargaVelas, calculaPorDentro: async () => { throw new Error('no') } },
+    const monta = (inicial) => D.monta(React.createElement(BP, { estrategias: [est], estrategiaId: est.id, datosLista, onIrAValor: (s) => { ido = s }, deps: { ctx: null, calcula, calculaPorDentro: async () => { throw new Error('no') } },
       inicial: { planes: [], pestana: 'n1', simbolos: ['AAPL'], pruebas: [], resultadoPrueba: { periodos: [] }, ajustes: aPant, ...inicial } }), RDC)
     const b = monta({ vistaDer: 'detalle' })
     for (let k = 0; k < 120 && !b.raiz.conAtributo('data-vista-detalle').length; k++) await D.espera(250)
@@ -370,23 +374,29 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     ok(b.raiz.conAtributo('data-elegida')[0]?.getAttribute('data-linea-valor') === d0.filas[1].simbolo && b.raiz.conAtributo('data-valor', d0.filas[1].simbolo)[0].getAttribute('aria-selected') === 'true', `al pulsar ${d0.filas[1].simbolo} en la leyenda, su línea queda resaltada y su fila marcada`)
     D.pulsa(modoB('plan')); await D.espera(30)
     D.pulsa(b.raiz.conAtributo('data-elige-valor', d0.filas[0].simbolo)[0]); await D.espera(30)
-    // §160: pulsar un valor de la tabla enseña sus velas con sus operaciones, en lugar del gráfico; «← Volver» lo devuelve.
-    for (let k = 0; k < 80 && !b.raiz.conAtributo('data-grafico', 'velas-valor').length; k++) await D.espera(50)
-    const gvv = b.raiz.conAtributo('data-grafico', 'velas-valor')[0], nOpsSym = d0.porOperacion.ops.filter(o => o.simbolo === d0.filas[0].simbolo).length
-    ok(!!gvv && Number(gvv.getAttribute('data-operaciones')) === nOpsSym && Number(gvv.getAttribute('data-velas')) === ej.serie.length && !b.raiz.conAtributo('data-tarjeta', 'detalle-crece').length && pedidasVelas.join() === d0.filas[0].simbolo
-      && b.raiz.conAtributo('data-op-velas', 'gana').length + b.raiz.conAtributo('data-op-velas', 'pierde').length === nOpsSym,
-      `al pulsar ${d0.filas[0].simbolo} en la tabla: sus velas (${gvv?.getAttribute('data-velas')}) con sus ${nOpsSym} operaciones, en lugar de «Cómo crece»`)
+    // §160/§164: pulsar un valor de la tabla enseña sus velas (el gráfico del Backtesting) con sus operaciones, en lugar de «Cómo crece».
+    const vv = () => b.raiz.conAtributo('data-velas-valor'), nOpsSym = d0.porOperacion.ops.filter(o => o.simbolo === d0.filas[0].simbolo).length
+    ok(vv().length === 1 && vv()[0].getAttribute('data-velas-valor') === d0.filas[0].simbolo && Number(vv()[0].getAttribute('data-operaciones')) === nOpsSym && !vv()[0].hasAttribute('data-foco') && !b.raiz.conAtributo('data-tarjeta', 'detalle-crece').length,
+      `al pulsar ${d0.filas[0].simbolo} en la tabla: su gráfico de velas del Backtesting con sus ${nOpsSym} operaciones, en lugar de «Cómo crece»`)
     D.pulsa(b.raiz.conAtributo('data-volver-velas')[0]); await D.espera(30)
-    ok(b.raiz.conAtributo('data-tarjeta', 'detalle-crece').length === 1 && !b.raiz.conAtributo('data-grafico', 'velas-valor').length, '«← Volver al gráfico del plan»')
-    // «Vista de gráficos»: cerrada no pide nada; abierta, un gráfico por valor, nunca más de 4 lecturas a la vez y una sola por valor.
-    ok(pedidasVelas.length === 1 && !b.raiz.conAtributo('data-vista-graficos').length, '«Vista de gráficos» cerrada: no pide velas')
-    D.pulsa(b.raiz.conAtributo('data-abre-vista-graficos')[0])
-    for (let k = 0; k < 120 && b.raiz.conAtributo('data-grafico', 'velas-valor').length < conOps; k++) await D.espera(50)
-    ok(b.raiz.conAtributo('data-grafico-pequeno').length === conOps && b.raiz.conAtributo('data-grafico', 'velas-valor').length === conOps && pedidasVelas.length === conOps && new Set(pedidasVelas).size === conOps && maxVelasALaVez <= 4,
-      `«Vista de gráficos»: ${conOps} gráficos, ${pedidasVelas.length} lecturas (una por valor; la ya leída no se repite) y como mucho ${maxVelasALaVez} a la vez`)
-    D.pulsa(b.raiz.conAtributo('data-grafico-pequeno', d0.filas[2].simbolo)[0].todos(n => n.getAttribute?.('data-grafico') === 'velas-valor')[0].parentNode); await D.espera(30)
-    ok(b.raiz.conAtributo('data-tarjeta', 'detalle-velas')[0]?.textContent.startsWith(`${d0.filas[2].simbolo} · sus velas`), `pulsar el gráfico pequeño de ${d0.filas[2].simbolo} lo abre en grande`)
+    ok(b.raiz.conAtributo('data-tarjeta', 'detalle-crece').length === 1 && !vv().length, '«← Volver al gráfico del plan»')
+    // «Vista de gráficos»: cerrada, ningún gráfico; abierta, uno por valor (los del Backtesting); «Ver en grande» lo abre arriba.
+    ok(!b.raiz.conAtributo('data-vista-graficos').length && !vv().length, '«Vista de gráficos» cerrada: ningún gráfico')
+    D.pulsa(b.raiz.conAtributo('data-abre-vista-graficos')[0]); await D.espera(30)
+    ok(b.raiz.conAtributo('data-grafico-pequeno').length === conOps && vv().length === conOps, `«Vista de gráficos»: ${conOps} gráficos de velas, uno por valor`)
+    D.pulsa(b.raiz.conAtributo('data-ver-grande', d0.filas[2].simbolo)[0]); await D.espera(30)
+    ok(b.raiz.conAtributo('data-tarjeta', 'detalle-velas')[0]?.textContent.startsWith(`${d0.filas[2].simbolo} · sus velas`), `«Ver en grande» de ${d0.filas[2].simbolo} lo abre arriba`)
     D.pulsa(b.raiz.conAtributo('data-volver-velas')[0]); D.pulsa(b.raiz.conAtributo('data-abre-vista-graficos')[0]); await D.espera(30)
+    // §164: del historial a su gráfico. Pulsar una fila abre las velas de su valor centradas en esa operación (30 días antes y después) y la
+    // resalta (n = su número entre las de ese valor, por fecha de compra); «Ver todo el periodo» quita el foco.
+    { const o = d0.porOperacion.ops[d0.porOperacion.ops.length - 1], fo = De.focoDeOperacion(d0.porOperacion.ops, o)
+      D.pulsa(b.raiz.conAtributo('data-operacion')[0]); await D.espera(30)
+      const v = vv()[0]
+      ok(!!fo && v?.getAttribute('data-velas-valor') === o.simbolo && Number(v.getAttribute('data-foco')) === fo.n && fo.n === d0.porOperacion.ops.filter(x => x.simbolo === o.simbolo).length && (b.raiz.conAtributo('data-foco-linea')[0]?.textContent || '').includes(Pa.fechaCorta(o.entryDate)),
+        `pulsar la primera fila del historial (${o.simbolo}, ${o.entryDate} → ${o.exitDate}) abre su gráfico centrado en ella (operación ${fo?.n} de ${o.simbolo}, ${fo?.from} → ${fo?.to})`)
+      D.pulsa(b.raiz.conAtributo('data-todo-periodo')[0]); await D.espera(30)
+      ok(!vv()[0]?.hasAttribute('data-foco') && !b.raiz.conAtributo('data-foco-linea').length, '«Ver todo el periodo» quita el foco')
+      D.pulsa(b.raiz.conAtributo('data-volver-velas')[0]); await D.espera(30) }
     D.pulsa(b.raiz.conAtributo('data-ir-valor', d0.filas[0].simbolo)[0]); ok(ido === d0.filas[0].simbolo, 'el «↗» de un valor pide ir a ese valor')
     // §157: con precios reales, cada año de «Ganancias mensuales» es el de «Año a año» y todos los años suman la ganancia neta.
     const anios = Pa.cifrasPlan(ultima, Pl.planListaCalculable(Pa.planDe(aPant, est)).plan).anios
@@ -463,14 +473,13 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     b3.quita()
     // §161: con UN valor (AAPL, oro, 300 €/mes, impuestos): pestañas «Tu dinero» y «Detalle» (sin «La cartera por dentro»); en «Detalle»,
     // la suma = «Tienes al final», sus velas a la vista (sin «Volver»), «Cómo crece» solo con «El plan» y sin tabla por valor ni «Vista de gráficos».
-    pedidasVelas.length = 0
     const aUno = { ...Pa.AJUSTES_PLAN, comisionTipo: 'fija', comisionFija: 0.185, periodo: 'todo', capital: 10000, aportacion: 300, impuestos: 'ES-ahorro', ocioso: 'GLD', activo: 'AAPL' }
     const b4 = monta({ vistaDer: 'detalle', ajustes: aUno })
-    for (let k = 0; k < 120 && !(b4.raiz.conAtributo('data-vista-detalle').length && b4.raiz.conAtributo('data-grafico', 'velas-valor').length); k++) await D.espera(250)
+    for (let k = 0; k < 120 && !(b4.raiz.conAtributo('data-vista-detalle').length && b4.raiz.conAtributo('data-velas-valor').length); k++) await D.espera(250)
     const p4 = (id) => b4.raiz.busca(n => n.nodeName === 'BUTTON' && n.getAttribute?.('data-vista-der') === id), L4 = ultima?.evaluacion.plan.ejecucion.libro, m4 = ultima?.evaluacion.plan.medidas
-    const s4 = b4.raiz.conAtributo('data-detalle-suma')[0], fin4 = s4?.todos(n => n.getAttribute('data-suma') === 'final')[0]?.textContent, g4 = b4.raiz.conAtributo('data-grafico', 'velas-valor')[0]
+    const s4 = b4.raiz.conAtributo('data-detalle-suma')[0], fin4 = s4?.todos(n => n.getAttribute('data-suma') === 'final')[0]?.textContent, g4 = b4.raiz.conAtributo('data-velas-valor')[0]
     ok(!!p4('dinero') && !!p4('detalle') && !p4('dentro') && !ultima.finalPorDentro && !!L4 && s4?.getAttribute('data-cuadra') === 'si' && fin4 === Pa.euros(m4.valorNeto, 0)
-      && (b4.raiz.conAtributo('data-detalle-cabecera')[0]?.textContent || '').startsWith('1 valor (AAPL)') && Number(g4?.getAttribute('data-operaciones')) === L4.operaciones.length && pedidasVelas.join() === 'AAPL'
+      && (b4.raiz.conAtributo('data-detalle-cabecera')[0]?.textContent || '').startsWith('1 valor (AAPL)') && Number(g4?.getAttribute('data-operaciones')) === L4.operaciones.length && g4.getAttribute('data-velas-valor') === 'AAPL'
       && !b4.raiz.conAtributo('data-volver-velas').length && !b4.raiz.conAtributo('data-tarjeta', 'detalle-valores').length && !b4.raiz.conAtributo('data-modo-crece').length && b4.raiz.conAtributo('data-grafico', 'plan').length === 1 && !b4.raiz.conAtributo('data-tarjeta', 'detalle-vista-graficos').length
       && b4.raiz.conAtributo('data-tabla', 'detalle-mensual').length === 1 && b4.raiz.conAtributo('data-operacion').length === Math.min(50, L4.operaciones.length),
       `con UN valor: «Tu dinero» y «Detalle»; la suma ${fin4} = «Tienes al final»; AAPL con sus ${L4?.operaciones.length} operaciones a la vista; «El plan» sin «Valor a valor»; mensuales e historial`)

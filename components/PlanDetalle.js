@@ -3,18 +3,19 @@
 // lib/builder/detallePlan.js con el libro del motor. Parte 2: la línea de arriba, la línea que suma, «Qué aportó cada valor» (con la fila
 // del dinero ocioso) y «Cómo crece» («El plan», con el mismo gráfico de «Tu dinero» y los «comprar y mantener» del plan, y «Valor a
 // valor»). §157 (parte 3a): ganancias mensuales, dónde está tu dinero cada día y resultados por operación. §158 (parte 3b): el
-// historial (tabla con buscador, Gantt y Excel del Backtesting) y «Copiar para Claude». §159 (parte 4a): «Todos los movimientos». §162 (parte 5a): fila de cifras, columnas por valor como el Backtesting y buscador en toda la fila. §161 (parte 4c): también con un solo valor (sin la tabla por valor; sus velas a la vista). §160 (parte 4b): las velas de cada valor (pulsando un valor de la tabla) y la «Vista de gráficos».
+// historial (tabla con buscador, Gantt y Excel del Backtesting) y «Copiar para Claude». §159 (parte 4a): «Todos los movimientos». §162 (parte 5a): fila de cifras, columnas por valor como el Backtesting y buscador en toda la fila. §161 (parte 4c): también con un solo valor (sin la tabla por valor; sus velas a la vista). §160 (parte 4b): las velas de cada valor (pulsando un valor de la tabla) y la «Vista de gráficos»; §164 (parte 5c): con el gráfico del Backtesting, y del historial o de una barra a su operación.
 // «La cartera por dentro» sigue mientras Sergi no compruebe que «Detalle» lo tiene todo.
 //   detalle: lo de detallePlan · cifras: lo de cifrasPlan (las filas de los «comprar y mantener») · graficoPlan: el gráfico de «Tu dinero»
 //   ya montado (lo pone BuilderPlan) · onIrAValor(símbolo): el «↗» · viejas: el cálculo es el anterior (se atenúa).
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { B, S } from '../lib/builder/estilo'
 import Ayuda from './BuilderAyuda'
 import { separaEtiquetas } from '../lib/builder/escalaGrafico'
-import { AYUDA_DETALLE, textoSenales, filtraMovimientos, historial, nombreOcioso, opsEnVelas, textoDetalle, tradesBacktesting, velasDe } from '../lib/builder/detallePlan'
+import { AYUDA_DETALLE, textoSenales, filtraMovimientos, historial, nombreOcioso, focoDeOperacion, senalesGrafico, textoDetalle, tradesBacktesting } from '../lib/builder/detallePlan'
 import ConLimpiar from './LimpiarBusqueda'
 import BotonCopiar from './BotonCopiar'
 import GanttChart from './GanttChart'
+import { AssetSignalChart } from './BacktestCharts'
 import { euros, fechaCorta, numero, pct } from '../lib/builder/planPantalla'
 
 const VERDE = '#7ee2a0', ROJO = '#ff8b8b', AZUL = '#58a6ff', AMARILLO = '#f2cc60', GRIS = '#4b5868'
@@ -145,7 +146,7 @@ export function GraficoDondeEsta({ donde, ocioso = 'LIQUIDEZ' }) {
   )
 }
 // §157 · Resultados por operación: una barra por operación (verde gana, roja pierde), en euros.
-export function BarrasOperaciones({ datos }) {
+export function BarrasOperaciones({ datos, onPulsa = null }) {
   const [ref, W] = useAncho()
   const [hov, setHov] = useState(null)
   const { ops } = datos, n = ops.length, IZQ = 62, DER = 10, H = 130, ARR = 6, ABJ = 6
@@ -162,7 +163,7 @@ export function BarrasOperaciones({ datos }) {
         <line x1={IZQ} x2={W - DER} y1={y0} y2={y0} stroke="#3a4656"/>
         {ops.map((op, i) => { const yv = y(op.resultado); return <rect key={i} x={IZQ + i * ancho + hueco / 2} width={Math.max(0.6, ancho - hueco)} y={Math.min(yv, y0)} height={Math.max(0.6, Math.abs(yv - y0))} fill={op.resultado >= 0 ? VERDE : ROJO} opacity={hov == null || hov === i ? 1 : 0.55}/> })}
         {o && <text data-operacion-dato x={IZQ} y={H + 13} fontSize={12} fill={B.texto}>{`${o.simbolo} · ${fechaCorta(o.entryDate)} → ${fechaCorta(o.exitDate)}${o.abierta ? ' (seguía abierta)' : ''} · ${conSigno(o.resultado, 2)} · ${o.pct == null ? '—' : `${o.pct > 0 ? '+' : ''}${pct(o.pct, 1)}`}`}</text>}
-        <rect x={IZQ} y={ARR} width={Math.max(0, W - IZQ - DER)} height={H - ARR - ABJ} fill="transparent" onMouseLeave={() => setHov(null)} onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); const i = Math.floor((e.clientX - r.left) / Math.max(1, r.width) * n); setHov(Math.max(0, Math.min(n - 1, i))) }}/>
+        <rect x={IZQ} y={ARR} width={Math.max(0, W - IZQ - DER)} height={H - ARR - ABJ} fill="transparent" style={onPulsa ? { cursor: 'pointer' } : undefined} onClick={onPulsa ? () => { if (hov != null) onPulsa(ops[hov]) } : undefined} onMouseLeave={() => setHov(null)} onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); const i = Math.floor((e.clientX - r.left) / Math.max(1, r.width) * n); setHov(Math.max(0, Math.min(n - 1, i))) }}/>
       </svg>
     </div>
   )
@@ -173,7 +174,7 @@ export function BarrasOperaciones({ datos }) {
 const POR_PAGINA = 50
 // §159: «Todos los movimientos» (movs): además de las operaciones, el ocioso, los impuestos y las aportaciones, con el dinero al cierre.
 const COLOR_MOV = { aportacion: '#79c0ff', impuesto: '#ff8b8b', ocioso: '#f2cc60', valor: undefined, otro: undefined }
-export function Historial({ ops, movs = [], desde, hasta, nombre = 'plan', inicial = null }) {
+export function Historial({ ops, movs = [], desde, hasta, nombre = 'plan', inicial = null, onOperacion = null }) {
   const [vista, setVista] = useState(inicial?.vista || 'tabla')
   const [busca, setBusca] = useState(inicial?.busca || '')
   const [cuantas, setCuantas] = useState(POR_PAGINA)
@@ -215,8 +216,8 @@ export function Historial({ ops, movs = [], desde, hasta, nombre = 'plan', inici
       : !lista.length ? <div data-historial-vacio style={S.secundario}>Ninguna operación de «{busca}».</div>
       : <><div style={{ overflowX: 'auto' }}><table data-tabla="detalle-historial" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr><th style={cab}>Valor</th><th style={cab}>Compra</th><th style={cab}>Venta</th>{['Acciones', 'Precio de compra', 'Precio de venta', 'Resultado', '%'].map(h => <th key={h} style={cabNum}>{h}</th>)}</tr></thead>
-        <tbody>{lista.slice(0, cuantas).map((o, k) => <tr key={`${o.simbolo}-${o.entryDate}-${k}`} data-operacion={o.simbolo}>
-          <td style={celda}><button type="button" onClick={() => { setBusca(o.simbolo); setCuantas(POR_PAGINA) }} title={`Ver solo las de ${o.simbolo}`} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.texto, fontFamily: B.letra, fontSize: 'inherit' }}>{o.simbolo}</button></td>
+        <tbody>{lista.slice(0, cuantas).map((o, k) => <tr key={`${o.simbolo}-${o.entryDate}-${k}`} data-operacion={o.simbolo} onClick={onOperacion ? () => onOperacion(o) : undefined} title={onOperacion ? `Pulsa para ver esta operación en el gráfico de ${o.simbolo}` : undefined} style={onOperacion ? { cursor: 'pointer' } : undefined}>
+          <td style={celda}><button type="button" onClick={(e) => { e.stopPropagation(); setBusca(o.simbolo); setCuantas(POR_PAGINA) }} title={`Ver solo las de ${o.simbolo}`} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.texto, fontFamily: B.letra, fontSize: 'inherit' }}>{o.simbolo}</button></td>
           <td style={celda}>{fechaCorta(o.entryDate)}</td><td style={celda}>{fechaCorta(o.exitDate)}{o.abierta && <span title="Seguía abierta el último día: se cuenta vendida ese día" style={{ color: AMARILLO }}> · abierta</span>}</td>
           <td style={num}>{numero(o.unidades, o.unidades < 10 ? 4 : 2)}</td><td style={num}>{euros(o.entryPrice, 2)}</td><td style={num}>{euros(o.exitPrice, 2)}</td>
           <td style={{ ...num, color: signo(o.resultado) }}>{conSigno(o.resultado, 2)}</td><td style={{ ...num, color: signo(o.pct) }}>{o.pct == null ? '—' : `${o.pct > 0 ? '+' : ''}${pct(o.pct, 1)}`}</td>
@@ -226,77 +227,30 @@ export function Historial({ ops, movs = [], desde, hasta, nombre = 'plan', inici
   </>)
 }
 
-// §160 · Las velas de un valor con sus operaciones (SVG). Con pocas velas a la vista, velas; con muchas, la línea del cierre (en 10 años de
-// diarias no caben velas). Cada operación: ▲ en la compra, ▼ en la venta y una línea verde (gana) o roja (pierde) entre sus precios.
-export function GraficoVelasValor({ velas, ops, alto = 330, compacto = false, onPulsa = null }) {
-  const [ref, W] = useAncho(compacto ? 360 : 760)
-  const [hov, setHov] = useState(null)
-  const n = velas.length, IZQ = compacto ? 8 : 62, DER = compacto ? 8 : 12, ARR = 8, ABJ = compacto ? 8 : 22, H = alto
-  if (n < 2) return <div data-sin-velas style={S.secundario}>Sin velas en las fechas del plan.</div>
-  let lo = Infinity, hi = -Infinity; for (const v of velas) { const l = v.low > 0 ? v.low : v.close, h = v.high > 0 ? v.high : v.close; if (l < lo) lo = l; if (h > hi) hi = h }
-  const x = (i) => IZQ + (n === 1 ? 0 : i / (n - 1)) * (W - IZQ - DER), y = (p) => ARR + (1 - (p - lo) / ((hi - lo) || 1)) * (H - ARR - ABJ)
-  const ancho = (W - IZQ - DER) / n, conVelas = ancho >= 3
-  const paso = conVelas ? 1 : Math.max(1, Math.ceil(n / 900))
-  const linea = []; for (let i = 0; i < n; i += paso) linea.push(`${x(i).toFixed(1)},${y(velas[i].close).toFixed(1)}`); if ((n - 1) % paso) linea.push(`${x(n - 1).toFixed(1)},${y(velas[n - 1].close).toFixed(1)}`)
-  const anios = []; velas.forEach((v, i) => { if (i === 0 || v.date.slice(0, 4) !== velas[i - 1].date.slice(0, 4)) anios.push([i, v.date.slice(0, 4)]) })
-  const cada = Math.max(1, Math.ceil(anios.length / Math.max(1, Math.floor((W - IZQ - DER) / 44))))
-  const visibles = ops.filter(o => o.e != null && o.x != null)
-  const opHov = hov != null ? visibles.find(o => hov >= o.e && hov <= o.x) : null
-  const tam = compacto ? 4 : 6
+// §164 (parte 5c) · LAS VELAS de un valor: el gráfico del Backtesting TAL CUAL (AssetSignalChart de components/BacktestCharts.js: sus velas,
+// la rueda para acercar, arrastrar, las etiquetas y el globo de cada operación), con las operaciones de ESTE plan. Él mismo pide sus velas
+// (/api/chartdata) cuando se ve. foco: { n, from, to } = centrar en esas fechas y resaltar la operación n de ese valor (la del historial).
+const aniosHasta = (desde) => Math.max(1, Math.ceil((Date.now() - Date.parse(desde + 'T00:00:00Z')) / (365.25 * 864e5)) + 1)
+export function VelasValor({ sim, ops, desde, hasta, alto = 400, foco = null, etiquetas = true }) {
+  const senales = useMemo(() => senalesGrafico(ops, sim, nombreSenales), [ops, sim])
+  const rango = useMemo(() => foco ? { from: foco.from, to: foco.to } : { from: desde, to: hasta }, [foco?.from, foco?.to, desde, hasta])
+  const n = senales[0]?.trades.length || 0
   return (
-    <div ref={ref} style={{ width: '100%' }} onClick={onPulsa || undefined}>
-      <svg data-grafico="velas-valor" data-velas={n} data-operaciones={visibles.length} width={W} height={H + (compacto ? 0 : 18)} role="img" aria-label={`Precio y ${visibles.length} operaciones del plan`} style={{ display: 'block', fontFamily: B.letra, cursor: onPulsa ? 'pointer' : undefined }}>
-        {!compacto && marcasLineales(lo, hi).map((t, k) => <g key={k}><line x1={IZQ} x2={W - DER} y1={y(t)} y2={y(t)} stroke="#1b2430"/><text x={IZQ - 6} y={y(t) + 4} textAnchor="end" fontSize={11} fill={B.apagado}>{numero(t, t < 10 ? 2 : 0)}</text></g>)}
-        {!compacto && anios.filter((_, k) => k % cada === 0).map(([i, a]) => <text key={a} x={x(i)} y={H - 6} fontSize={11} fill={B.apagado}>{a}</text>)}
-        {conVelas ? velas.map((v, i) => { const sube = v.close >= v.open, c = sube ? '#5b7a66' : '#7a5b5b'; return <g key={i}><line x1={x(i)} x2={x(i)} y1={y(v.high || v.close)} y2={y(v.low || v.close)} stroke={c}/><rect x={x(i) - ancho * 0.35} width={Math.max(1, ancho * 0.7)} y={y(Math.max(v.open, v.close))} height={Math.max(1, Math.abs(y(v.open) - y(v.close)))} fill={c}/></g> })
-          : <polyline points={linea.join(' ')} fill="none" stroke="#8b98a8" strokeWidth={1}/>}
-        {visibles.map((o, k) => { const gana = o.resultado >= 0, c = gana ? VERDE : ROJO; return <g key={k} data-op-velas={gana ? 'gana' : 'pierde'} opacity={opHov && opHov !== o ? 0.5 : 1}>
-          <line x1={x(o.e)} x2={x(o.x)} y1={y(o.entryPrice)} y2={y(o.exitPrice)} stroke={c} strokeWidth={compacto ? 1.5 : 2.2}/>
-          <path d={`M${x(o.e)},${y(o.entryPrice) + 3} l${-tam / 2},${tam} l${tam},0 z`} fill={VERDE}/>
-          <path d={`M${x(o.x)},${y(o.exitPrice) - 3} l${-tam / 2},${-tam} l${tam},0 z`} fill={c}/></g> })}
-        {!compacto && hov != null && <><line x1={x(hov)} x2={x(hov)} y1={ARR} y2={H - ABJ} stroke={B.titulo} strokeWidth={1} opacity={0.5}/>
-          <text data-velas-dato x={IZQ} y={H + 13} fontSize={12} fill={B.texto}>{`${fechaCorta(velas[hov].date)} · cierre ${numero(velas[hov].close, 2)}${opHov ? ` · operación ${fechaCorta(opHov.entryDate)} → ${fechaCorta(opHov.exitDate)}: ${conSigno(opHov.resultado, 2)}${opHov.pct == null ? '' : ` (${opHov.pct > 0 ? '+' : ''}${pct(opHov.pct, 1)})`}` : ''}`}</text></>}
-        {!compacto && <rect x={IZQ} y={ARR} width={Math.max(0, W - IZQ - DER)} height={H - ARR - ABJ} fill="transparent" onMouseLeave={() => setHov(null)} onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); const i = Math.round((e.clientX - r.left) / Math.max(1, r.width) * (n - 1)); setHov(Math.max(0, Math.min(n - 1, i))) }}/>}
-      </svg>
+    <div data-velas-valor={sim} data-operaciones={n} data-foco={foco ? foco.n : undefined}>
+      <AssetSignalChart key={`${sim}|${foco?.n ?? ''}`} symbol={sim} stratSignals={senales} years={aniosHasta(desde)} height={alto} rangoVisible={rango} verEtiquetas={etiquetas}
+        onReady={({ highlightTrade }) => { if (foco?.n) setTimeout(() => highlightTrade?.(foco.n), 150) }}/>
     </div>
   )
 }
-// Lee (una vez) las velas de un valor con cargaVelas; cache: un Map compartido por el «Detalle» (símbolo → { velas } | { error }).
-function useVelasValor(sim, cargaVelas, cache, desde, hasta) {
-  const [, setN] = useState(0)
-  useEffect(() => {
-    if (!sim || !cargaVelas || cache.has(sim)) return
-    let vivo = true
-    cache.set(sim, { cargando: true })
-    cargaVelas(sim).then(r => { cache.set(sim, { crudas: r }) }).catch(e => { cache.set(sim, { error: e.message || String(e) }) }).finally(() => { if (vivo) setN(x => x + 1) })
-    return () => { vivo = false; if (cache.get(sim)?.cargando) cache.delete(sim) }
-  }, [sim, cargaVelas, cache])
-  const e = sim ? cache.get(sim) || { cargando: true } : null
-  return e?.crudas ? { velas: velasDe(e.crudas, desde, hasta) } : e
-}
-// Pide como mucho `max` a la vez (la «Vista de gráficos» puede pedir 100 valores).
-export function limitador(f, max = 4) {
-  if (!f) return null
-  let activos = 0
-  const cola = []
-  const sigue = () => { while (activos < max && cola.length) { const [a, ok, ko] = cola.shift(); activos++; Promise.resolve().then(() => f(a)).then(ok, ko).finally(() => { activos--; sigue() }) } }
-  return (a) => new Promise((ok, ko) => { cola.push([a, ok, ko]); sigue() })
-}
-function VelasDeValor({ sim, ops, cargaVelas, cache, desde, hasta, compacto = false, alto, onPulsa = null }) {
-  const e = useVelasValor(sim, cargaVelas, cache, desde, hasta)
-  if (!cargaVelas) return <div style={S.secundario}>No se pueden pedir las velas aquí.</div>
-  if (!e || e.cargando) return <div data-velas-cargando style={{ ...S.secundario, height: alto, display: 'flex', alignItems: 'center' }}>Leyendo las velas de {sim}…</div>
-  if (e.error) return <div data-velas-error style={{ color: ROJO }}>No se pudieron leer las velas de {sim}: {e.error}</div>
-  return <GraficoVelasValor velas={e.velas} ops={opsEnVelas(e.velas, ops, sim)} alto={alto} compacto={compacto} onPulsa={onPulsa}/>
-}
-// §160 · «Vista de gráficos»: un gráfico pequeño por valor (cerrada por defecto; al abrirla se piden las velas, de 4 en 4 por el efecto de
-// cada uno). Pulsar uno lo abre en grande en «Cómo crece».
-function VistaGraficos({ filas, ops, cargaVelas, cache, desde, hasta, onElegir }) {
+const nombreSenales = 'Operaciones del plan'
+// §164 · «Vista de gráficos»: un gráfico por valor, los del Backtesting (cada uno pide sus velas cuando se ve). «Ver en grande» lo abre arriba.
+function VistaGraficos({ filas, ops, desde, hasta, onElegir }) {
   return (
-    <div data-vista-graficos style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 10 }}>
+    <div data-vista-graficos style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {filas.map(f => <div key={f.simbolo} data-grafico-pequeno={f.simbolo} style={{ border: `1px solid ${B.borde}`, borderRadius: 6, padding: '6px 8px', background: B.fondo }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}><b style={{ color: B.titulo }}>{f.simbolo}</b><span style={{ color: signo(f.aporto) }}>{conSigno(f.aporto)} · {numero(f.operaciones, 0)} op.</span></div>
-        <VelasDeValor sim={f.simbolo} ops={ops} cargaVelas={cargaVelas} cache={cache} desde={desde} hasta={hasta} compacto alto={110} onPulsa={() => onElegir(f.simbolo)}/>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, marginBottom: 4 }}><b style={{ color: B.titulo }}>{f.simbolo}</b><span style={{ color: signo(f.aporto) }}>{conSigno(f.aporto)}</span><span style={{ color: B.secundario }}>{numero(f.operaciones, 0)} operaciones · {pct(f.ganadoras, 1)} ganan</span>
+          <button type="button" data-ver-grande={f.simbolo} onClick={() => onElegir(f.simbolo)} style={{ ...boton(false), marginLeft: 'auto' }}>Ver en grande ↑</button></div>
+        <VelasValor sim={f.simbolo} ops={ops} desde={desde} hasta={hasta} alto={300}/>
       </div>)}
     </div>
   )
@@ -327,15 +281,15 @@ const Tarjeta = ({ id, titulo, ayuda, derecha = null, children }) => (
   </div>
 )
 
-export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrAValor = null, viejas = false, inicial = null, nombre = null, version = null, cargaVelas = null }) {
+export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrAValor = null, viejas = false, inicial = null, nombre = null, version = null }) {
   const [modo, setModo] = useState(inicial?.modo || 'plan')
   const [elegido, setElegido] = useState(inicial?.elegido || null)
   const [abierta, setAbierta] = useState(true)
   // §160: el valor cuyas velas se ven en «Cómo crece» (null = el gráfico del plan) y si la «Vista de gráficos» está abierta.
   const [verValor, setVerValor] = useState(inicial?.verValor || null)
   const [vistaG, setVistaG] = useState(!!inicial?.vistaGraficos)
-  const cache = useRef(null); if (!cache.current) cache.current = new Map()
-  const carga = useRef(null); if (!carga.current || carga.current.f !== cargaVelas) carga.current = { f: cargaVelas, g: limitador(cargaVelas, 4) }
+  // §164: la operación pulsada en el historial o en «Resultados por operación» ({ n, from, to }; null = todo el periodo).
+  const [foco, setFoco] = useState(null)
   const crece = useRef(null)
   if (!detalle) return <div data-sin-detalle style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>Este cálculo no trae el detalle. Cambia cualquier ajuste del plan y se calculará de nuevo.</div>
   const { cabecera: c, suma: s, filas, total, ocioso } = detalle
@@ -344,7 +298,8 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
   const nombreOc = nombreOcioso(ocioso.simbolo), sinOcioso = ocioso.simbolo === 'LIQUIDEZ'
   const parte = (id, color, texto) => <span data-suma={id} style={{ color, whiteSpace: 'nowrap' }}>{texto}</span>
   const elige = (sim) => { setElegido(sim); setModo('valores') }
-  const abreVelas = (sim) => { setVerValor(sim); try { crece.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }) } catch (_) {} }
+  const abreOperacion = (o) => { const fo = focoDeOperacion(detalle.porOperacion?.ops || [], o); if (fo) abreVelas(o.simbolo, fo) }
+  const abreVelas = (sim, fo = null) => { setVerValor(sim); setFoco(fo); try { crece.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }) } catch (_) {} }
   const bh = (cifras?.alternativas || []).filter(x => x.id !== 'OCIOSO_LIQUIDEZ')
   return (
     <div data-vista-detalle data-cifras-viejas={viejas ? 'si' : undefined} title={viejas ? 'Calculando con tus ajustes de ahora: estas cifras son del cálculo anterior.' : undefined} style={{ display: 'flex', flexDirection: 'column', opacity: viejas ? 0.4 : 1, transition: 'opacity 0.15s' }}>
@@ -401,8 +356,9 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
 
       <div ref={crece}/>
       {simVelas && <Tarjeta id="detalle-velas" titulo={`${simVelas} · sus velas con las operaciones del plan`} ayuda={AYUDA_DETALLE.velas}
-        derecha={unValor ? null : <button type="button" data-volver-velas onClick={() => setVerValor(null)} style={boton(false)}>← Volver al gráfico del plan</button>}>
-        <VelasDeValor sim={simVelas} ops={detalle.porOperacion?.ops || []} cargaVelas={carga.current.g} cache={cache.current} desde={c.desde} hasta={c.hasta} alto={330}/>
+        derecha={unValor ? null : <button type="button" data-volver-velas onClick={() => { setVerValor(null); setFoco(null) }} style={boton(false)}>← Volver al gráfico del plan</button>}>
+        <VelasValor sim={simVelas} ops={detalle.porOperacion?.ops || []} desde={c.desde} hasta={c.hasta} alto={420} foco={foco && foco.sim === simVelas ? foco : null}/>
+        {foco && foco.sim === simVelas && <div data-foco-linea style={{ ...S.secundario, fontSize: 12, marginTop: 4, display: 'flex', gap: 10, alignItems: 'center' }}>Centrado en la operación del {fechaCorta(foco.entryDate)} al {fechaCorta(foco.exitDate)} ({conSigno(foco.resultado, 2)}). Con la rueda del ratón te alejas.<button type="button" data-todo-periodo onClick={() => setFoco(null)} style={boton(false)}>Ver todo el periodo</button></div>}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12, color: B.secundario, marginTop: 6 }}><span><span style={{ color: VERDE }}>▲</span> compra</span><span><span style={{ color: VERDE }}>▼</span> / <span style={{ color: ROJO }}>▼</span> venta</span><span><span style={{ color: VERDE }}>━</span> operación que gana</span><span><span style={{ color: ROJO }}>━</span> operación que pierde</span>
           {(() => { const f = filas.find(x => x.simbolo === simVelas); return f ? <span style={{ marginLeft: 'auto' }}>aportó <b style={{ color: signo(f.aporto) }}>{conSigno(f.aporto)}</b> · {numero(f.operaciones, 0)} operaciones · {pct(f.ganadoras, 1)} ganan</span> : null })()}</div>
       </Tarjeta>}
@@ -424,15 +380,15 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
       {detalle.donde && <Tarjeta id="detalle-donde" titulo="Dónde está tu dinero cada día" ayuda={AYUDA_DETALLE.dondeEsta}><GraficoDondeEsta donde={detalle.donde} ocioso={ocioso.simbolo}/></Tarjeta>}
       {detalle.porOperacion && <Tarjeta id="detalle-por-operacion" titulo="Resultados por operación" ayuda={AYUDA_DETALLE.porOperacion}
         derecha={<span data-resumen-operaciones style={{ color: B.secundario, fontSize: 13 }}>{numero(detalle.porOperacion.ops.length, 0)} · <span style={{ color: VERDE }}>{numero(detalle.porOperacion.ganan, 0)} ganan</span> · <span style={{ color: ROJO }}>{numero(detalle.porOperacion.pierden, 0)} pierden</span></span>}>
-        <BarrasOperaciones datos={detalle.porOperacion}/></Tarjeta>}
+        <BarrasOperaciones datos={detalle.porOperacion} onPulsa={abreOperacion}/></Tarjeta>}
       {/* §158 (parte 3b) */}
       {detalle.porOperacion && <Tarjeta id="detalle-historial" titulo={`Historial · ${numero(detalle.porOperacion.ops.length, 0)} operaciones`} ayuda={`${AYUDA_DETALLE.historial} ${AYUDA_DETALLE.movimientos}`}>
-        <Historial ops={detalle.porOperacion.ops} movs={detalle.movimientos || []} desde={detalle.cabecera.desde} hasta={detalle.cabecera.hasta} nombre={nombre || 'plan'} inicial={inicial?.historial || null}/></Tarjeta>}
+        <Historial ops={detalle.porOperacion.ops} movs={detalle.movimientos || []} onOperacion={abreOperacion} desde={detalle.cabecera.desde} hasta={detalle.cabecera.hasta} nombre={nombre || 'plan'} inicial={inicial?.historial || null}/></Tarjeta>}
       {/* §160 (parte 4b) */}
       {filas.length > 0 && !unValor && <Tarjeta id="detalle-vista-graficos" titulo="Vista de gráficos" ayuda={AYUDA_DETALLE.vistaGraficos}
         derecha={<button type="button" data-abre-vista-graficos aria-expanded={vistaG} onClick={() => setVistaG(x => !x)} style={boton(vistaG)}>{vistaG ? 'Ocultar ▴' : `Ver un gráfico por valor (${numero(filas.length, 0)}) ▾`}</button>}>
-        {vistaG ? <VistaGraficos filas={filas} ops={detalle.porOperacion?.ops || []} cargaVelas={carga.current.g} cache={cache.current} desde={c.desde} hasta={c.hasta} onElegir={abreVelas}/>
-          : <div style={S.secundario}>Cerrada: al abrirla se leen las velas de cada valor.</div>}
+        {vistaG ? <VistaGraficos filas={filas} ops={detalle.porOperacion?.ops || []} desde={c.desde} hasta={c.hasta} onElegir={(s) => abreVelas(s)}/>
+          : <div style={S.secundario}>Cerrada: al abrirla, cada gráfico pide sus velas cuando llega a la vista.</div>}
       </Tarjeta>}
     </div>
   )

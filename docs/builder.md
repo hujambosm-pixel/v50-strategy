@@ -3158,3 +3158,15 @@ Pedido por Sergi el 16/11: mantener el «100 %» junto a «Ops» de la «Compara
 - Pantalla: en «Qué aportó cada valor», junto a las operaciones del total, el «%» (verde si entraron todas; naranja si no) con ese tooltip; en cada valor, al pasar el ratón por sus operaciones, «De N señales de X, entraron M». Con un solo valor no sale (la estrategia entra en todas sus señales).
 - Comprobación `scripts/comprobaciones/plan-detalle.js` ampliada: a mano (compartido 2 de 2; concentrado máx. 1: entra A y B no por falta de hueco, B habría perdido un 10 %; A fuera por el filtro); con la lista Degiro real, generadas = candidatos y ejecutadas = operaciones (concentrado: 1.699 = 777 + 836 sin hueco + 86 sin dinero); y el «%» con su tooltip en la pantalla.
 - Ninguna cifra cambia.
+
+## 164. Un solo cálculo, parte 5c: las velas de «Detalle» con el gráfico del Backtesting y del historial a su operación
+
+Pedido por Sergi el 16/11 (boceto bocetos/detalle-final.html, pestaña 4): mantener el diseño de los gráficos del Backtesting y que pulsar una operación del historial lleve a su gráfico con ella seleccionada.
+
+- Fuera los gráficos de velas propios de §160 (SVG `GraficoVelasValor`, la lectura con /api/velas, la caché y el `limitador`). En su lugar, `AssetSignalChart` de components/BacktestCharts.js TAL CUAL (velas, rueda para acercar, arrastrar, etiquetas y globo de cada operación), con las operaciones de ESTE plan: `senalesGrafico(ops, símbolo)` de lib/builder/detallePlan.js (entradas, salidas y `trades` con n, precios, % y € en la forma del Backtesting). El gráfico pide sus velas a /api/chartdata cuando se ve, como en el Backtesting.
+- Velas de un valor (pulsar un valor de la tabla, o con un solo valor, siempre): el gráfico del Backtesting de 420 px con todo el periodo del plan.
+- Del historial a su gráfico: pulsar una fila de «Operaciones» (o una barra de «Resultados por operación») abre las velas de su valor centradas en esa operación (de 30 días antes de comprar a 30 después de vender, como el historial del Backtesting) y la resalta (`focoDeOperacion`: su número entre las de su valor, por fecha de compra). Una línea dice qué operación es y «Ver todo el periodo» quita el foco. Pulsar el valor de la fila sigue buscándolo.
+- «Vista de gráficos»: un gráfico del Backtesting por valor (300 px, uno debajo de otro), con lo que aportó, sus operaciones y las que ganan, y «Ver en grande ↑».
+- BuilderPlan ya no pasa `cargaVelas` a «Detalle». Se quedan `velasDe` y `opsEnVelas` en lib/builder/detallePlan.js (las usan las pruebas).
+- Comprobación `scripts/comprobaciones/plan-detalle.js` adaptada: a mano (las señales del gráfico de A: +20 %, 499 € → 598,80 €; su foco del 04/12/2019 al 06/02/2020) y en la pantalla (TSLA con sus 48 operaciones; volver; la vista con 11 gráficos y «Ver en grande»; la primera fila del historial abre su gráfico centrado en ella; «Ver todo el periodo»).
+- Ninguna cifra cambia.

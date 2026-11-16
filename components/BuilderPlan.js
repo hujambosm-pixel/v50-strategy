@@ -554,8 +554,6 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const cifras = useMemo(() => { try { return calc.resultado ? cifrasPlan(calc.resultado.respuesta, calc.resultado.plan) : null } catch (_) { return null } }, [calc.resultado])
   const ajustesDelResultado = calc.resultado?.plan?.piezas?.[0] || null
   // §156: lo de la pestaña «Detalle», del mismo resultado (null si la respuesta no trae el libro).
-  // §160: las velas de un valor para «Detalle» (las de /api/velas, como en el paso 1; en las pruebas, deps.cargaVelas).
-  const cargaVelasDetalle = useMemo(() => deps?.cargaVelas || (async (sym) => { const r = await api.current(`/api/velas?simbolo=${encodeURIComponent(sym)}`); if (!r.ok) throw new Error(`HTTP ${r.status}`); return await r.json() }), [deps])
   const detalle = useMemo(() => { try { return calc.resultado ? detallePlan(calc.resultado.respuesta, calc.resultado.plan) : null } catch (_) { return null } }, [calc.resultado])
   // §97: el resultado que se enseña es de OTROS ajustes (aún no ha llegado el cálculo de los de ahora; p. ej., tras «Descartar cambios»):
   // sus cifras se ven atenuadas hasta que llega el nuevo, para no confundirlas con las buenas.
@@ -844,7 +842,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       : <>
         {!!calcLista?.ignorado.length && <div data-aviso-lista-simple style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>{avisoListaSimple(calcLista.ignorado, a.ocioso)}<Ayuda texto={AYUDA_PLAN.listaSimple} etiqueta="Lo que todavía no cuenta con una lista"/></div>}
         {Number.isFinite(calc.resultado?.respuesta?.finalPorDentro) && oroComparable(calc.resultado?.plan) && <div data-oro style={{ ...S.secundario, fontSize: 13 }}>Comprobación: «La cartera por dentro» acaba en {euros(calc.resultado.respuesta.finalPorDentro, 2)} y tu plan, en {euros(cifrasLista.seis.final, 2)}{Math.abs(calc.resultado.respuesta.finalPorDentro - cifrasLista.seis.final) < 0.005 ? ' ✓' : ' ✕ (deberían coincidir)'}</div>}
-        {vistaDer === 'detalle' ? <PlanDetalle detalle={detalle} cifras={cifrasLista} viejas={cifrasViejas} onIrAValor={onIrAValor} inicial={inicial?.detalle || null} nombre={nombreDe(actual) || null} version={version} cargaVelas={cargaVelasDetalle}
+        {vistaDer === 'detalle' ? <PlanDetalle detalle={detalle} cifras={cifrasLista} viejas={cifrasViejas} onIrAValor={onIrAValor} inicial={inicial?.detalle || null} nombre={nombreDe(actual) || null} version={version}
           graficoPlan={<><GraficoPlan curva={sinOcioso ? { ...cifrasLista.curva, ociosoLiquidez: null } : cifrasLista.curva} activo="de la lista" finales={finalesDe(cifrasLista)} visibles={lineasVisibles} proporcion/>
             <Leyenda curva={sinOcioso ? { ...cifrasLista.curva, ociosoLiquidez: null } : cifrasLista.curva} activo="de la lista" visibles={lineasVisibles} onMarca={marcaLinea} proporcion/></>}/>
           : vistaDinero(cifrasLista, true)}
@@ -854,7 +852,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{!estrategia ? 'Elige una estrategia de tarjetas.' : calc.calculando || clave ? 'Calculando tu plan…' : 'Sin resultado todavía.'}</div>
   ) : (<>   {/* §161: con un solo valor, «Tu dinero» y «Detalle» (sin «La cartera por dentro», que es del Backtesting con lista) */}
     <div data-pestanas-der role="group" aria-label="Qué ver del plan" style={{ display: 'flex', borderBottom: `1px solid ${B.borde}` }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('detalle', 'Detalle', AYUDA_DETALLE.pestana)}</div>
-    {vistaDer === 'detalle' ? <PlanDetalle detalle={detalle} cifras={cifras} viejas={cifrasViejas} onIrAValor={onIrAValor} inicial={inicial?.detalle || null} nombre={nombreDe(actual) || null} version={version} cargaVelas={cargaVelasDetalle}
+    {vistaDer === 'detalle' ? <PlanDetalle detalle={detalle} cifras={cifras} viejas={cifrasViejas} onIrAValor={onIrAValor} inicial={inicial?.detalle || null} nombre={nombreDe(actual) || null} version={version}
         graficoPlan={<><GraficoPlan curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles}/>
           <Leyenda curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes} visibles={lineasVisibles} onMarca={marcaLinea}/></>}/>
       : vistaDinero(cifras, false)}
