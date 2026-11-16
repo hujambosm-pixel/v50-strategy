@@ -9,6 +9,10 @@
 //     de cada día suma el patrimonio; las operaciones suman lo ganado en los valores; los costes de los movimientos, los del plan; y hay
 //     tantas órdenes en el libro como cuenta el plan.
 // 4 · /api/plan: con libro: true lo devuelve; sin pedirlo, no.
+// 5 · §156 (parte 2, la pestaña «Detalle»): lo ganado día a día con cada valor (libro.curvas), a mano y en todos los casos del apartado 3
+//     (cada día: lo aportado + lo ganado hasta hoy − las comisiones y los impuestos pagados hasta hoy = el patrimonio); lo que prepara
+//     lib/builder/detallePlan.js, a mano; y la pantalla montada con /api/plan de verdad detrás: la línea que suma, la tabla por valor con
+//     la fila del ocioso, «El plan» / «Valor a valor» y la vuelta a «Tu dinero».
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-del-arnes'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ
@@ -37,6 +41,13 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     const impOk = cerca(pu.impuestos, con.impuestos?.pagados || 0, 1e-9) && cerca(sum(L.movimientos.filter(m => m.tipo === 'impuesto' || m.tipo === 'impuestoFinal'), m => m.importe), pu.impuestos, 1e-6)
     const apOk = cerca(sum(L.movimientos.filter(m => m.tipo === 'aportacion'), m => m.importe), con.aportado, 1e-6) && pu.aportado === con.aportado
     const fechasOk = L.movimientos.every((m, k) => k === 0 || m.fecha >= L.movimientos[k - 1].fecha)
+    // §156: las curvas. El último día de cada una es lo ganado con ese símbolo; y, sin símbolos «otros», cada día cuadra con el patrimonio.
+    const simC = Object.entries(L.porSimbolo).filter(([, s]) => s.rol !== 'otro'), hayOtros = Object.values(L.porSimbolo).some(s => s.rol === 'otro')
+    let curvasOk = Object.keys(L.curvas).length === simC.length && simC.every(([a, s]) => L.curvas[a]?.length === con.serie.length && cerca(L.curvas[a][con.serie.length - 1], s.ganado, 1e-6))
+    if (curvasOk && !hayOtros) { let c = 0, t = 0, k = 0; const ms = L.movimientos.filter(m => m.tipo !== 'ventaFinal' && m.tipo !== 'impuestoFinal')
+      con.serie.forEach((p, d) => { for (; k < ms.length && ms[k].fecha <= p.date; k++) { c += ms[k].coste || 0; if (ms[k].tipo === 'impuesto') t += ms[k].importe }
+        if (!cerca(p.aportado + sum(simC, ([a]) => L.curvas[a][d]) - c - t, p.patrimonio, 1e-5)) curvasOk = false }) }
+    ok(curvasOk, `${nombre}: lo ganado día a día con cada símbolo (${simC.length}) acaba en lo ganado con él${hayOtros ? '' : ' y cada día cuadra con el patrimonio'}`)
     ok(igual, `${nombre}: sin pedir el libro, la salida es exactamente la de siempre`)
     ok(Math.abs(pu.descuadre) < 0.005 && pu.valorNeto === con.valorNeto, `${nombre}: LA SUMA cuadra: ${pu.aportado.toFixed(2)} + ${pu.ganadoValores.toFixed(2)} (valores) + ${pu.ganadoOcioso.toFixed(2)} (ocioso) + ${pu.ganadoOtros.toFixed(2)} (otros) − ${pu.costes.toFixed(2)} − ${pu.impuestos.toFixed(2)} = ${con.valorNeto.toFixed(2)} € (descuadre ${pu.descuadre.toExponential(1)})`)
     ok(repartoOk && opsOk && simOk && costesOk && impOk && apOk && fechasOk && L.operaciones.length >= minOps,
@@ -68,6 +79,21 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     ok(cerca(L.reparto[1].valores, 49.9 * 11 + 24.95 * 19) && L.reparto[1].liquidez === 0 && L.reparto[0].valores === 0 && cerca(L.reparto[0].liquidez, 1000) && cerca(L.reparto[2].liquidez, 448.1),
       `a mano: el día 2 hay 1.022,95 € en valores; el día 3, 448,10 € en liquidez (${L.reparto[1].valores}, ${L.reparto[2].liquidez})`)
     ok(cerca(L.porSimbolo.A.ganado, 99.8) && cerca(L.porSimbolo.B.ganado, -49.9) && L.porSimbolo.A.rol === 'valor', 'a mano: lo ganado por símbolo')
+    // §156: día a día. A: 0 · 49,9 × 11 − 499 = 49,90 · 49,9 × 11,5 − 499 = 74,85 · 598,80 − 499 = 99,80. B: 0 · 24,95 × 19 − 499 = −24,95 · −49,90 · −49,90.
+    const cA = L.curvas.A, cB = L.curvas.B
+    ok([0, 49.9, 74.85, 99.8].every((v, k) => cerca(cA[k], v)) && [0, -24.95, -49.9, -49.9].every((v, k) => cerca(cB[k], v)), `a mano, día a día: A 0 · 49,90 · 74,85 · 99,80 y B 0 · −24,95 · −49,90 · −49,90 (${cA.map(v => v.toFixed(2)).join(' · ')} y ${cB.map(v => v.toFixed(2)).join(' · ')})`)
+    // §156: lo que prepara detallePlan. A: 1 operación que gana, 2 de 4 días en cartera (50 %); B: 1 que pierde, 1 de 4 días (25 %). Total: 2 operaciones,
+    // 1 gana (50 %), Profit Factor 99,80 / 49,90 = 2. En valores: 0 · 1.022,95 / 1.022,95 · 573,85 / 1.021,95 · 0 → media (0 + 1 + 0,56153 + 0) / 4 = 39,04 %.
+    const De = require(R + '/lib/builder/detallePlan.js'), d = De.detallePlan({ evaluacion: { plan: { medidas: { valorNeto: r.valorNeto }, ejecucion: r } } }, planA('compartido'))
+    const fA = d.filas[0], fB = d.filas[1], mv = (0 + 1 + 573.85 / 1021.95 + 0) / 4
+    ok(d.filas.length === 2 && fA.simbolo === 'A' && cerca(fA.aporto, 99.8) && fA.operaciones === 1 && fA.ganadoras === 1 && fA.pf === null && fA.dentro === 0.5 && fB.simbolo === 'B' && cerca(fB.aporto, -49.9) && fB.ganadoras === 0 && fB.pf === 0 && fB.dentro === 0.25,
+      `detalle a mano: A +99,80 € (1 operación, gana, 50 % del tiempo) y B −49,90 € (pierde, 25 %) (${fA.aporto}, ${fA.dentro}; ${fB.aporto}, ${fB.dentro})`)
+    ok(d.total.operaciones === 2 && d.total.ganadoras === 0.5 && cerca(d.total.pf, 2) && cerca(d.total.aporto, 49.9) && cerca(d.total.enValores, mv) && cerca(d.ocioso.liquidez, 1 - mv) && d.ocioso.simbolo === 'LIQUIDEZ' && d.ocioso.ordenes === 0 && d.ocioso.aporto === 0,
+      `detalle a mano: 2 operaciones, 50 % ganan, Profit Factor 99,80 / 49,90 = 2; de media, el ${(mv * 100).toFixed(2)} % del dinero en valores (${(d.total.enValores * 100).toFixed(2)} %)`)
+    ok(d.cabecera.valores === 2 && d.cabecera.conOperaciones === 2 && d.cabecera.operaciones === 2 && d.cabecera.ordenes === 4 && d.cabecera.ordenesValores === 4 && d.cabecera.ordenesOcioso === 0 && d.cabecera.ordenesOtras === 0 && d.cabecera.desde === F[0] && d.cabecera.hasta === F[3] && d.cabecera.velas === 'diarias'
+      && d.suma.cuadra && d.suma.aportado === 1000 && cerca(d.suma.valores, 49.9) && cerca(d.suma.costes, 4) && cerca(d.suma.final, 1045.9) && d.curvas.series.length === 2 && d.curvas.series[0].v === L.curvas.A,
+      'detalle a mano: la línea de arriba (2 valores, 2 operaciones, 4 órdenes) y la suma 1.000 + 49,90 − 4 = 1.045,90 €')
+    ok(De.detallePlan({ evaluacion: { plan: { medidas: {}, ejecucion: Pl.ejecutaPlan(planA('compartido'), datosA('compartido')) } } }, planA('compartido')) === null, 'detalle: sin libro en la respuesta, nada (null)')
   }
   {
     // Con ocioso y aportaciones (el caso de §91): concentrado máx. 1, 1.000 € + 300 €/mes, ocioso O, 1 € por orden. Día 1, al cierre: 999 €
@@ -84,6 +110,10 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     ok(pu.aportado === 1300 && cerca(pu.ganadoValores, 219.38) && cerca(pu.ganadoOcioso, gO) && cerca(pu.costes, 6) && cerca(pu.valorNeto, 1300 + 219.38 + gO - 6),
       `a mano: 1.300 + 219,38 (A) + 127,08 (ocioso) − 6 = 1.640,46 € (${pu.ganadoValores.toFixed(2)}, ${pu.ganadoOcioso.toFixed(2)}, ${pu.valorNeto.toFixed(2)})`)
     const txt = L.movimientos.map(m => `${m.tipo}${m.simbolo ? ' ' + m.simbolo : ''}`).join(' · ')
+    // §156: el ocioso O día a día: 0 · 0 · 1.098,90 − 999 − 299 + 299 = 99,90 · 127,08; 3 órdenes del ocioso + su venta final = 4 de las 6.
+    { const De = require(R + '/lib/builder/detallePlan.js'), dd = De.detallePlan({ evaluacion: { plan: { medidas: { valorNeto: r.valorNeto }, ejecucion: r } } }, p)
+      ok([0, 0, 99.9, gO].every((v, k) => cerca(L.curvas.O[k], v)) && dd.ocioso.simbolo === 'O' && dd.ocioso.ordenes === 4 && cerca(dd.ocioso.aporto, gO) && dd.cabecera.ordenesValores === 2 && dd.cabecera.ordenes === 6 && dd.filas.length === 1 && dd.curvas.series.length === 2 && dd.curvas.series[1].rol === 'ocioso' && dd.suma.cuadra,
+        `a mano, el ocioso día a día: 0 · 0 · 99,90 · 127,08 € y 4 de las 6 órdenes son suyas (${L.curvas.O.map(v => v.toFixed(2)).join(' · ')}; ${dd.ocioso.ordenes} de ${dd.cabecera.ordenes})`) }
     ok(txt === 'aportacion · compra O · venta O · compra A · aportacion · compra O · venta A · ventaFinal O' && L.movimientos[1].rol === 'ocioso' && L.porSimbolo.O.rol === 'ocioso' && cerca(L.porSimbolo.O.valorFinal, 299 / 55 * 60), `a mano: los movimientos, en orden (${txt})`)
     ok(cerca(L.reparto[0].ocioso, 999) && L.reparto[0].valores === 0 && cerca(L.reparto[2].valores, 109.69 * 11) && cerca(L.reparto[2].ocioso, 299) && cerca(L.reparto[2].liquidez, 0),
       `a mano: el día 1 hay 999 € en el ocioso; el día 3, 1.206,59 € en valores y 299 € en el ocioso (${L.reparto[2].valores.toFixed(2)}, ${L.reparto[2].ocioso.toFixed(2)})`)
@@ -194,6 +224,79 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     const L = jc?.evaluacion.plan.ejecucion.libro
     ok(!!L && !!js && !('libro' in js.evaluacion.plan.ejecucion) && Math.abs(L.puente.descuadre) < 0.005 && Math.abs(L.puente.valorNeto - jc.finalPorDentro) < 0.005 && jc.evaluacion.plan.medidas.valorNeto === js.evaluacion.plan.medidas.valorNeto,
       `/api/plan: con libro: true devuelve el libro (${L ? L.operaciones.length + ' operaciones, ' + L.movimientos.length + ' movimientos, ' + (con.cuerpo.length / 1024).toFixed(0) + ' KB frente a ' + (sin.cuerpo.length / 1024).toFixed(0) + ' KB' : con.status + ' ' + String(con.cuerpo).slice(0, 200)}); sin pedirlo, no; y su suma es el final de «por dentro» (${jc?.finalPorDentro?.toFixed(2)} €)`)
+  }
+  // ── 5 · La pantalla (§156) ──
+  {
+    const HP = require(R + '/pages/api/plan.js').default
+    const D = require('./domFalso'); D.pon()
+    { const Mod = require('module'), orig = Mod._load; const vacio = new Proxy({}, { get: (_, k) => k === '__esModule' ? true : () => null }); const nada = new Proxy(function () {}, { get: (_, k) => k === '__esModule' ? true : k === Symbol.toPrimitive ? () => 0 : k === 'then' ? undefined : nada, apply: () => nada, construct: () => nada })
+      Mod._load = function (req, ...r) { return req === 'recharts' ? vacio : req === 'lightweight-charts' ? nada : orig.call(this, req, ...r) } }
+    { const proto = Object.getPrototypeOf(globalThis.document.createElement('div')); if (!proto.querySelectorAll) { proto.querySelectorAll = () => []; proto.querySelector = () => null } }
+    if (!globalThis.ResizeObserver) globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} }
+    if (!globalThis.requestAnimationFrame) { globalThis.requestAnimationFrame = (f) => setTimeout(f, 0); globalThis.cancelAnimationFrame = (t) => clearTimeout(t) }
+    const React = require(path.join(R, 'node_modules', 'react')), RDC = require(path.join(R, 'node_modules', 'react-dom', 'client'))
+    const BP = require(R + '/components/BuilderPlan.js').default
+    const datosLista = { watchlist: SIMB.map(s => ({ symbol: s, name: s, list_ids: [1] })), wlLists: [{ id: 1, name: 'Degiro' }], rankingData: {} }
+    const aPant = ajustes('concentrado')   // 300 €/mes, impuestos, oro (GLD), 0,185 € por orden
+    let ultima = null, conLibro = true, ido = null
+    const calcula = async (p, c) => { const r = await E.llama(HP, { plan: p, curvas: true, cuerpoLista: c, ...(conLibro ? { libro: true } : {}) }); const j = JSON.parse(r.cuerpo); if (r.status !== 200) throw new Error(j.error); ultima = j; return j }
+    const monta = (inicial) => D.monta(React.createElement(BP, { estrategias: [est], estrategiaId: est.id, datosLista, onIrAValor: (s) => { ido = s }, deps: { ctx: null, calcula, calculaPorDentro: async () => { throw new Error('no') } },
+      inicial: { planes: [], pestana: 'n1', simbolos: ['AAPL'], pruebas: [], resultadoPrueba: { periodos: [] }, ajustes: aPant, ...inicial } }), RDC)
+    const b = monta({ vistaDer: 'detalle' })
+    for (let k = 0; k < 120 && !b.raiz.conAtributo('data-vista-detalle').length; k++) await D.espera(250)
+    const pest = (id) => b.raiz.busca(n => n.nodeName === 'BUTTON' && n.getAttribute?.('data-vista-der') === id)
+    const De = require(R + '/lib/builder/detallePlan.js'), ej = ultima?.evaluacion.plan.ejecucion, L = ej?.libro, m = ultima?.evaluacion.plan.medidas
+    ok(!!pest('dinero') && !!pest('detalle') && !!pest('dentro') && pest('detalle').getAttribute('aria-pressed') === 'true' && b.raiz.conAtributo('data-vista-detalle').length === 1 && !b.raiz.conAtributo('data-cifras').length,
+      'pantalla: tres pestañas («Tu dinero», «Detalle», «La cartera por dentro») y, con «Detalle» abierta, su contenido y no el de «Tu dinero»')
+    const suma = b.raiz.conAtributo('data-detalle-suma')[0], trozo = (id) => suma?.todos(n => n.getAttribute('data-suma') === id)[0]?.textContent || ''
+    ok(!!L && suma?.getAttribute('data-cuadra') === 'si' && trozo('final') === Pa.euros(m.valorNeto, 0) && trozo('aportado').startsWith(Pa.euros(ej.aportado, 0)) && trozo('valores').includes(Pa.euros(Math.abs(L.puente.ganadoValores), 0)) && trozo('ocioso').includes(Pa.euros(Math.abs(L.puente.ganadoOcioso), 0))
+      && trozo('costes').includes(Pa.euros(L.puente.costes, 0)) && trozo('impuestos').includes(Pa.euros(L.puente.impuestos, 0)) && suma.textContent.includes('= «Tienes al final» de «Tu dinero» ✓'),
+      `pantalla, la línea que suma: «${['aportado', 'valores', 'ocioso', 'costes', 'impuestos'].map(trozo).join(' ')} = ${trozo('final')}»`)
+    const filasV = b.raiz.conAtributo('data-valor'), conOps = Object.values(L.porSimbolo).filter(s => s.rol === 'valor').length
+    const d0 = De.detallePlan(ultima, Pl.planListaCalculable(Pa.planDe(aPant, est)).plan)
+    ok(filasV.length === conOps && conOps > 5 && filasV[0].getAttribute('data-valor') === d0.filas[0].simbolo && filasV[0].textContent.includes(Pa.euros(Math.abs(d0.filas[0].aporto), 0)) && b.raiz.conAtributo('data-fila-total')[0].textContent.includes(`Los ${conOps} valores`)
+      && cerca(sum(d0.filas, f => f.aporto), L.puente.ganadoValores, 1e-6) && sum(d0.filas, f => f.operaciones) === L.operaciones.length && d0.filas.every(f => f.dentro > 0 && f.dentro < 1),
+      `pantalla, «Qué aportó cada valor»: ${filasV.length} valores, de más a menos (el primero, ${d0.filas[0].simbolo} ${d0.filas[0].aporto.toFixed(2)} €); sus «Aportó» suman lo ganado en los valores y sus operaciones, las ${L.operaciones.length} del plan`)
+    const oc = b.raiz.conAtributo('data-fila-ocioso')[0]?.textContent || ''
+    ok(oc.includes('Dinero ocioso · oro (GLD)') && oc.includes(Pa.euros(Math.abs(L.puente.ganadoOcioso), 0)) && oc.includes(`${Pa.numero(d0.ocioso.ordenes, 0)} órdenes`) && oc.includes('del dinero, de media') && d0.cabecera.ordenesValores + d0.cabecera.ordenesOcioso === ej.costes.ordenes && cerca(d0.total.enValores + d0.ocioso.media + d0.ocioso.liquidez, 1, 1e-9),
+      `pantalla, la fila del ocioso: «${oc}» (órdenes de la estrategia ${d0.cabecera.ordenesValores} + del ocioso ${d0.cabecera.ordenesOcioso} = ${ej.costes.ordenes})`)
+    const cabT = b.raiz.conAtributo('data-detalle-cabecera')[0]?.todos(n => n.nodeName === 'SPAN')[0]?.textContent || ''
+    ok(cabT.includes(`${SIMB.length} valores`) && cabT.includes('velas diarias') && cabT.includes(`${Pa.numero(L.operaciones.length, 0)} operaciones`) && cabT.includes(`${Pa.numero(ej.costes.ordenes, 0)} órdenes`) && cabT.includes(Pa.fechaCorta(ej.serie[0].date)), `pantalla, la línea de arriba: «${cabT}»`)
+    // «Cómo crece»: «El plan» (el gráfico de «Tu dinero» y los «comprar y mantener» del plan, sin la fila del ocioso en liquidez) y «Valor a valor».
+    const bh = b.raiz.conAtributo('data-fila-bh').map(n => n.getAttribute('data-fila-bh'))
+    ok(b.raiz.conAtributo('data-grafico', 'plan').length === 1 && bh.join() === 'PLAN,ACTIVO,QQQ,SPY' && b.raiz.conAtributo('data-fila-bh', 'PLAN')[0].textContent.includes(Pa.euros(m.valorNeto, 0)) && !b.raiz.conAtributo('data-grafico', 'valores').length,
+      `pantalla, «El plan»: el gráfico del plan y las filas ${bh.join(', ')}`)
+    const modoB = (id) => b.raiz.busca(n => n.nodeName === 'BUTTON' && n.getAttribute?.('data-modo-crece') === id)
+    D.pulsa(modoB('valores')); await D.espera(30)
+    const gv = b.raiz.conAtributo('data-grafico', 'valores')[0]
+    ok(!!gv && Number(gv.getAttribute('data-series')) === conOps + 1 && b.raiz.conAtributo('data-linea-valor').length === conOps + 1 && b.raiz.conAtributo('data-chip-valor').length === conOps + 1 && !b.raiz.conAtributo('data-grafico', 'plan').length,
+      `pantalla, «Valor a valor»: ${gv?.getAttribute('data-series')} líneas (los ${conOps} valores y el ocioso)`)
+    D.pulsa(b.raiz.conAtributo('data-chip-valor', d0.filas[1].simbolo)[0]); await D.espera(30)
+    ok(b.raiz.conAtributo('data-elegida')[0]?.getAttribute('data-linea-valor') === d0.filas[1].simbolo && b.raiz.conAtributo('data-valor', d0.filas[1].simbolo)[0].getAttribute('aria-selected') === 'true', `al pulsar ${d0.filas[1].simbolo} en la leyenda, su línea queda resaltada y su fila marcada`)
+    D.pulsa(modoB('plan')); await D.espera(30)
+    D.pulsa(b.raiz.conAtributo('data-elige-valor', d0.filas[0].simbolo)[0]); await D.espera(30)
+    ok(b.raiz.conAtributo('data-elegida')[0]?.getAttribute('data-linea-valor') === d0.filas[0].simbolo, `al pulsar ${d0.filas[0].simbolo} en la tabla, pasa a «Valor a valor» con su línea resaltada`)
+    D.pulsa(b.raiz.conAtributo('data-ir-valor', d0.filas[0].simbolo)[0]); ok(ido === d0.filas[0].simbolo, 'el «↗» de un valor pide ir a ese valor')
+    D.pulsa(b.raiz.conAtributo('data-pliega-valores')[0]); await D.espera(30)
+    ok(!b.raiz.conAtributo('data-valor').length && b.raiz.conAtributo('data-fila-total').length === 1 && b.raiz.conAtributo('data-fila-ocioso').length === 1, 'al plegar, quedan el total y el ocioso')
+    // De vuelta a «Tu dinero»: el mismo cálculo (no se pide otra vez) y la misma cifra.
+    const antes = ultima
+    D.pulsa(pest('dinero')); await D.espera(60)
+    const fin = b.raiz.conAtributo('data-cifra', 'final')[0]?.todos(n => n.hasAttribute('data-valor'))[0]?.textContent
+    ok(ultima === antes && b.raiz.conAtributo('data-cifras').length === 1 && !b.raiz.conAtributo('data-vista-detalle').length && fin === Pa.euros(m.valorNeto, 0), `de vuelta a «Tu dinero»: sin calcular otra vez y con el mismo «Tienes al final» (${fin})`)
+    b.quita()
+    // Sin libro en la respuesta: lo dice (no se rompe). Y sin ocioso (liquidez), la suma no lleva su trozo.
+    conLibro = false
+    const b2 = monta({ vistaDer: 'detalle' })
+    for (let k = 0; k < 120 && !b2.raiz.conAtributo('data-sin-detalle').length; k++) await D.espera(250)
+    ok(b2.raiz.conAtributo('data-sin-detalle').length === 1 && !b2.raiz.conAtributo('data-vista-detalle').length, 'sin el libro en la respuesta, «Detalle» lo dice')
+    b2.quita(); conLibro = true
+    const b3 = monta({ vistaDer: 'detalle', ajustes: { ...aPant, ocioso: 'LIQUIDEZ', aportacion: 0, impuestos: 'ninguno' } })
+    for (let k = 0; k < 120 && !b3.raiz.conAtributo('data-vista-detalle').length; k++) await D.espera(250)
+    const s3 = b3.raiz.conAtributo('data-detalle-suma')[0], oc3 = b3.raiz.conAtributo('data-fila-ocioso')[0]?.textContent || ''
+    ok(s3?.getAttribute('data-cuadra') === 'si' && !s3.todos(n => n.getAttribute('data-suma') === 'ocioso').length && oc3.includes('Dinero ocioso · liquidez') && oc3.includes('sin órdenes') && Math.abs(ultima.evaluacion.plan.medidas.valorNeto - ultima.finalPorDentro) < 0.005 && b3.raiz.conAtributo('data-oro').length === 1,
+      `con el ocioso en liquidez, sin aportaciones ni impuestos: la suma sin el trozo del ocioso, y el final (${ultima.evaluacion.plan.medidas.valorNeto.toFixed(2)} €) es el de «La cartera por dentro» (${ultima.finalPorDentro.toFixed(2)} €)`)
+    b3.quita()
   }
   console.log(fallos ? `plan-detalle: ${fallos} fallos` : 'plan-detalle: todas bien')
   process.exit(fallos ? 1 : 0)

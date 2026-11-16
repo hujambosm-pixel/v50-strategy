@@ -50,6 +50,9 @@ import PanelPesos from './backtesting/PanelPesos'
 import PanelUniverso from './backtesting/PanelUniverso'
 import SelectorValores from './backtesting/SelectorValores'
 import PlanPorDentro, { peticionPorDentro, motivoSinPeticion } from './backtesting/PlanPorDentro'
+// §156: la pestaña «Detalle» (un solo cálculo, parte 2): el mismo cálculo de «Tu dinero», por dentro.
+import PlanDetalle from './PlanDetalle'
+import { AYUDA_DETALLE, detallePlan } from '../lib/builder/detallePlan'
 // §128: «Comparar planes» (opción A: cada plan tal como está guardado).
 import ComparaPlanes from './ComparaPlanes'
 import { CLAVE_COMPARAR, REFS_COMPARAR, TEXTO_SIN_PLANES, alterna, elegidosIniciales, pieza as piezaDe } from '../lib/builder/comparaPlanes'
@@ -345,7 +348,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // §128: la llamada a /api/plan, en un ref para que «Comparar planes» pida con la misma (varios planes a la vez, sin el calculador).
   const pideApi = useRef(null)
   if (!pideApi.current) pideApi.current = deps?.calcula || (async (p, cuerpoLista = null) => {
-    const r = await api.current('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: p, curvas: true, ...(cuerpoLista ? { cuerpoLista } : {}) }) })
+    const r = await api.current('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: p, curvas: true, ...(cuerpoLista ? { cuerpoLista, libro: true } : {}) }) })   // §156: con lista, también el libro (la pestaña «Detalle»)
     const j = await r.json().catch(() => ({}))
     if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
     return j
@@ -550,6 +553,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const valoresLista = useMemo(() => simbolos.map(s => typeof s === 'string' ? { simbolo: s, nombre: '' } : s), [simbolos])
   const cifras = useMemo(() => { try { return calc.resultado ? cifrasPlan(calc.resultado.respuesta, calc.resultado.plan) : null } catch (_) { return null } }, [calc.resultado])
   const ajustesDelResultado = calc.resultado?.plan?.piezas?.[0] || null
+  // §156: lo de la pestaña «Detalle», del mismo resultado (null si la respuesta no trae el libro).
+  const detalle = useMemo(() => { try { return calc.resultado ? detallePlan(calc.resultado.respuesta, calc.resultado.plan) : null } catch (_) { return null } }, [calc.resultado])
   // §97: el resultado que se enseña es de OTROS ajustes (aún no ha llegado el cálculo de los de ahora; p. ej., tras «Descartar cambios»):
   // sus cifras se ven atenuadas hasta que llega el nuevo, para no confundirlas con las buenas.
   const claveDelResultado = useMemo(() => calc.resultado ? (calc.resultado.clave || JSON.stringify(calc.resultado.plan)) : null, [calc.resultado])
@@ -635,7 +640,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       {enlaceTesis?.('plan', fila?.id)}
       {!enLista && <div data-aviso="a-mano" style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>⚠ {AVISO_A_MANO}<Ayuda texto={AYUDA_PLAN.aMano} etiqueta={AVISO_A_MANO}/></div>}
       {nuevaActual && <div data-aviso="sin-guardar" style={{ color: AMARILLO }}>Sin guardar: se perderá al recargar</div>}
-      {calc.calculando && (!enLista || vistaDer === 'dinero') && <div data-calculando style={{ color: AMARILLO }}>Calculando…</div>}
+      {calc.calculando && (!enLista || vistaDer !== 'dentro') && <div data-calculando style={{ color: AMARILLO }}>Calculando…</div>}
       <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         {sinGuardar && <button data-boton="descartar" style={{ ...S.boton, padding: '6px 12px' }} disabled={guardando} onClick={descartaCambios}>Descartar cambios</button>}
         {hayCambios && <button data-boton="guardar-cambios" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={`Guardado por última vez el ${fechaCorta(fila.updated_at)}`} onClick={guardaAbierta}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>}
@@ -831,13 +836,16 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const resLista = ajustesDelResultado?.donde === 'lista'
   const cifrasLista = enLista && resLista && !motivoLista ? cifras : null
   const resultado = enLista ? (<>
-    <div data-pestanas-der role="group" aria-label="Qué ver del plan" style={{ display: 'flex', borderBottom: `1px solid ${B.borde}` }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('dentro', 'La cartera por dentro', AYUDA_PLAN.porDentro)}</div>
-    {vistaDer === 'dinero' && (motivoLista ? <div data-sin-motor-lista style={{ ...S.tarjeta, ...S.cuerpo, color: B.texto }}>{motivoLista}</div>
+    <div data-pestanas-der role="group" aria-label="Qué ver del plan" style={{ display: 'flex', borderBottom: `1px solid ${B.borde}` }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('detalle', 'Detalle', AYUDA_DETALLE.pestana)}{pestanaDer('dentro', 'La cartera por dentro', AYUDA_PLAN.porDentro)}</div>
+    {vistaDer !== 'dentro' && (motivoLista ? <div data-sin-motor-lista style={{ ...S.tarjeta, ...S.cuerpo, color: B.texto }}>{motivoLista}</div>
       : !cifrasLista ? <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{calc.error ? '' : 'Calculando tu plan…'}</div>
       : <>
         {!!calcLista?.ignorado.length && <div data-aviso-lista-simple style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>{avisoListaSimple(calcLista.ignorado, a.ocioso)}<Ayuda texto={AYUDA_PLAN.listaSimple} etiqueta="Lo que todavía no cuenta con una lista"/></div>}
         {Number.isFinite(calc.resultado?.respuesta?.finalPorDentro) && oroComparable(calc.resultado?.plan) && <div data-oro style={{ ...S.secundario, fontSize: 13 }}>Comprobación: «La cartera por dentro» acaba en {euros(calc.resultado.respuesta.finalPorDentro, 2)} y tu plan, en {euros(cifrasLista.seis.final, 2)}{Math.abs(calc.resultado.respuesta.finalPorDentro - cifrasLista.seis.final) < 0.005 ? ' ✓' : ' ✕ (deberían coincidir)'}</div>}
-        {vistaDinero(cifrasLista, true)}
+        {vistaDer === 'detalle' ? <PlanDetalle detalle={detalle} cifras={cifrasLista} viejas={cifrasViejas} onIrAValor={onIrAValor} inicial={inicial?.detalle || null}
+          graficoPlan={<><GraficoPlan curva={sinOcioso ? { ...cifrasLista.curva, ociosoLiquidez: null } : cifrasLista.curva} activo="de la lista" finales={finalesDe(cifrasLista)} visibles={lineasVisibles} proporcion/>
+            <Leyenda curva={sinOcioso ? { ...cifrasLista.curva, ociosoLiquidez: null } : cifrasLista.curva} activo="de la lista" visibles={lineasVisibles} onMarca={marcaLinea} proporcion/></>}/>
+          : vistaDinero(cifrasLista, true)}
       </>)}
     <PlanPorDentro a={a} estrategia={estPorDentro} motivo={motivoEstPorDentro} estrategias={estrategias} apiFetch={apiFetch} version={version} visible={vistaDer === 'dentro'} onIrAValor={onIrAValor} wlData={datosLista?.wlData || null} calcula={deps?.calculaPorDentro || null} universoDatos={universoDatos}/>
   </>) : !cifras ? (
