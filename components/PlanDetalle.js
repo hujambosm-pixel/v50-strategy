@@ -245,7 +245,7 @@ export function Historial({ ops, movs = [], desde, hasta, nombre = 'plan', inici
       : <><div style={{ overflowX: 'auto' }}><table data-tabla="detalle-historial" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr><th style={cab}>Valor</th><th style={cab}>Compra</th><th style={cab}>Venta</th>{['Acciones', 'Precio de compra', 'Precio de venta', 'Resultado', '%'].map(h => <th key={h} style={cabNum}>{h}</th>)}</tr></thead>
         <tbody>{lista.slice(0, cuantas).map((o, k) => <tr key={`${o.simbolo}-${o.entryDate}-${k}`} data-operacion={o.simbolo} onClick={onOperacion ? () => onOperacion(o) : undefined} title={onOperacion ? `Pulsa para ver esta operación en el gráfico de ${o.simbolo}` : undefined} style={onOperacion ? { cursor: 'pointer' } : undefined}>
-          <td style={celda}><button type="button" onClick={(e) => { e.stopPropagation(); setBusca(o.simbolo); setCuantas(POR_PAGINA) }} title={`Ver solo las de ${o.simbolo}`} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.texto, fontFamily: B.letra, fontSize: 'inherit' }}>{o.simbolo}</button></td>
+          <td style={{ ...celda, color: B.texto }}>{o.simbolo}</td>
           <td style={celda}>{fechaCorta(o.entryDate)}</td><td style={celda}>{fechaCorta(o.exitDate)}{o.abierta && <span title="Seguía abierta el último día: se cuenta vendida ese día" style={{ color: AMARILLO }}> · abierta</span>}</td>
           <td style={num}>{numero(o.unidades, o.unidades < 10 ? 4 : 2)}</td><td style={num}>{euros(o.entryPrice, 2)}</td><td style={num}>{euros(o.exitPrice, 2)}</td>
           <td style={{ ...num, color: signo(o.resultado) }}>{conSigno(o.resultado, 2)}</td><td style={{ ...num, color: signo(o.pct) }}>{o.pct == null ? '—' : `${o.pct > 0 ? '+' : ''}${pct(o.pct, 1)}`}</td>
@@ -266,7 +266,7 @@ export function VelasValor({ sim, ops, desde, hasta, alto: altoNormal = 400, foc
   const n = senales[0]?.trades.length || 0
   return (
     <div data-velas-valor={sim} data-operaciones={n} data-foco={foco ? foco.n : undefined}>
-      <AssetSignalChart key={`${sim}|${foco?.n ?? ''}`} symbol={sim} stratSignals={senales} years={aniosHasta(desde)} height={alto} rangoVisible={rango} verEtiquetas={etiquetas}
+      <AssetSignalChart key={`${sim}|${foco?.n ?? ''}`} symbol={sim} stratSignals={senales} years={aniosHasta(desde)} height={alto} rangoVisible={rango} verEtiquetas={etiquetas} ruedaTrasClic
         onReady={({ highlightTrade }) => { if (foco?.n) setTimeout(() => highlightTrade?.(foco.n), 150) }}/>
     </div>
   )
@@ -313,7 +313,7 @@ const Tarjeta = ({ id, titulo, ayuda, derecha = null, children }) => (
 export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrAValor = null, viejas = false, inicial = null, nombre = null, version = null }) {
   const [modo, setModo] = useState(inicial?.modo || 'plan')
   const [elegido, setElegido] = useState(inicial?.elegido || null)
-  const [abierta, setAbierta] = useState(true)
+  const [abierta, setAbierta] = useState(inicial?.abierta ?? false)   // §167: los valores, plegados al entrar (pedido por Sergi)
   // §160: el valor cuyas velas se ven en «Cómo crece» (null = el gráfico del plan) y si la «Vista de gráficos» está abierta.
   const [verValor, setVerValor] = useState(inicial?.verValor || null)
   const [vistaG, setVistaG] = useState(!!inicial?.vistaGraficos)
@@ -360,7 +360,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
             <tr data-fila-total style={{ fontWeight: 700, color: B.titulo }}>
               <td style={celda}><button type="button" data-pliega-valores aria-expanded={abierta} onClick={() => setAbierta(x => !x)} title={abierta ? 'Ocultar los valores' : 'Ver los valores'} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.titulo, fontFamily: B.letra, fontSize: 'inherit', fontWeight: 700 }}>{abierta ? '▾' : '▸'} {filas.length === 1 ? filas[0].simbolo : `Los ${numero(filas.length, 0)} valores`}</button></td>
               <td style={{ ...num, color: signo(total.aporto) }}>{conSigno(total.aporto)}</td><td style={{ ...num, color: signo(total.aportoPct) }}>{pctSigno(total.aportoPct)}</td><td style={{ ...num, color: signo(total.cagr) }}>{pct(total.cagr)}</td>
-              <td style={num}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>{numero(total.operaciones, 0)}{detalle.senales && <span data-senales title={textoSenales(detalle.senales)} style={{ fontSize: 10, fontWeight: 400, cursor: 'help', borderRadius: 3, padding: '1px 4px', color: detalle.senales.pct >= 0.995 ? VERDE : '#ff9f43', background: detalle.senales.pct >= 0.995 ? 'rgba(126,226,160,0.10)' : 'rgba(255,159,67,0.12)' }}>{Math.round(detalle.senales.pct * 100)} %</span>}</span></td><td style={num}>{pct(total.ganadoras, 1)}</td><td style={num}>{total.pf == null ? '—' : numero(total.pf, 2)}</td><td style={num}></td>
+              <td style={num}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>{numero(total.operaciones, 0)}{detalle.senales && <span data-senales title={textoSenales(detalle.senales)} style={{ fontSize: 10, fontWeight: 400, cursor: 'help', borderRadius: 3, padding: '1px 4px', color: detalle.senales.pct >= 0.995 ? VERDE : '#ff9f43', background: detalle.senales.pct >= 0.995 ? 'rgba(126,226,160,0.10)' : 'rgba(255,159,67,0.12)' }}>{Math.round(detalle.senales.pct * 100)} %</span>}</span></td><td style={num}>{pct(total.ganadoras, 1)}</td><td style={num}>{total.pf == null ? '—' : numero(total.pf, 2)}</td><td style={{ ...num, color: total.caidaEur < 0 ? ROJO : undefined }} title={total.caidaEur < 0 ? `${conSigno(total.caidaEur, 0)} de lo ganado con los valores` : 'Sin caídas'}>{total.caidaPct == null || !(total.caidaEur < 0) ? '—' : pct(total.caidaPct, 1)}</td>
               <td style={num} title={`De media, ${euros(total.enValoresEur, 0)} en valores`}>{pct(total.enValores, 0)}</td><td style={num}>{pct(detalle.cifras?.tiempoInvertido, 0)}</td>
             </tr>
             {abierta && filas.length > 1 && filas.map(f => <tr key={f.simbolo} data-valor={f.simbolo} aria-selected={f.simbolo === elegido} style={f.simbolo === elegido ? { background: B.cabecera } : undefined}>

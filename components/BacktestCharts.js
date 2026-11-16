@@ -400,7 +400,11 @@ const _MONO='"Roboto Mono",monospace'
 // para que alternarlo no toque la descarga de velas: esa petición depende de symbol, years e intervalo, y
 // de nada más.
 export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef,onReady,rangoVisible=null,
-  indicadores=null,zonasFiltro=null,intervalo='diario',verEtiquetas=true}) {
+  indicadores=null,zonasFiltro=null,intervalo='diario',verEtiquetas=true,ruedaTrasClic=false}) {
+  // §167 (docs/builder.md): con ruedaTrasClic, la rueda del ratón NO mueve ni acerca el gráfico hasta hacer clic en él (así se puede bajar por
+  // la página sin acercarlo sin querer); al salir del gráfico, se vuelve a apagar. Sin la prop, como siempre.
+  const [ruedaActiva,setRuedaActiva]=useState(false)
+  const ponRueda=(si)=>{ setRuedaActiva(si); try{chartRef.current?.applyOptions({handleScroll:{mouseWheel:si},handleScale:{mouseWheel:si}})}catch(_){} }
   const containerRef=useRef(null)
   const chartDivRef=useRef(null)
   const chartRef=useRef(null)
@@ -473,8 +477,8 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
         crosshair:{mode:CrosshairMode.Normal},
         rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.15,bottom:0.05}},
         timeScale:{borderColor:'#1a2d45',timeVisible:false},
-        handleScroll:{mouseWheel:true,pressedMouseMove:true},
-        handleScale:{mouseWheel:true,pinch:true},
+        handleScroll:{mouseWheel:!ruedaTrasClic,pressedMouseMove:true},
+        handleScale:{mouseWheel:!ruedaTrasClic,pinch:true},
       })
       chartRef.current=chart
       const candles=chart.addCandlestickSeries({
@@ -760,7 +764,10 @@ export function AssetSignalChart({symbol,stratSignals,years=5,height=400,syncRef
   },[ohlcv,stratSignals,height,rangoVisible,indicadores,zonasFiltro])
 
   return(
-    <div ref={containerRef} data-mcsym={symbol} style={{borderBottom:'1px solid var(--border)'}}>
+    <div ref={containerRef} data-mcsym={symbol} style={{borderBottom:'1px solid var(--border)',position:ruedaTrasClic?'relative':undefined}}
+      onClick={ruedaTrasClic?()=>{ if(!ruedaActiva) ponRueda(true) }:undefined} onMouseLeave={ruedaTrasClic?()=>{ if(ruedaActiva) ponRueda(false) }:undefined}>
+      {ruedaTrasClic&&<span data-rueda={ruedaActiva?'activa':'apagada'} style={{position:'absolute',right:70,bottom:34,zIndex:3,pointerEvents:'none',fontSize:11,padding:'2px 7px',borderRadius:4,
+        background:ruedaActiva?'rgba(0,229,160,0.15)':'rgba(8,12,20,0.85)',color:ruedaActiva?'#00e5a0':'#7a9bc0',border:'1px solid #1a2d45'}}>{ruedaActiva?'Rueda: acercar y alejar · sal del gráfico para seguir bajando':'Haz clic en el gráfico para acercar con la rueda'}</span>}
       {/* Header: symbol + strategy signals */}
       <div style={{padding:'5px 12px',display:'flex',alignItems:'flex-start',gap:10,background:'#050c18',
         borderBottom:'1px solid var(--border)',flexWrap:'wrap'}}>

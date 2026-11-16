@@ -3189,3 +3189,12 @@ Pedido por Sergi el 16/11 (opción A del boceto bocetos/detalle-final.html, acep
 - `altoAmpliado(amp, normal, menos)`: el alto de cada gráfico cuando está ampliado (nunca menos que el normal).
 - Comprobación `scripts/comprobaciones/plan-detalle.js`: «Dónde está tu dinero» ampliado pasa de 168 a 628 px y «✕ Cerrar» lo devuelve; cada gráfico de «Detalle» tiene su «⤢ Ampliar».
 - Ninguna cifra cambia.
+
+## 167. «Detalle»: arreglos pedidos por Sergi al ver la parte 5 (16/11)
+
+- Los valores de «Qué aportó cada valor» salen PLEGADOS al entrar (el total y el ocioso a la vista); «▸ Los N valores» los despliega.
+- La fila del total ya tiene su «Peor caída» (antes, vacía): la de lo ganado con todos los valores juntos (la suma de sus curvas), como el Max DD de la fila de la estrategia en el Backtesting; los € en el tooltip.
+- La rueda del ratón ya no acerca el gráfico de velas sin querer al bajar por la página: `AssetSignalChart` (components/BacktestCharts.js) aprende la prop opcional `ruedaTrasClic` (sin ella, el Backtesting igual): la rueda está apagada hasta hacer clic en el gráfico y se apaga al salir de él; una etiqueta lo dice («Haz clic en el gráfico para acercar con la rueda» / «Rueda: acercar y alejar»). Arrastrar sigue moviendo el gráfico. «Detalle» la usa en todos sus gráficos de velas.
+- Historial: pulsar el VALOR de una fila filtraba el historial por ese valor (y Sergi creía que no llevaba a su gráfico). Ahora pulsar cualquier parte de la fila, también el valor, lleva al gráfico de ese valor centrado en esa operación; para filtrar está el buscador.
+- Comprobación `scripts/comprobaciones/plan-detalle.js`: plegados al entrar; la peor caída del total (−34,0 %, −77.746,84 € con la lista de la prueba); pulsar la fila lleva a su operación sin filtrar; la rueda apagada, activa tras un clic y apagada al salir.
+- Ninguna cifra cambia.

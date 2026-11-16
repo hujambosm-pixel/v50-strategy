@@ -26,6 +26,8 @@
 //     §163 (parte 5b): las señales que cuenta el motor del plan (generadas, ejecutadas, motivos, cómo les habría ido), a mano, con la lista
 //     Degiro real (generadas = candidatos; ejecutadas = operaciones) y su «%» con el tooltip en la pantalla.
 //     §165 (parte 5d): ocultar el panel de la izquierda y volverlo a ver. §166 (parte 5e): «⤢ Ampliar» a pantalla completa.
+//     §167: los valores plegados al entrar; la peor caída del total; la rueda del gráfico de velas solo tras un clic; pulsar cualquier
+//     parte de una fila del historial (también el valor) lleva a su operación.
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-del-arnes'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ
@@ -352,6 +354,9 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     ok(!!L && suma?.getAttribute('data-cuadra') === 'si' && trozo('final') === Pa.euros(m.valorNeto, 0) && trozo('aportado').startsWith(Pa.euros(ej.aportado, 0)) && trozo('valores').includes(Pa.euros(Math.abs(L.puente.ganadoValores), 0)) && trozo('ocioso').includes(Pa.euros(Math.abs(L.puente.ganadoOcioso), 0))
       && trozo('costes').includes(Pa.euros(L.puente.costes, 0)) && trozo('impuestos').includes(Pa.euros(L.puente.impuestos, 0)) && suma.textContent.includes('= «Tienes al final» de «Tu dinero» ✓'),
       `pantalla, la línea que suma: «${['aportado', 'valores', 'ocioso', 'costes', 'impuestos'].map(trozo).join(' ')} = ${trozo('final')}»`)
+    // §167: al entrar, los valores plegados (solo el total y el ocioso); se despliegan con «▸ Los N valores».
+    ok(!b.raiz.conAtributo('data-valor').length && b.raiz.conAtributo('data-pliega-valores')[0]?.getAttribute('aria-expanded') === 'false' && b.raiz.conAtributo('data-fila-ocioso').length === 1, 'al entrar, los valores plegados (el total y el ocioso a la vista)')
+    D.pulsa(b.raiz.conAtributo('data-pliega-valores')[0]); await D.espera(30)
     const filasV = b.raiz.conAtributo('data-valor'), conOps = Object.values(L.porSimbolo).filter(s => s.rol === 'valor').length
     const d0 = De.detallePlan(ultima, Pl.planListaCalculable(Pa.planDe(aPant, est)).plan)
     ok(filasV.length === conOps && conOps > 5 && filasV[0].getAttribute('data-valor') === d0.filas[0].simbolo && filasV[0].textContent.includes(Pa.euros(Math.abs(d0.filas[0].aporto), 0)) && b.raiz.conAtributo('data-fila-total')[0].textContent.includes(`Los ${conOps} valores`)
@@ -402,6 +407,18 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
       ok(izq()?.style.display === 'none' && b.raiz.conAtributo('data-abre-panel').length === 1 && izq().textContent.includes('Tu dinero'), 'ocultar el panel: franja «▶ Cartera · Tu dinero» y el panel oculto (sigue montado)')
       D.pulsa(b.raiz.conAtributo('data-abre-panel')[0]); await D.espera(30)
       ok(izq()?.style.display !== 'none' && !b.raiz.conAtributo('data-abre-panel').length, 'pulsando la franja vuelve el panel') }
+    // §167: pulsar el VALOR de una fila del historial (no solo el resto de la fila) también lleva a su operación; y en el gráfico de velas, la
+    // rueda está apagada hasta hacer clic en él y se apaga al salir.
+    { const fila = b.raiz.conAtributo('data-operacion')[1], sim = fila.getAttribute('data-operacion')
+      D.pulsa(fila); await D.espera(30)
+      const v = b.raiz.conAtributo('data-velas-valor')[0], ru = () => v?.todos(n => n.hasAttribute('data-rueda'))[0]
+      ok(v?.getAttribute('data-velas-valor') === sim && v.hasAttribute('data-foco') && !fila.todos(n => n.nodeName === 'BUTTON').length && !(b.raiz.conAtributo('data-historial-filtro')[0]), `pulsar la fila de ${sim} lleva a su operación (sin filtrar el historial)`)
+      ok(ru()?.getAttribute('data-rueda') === 'apagada', 'la rueda del gráfico de velas, apagada al entrar')
+      const caja = v.todos(n => n.hasAttribute('data-mcsym'))[0]; D.pulsa(caja); await D.espera(30)
+      ok(ru()?.getAttribute('data-rueda') === 'activa', 'tras un clic en el gráfico, la rueda acerca y aleja')
+      D.propsDe(caja).onMouseLeave?.({}); await D.espera(30)
+      ok(ru()?.getAttribute('data-rueda') === 'apagada', 'al salir del gráfico, la rueda se apaga otra vez')
+      D.pulsa(b.raiz.conAtributo('data-volver-velas')[0]); await D.espera(30) }
     // §164: del historial a su gráfico. Pulsar una fila abre las velas de su valor centradas en esa operación (30 días antes y después) y la
     // resalta (n = su número entre las de ese valor, por fecha de compra); «Ver todo el periodo» quita el foco.
     { const o = d0.porOperacion.ops[d0.porOperacion.ops.length - 1], fo = De.focoDeOperacion(d0.porOperacion.ops, o)
@@ -448,6 +465,10 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     ok(!!fc && fc.todos(n => n.hasAttribute('data-cifra-detalle')).length === 7 && fc.textContent.includes(Pa.pct(m.twrNeto)) && cols.join() === 'Aportó,Aportó %,CAGR de su aportación,Operaciones,Ganadoras,Profit Factor,Peor caída,Dinero en él,Tiempo dentro'
       && b.raiz.conAtributo('data-en-el', d0.filas[0].simbolo)[0]?.getAttribute('title') === `De media, ${Pa.euros(d0.filas[0].enElEur, 0)} en ${d0.filas[0].simbolo}` && cerca(sum(d0.filas, f => f.enEl), d0.total.enValores, 1e-9) && cerca(sum(d0.filas, f => f.aportoPct), d0.total.aportoPct, 1e-9),
       `pantalla, la fila de cifras (7) y las columnas por valor (${cols.length}); los «Dinero en él» y los «Aportó %» suman el total`)
+    // §167: la peor caída de la fila del total = la de la suma de las curvas de todos los valores.
+    { const cs = d0.filas.map(fl => L.curvas[fl.simbolo]), sumaC = cs[0].map((_, i) => cs.reduce((x, c) => x + c[i], 0)), cd = De.caidaDeCurva(sumaC, ej.serie)
+      const celda = b.raiz.conAtributo('data-fila-total')[0].todos(n => n.nodeName === 'TD')[7]
+      ok(cd.eur < 0 && cerca(d0.total.caidaEur, cd.eur, 1e-6) && cerca(d0.total.caidaPct, cd.pct, 1e-12) && celda?.textContent === Pa.pct(cd.pct, 1), `la peor caída del total: ${cd.eur.toFixed(2)} € (${celda?.textContent}), la de todos los valores juntos`) }
     // §163: el «%» de señales en la fila del total, con su tooltip.
     const bs = b.raiz.conAtributo('data-senales')[0]
     ok(!!bs && bs.textContent === `${Math.round(d0.senales.pct * 100)} %` && bs.getAttribute('title') === De.textoSenales(d0.senales) && bs.getAttribute('title').startsWith(`Señales de compra de la estrategia: ${d0.senales.generadas.toLocaleString('es-ES')}`),
