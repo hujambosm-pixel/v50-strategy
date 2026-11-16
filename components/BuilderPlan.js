@@ -68,6 +68,7 @@ import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, avisoPrueba as textoAvisoP
   ayudaCaida, ayudaPrueba, avisoListaSimple, oroComparable, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, velasDeEstrategia, velasDelPlan, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS } from '../lib/builder/planPantalla'
 
+const CLAVE_PANEL = 'builder_plan_panel_oculto'   // §165
 const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0', AZUL = '#58a6ff', GRIS_FRANJA = '#3a4656'
 const campo = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px' }
 const etiqueta = { fontWeight: 600, color: B.titulo, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 2 }
@@ -270,6 +271,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const [resPrueba, setResPrueba] = useState(inicial?.resultadoPrueba || null)
   // §84: con «Una lista», la columna derecha tiene dos pestañas: «Tu dinero» y «La cartera por dentro» (boceto C). Solo de la vista.
   const [vistaDer, setVistaDer] = useState(inicial?.vistaDer || 'dinero')
+  // §165: el panel de la izquierda plegado o no, recordado en este navegador.
+  const [panelOculto, setPanelOculto] = useState(!!inicial?.panelOculto)
+  useEffect(() => { if (inicial?.panelOculto != null) return; try { if (window.localStorage.getItem(CLAVE_PANEL) === '1') setPanelOculto(true) } catch (_) {} }, [])
+  const ponPanelOculto = (x) => { setPanelOculto(x); try { window.localStorage.setItem(CLAVE_PANEL, x ? '1' : '0') } catch (_) {} }
   // §128: «Comparar planes». comparando: se ve la comparación en lugar del plan abierto (que sigue con sus cambios). Lo elegido, recordado
   // en este navegador (CLAVE_COMPARAR); el modo del gráfico (null = el de por defecto), solo en esta visita. resComp: { id: estado de su cálculo }.
   const [comparando, setComparando] = useState(!!inicial?.comparando || !!comparar)   // §140: comparar: se entra comparando (desde la portada de Planes)
@@ -941,7 +946,12 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   .bp-izq, .bp-der { overflow-y: auto; overscroll-behavior: contain; padding-right: 4px }
   .bp-der > * { flex-shrink: 0 } }`}</style>
       {comparando ? null : actual ? <div className="bp-cols" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        <div data-columna="izquierda" className="bp-izq" style={{ flex: '1 1 340px', maxWidth: 520, minWidth: 0 }}>{bloques}{dinero}</div>
+        {/* §165: el panel de la izquierda se puede plegar a una franja estrecha (se recuerda en este navegador). Plegado sigue montado (oculto), así no pierde nada. */}
+        {panelOculto && <button type="button" data-abre-panel onClick={() => ponPanelOculto(false)} title="Ver otra vez «Cartera» y «Tu dinero»" aria-label="Ver el panel de la izquierda"
+          style={{ flex: '0 0 34px', alignSelf: 'stretch', minHeight: 240, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, color: B.secundario, cursor: 'pointer', fontFamily: B.letra, fontSize: 13, writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0' }}>▶ Cartera · Tu dinero</button>}
+        <div data-columna="izquierda" className="bp-izq" style={{ flex: '1 1 340px', maxWidth: 520, minWidth: 0, ...(panelOculto ? { display: 'none' } : {}) }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}><button type="button" data-oculta-panel onClick={() => ponPanelOculto(true)} title="Pliega «Cartera» y «Tu dinero» para que los gráficos y las tablas usen todo el ancho" style={{ fontFamily: B.letra, fontSize: 12, padding: '3px 9px', borderRadius: 6, cursor: 'pointer', border: `1px solid ${B.borde}`, background: B.fondo, color: B.secundario }}>◀ Ocultar el panel</button></div>
+          {bloques}{dinero}</div>
         <div data-columna="derecha" className="bp-der" style={{ flex: '2 1 480px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {resultado}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>

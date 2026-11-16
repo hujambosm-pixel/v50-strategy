@@ -3170,3 +3170,12 @@ Pedido por Sergi el 16/11 (boceto bocetos/detalle-final.html, pestaña 4): mante
 - BuilderPlan ya no pasa `cargaVelas` a «Detalle». Se quedan `velasDe` y `opsEnVelas` en lib/builder/detallePlan.js (las usan las pruebas).
 - Comprobación `scripts/comprobaciones/plan-detalle.js` adaptada: a mano (las señales del gráfico de A: +20 %, 499 € → 598,80 €; su foco del 04/12/2019 al 06/02/2020) y en la pantalla (TSLA con sus 48 operaciones; volver; la vista con 11 gráficos y «Ver en grande»; la primera fila del historial abre su gráfico centrado en ella; «Ver todo el periodo»).
 - Ninguna cifra cambia.
+
+## 165. Un solo cálculo, parte 5d: ocultar el panel de la izquierda del plan
+
+Pedido por Sergi el 16/11 (opción A del boceto bocetos/detalle-final.html, aceptada).
+
+- Arriba del panel de la izquierda («Cartera» y «Tu dinero»), «◀ Ocultar el panel»: el panel se pliega a una franja estrecha vertical «▶ Cartera · Tu dinero» y la columna de la derecha («Tu dinero» / «Detalle») usa todo el ancho. Pulsando la franja vuelve. Se recuerda en este navegador (localStorage `builder_plan_panel_oculto`).
+- Plegado, el panel sigue montado (con display: none), así no se pierde nada de lo que esté abierto o a medio escribir.
+- Comprobación `scripts/comprobaciones/plan-detalle.js`: ocultar (franja, panel oculto y montado) y volver a ver.
+- Ninguna cifra cambia.

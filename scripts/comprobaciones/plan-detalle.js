@@ -25,6 +25,7 @@
 //     en él) y el buscador en toda la fila, a mano y en la pantalla.
 //     §163 (parte 5b): las señales que cuenta el motor del plan (generadas, ejecutadas, motivos, cómo les habría ido), a mano, con la lista
 //     Degiro real (generadas = candidatos; ejecutadas = operaciones) y su «%» con el tooltip en la pantalla.
+//     §165 (parte 5d): ocultar el panel de la izquierda y volverlo a ver.
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-del-arnes'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ
@@ -387,6 +388,12 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     D.pulsa(b.raiz.conAtributo('data-ver-grande', d0.filas[2].simbolo)[0]); await D.espera(30)
     ok(b.raiz.conAtributo('data-tarjeta', 'detalle-velas')[0]?.textContent.startsWith(`${d0.filas[2].simbolo} · sus velas`), `«Ver en grande» de ${d0.filas[2].simbolo} lo abre arriba`)
     D.pulsa(b.raiz.conAtributo('data-volver-velas')[0]); D.pulsa(b.raiz.conAtributo('data-abre-vista-graficos')[0]); await D.espera(30)
+    // §165: ocultar el panel de la izquierda: queda una franja «▶ Cartera · Tu dinero» (el panel sigue montado, oculto); pulsándola vuelve.
+    { const izq = () => b.raiz.conAtributo('data-columna', 'izquierda')[0]
+      D.pulsa(b.raiz.conAtributo('data-oculta-panel')[0]); await D.espera(30)
+      ok(izq()?.style.display === 'none' && b.raiz.conAtributo('data-abre-panel').length === 1 && izq().textContent.includes('Tu dinero'), 'ocultar el panel: franja «▶ Cartera · Tu dinero» y el panel oculto (sigue montado)')
+      D.pulsa(b.raiz.conAtributo('data-abre-panel')[0]); await D.espera(30)
+      ok(izq()?.style.display !== 'none' && !b.raiz.conAtributo('data-abre-panel').length, 'pulsando la franja vuelve el panel') }
     // §164: del historial a su gráfico. Pulsar una fila abre las velas de su valor centradas en esa operación (30 días antes y después) y la
     // resalta (n = su número entre las de ese valor, por fecha de compra); «Ver todo el periodo» quita el foco.
     { const o = d0.porOperacion.ops[d0.porOperacion.ops.length - 1], fo = De.focoDeOperacion(d0.porOperacion.ops, o)
