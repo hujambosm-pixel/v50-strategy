@@ -3228,3 +3228,11 @@ Boceto bocetos/detalle-final.html, pestaña 3 (puntos 1, 2 y 5 aceptados por Ser
 - components/BuilderPlan.js: `comp.conAhora`; «Comparar (N)» entra en la comparación con la base y las copias elegidas; al salir de la comparación, las copias se olvidan (al volver con «Comparar planes» salen solo los guardados) y nunca se recuerdan en el navegador.
 - Comprobación: comparar-planes.js, apartado 6 (15 nuevas). A mano: «Plan A · tal como está» acaba en 10.694,29 €, igual que el plan A.
 - Ninguna cifra cambia.
+
+## 171. «Comparar planes»: los costes se comparan por lo que significan (17/11)
+
+Visto por mí en la app al probar §170 con la sesión de Sergi (plan 7 «Prueba editor EMA20» con SuperTrend 10/3): las dos tarjetas decían «impuestos de España · 0,37 € fijos por operación» y aun así salía ⚠ en impuestos y comisiones («No tienen los mismos impuestos o comisiones»). La clave comparaba el JSON guardado de los costes, y el plan guardado y su copia los escriben distinto con el mismo significado.
+
+- lib/builder/comparaPlanes.js: claveCostes compara el régimen de impuestos, el % de comisión, el mínimo por orden y las horquillas mayores que 0 (sin costes = ceros).
+- Comprobación: comparar-planes.js, apartado 7 (3 nuevas).
+- Ninguna cifra cambia (solo desaparece un ⚠ falso).

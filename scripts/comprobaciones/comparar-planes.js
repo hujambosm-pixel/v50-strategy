@@ -7,6 +7,7 @@
 //       §135: sin cabecera de pasos ni pestañas al comparar, y «Ocultar ▲» (una línea por plan, mismas cifras, gráfico de 470 px).
 //   5 · §169: ids como texto y copias sin guardar del plan abierto con otra estrategia (la copia con su misma estrategia = el plan).
 //   6 · §170: el botón «Comparar con otras estrategias ▾»: menú sin la del plan, hasta 3, base «tal como está», las copias se olvidan al volver.
+//   7 · §171: los costes se comparan por lo que significan (sin ⚠ falso entre un plan guardado y su copia).
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://falso.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-de-la-prueba'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
@@ -221,6 +222,12 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
     ok(q('data-elige-plan').map(n => n.getAttribute('data-elige-plan')).join() === '1,2,3' && q('data-copia-sin-guardar').length === 0, '§170: al volver a «Comparar planes», las copias ya no están (solo los guardados)')
     ok(!(localStorage.getItem(K.CLAVE_COMPARAR) || '').includes('v-'), '§170: en el navegador no se recuerda ninguna copia')
     m.quita(); await D.espera(5) }
+
+  // ── 7 · §171: los costes se comparan por lo que significan ──
+  { const c1 = { comisionPct: 0, comisionMinEur: 0.37, horquillaPct: { QQQ: 0, ETF: 0, SPY: 0 } }, c2 = { comisionMinEur: 0.37, comisionPct: 0, horquillaPct: { QQQ: 0 } }
+    ok(K.diferencias([fila(1, 'A', planMano(fs, { costes: c1 })), fila(2, 'B', planMano(fs, { costes: c2 }))]).costes, '§171: 0,37 € fijos guardados de dos formas (con y sin horquillas a 0): mismos costes, sin ⚠')
+    ok(!K.diferencias([fila(1, 'A', planMano(fs, { costes: c1 })), fila(2, 'B', planMano(fs, { costes: { ...c1, comisionMinEur: 0.185 } }))]).costes && !K.diferencias([fila(1, 'A', planMano(fs, { costes: null })), fila(2, 'B', planMano(fs, { costes: c1 }))]).costes, '§171: 0,37 € frente a 0,185 €, o sin comisión frente a 0,37 €: costes distintos, con ⚠')
+    ok(K.diferencias([fila(1, 'A', planMano(fs, { costes: null })), fila(2, 'B', planMano(fs, { costes: { comisionPct: 0, comisionMinEur: 0, horquillaPct: {} } }))]).costes && !K.diferencias([fila(1, 'A', pA), fila(2, 'B', planMano(fs, { impuestos: { regimen: 'ninguno', reglaDosMeses: true } }))]).costes, '§171: sin costes guardado como null o a ceros: iguales; impuestos distintos: con ⚠') }
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTodo bien')
   process.exit(fallos ? 1 : 0)
