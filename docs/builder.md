@@ -3265,3 +3265,14 @@ Pedido por Sergi el 18/11 con capturas del plan 4 (punto 1 de tres: después, se
 - «◀ Ocultar el panel» en una franja de 40 px (ALTO_BARRA_COL, data-barra-izq) a la misma altura que las pestañas «Tu dinero / Detalle»; en escritorio (≥ 1000 px) las dos son position: sticky (clase bp-fijo) con fondo opaco: al bajar por cada columna se quedan arriba. En el móvil, como antes.
 - Comprobado por mí en la app (plan 7, 1400×800): con la rueda en cada columna las dos franjas se quedan arriba; el desplegable de comparar se abre por encima; 64.625 €; consola sin errores.
 - Ninguna cifra cambia.
+
+## 175. Selectores de estrategia como el selector de valores (17/11)
+
+Pedido por Sergi el 18/11 (punto 2 de tres). El desplegable de «Comparar con otras estrategias» se veía mal: la casilla del navegador salía ENCIMA del nombre y centrada (un estilo global de input/label la descolocaba).
+
+- components/ListaEstrategias.js (nuevo): ListaEstrategias = buscador con ✕ siempre (sin mayúsculas ni acentos, palabra a palabra), casilla DIBUJADA a la izquierda del nombre (cuadrado; círculo si es de una sola), filas compactas, «N seleccionadas», etiqueta a la derecha y las marcadas AL ABRIR, arriba (no saltan al pulsar). SelectorEstrategia = botón con la elegida y su etiqueta que abre la lista de una; se cierra al elegir, al pulsar fuera o con Esc.
+- components/MenuCompararEstrategias.js: usa ListaEstrategias (hasta 3, como antes).
+- components/BuilderPlan.js: el <select> «Estrategia» del bloque pasa a SelectorEstrategia: «pasa el azar» en verde, «no pasa» en rojo, «sin prueba», «semanal»; la estrategia borrada del plan, arriba con su etiqueta en amarillo; las de código, en gris al final. Las SEMANALES ya se pueden elegir (el <select> las dejaba apagadas aunque desde §145 el plan las admite; decidido por mí: es lo ya decidido, «el plan manda»).
+- Comprobaciones: comparar-planes.js apartado 6 adaptado (filas con role=checkbox) + 5 nuevas y apartado 10 (5 nuevas: selector del bloque); borrar.js mira el botón en vez de la <option>.
+- Comprobado por mí en la app (plan 7): las dos listas se ven bien; al cerrar sin elegir, 64.625 € y sin cambios pendientes; consola sin errores.
+- Ninguna cifra cambia.

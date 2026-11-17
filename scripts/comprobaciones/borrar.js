@@ -109,7 +109,7 @@ const AVISO = 'puedes estar quedándote con una que pasó por suerte'
   ok(await Pl.huellaPlan(sinEst) === await Pl.huellaPlan(filaP.plan), 'tras borrar la estrategia, se calcula el plan guardado: la misma huella')
   ok(await Pl.huellaPlan(sinEst) === await Pl.huellaPlan(conEst), 'y es el mismo que antes de borrarla')
   ok(m.raiz.conAtributo('data-ruta', 'plan')[0]?.textContent === filaP.nombre && !m.raiz.conAtributo('data-ruta', 'estrategia').length && !q(m, 'data-boton', 'abrir-estrategia'), `§139: la ruta dice el plan («${m.raiz.conAtributo('data-ruta', 'plan')[0]?.textContent}»), sin «Abrir la estrategia» (está borrada)`)
-  ok(m.raiz.todos(n => n.nodeName === 'OPTION').some(n => n.textContent === 'Con prueba y plan (estrategia borrada · copia guardada)'), 'el desplegable dice lo mismo')
+  ok((m.raiz.conAtributo('data-boton', 'elige-estrategia')[0]?.textContent || '').startsWith('Con prueba y plan(estrategia borrada · copia guardada)'), 'el selector de la estrategia dice lo mismo (§175: nombre y, al lado, la etiqueta)')
   ok(!q(m, 'data-boton', 'guardar-cambios') && !q(m, 'data-boton', 'descartar'), 'sin cambios por guardar')
   ok(!q(m, 'data-boton', 'ver-prueba') && !q(m, 'data-boton', 'paso2'), 'sin «Probarla ahora» ni «Volver al paso 2»')
   ok(!m.raiz.busca(n => n.nodeName === 'BUTTON' && n.getAttribute('data-paso') === '2'), 'el paso 2 no se pulsa')

@@ -58,6 +58,7 @@ import { AYUDA_DETALLE, detallePlan } from '../lib/builder/detallePlan'
 import ComparaPlanes from './ComparaPlanes'
 import { CLAVE_COMPARAR, REFS_COMPARAR, TEXTO_SIN_PLANES, alterna, copiaDeAhora, copiasDe, eleccionCopias, elegidosIniciales, mismoId, nombreParaGuardar, paraRecordar, pieza as piezaDe, trasGuardarCopia } from '../lib/builder/comparaPlanes'
 import MenuCompararEstrategias from './MenuCompararEstrategias'
+import { SelectorEstrategia } from './ListaEstrategias'
 import { cargaUniversoMc, nDeUniverso, nombreUniverso, reglaDeUniverso } from '../lib/universoMc'
 import FiltrosDelPlan from './FiltrosDelPlan'
 import { filtrosPropios, respetaPropios, usoDeLaEstrategia } from '../lib/builder/filtrosPlan'
@@ -762,13 +763,14 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           {bloqueAbierto && <div data-cuerpo-bloque style={{ borderTop: `1px solid ${B.borde}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <Etiqueta texto="Estrategia" ayuda={AYUDA_PLAN.estrategia}/>
-            {tarjetas.length ? <select aria-label="Estrategia" value={estId} onChange={e => { setEstId(e.target.value); setCualVersion('actual') }} style={{ ...campo, maxWidth: '100%' }}>
-              {fotoG && String(fotoG.id) === estId && !tarjetas.some(s => String(s.id) === estId) && <option value={estId}>{`${fotoG.name} ${ETIQUETA_BORRADA}`}</option>}
-              {tarjetas.map(s => { const sem = esSemanal(s), ps = [ETIQUETA_PRUEBA[estadosLista[s.id]], sem ? 'semanal' : null].filter(Boolean)
-                return <option key={s.id} value={String(s.id)} disabled={sem}>{`${s.name}${ps.length ? ` (${ps.join(' · ')})` : ''}`}</option> })}
-              {/* §50: al final, en gris y sin poder elegirse, cuántas de código hay (no sirven aquí). */}
-              {deCodigo > 0 && <option data-codigo={deCodigo} value="" disabled style={{ color: B.apagado }}>{textoCodigo(deCodigo)}</option>}
-            </select> : <div style={S.secundario}>No tienes estrategias de tarjetas. Crea una en «Estrategias».</div>}
+            {/* §175: como el selector de valores: botón con la elegida y lista con buscador (antes, un <select>). Las semanales ya se
+                pueden elegir (desde §145 el plan las admite; el <select> las dejaba apagadas). Al final, en gris, cuántas de código hay. */}
+            {tarjetas.length ? <SelectorEstrategia valor={estId} onElige={id => { setEstId(id); setCualVersion('actual') }} estiloBoton={{ ...campo, maxWidth: '100%' }}
+              extra={fotoG && String(fotoG.id) === estId && !tarjetas.some(s => String(s.id) === estId) ? { id: estId, name: fotoG.name, etiqueta: ETIQUETA_BORRADA, colorEtiqueta: AMARILLO } : null}
+              estrategias={tarjetas.map(s => { const ep = estadosLista[s.id], ps = [ETIQUETA_PRUEBA[ep], esSemanal(s) ? 'semanal' : null].filter(Boolean)
+                return { id: s.id, name: s.name, etiqueta: ps.join(' · ') || null, colorEtiqueta: ep === 'pasa' ? VERDE : ep === 'noPasa' ? ROJO : undefined } })}
+              pie={deCodigo > 0 ? <div data-codigo={deCodigo} style={{ ...S.apagado, fontSize: 12, borderTop: `1px solid ${B.borde}`, paddingTop: 6 }}>{textoCodigo(deCodigo)}</div> : null}/>
+              : <div style={S.secundario}>No tienes estrategias de tarjetas. Crea una en «Estrategias».</div>}
             {estrategia && !estBorrada && <div style={{ marginTop: 6 }}><button data-boton="abrir-estrategia" type="button" style={{ ...S.enlace, fontSize: 13 }} onClick={() => pide({ tipo: 'paso1' })} title="Abre esta estrategia para verla o cambiarla; si el plan tiene cambios sin guardar, pregunta antes">Abrir la estrategia ›</button></div>}
             {/* §148: fuera el aviso de que los planes eran solo de velas diarias: desde §145 las semanales también entran. */}
           </div>

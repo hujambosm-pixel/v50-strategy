@@ -10,6 +10,8 @@
 //   7 · §171: los costes se comparan por lo que significan (sin ⚠ falso entre un plan guardado y su copia).
 //   8 · §172: la vista «Tabla» (cifras de «Detalle» de cada plan; ★ y ⚠ como en las tarjetas; Buy&Hold solo con todo igual).
 //   9 · §173: «Guardar como plan» en una copia (nombre propuesto, se guarda tal cual, ocupa su sitio en la comparación).
+//  10 · §175: las listas de estrategias como el selector de valores (casilla a la izquierda, buscador, marcadas arriba) y el selector de
+//       UNA estrategia del bloque (con su etiqueta de la prueba, las semanales elegibles y las de código en gris al final).
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://falso.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-de-la-prueba'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
@@ -206,12 +208,23 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
     const opciones = () => q('data-estrategia-comparar').map(n => n.getAttribute('data-estrategia-comparar')).join()
     ok(q('data-menu', 'comparar-estrategias').length === 1 && opciones() === 'y,w,u,t', `§170: el menú, con tus estrategias de tarjetas MENOS la del plan, por nombre (${opciones()})`)
     ok(q('data-boton', 'comparar-marcadas')[0].hasAttribute('disabled') && q('data-boton', 'comparar-marcadas')[0].textContent === 'Comparar (0)', '§170: sin marcar ninguna, «Comparar (0)» apagado')
-    const casilla = (id) => q('data-estrategia-comparar', id)[0].conAtributo('type', 'checkbox')[0]
-    const marca = async (id) => { D.propsDe(casilla(id)).onChange?.({ target: casilla(id) }); await D.espera(10) }
+    // §175: cada fila es un botón con role=checkbox y la casilla dibujada delante del nombre.
+    const casilla = (id) => q('data-estrategia-comparar', id)[0]
+    const marca = async (id) => { D.pulsa(casilla(id)); await D.espera(10) }
+    ok(casilla('y').getAttribute('role') === 'checkbox' && casilla('y').getAttribute('aria-checked') === 'false' && casilla('y').childNodes[0]?.getAttribute?.('aria-hidden') === 'true' && casilla('y').textContent === 'EMA3', '§175: la fila: casilla dibujada a la izquierda y el nombre detrás')
+    ok(q('data-cuantas-marcadas')[0]?.textContent === '0 seleccionadas' && q('data-buscar', 'estrategias').length === 1, '§175: «0 seleccionadas» y buscador siempre')
     await marca('y'); await marca('w'); await marca('u')
     ok(q('data-boton', 'comparar-marcadas')[0].textContent === 'Comparar (3)' && casilla('t').hasAttribute('disabled'), '§170: con 3 marcadas, la cuarta no se puede marcar')
     await marca('u'); await marca('w')
     ok(q('data-boton', 'comparar-marcadas')[0].textContent === 'Comparar (1)' && !casilla('t').hasAttribute('disabled'), '§170: desmarcar libera sitio')
+    ok(q('data-cuantas-marcadas')[0]?.textContent === '1 seleccionada' && opciones() === 'y,w,u,t' && casilla('y').getAttribute('aria-checked') === 'true', '§175: «1 seleccionada»; al marcar, las filas no saltan')
+    await marca('t'); D.pulsa(q('data-boton', 'comparar-estrategias')[0]); await D.espera(10); D.pulsa(q('data-boton', 'comparar-estrategias')[0]); await D.espera(10)
+    ok(opciones() === 'y,t,w,u', `§175: al volver a abrir, las marcadas arriba (${opciones()})`)
+    D.escribe(q('data-buscar', 'estrategias')[0], 'xyz'); await D.espera(10)
+    ok(opciones() === '' && q('data-lista-estrategias')[0].textContent.includes('Ninguna estrategia con «xyz»'), '§175: sin ninguna que coincida, lo dice')
+    D.escribe(q('data-buscar', 'estrategias')[0], 'éma5'); await D.espera(10)
+    ok(opciones() === 'u', `§175: el buscador no distingue mayúsculas ni acentos (${opciones()})`)
+    D.escribe(q('data-buscar', 'estrategias')[0], ''); await D.espera(10); await marca('t')
     D.pulsa(q('data-boton', 'comparar-marcadas')[0]); await D.espera(120)
     // §172: se entra en la vista «Tabla»; aquí se miran las tarjetas.
     ok(q('data-vista', 'tabla')[0]?.getAttribute('aria-pressed') === 'true' && q('data-fila-tabla').map(n => n.getAttribute('data-fila-tabla')).join() === 'v-ahora,v-y,bh', `§172: desde el plan, se entra en la vista «Tabla» (filas ${q('data-fila-tabla').map(n => n.getAttribute('data-fila-tabla')).join()})`)
@@ -284,6 +297,23 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
     ok(q('data-abrir-plan', '99').length === 1 && q('data-elige-plan', '99')[0]?.textContent.includes('Plan A · EMA3'), '§173: el plan guardado, con «Abrir» y en las fichas con su nombre')
     D.pulsa(q('data-boton', 'volver-plan')[0]); await D.espera(40)
     ok(q('data-pestana', 'g99').length === 1 && q('data-pestana', 'g1')[0]?.getAttribute('aria-selected') === 'true', '§173: tiene su pestaña y el plan abierto sigue siendo el A')
+    m.quita(); await D.espera(5) }
+
+  // ── 10 · §175: el selector de UNA estrategia del bloque ──
+  { const otra = (id, ema, extra = {}) => ({ id, name: `EMA${ema}`, definition: EMA, params: { ema, ...extra } })
+    const COD = { id: 'c1', name: 'Una de código', code: 'x', definition: null }
+    const ESTRS = [ESTR, otra('w', 4), otra('s', 6, { intervalo: 'semanal' }), COD]
+    m = D.monta(h(BPlan, { estrategias: ESTRS, deps: { ctx: null, calcula: calcula2 }, tema: 'oscuro', inicial: { planes: filas, orden: ['g1'], pestana: 'g1', simbolos: ['TEST'], pruebas: [], anchoPestanas: 1400 } }), RDC)
+    await D.espera(80)
+    const bS = q('data-boton', 'elige-estrategia')[0]
+    ok(bS && bS.getAttribute('aria-label') === 'Estrategia' && bS.textContent.startsWith('EMA2') && q('data-menu', 'elige-estrategia').length === 0, `§175: el bloque enseña la elegida en un botón (${bS?.textContent})`)
+    D.pulsa(bS); await D.espera(10)
+    const filasS = () => q('data-elige-estrategia').map(n => n.getAttribute('data-elige-estrategia')).join()
+    ok(filasS() === 'x,w,s' && q('data-elige-estrategia', 'x')[0].getAttribute('role') === 'radio' && q('data-elige-estrategia', 'x')[0].getAttribute('aria-checked') === 'true', `§175: la elegida arriba, sin las de código (${filasS()})`)
+    ok(!q('data-elige-estrategia', 's')[0].hasAttribute('disabled') && q('data-elige-estrategia', 's')[0].textContent.includes('semanal'), '§175: la semanal se puede elegir y lo dice')
+    ok(q('data-menu', 'elige-estrategia')[0].conAtributo('data-codigo').length === 1, '§175: al final, en gris, cuántas de código hay')
+    D.pulsa(q('data-elige-estrategia', 'w')[0]); await D.espera(40)
+    ok(q('data-menu', 'elige-estrategia').length === 0 && q('data-boton', 'elige-estrategia')[0].textContent.startsWith('EMA4') && (q('data-resumen-bloque')[0]?.textContent || '').includes('EMA4'), `§175: al elegir otra, se cierra y el bloque pasa a EMA4 (${q('data-resumen-bloque')[0]?.textContent})`)
     m.quita(); await D.espera(5) }
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTodo bien')
