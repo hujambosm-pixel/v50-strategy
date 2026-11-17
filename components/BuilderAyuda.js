@@ -67,13 +67,13 @@ export default function Ayuda({ texto, etiqueta = 'Ayuda', abiertoInicial = fals
   const ventana = abierto && pos && (
     <span ref={burbuja} role="tooltip" data-ayuda-ventana {...raton}
       style={{ position: 'fixed', left: pos.left, top: pos.top, width: pos.width, maxHeight: pos.maxHeight ?? undefined, overflowY: pos.maxHeight ? 'auto' : 'visible', visibility: pos.provisional ? 'hidden' : 'visible', boxSizing: 'border-box', zIndex: zIndice, background: B.cabecera, border: `1px solid ${B.siguienteBorde}`, borderRadius: B.radioBoton,
-        padding: '10px 12px', color: B.texto, fontFamily: B.letra, fontSize: 13, fontWeight: 400, lineHeight: 1.45, textAlign: 'left', whiteSpace: 'normal', boxShadow: '0 6px 20px rgba(0,0,0,0.45)', display: 'block' }}>{texto}</span>
+        padding: '10px 12px', color: B.texto, fontFamily: B.letra, fontSize: 13, fontWeight: 400, lineHeight: 1.45, textAlign: 'left', whiteSpace: 'normal', boxShadow: '0 6px 20px var(--bd-sombra, rgba(0,0,0,0.45))', display: 'block' }}>{texto}</span>
   )
   return (
     <span ref={ref} style={contenido ? { display: 'inline-block', verticalAlign: 'middle' } : { display: 'inline-block', verticalAlign: 'middle', marginLeft: 4 }} {...raton}>
       <button ref={boton} type="button" aria-label={`Ayuda: ${etiqueta}`} aria-expanded={abierto} onClick={() => setFijo(x => !x)}
         style={estiloBoton || { width: 18, height: 18, padding: 0, borderRadius: '50%', border: `1px solid ${B.borde}`, background: B.fondo, color: B.secundario, fontFamily: B.letra, fontSize: 11, fontWeight: 700, lineHeight: '16px', cursor: 'pointer' }}>{contenido ?? '?'}</button>
-      {ventana && (enPagina ? createPortal(ventana, document.body) : ventana)}
+      {ventana && (enPagina ? createPortal(ventana, (typeof ref.current?.closest === 'function' && ref.current.closest('[data-tema-builder]')) || document.body) : ventana)}
     </span>
   )
 }

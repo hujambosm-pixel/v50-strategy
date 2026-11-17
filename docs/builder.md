@@ -3359,3 +3359,15 @@ BuilderAzar.js, BuilderAzarResultado.js y BuilderAzarVelas.js pasan sus colores 
 - Revisado por mí en la app (Prueba editor EMA20): Validar, resultado de la prueba y sus velas en claro forzado; cifras de referencia idénticas (55.706 €, 111.156 €, 44.332 €, 13.824 €, 73,9 %, 123 operaciones; velas 42,3 %, 29,1 %, 68,7 %); sin errores de color en la consola.
 - Visto de paso: «📋 Copiar para Claude» (components/BotonCopiar.js, común a la app) sigue oscuro en claro: va con las ventanas «?» al encender el claro.
 - Ninguna cifra cambia.
+
+## 184. ☀/☾ en el Builder, parte 8: ventanas «?» y EL CLARO ENCENDIDO (17/11)
+
+Con esto, Estrategias y Planes (todo el Builder) siguen el botón «☀ Claro / ☾ Oscuro» de la barra de arriba, como el screener.
+
+- components/BuilderPanel.js: TEMA_BUILDER_LISTO = true. En claro, CSS_CLARO_BUILDER: color-scheme: light (barras de desplazamiento y controles del navegador en claro) y las variables generales de la app (--bg, --bg2, --bg3, --border, --text, --text2, --text3, --text-legible, --accent, las de styles/globals.css) pasan a las del tono dentro del Builder: así «📋 Copiar para Claude» y las piezas comunes también van en claro. En oscuro no se pone nada (nada cambia).
+- components/BuilderAyuda.js: la ventana del «?» va (por portal) al contenedor del tono del Builder si lo hay, para heredar sus colores; si no (screener, resto de la app), a la página como siempre. Sombra con --bd-sombra.
+- pages/index.js: el tooltip del botón dice «Cambia el Screener, Estrategias y Planes (el resto de la app, más adelante)».
+- DECIDIDO (recomendación mía, a confirmar por Sergi): los gráficos de «Detalle» que vienen del Backtesting (AssetSignalChart y GanttChart) se quedan con su recuadro oscuro en claro, como un gráfico incrustado; se rehacen al retirar el Backtesting suelto.
+- Revisado por mí en la app pulsando ☀: portada de Planes, plan «Prueba editor EMA20» (64.625 €, 20,54 %), ventana «?» por encima de todo y en claro, «Detalle» (cifras y velas); vuelto a ☾ (el tono de Sergi).
+- Pendiente apuntado: en claro, algunas líneas de los gráficos (media amarilla, RSI) salen pálidas; el resto de la app (Tesis, Watchlist, Dashboard…), más adelante.
+- Ninguna cifra cambia.

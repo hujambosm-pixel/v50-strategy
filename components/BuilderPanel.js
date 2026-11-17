@@ -184,11 +184,12 @@ export const filaCopia = (s) => esDeCodigo(s) ? filaCopiaCodigo(s) : ({ id: null
 // el enlace «Backtest de un valor» (la pestaña donde se ejecutan y se ven en el gráfico). abrir ({ fila, n }): la página pide
 // abrir una estrategia (al pulsar su nombre en «Backtest de un valor»); cada n nuevo la abre. §55: { planId, n }, un plan en el paso 3. V9.1058: buscarInicial (para las pruebas de montaje): lo escrito en el buscador de «Mi trabajo».
 // §176: las pantallas del Builder dentro de un contenedor que pone las variables de color de su tono (display: contents: no cambia
-// la colocación). De momento, siempre el oscuro (= los colores de siempre): el claro se enciende cuando todas las pantallas estén listas.
-export const TEMA_BUILDER_LISTO = false
+// la colocación). §184: el claro, ENCENDIDO (todas las pantallas del Builder listas); en claro, además, CSS_CLARO_BUILDER.
+export const TEMA_BUILDER_LISTO = true
+export const CSS_CLARO_BUILDER = "[data-tema-builder=\"claro\"] { color-scheme: light; --bg: var(--bd-fondo); --bg2: var(--bd-tarjeta); --bg3: var(--bd-cabecera); --border: var(--bd-borde); --border2: var(--bd-borde); --text: var(--bd-texto); --text2: var(--bd-secundario); --text3: var(--bd-apagado); --text-legible: var(--bd-secundario); --accent: var(--bd-enlace) }"
 export default function BuilderPanel(props) {
   const t = TEMA_BUILDER_LISTO && props.tema === 'claro' ? 'claro' : 'oscuro'
-  return <div data-tema-builder={t} style={{ display: 'contents', ...varsBuilder(t) }}><PanelDelBuilder {...props}/></div>
+  return <div data-tema-builder={t} style={{ display: 'contents', ...varsBuilder(t) }}>{t === 'claro' && <style>{CSS_CLARO_BUILDER}</style>}<PanelDelBuilder {...props}/></div>
 }
 function PanelDelBuilder({ estrategias = [], salida = null, onAbrirEstrategia, onAbrirTesis = null, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '', datosLista = null, onIrAValor = null, tema = 'oscuro', zonaInicial = 'estrategias', ir = null, onZona = null }) {
   // §58: planes y pruebasAzar (null: no se han podido leer; entonces la fila dice «—»).
