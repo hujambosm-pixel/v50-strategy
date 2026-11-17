@@ -29,6 +29,10 @@
 // 4 · DOS BLOQUES IGUALES AL 50 % (la misma estrategia de un valor sobre dos valores con las mismas velas) = el plan de UN bloque con
 //     todo el dinero (ocioso en liquidez, sin costes): cada bloque compra siempre la mitad.
 // 5 · Validación.
+// 6 · SOLO LO QUE SE PODRÍA HACER EN LA REALIDAD: el dinero de una venta a mitad de sesión no paga una compra a la apertura de ese día.
+//     1.000 €, X 70 % (lista [A]) e Y 30 % (lista [B]), con tope, ocioso en liquidez. Día 0: Y compra 300 € de B a 20 (15); X no tiene
+//     señal (700 € libres). Día 1: B abre a 40 y salta su stop a 39 → 585 € que llegan A MITAD DE SESIÓN. Patrimonio 700 + 585 = 1.285: en
+//     X cabrían 0,7 × 1.285 = 899,50 €, pero a la apertura solo hay 700 → compra 70 A a 10. Día 2: A sale a 11 → 770; final 1.355 €.
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'clave-falsa-del-arnes'
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
 let fallos = 0
@@ -144,6 +148,16 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     ok(tiene(pl([pz('a'), pz('b')], { dineroLibre: 'otro' }), '«tope» o «prioridad»'), 'dinero libre desconocido: no')
     ok(P.esBloques(pl([pz('a'), pz('b')])) && !P.esBloques(pl([pz('a', { peso: 1 })])) && !P.esBloques(pl([pz('a'), { id: 'q', tipo: 'activo', activo: 'QQQ', peso: 0.5 }])), 'esBloques: dos o más bloques de estrategia')
     ok(tiene(pl([pz('a'), pz('b', { activo: 'GLD' })]), 'el valor de un bloque'), 'el ocioso no puede ser el valor de un bloque')
+  }
+
+  // ── 6 · El dinero de una venta a mitad de sesión ──
+  {
+    const F = Array.from({ length: 3 }, (_, k) => dia('2020-01-06', k))
+    const d = () => datosDe(F, { x: lista(1, 1, [activo('A', F, [10, 10, 11], [[1, 10, 2, 11]])]), y: lista(1, 1, [activo('B', F, [20, 40, 40], [[0, 20, 1, 39]])]) })
+    const p = planListas([{ id: 'x', peso: 0.7, simbolos: ['A'], max: 1 }, { id: 'y', peso: 0.3, simbolos: ['B'], max: 1 }], { capital: 1000, desde: F[0], hasta: F[2] })
+    const r = P.ejecutaPlan(p, d(), { libro: true })
+    ok(cerca(uds(r, 'y', 'B'), 15) && cerca(uds(r, 'x', 'A'), 70), `X compra a la apertura solo con lo que hay a esa hora: 70 A, no 89,95 (obtenido ${uds(r, 'x', 'A')})`)
+    ok(cerca(r.valorNeto, 1355) && cerca(r.serie[1].piezas.cuenta, 585) && cerca(r.serie[1].piezas.y, 0), `los 585 € del stop pasan a la cuenta al acabar el día; final 1.355 € (obtenido ${r.valorNeto})`)
   }
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nplan-bloques: todo bien')

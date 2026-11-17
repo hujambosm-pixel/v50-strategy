@@ -3384,3 +3384,8 @@ Primera parte de «varios bloques» (boceto bocetos/varios-bloques.html; decisio
 - Con UN bloque, nada de esto: el cálculo de siempre, sin tocar.
 - Comprobación nueva scripts/comprobaciones/plan-bloques.js (en comunes.sh), a mano: tope (12.156 €; con prioridad 13.200 €), el más atrasado primero y el ocioso común (14.300 €, vende 30,8 del ocioso), un valor en dos bloques con impuestos FIFO de la cuenta (2020: 400 € de plusvalía, no 66,67; final 2.621 €), dos bloques iguales al 50 % = un bloque con todo (al céntimo, día a día) y la validación.
 - Ninguna cifra cambia.
+
+## 186. Varios bloques: el dinero de una venta a mitad de sesión, después de las compras del día (17/11)
+Norma de Sergi (15/11): «solo lo que se podría hacer en la realidad». Con varios bloques, el dinero de una venta que NO es a la apertura (un stop a mitad de sesión, una venta al cierre) no ha llegado cuando otro bloque compra a la apertura: espera en su bloque (P.tarde) y pasa a la cuenta después de las compras del día. El tope y el «más atrasado» miran lo invertido de cada bloque (sin ese dinero que espera). Con un bloque, nada cambia (la lista de un solo bloque sigue como el Backtesting, la prueba de oro).
+- Caso nuevo en plan-bloques.js (6), a mano: 1.000 €, X 70 % e Y 30 %; Y sube de 20 a 40 y salta su stop a 39 a mitad de sesión (585 €); X compra a la apertura con los 700 € que hay (70 A), no con 899,50 → final 1.355 € (con el cálculo de §185 daba 1.374,95).
+- Ninguna cifra de los planes guardados cambia (todos de un bloque).
