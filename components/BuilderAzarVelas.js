@@ -6,7 +6,7 @@ import { B, S, C, colorReal } from '../lib/builder/estilo'
 import Ayuda from './BuilderAyuda'
 import { euros, numero } from '../lib/resultadoAzar'
 
-const AZUL = '#58a6ff', NARANJA = '#f0883e', ZONA = '#182431'   // Color sólido, apenas más claro que el fondo: con transparencia, las barras solapadas sumarían color al juntarse las velas.
+const AZUL = '#58a6ff', NARANJA = '#f0883e', ZONA = C.zonaVelas   // §183: la zona sigue el tono (va al gráfico: colorReal). Las flechas y los puntos, iguales en los dos tonos. Color sólido, apenas más claro que el fondo: con transparencia, las barras solapadas sumarían color al juntarse las velas.
 export const NOMBRES_COPIA = { mejor: ['La mejor copia', 'la mejor copia'], tipica: ['La típica', 'la copia típica'], peor: ['La peor copia', 'la peor copia'] }
 const NS = 'http://www.w3.org/2000/svg'
 // Las capas que la leyenda enciende y apaga: [clave, texto, símbolo, color, si es de la copia]. Se recuerdan en el navegador.
@@ -26,8 +26,8 @@ export function rangoNormal(r) {
 export function zonaDentro(velas, i0, i1, ops) {
   const dentro = new Uint8Array(i1 + 1)
   for (const o of ops) for (let j = Math.max(o.e, i0); j <= Math.min(o.x, i1); j++) dentro[j] = 1
-  const out = []
-  for (let j = i0; j <= i1; j++) out.push({ time: velas[j].date, value: 1, color: dentro[j] ? ZONA : 'rgba(0,0,0,0)' })
+  const out = [], zona = colorReal(ZONA)
+  for (let j = i0; j <= i1; j++) out.push({ time: velas[j].date, value: 1, color: dentro[j] ? zona : 'rgba(0,0,0,0)' })
   return out
 }
 // Las marcas de tu estrategia: ▲ debajo de la vela al comprar y ▼ encima al vender. Sin vender dentro del periodo, se cierra al último día (la norma de cierre).
@@ -118,7 +118,7 @@ export default function BuilderAzarVelas({ v, simbolo, velasTexto = 'diarias', i
   }, [v])
 
   return (
-    <div data-velas-azar role="dialog" aria-modal="true" aria-label={`Velas de ${simbolo}`} style={{ position: 'fixed', inset: 0, zIndex: 2500, background: '#010409', color: B.texto, fontFamily: B.letra, display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 20px', boxSizing: 'border-box' }}>
+    <div data-velas-azar role="dialog" aria-modal="true" aria-label={`Velas de ${simbolo}`} style={{ position: 'fixed', inset: 0, zIndex: 2500, background: C.fondoDialogo, color: B.texto, fontFamily: B.letra, display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 20px', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <div data-titulo-velas style={{ fontSize: 17, fontWeight: 700, color: B.titulo }}>Tu estrategia{cual && <> frente a <span style={{ color: NARANJA }}>{NOMBRES_COPIA[cual][1]}</span></>}</div>
@@ -126,11 +126,11 @@ export default function BuilderAzarVelas({ v, simbolo, velasTexto = 'diarias', i
         </div>
         <span data-periodo-velas style={{ fontSize: 13, color: B.secundario }}>{simbolo} · {v.pestana.nombre} · velas {velasTexto}</span>
         <div role="group" aria-label="Qué ver" style={{ display: 'flex' }}>
-          {[[null, 'Tu estrategia'], ...Object.entries(NOMBRES_COPIA).map(([k, [t]]) => [k, t])].map(([k, t]) => <button key={t} data-copia-velas={k || 'estrategia'} aria-pressed={cual === k} onClick={() => setCual(k)} style={{ padding: '6px 12px', border: `1px solid ${B.borde}`, background: cual === k ? '#1f2937' : 'transparent', color: cual === k ? B.titulo : B.secundario, fontFamily: B.letra, fontSize: 13, fontWeight: cual === k ? 700 : 400, cursor: 'pointer' }}>{t}</button>)}
+          {[[null, 'Tu estrategia'], ...Object.entries(NOMBRES_COPIA).map(([k, [t]]) => [k, t])].map(([k, t]) => <button key={t} data-copia-velas={k || 'estrategia'} aria-pressed={cual === k} onClick={() => setCual(k)} style={{ padding: '6px 12px', border: `1px solid ${B.borde}`, background: cual === k ? C.activo : 'transparent', color: cual === k ? B.titulo : B.secundario, fontFamily: B.letra, fontSize: 13, fontWeight: cual === k ? 700 : 400, cursor: 'pointer' }}>{t}</button>)}
         </div>
         <span style={{ marginLeft: 'auto', fontSize: 12, color: B.secundario }}>Rueda: zoom · arrastrar: moverse</span>
         <div role="group" aria-label="Escala del precio" style={{ display: 'flex' }}>
-          {[['log', 'Log'], ['normal', 'Normal']].map(([k, t]) => <button key={k} data-escala-velas={k} aria-pressed={escala === k} onClick={() => setEscala(k)} style={{ padding: '3px 8px', border: `1px solid ${B.borde}`, background: escala === k ? '#1f2937' : 'transparent', color: escala === k ? B.titulo : B.secundario, fontFamily: B.letra, fontSize: 12, fontWeight: escala === k ? 700 : 400, cursor: 'pointer' }}>{t}</button>)}
+          {[['log', 'Log'], ['normal', 'Normal']].map(([k, t]) => <button key={k} data-escala-velas={k} aria-pressed={escala === k} onClick={() => setEscala(k)} style={{ padding: '3px 8px', border: `1px solid ${B.borde}`, background: escala === k ? C.activo : 'transparent', color: escala === k ? B.titulo : B.secundario, fontFamily: B.letra, fontSize: 12, fontWeight: escala === k ? 700 : 400, cursor: 'pointer' }}>{t}</button>)}
         </div>
         <button data-cerrar-velas aria-label="Cerrar" title="Cerrar (Esc)" onClick={onCierra} style={{ ...S.boton, width: 36, height: 36, padding: 0, fontSize: 20, lineHeight: 1 }}>×</button>
       </div>
@@ -140,7 +140,7 @@ export default function BuilderAzarVelas({ v, simbolo, velasTexto = 'diarias', i
       <div style={{ flex: 1, minHeight: 200, position: 'relative', border: `1px solid ${B.borde}`, borderRadius: B.radioTarjeta, overflow: 'hidden' }}>
         <div ref={caja} data-grafico-velas style={{ position: 'absolute', inset: 0 }}/>
         <svg ref={capa} data-capa-copia aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3 }}/>
-        {fallo && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ff8b8b' }}>✕ No se pudo dibujar: {fallo}</div>}
+        {fallo && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.rojo }}>✕ No se pudo dibujar: {fallo}</div>}
       </div>
       <table data-tabla-velas style={{ borderCollapse: 'collapse', fontSize: 13, background: B.tarjeta, border: `1px solid ${B.borde}`, width: '100%' }}>
         <thead><tr>{['', 'Tu estrategia', ...(copia ? [NOMBRES_COPIA[cual][1].replace(/^la /, 'La ')] : [])].map((t, k) => <th key={k} style={{ padding: '5px 12px', fontWeight: 400, fontSize: 12, color: B.secundario, textAlign: 'left' }}>{t}</th>)}</tr></thead>

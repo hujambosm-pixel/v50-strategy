@@ -3,7 +3,7 @@
 //   onVolver: a la pantalla de confirmación; onPaso1; onPaso3; onBorrar: la papelera; obtenerPrecios(): las velas diarias de la prueba; ctx y version: para leer y guardar el gráfico.
 //   graficosInicial, preciosInicial, pestanaInicial y velasInicial: para las pruebas de montaje.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { B, S } from '../lib/builder/estilo'
+import { B, C, S } from '../lib/builder/estilo'
 import BotonCopiar from './BotonCopiar'
 import Ayuda from './BuilderAyuda'
 import { Papelera } from './VentanaPregunta'
@@ -16,7 +16,7 @@ import { marcasLog, separaEtiquetas } from '../lib/builder/escalaGrafico'
 import BuilderAzarVelas, { IconoVelas } from './BuilderAzarVelas'
 
 const R = REGLA_AZAR_REGLAS
-const AZUL = '#58a6ff', VERDE = '#3fb950', ROJO = '#ff7b72', AMARILLO = '#f2cc60', NARANJA = '#f0883e', CLARO = '#c9d1d9', GRIS = '#6e7681'
+const AZUL = C.azul, VERDE = C.verdeVivo, ROJO = C.rojoVeredicto, AMARILLO = C.amarillo, NARANJA = C.naranja, CLARO = C.textoClaro, GRIS = C.grisLinea
 const fecha = (d) => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '—'
 const VEREDICTO = { pasa: ['✓ Pasa', VERDE, 'rgba(63,185,80,0.15)'], noPasa: ['✕ No pasa', ROJO, 'rgba(248,81,73,0.15)'], sinVeredicto: ['Sin veredicto', CLARO, 'rgba(139,148,158,0.18)'] }
 export const LINEAS_COPIAS = [['mejor', 'La mejor copia', VERDE], ['tipica', 'La típica', CLARO], ['peor', 'La peor copia', NARANJA]]

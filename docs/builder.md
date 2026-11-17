@@ -3347,3 +3347,15 @@ components/BuilderSenales.js. DECIDIDO por mí: el GRÁFICO (velas, flechas, pun
 - Revisado por mí en la app con «Retroceso líderes RSI2» (tiene RSI): en claro forzado, gráfico de precio y RSI dibujados (14 lienzos), tabla legible; en oscuro, Win Rate #00e5a0 y Operaciones/Tiempo #ffd166 como antes; sin «Cannot parse color».
 - Pendiente al encender el claro: algunas medias (amarilla #f2cc60) y la línea del RSI se ven pálidas sobre el fondo claro; valorar con Sergi si el gráfico usa otros colores en claro.
 - Ninguna cifra cambia.
+
+## 183. ☀/☾ en el Builder, parte 7: «Validar» (17/11)
+
+BuilderAzar.js, BuilderAzarResultado.js y BuilderAzarVelas.js pasan sus colores fijos a las variables del tono (en oscuro, los de antes).
+
+- BuilderAzar: amarillo, rojo y verde → C.amarillo, C.rojo, C.verde.
+- BuilderAzarResultado (abanico y veredicto, SVG): azul, verde, rojo del veredicto (#ff7b72), amarillo, naranja, gris claro de «Sin veredicto» (#c9d1d9) y gris → C (claves nuevas cRojoVeredicto y cTextoClaro).
+- BuilderAzarVelas: fondo del diálogo (#010409 → C.fondoDialogo), botones activos (#1f2937 → C.activo), error (C.rojo) y la zona «dentro» de las velas (#182431 → C.zonaVelas; va a lightweight-charts: zonaDentro la pasa por colorReal una vez). Las flechas y puntos del gráfico, iguales en los dos tonos.
+- Claves nuevas en las dos paletas: cRojoVeredicto, cTextoClaro, cFondoDialogo, cZonaVelas, cActivo.
+- Revisado por mí en la app (Prueba editor EMA20): Validar, resultado de la prueba y sus velas en claro forzado; cifras de referencia idénticas (55.706 €, 111.156 €, 44.332 €, 13.824 €, 73,9 %, 123 operaciones; velas 42,3 %, 29,1 %, 68,7 %); sin errores de color en la consola.
+- Visto de paso: «📋 Copiar para Claude» (components/BotonCopiar.js, común a la app) sigue oscuro en claro: va con las ventanas «?» al encender el claro.
+- Ninguna cifra cambia.

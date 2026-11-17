@@ -11,7 +11,7 @@
 //   { simbolos, precios, pruebas, curso, valor, velas, viendo } ya leídos o en curso (viendo: { fila, resultado }, la pantalla
 //   del resultado abierta).
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { B, S } from '../lib/builder/estilo'
+import { B, C, S } from '../lib/builder/estilo'
 import { CabeceraPasos } from './BuilderPanel'
 import BuilderGuia from './BuilderGuia'
 import Ayuda from './BuilderAyuda'
@@ -23,7 +23,7 @@ import { REGLA_AZAR_REGLAS } from '../lib/azarReglas'
 import { PERIODOS_AZAR, comprobarPrecios, confirmarPrueba, ejecutarPrueba, esDeTarjetas, fotoDe, guardarResultado, leerResultado, listarPruebas, reglaDeFoto, tickersDe, borrarPrueba } from '../lib/pruebaAzar'
 import { ctxConSesion, hayConfigSupabase } from '../lib/supabase'
 
-const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0'
+const AMARILLO = C.amarillo, ROJO = C.rojo, VERDE = C.verde
 const R = REGLA_AZAR_REGLAS
 const miles = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 const campo = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px' }
