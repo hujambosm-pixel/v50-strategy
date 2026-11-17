@@ -5,7 +5,7 @@
 //   valores: [{ simbolo, nombre }]; valor: el símbolo elegido; onCambia(simbolo). textoInicial (para las pruebas de montaje): lo
 //   escrito, con la lista abierta.
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { B } from '../lib/builder/estilo'
+import { B, C } from '../lib/builder/estilo'
 import { filtraValores } from '../lib/builder/buscar'
 import Resaltado from './Resaltado'
 import ConLimpiar from './LimpiarBusqueda'
@@ -43,8 +43,8 @@ export default function BuscadorValor({ valores = [], valor, onCambia = () => {}
         {visibles.map((v, k) => (
           <li key={v.simbolo} id={`buscador-valor-${k}`} ref={el => { filas.current[k] = el }} role="option" aria-selected={k === activo} data-opcion-valor={v.simbolo}
             onMouseDown={e => { e.preventDefault(); elige(v.simbolo) }} onMouseEnter={() => setActivo(k)}
-            style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', background: k === activo ? '#1f3350' : 'transparent' }}>
-            <span style={{ color: v.simbolo === valor ? '#7ee2a0' : B.titulo, fontWeight: 600, minWidth: '7ch' }}><Resaltado texto={v.simbolo} consulta={texto}/></span>
+            style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '5px 8px', borderRadius: 4, cursor: 'pointer', background: k === activo ? C.hover : 'transparent' }}>
+            <span style={{ color: v.simbolo === valor ? C.verde : B.titulo, fontWeight: 600, minWidth: '7ch' }}><Resaltado texto={v.simbolo} consulta={texto}/></span>
             <span style={{ color: B.secundario, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><Resaltado texto={v.nombre} consulta={texto}/></span>
           </li>
         ))}

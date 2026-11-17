@@ -4,14 +4,14 @@
 //   pestanas: [{ clave, nombre, guardado, sucia }]; actual: la clave abierta; planes: las filas guardadas; abiertas: las claves abiertas; finales: { id: € al final, si está calculado }.
 //   Avisa con onAbrir(clave), onDuplicar(clave), onBorrar(clave), onCerrar(clave), onCrear(), onAnadir(id). ancho, menuInicial y buscaInicial: para las pruebas de montaje.
 import { useState, useEffect, useRef } from 'react'
-import { B, S } from '../lib/builder/estilo'
+import { B, C, S } from '../lib/builder/estilo'
 import { ANCHO_ANADIR, ANCHO_NOMBRE_MAX, anchoPestana, claveDe, repartePestanas } from '../lib/builder/pestanasPlan'
 import { coincide } from '../lib/builder/buscar'
 import { euros, fechaCorta } from '../lib/builder/planPantalla'
 import ConLimpiar from './LimpiarBusqueda'
 import { Papelera } from './VentanaPregunta'
 
-const AMARILLO = '#f2cc60'
+const AMARILLO = C.amarillo   // §178: variable (☀/☾)
 export const MIN_PARA_BUSCAR = 6
 export const SIN_GUARDAR_PESTANA = 'sin guardar: se perderá al recargar'
 export const IconoDuplicar = () => (
@@ -93,7 +93,7 @@ export default function BuilderPestanas({ pestanas = [], actual = null, planes =
             {vistas.map(p => { const yaAbierto = abiertas.includes(claveDe(p.id)), final = finales[p.id]; return (
               <button key={p.id} data-plan-menu={p.id} title={p.nombre} onClick={() => { cierra(); onAnadir?.(p.id) }}
                 style={{ display: 'flex', gap: 8, alignItems: 'flex-start', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: 13, color: B.texto, padding: '5px 6px', borderRadius: 4 }}>
-                <span style={{ flex: 'none', width: 14, color: '#7ee2a0' }}>{yaAbierto ? <span data-ya-abierto>✓</span> : ''}</span>
+                <span style={{ flex: 'none', width: 14, color: C.verde }}>{yaAbierto ? <span data-ya-abierto>✓</span> : ''}</span>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: 'block', color: B.titulo, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</span>
                   <span style={{ display: 'block', color: B.apagado, fontSize: 12 }}>{Number.isFinite(final) ? <span data-final-plan>{`Tienes al final ${euros(final, 0)} · `}</span> : null}{fechaCorta(p.updated_at)}</span>

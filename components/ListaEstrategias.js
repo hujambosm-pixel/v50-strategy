@@ -4,13 +4,13 @@
 //   ListaEstrategias: varias (casillas, hasta `max`) o una (`unica`, círculo). Avisa con onMarca(id).
 //   SelectorEstrategia: un botón con la elegida que abre la lista de una (el «Estrategia» del bloque del plan).
 import { useState, useEffect, useRef } from 'react'
-import { B, S } from '../lib/builder/estilo'
+import { B, C, S } from '../lib/builder/estilo'
 import { coincide } from '../lib/builder/buscar'
 import ConLimpiar from './LimpiarBusqueda'
 
-const AZUL = '#58a6ff'
+const AZUL = C.azul   // §178: variable (☀/☾)
 const marcaEstilo = (on, unica, apagada) => ({ width: 14, height: 14, flex: 'none', boxSizing: 'border-box', borderRadius: unica ? '50%' : 3,
-  border: `1.5px solid ${on ? AZUL : apagada ? B.borde : '#3d5a7a'}`, background: on && !unica ? AZUL : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' })
+  border: `1.5px solid ${on ? AZUL : apagada ? B.borde : B.apagado}`, background: on && !unica ? AZUL : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' })
 
 // estrategias: [{ id, name, etiqueta? }]. marcadas: ids (texto). primero: ids que van arriba (los marcados al abrir: así no saltan al pulsar).
 export function ListaEstrategias({ estrategias = [], marcadas = [], onMarca, unica = false, max = Infinity, primero = [], atributo = 'data-estrategia', alto = 280, pie = null, autoFoco = false }) {
@@ -35,8 +35,8 @@ export function ListaEstrategias({ estrategias = [], marcadas = [], onMarca, uni
             title={lleno ? `Como mucho ${max}: desmarca una antes` : s.name}
             style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '5px 6px', marginBottom: 2, borderRadius: 4, fontFamily: B.letra, fontSize: 13,
               cursor: lleno ? 'not-allowed' : 'pointer', color: lleno ? B.apagado : on ? B.titulo : B.texto, fontWeight: on ? 600 : 400,
-              background: on ? 'rgba(90,169,255,0.10)' : 'transparent', border: `1px solid ${on ? 'rgba(90,169,255,0.35)' : 'transparent'}` }}>
-            <span aria-hidden="true" style={marcaEstilo(on, unica, lleno)}>{on && (unica ? <span style={{ width: 6, height: 6, borderRadius: '50%', background: AZUL }}/> : <span style={{ color: '#000', fontSize: 11, lineHeight: 1, fontWeight: 900 }}>✓</span>)}</span>
+              background: on ? B.siguienteFondo : 'transparent', border: `1px solid ${on ? B.siguienteBorde : 'transparent'}` }}>
+            <span aria-hidden="true" style={marcaEstilo(on, unica, lleno)}>{on && (unica ? <span style={{ width: 6, height: 6, borderRadius: '50%', background: AZUL }}/> : <span style={{ color: B.fondo, fontSize: 11, lineHeight: 1, fontWeight: 900 }}>✓</span>)}</span>
             <span style={{ flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
             {s.etiqueta && <span data-etiqueta-estrategia style={{ flex: 'none', fontSize: 11, fontWeight: 400, color: s.colorEtiqueta || B.secundario }}>{s.etiqueta}</span>}
           </button> })}

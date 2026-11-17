@@ -1,5 +1,5 @@
 // components/VentanaPregunta.js — la ventana de pregunta encima de todo (sin guardar, borrar) y la papelera ROJA: las mismas en Tesis (components/TesisPanel.js) y en las pestañas de planes (components/BuilderPestanas.js).
-import { B, S } from '../lib/builder/estilo'
+import { B, C, S } from '../lib/builder/estilo'
 
 export const ROJO_PAPELERA = '#f85149'
 export const Papelera = ({ tamano = 18 }) => (
@@ -12,7 +12,7 @@ export const Pregunta = ({ id, texto, detalle, aviso, extra, children }) => (
       <div style={{ color: B.titulo, marginBottom: 16 }}>{texto}</div>
       {detalle && <div data-detalle-pregunta style={{ color: B.secundario, marginTop: -8, marginBottom: 16 }}>{detalle}</div>}
       {extra}
-      {aviso && <div data-aviso-pregunta style={{ color: '#ff8b8b', marginBottom: 16 }}>⚠ {aviso}</div>}
+      {aviso && <div data-aviso-pregunta style={{ color: C.rojo, marginBottom: 16 }}>⚠ {aviso}</div>}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>{children}</div>
     </div>
   </div>)

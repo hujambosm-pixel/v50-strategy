@@ -81,8 +81,8 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   ok(ids(h) === 'aportado,final,twr,caida,ocioso,costes' && !/<th[^>]*>TIR<\/th>/.test(h), `§90: sin aportaciones, sin TIR (ni cifra ni columna): ${ids(h)}`)
   ok(ids(conAp) === 'aportado,final,twr,tir,caida,ocioso,costes' && /<th[^>]*>TIR<\/th>/.test(conAp), `§90: con aportaciones, la TIR y la peor caída detrás: ${ids(conAp)}`)
   const colorCifra = (html, id) => (html.slice(html.indexOf(`data-cifra="${id}"`)).match(/data-valor="true" style="[^"]*color:(#[0-9a-f]{6}|var\([^)]*\))/) || [])[1] || null   // §176: B.x es var(--bd-x, #…)
-  const esperado = (v) => v > 0 ? '#7ee2a0' : v < 0 ? '#ff8b8b' : null
-  ok(colorCifra(h, 'final') === esperado(c.seis.ganancia) && colorCifra(h, 'twr') === esperado(c.seis.twr) && colorCifra(h, 'caida') === esperado(c.seis.caidaPct) && !['#7ee2a0', '#ff8b8b'].includes(colorCifra(h, 'aportado')),
+  const { C: Cv } = require(R + '/lib/builder/estilo.js'), esperado = (v) => v > 0 ? Cv.verde : v < 0 ? Cv.rojo : null   // §178: variables
+  ok(colorCifra(h, 'final') === esperado(c.seis.ganancia) && colorCifra(h, 'twr') === esperado(c.seis.twr) && colorCifra(h, 'caida') === esperado(c.seis.caidaPct) && ![Cv.verde, Cv.rojo].includes(colorCifra(h, 'aportado')),
     `§90: colores por signo (final ${colorCifra(h, 'final')}, CAGR ${colorCifra(h, 'twr')}, caída ${colorCifra(h, 'caida')}; «Has aportado», el de siempre)`)
   ok(h.includes('[data-lista]') && h.includes('data-resumen-valores') && !h.includes('data-lista="valores"') && pinta({ valoresAbiertos: true }).includes('data-lista="valores"'), '§144 y §154: con un valor, el selector plegado en una línea; abierto, con su letra más grande (§90)')
 

@@ -28,7 +28,7 @@
 // (builder_pestanas); con cambios sin guardar, cualquier salida pregunta (la misma ventana que en Tesis). Esto deja atrás lo de «una pestaña por plan guardado» de la parte 2 y la «×» de §49.
 //   planId: el plan que se pide abrir (desde una tesis). salida: un ref; la página pregunta por él antes de salir del Builder. inicial, además: orden, pregunta ({ tipo }), ventana ('nuevo' | { duplica }), borrando (la clave), avisoPlan, anchoPestanas.
 import { useState, useEffect, useMemo, useRef, useContext } from 'react'
-import { B, S } from '../lib/builder/estilo'
+import { B, C, S } from '../lib/builder/estilo'
 import { CabeceraPasos } from './BuilderPanel'
 import BuilderPestanas from './BuilderPestanas'
 import { Pregunta } from './VentanaPregunta'
@@ -72,7 +72,8 @@ import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, avisoPrueba as textoAvisoP
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS } from '../lib/builder/planPantalla'
 
 const CLAVE_PANEL = 'builder_plan_panel_oculto'   // §165
-const AMARILLO = '#f2cc60', ROJO = '#ff8b8b', VERDE = '#7ee2a0', AZUL = '#58a6ff', GRIS_FRANJA = '#3a4656'
+// §178: los colores con significado, como variables (cambian con el tono ☀/☾).
+const AMARILLO = C.amarillo, ROJO = C.rojo, VERDE = C.verde, AZUL = C.azul, GRIS_FRANJA = C.ejeCero
 const campo = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px' }
 const etiqueta = { fontWeight: 600, color: B.titulo, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 2 }
 const celda = { padding: '8px 10px', borderBottom: `1px solid ${B.borde}`, textAlign: 'left', verticalAlign: 'top' }
@@ -125,11 +126,11 @@ export function useAncho(defecto = 760) {
 // punto de cada línea es ese mismo importe (cifrasPlan), así que línea y etiqueta coinciden.
 export const LINEAS_PLAN = [
   { k: 'plan', t: 'Tu plan', color: AZUL, ancho: 2 },
-  { k: 'activo', t: 'Buy&Hold', color: '#d0d7de', ancho: 1.5 },
-  { k: 'spy', t: 'Buy&Hold SPY', color: '#d2a8ff', ancho: 1.5 },
-  { k: 'qqq', t: 'Buy&Hold QQQ', color: '#56d4dd', ancho: 1.5 },
-  { k: 'ociosoLiquidez', t: 'Ocioso en liquidez', color: '#f0883e', ancho: 1.5 },
-  { k: 'aportado', t: 'Lo aportado', color: '#6e7681', ancho: 1, escalon: true },
+  { k: 'activo', t: 'Buy&Hold', color: C.grisClaro, ancho: 1.5 },
+  { k: 'spy', t: 'Buy&Hold SPY', color: C.morado, ancho: 1.5 },
+  { k: 'qqq', t: 'Buy&Hold QQQ', color: C.cian, ancho: 1.5 },
+  { k: 'ociosoLiquidez', t: 'Ocioso en liquidez', color: C.naranja, ancho: 1.5 },
+  { k: 'aportado', t: 'Lo aportado', color: C.grisLinea, ancho: 1, escalon: true },
 ]
 const nombreLinea = (l, activo) => l.k === 'activo' && activo ? `${l.t} ${activo}` : l.t
 // finales: { plan, activo, spy, qqq, ociosoLiquidez, aportado } en euros (el texto al final de cada línea; sin él, solo el nombre). §57: visibles: { clave: sí o no } (Tu plan siempre se ve); más alto (375 px, antes 250).
@@ -163,7 +164,7 @@ function GraficoPlan({ curva, activo, finales = {}, visibles = LINEAS_DEFECTO, p
     <div ref={ref} style={{ width: '100%', marginTop: 6 }}>
       <svg data-grafico="plan" width={W} height={yF + FR + (proporcion ? 22 : 4)} role="img" aria-label={resumen} style={{ display: 'block', fontFamily: B.letra }}>
         <text data-escala="log" x={4} y={12} fontSize={12} fill={B.apagado}>escala logarítmica</text>
-        {marcasLog(lo, hi).map((t, k) => <g key={k}><line x1={IZQ} x2={W - DER} y1={y(t)} y2={y(t)} stroke="#1b2430"/><text x={IZQ - 6} y={y(t) + 4} textAnchor="end" fontSize={12} fill={B.apagado}>{euros(t, 0)}</text></g>)}
+        {marcasLog(lo, hi).map((t, k) => <g key={k}><line x1={IZQ} x2={W - DER} y1={y(t)} y2={y(t)} stroke={C.rejilla}/><text x={IZQ - 6} y={y(t) + 4} textAnchor="end" fontSize={12} fill={B.apagado}>{euros(t, 0)}</text></g>)}
         {anios.filter((_, k) => k % paso === 0).map(([i, a]) => <text key={a} x={x(i)} y={H1 - 6} fontSize={12} fill={B.apagado}>{a}</text>)}
         {[...lineas].reverse().map(l => <polyline key={l.k} data-linea={l.k} points={ruta(l.v, l.escalon)} fill="none" stroke={l.color} strokeWidth={l.ancho} strokeLinejoin="round"/>)}
         {etq.map(e => <text key={e.t} data-etiqueta={e.t} x={W - DER + 8} y={e.y + 4} fontSize={12} fill={e.color} fontWeight={e.color === AZUL ? 700 : 400}>{e.t}</text>)}
@@ -195,6 +196,12 @@ function Leyenda({ curva, activo = null, visibles = LINEAS_DEFECTO, onMarca = nu
 }
 
 // §90: el color de una cifra según su signo (verde si suma, rojo si resta; 0 o sin número, el de siempre).
+// §178: los colores de texto escritos tal cual en las piezas del Backtesting (components/backtesting/), y el del tono que los sustituye
+// dentro del plan. El navegador guarda el color del style como «color: rgb(r, g, b)»: se busca así (al principio o tras «; », para no
+// confundirlo con «background-color»).
+const MAPA_PIEZAS = [['#cde5ff', 'texto'], ['#d0e8fa', 'texto'], ['#e0e8f0', 'texto'], ['#c8dff5', 'texto'], ['#b0d0e8', 'secundario'], ['#a8ccdf', 'secundario'], ['#7aabc8', 'secundario'], ['#ffd166', 'cAmarillo'], ['#ff4d6d', 'cRojo']]
+const rgbDe = (h) => `rgb(${parseInt(h.slice(1, 3), 16)}, ${parseInt(h.slice(3, 5), 16)}, ${parseInt(h.slice(5, 7), 16)})`
+export const COLORES_PIEZAS = MAPA_PIEZAS.map(([h, k]) => `.bp-mc [style^="color: ${rgbDe(h)}"], .bp-mc [style*="; color: ${rgbDe(h)}"] { color: var(--bd-${k}) !important }`).join('\n')
 // §174: alto de la franja de arriba de cada columna («◀ Ocultar el panel» y «Tu dinero / Detalle»), igual en las dos.
 const ALTO_BARRA_COL = 40
 const colorSigno = (v) => Number.isFinite(v) && v > 0 ? VERDE : Number.isFinite(v) && v < 0 ? ROJO : undefined
@@ -970,10 +977,15 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           desplaza y cada columna (ajustes y resultados) lleva su propia barra; al comparar o sin plan abierto, se desplaza la página; en el
           móvil, nada fijo y se desplaza la ventana, como antes. */}
       {/* §90: las piezas del Backtesting en el bloque con lista, con letra más grande y más clara SOLO aquí (el Backtesting no cambia). */}
-      {<style>{[[8, 12], [9, 12], [10, 12], [11, 13], [12, 13]].map(([de, a]) => `[data-lista] [style*="font-size:${de}px"], [data-lista] [style*="font-size: ${de}px"] { font-size: ${a}px !important }`).join(' ') + ' [data-lista] { --text3: #a9c3d6; --text2: #c6dbea }'}</style>}
+      {<style>{[[8, 12], [9, 12], [10, 12], [11, 13], [12, 13]].map(([de, a]) => `[data-lista] [style*="font-size:${de}px"], [data-lista] [style*="font-size: ${de}px"] { font-size: ${a}px !important }`).join(' ') + ' [data-lista] { --text3: var(--bd-secundario, #a9c3d6); --text2: var(--bd-texto, #c6dbea) }'}</style>}
+      {/* §178: las piezas del Backtesting llevan algunos colores de texto escritos tal cual (pensados para su fondo azul oscuro); dentro
+          del plan se cambian por los del tono (☀/☾). El Backtesting suelto no cambia. */}
+      <style>{COLORES_PIEZAS}</style>
       <style>{`.bp-avisos { flex-direction: row } @media (max-width: 700px) { .bp-avisos { flex-direction: column; align-items: flex-start !important } }
 /* §80: las piezas del Backtesting, en su caja oscura de siempre. */
-.bp-mc { background: var(--bg, #080c14); border: 1px solid var(--border, #1a2d45); border-radius: 6px; overflow: hidden; color: var(--text, #e2eaf5) }
+.bp-mc { --bg: var(--bd-caja, #080c14); --bg2: var(--bd-tarjeta, #0d1520); --bg3: var(--bd-cabecera, #111d2e); --border: var(--bd-borde, #1a2d45); --border2: var(--bd-borde, #243d5c);
+  --text: var(--bd-texto, #e2eaf5); --text2: var(--bd-secundario, #7a9bc0); --text3: var(--bd-apagado, #6a8aa8); --accent: var(--bd-enlace, #00d4ff);
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; color: var(--text) }
 @media (min-width: 1000px) { .bp-pagina { box-sizing: border-box; height: calc(100vh - var(--bp-arriba, 56px)); flex: none !important }
   /* §143: con el plan abierto, la página NO se desplaza: lo de arriba queda fijo y cada columna tiene su barra, sin pasarse la rueda. */
   .bp-pagina:has(> .bp-cols) { display: flex; flex-direction: column; overflow: hidden !important }
@@ -1014,7 +1026,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
         </Pregunta>)}
       {borrando && (
         <Pregunta id="borrar-plan" texto={`¿Borrar «${nombreDe(borrando)}»? Se borra de la base y no se puede deshacer.`} detalle="Para quitarlo solo de la vista, usa la ×." aviso={falloGuardar}>
-          <button data-boton="si-borrar" disabled={guardando} onClick={borra} style={{ ...S.botonVerde, background: '#f85149', borderColor: '#f85149', color: '#fff' }}>{guardando ? 'Borrando…' : 'Sí, borrar'}</button>
+          <button data-boton="si-borrar" disabled={guardando} onClick={borra} style={{ ...S.botonVerde, background: C.rojoFuerte, borderColor: C.rojoFuerte, color: '#fff' }}>{guardando ? 'Borrando…' : 'Sí, borrar'}</button>
           <button onClick={limpiaDialogos} style={S.boton}>Cancelar</button>
         </Pregunta>)}
     </div>

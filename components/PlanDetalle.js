@@ -8,7 +8,7 @@
 //   detalle: lo de detallePlan · cifras: lo de cifrasPlan (las filas de los «comprar y mantener») · graficoPlan: el gráfico de «Tu dinero»
 //   ya montado (lo pone BuilderPlan) · onIrAValor(símbolo): el «↗» · viejas: el cálculo es el anterior (se atenúa).
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { B, S } from '../lib/builder/estilo'
+import { B, C, S } from '../lib/builder/estilo'
 import Ayuda from './BuilderAyuda'
 import { separaEtiquetas } from '../lib/builder/escalaGrafico'
 import { AYUDA_DETALLE, textoSenales, filtraMovimientos, historial, nombreOcioso, focoDeOperacion, senalesGrafico, textoDetalle, tradesBacktesting } from '../lib/builder/detallePlan'
@@ -18,8 +18,9 @@ import GanttChart from './GanttChart'
 import { AssetSignalChart } from './BacktestCharts'
 import { euros, fechaCorta, numero, pct } from '../lib/builder/planPantalla'
 
-const VERDE = '#7ee2a0', ROJO = '#ff8b8b', AZUL = '#58a6ff', AMARILLO = '#f2cc60', GRIS = '#4b5868'
-export const COLORES_VALORES = ['#58a6ff', '#7ee2a0', '#f0883e', '#d2a8ff', '#56d4dd', '#ff8b8b', '#e3b341', '#a5d6ff', '#ffa198', '#b4f1b4']
+// §178: como variables (cambian con el tono ☀/☾).
+const VERDE = C.verde, ROJO = C.rojo, AZUL = C.azul, AMARILLO = C.amarillo, GRIS = C.gris
+export const COLORES_VALORES = [C.azul, C.verde, C.naranja, C.morado, C.cian, C.rojo, C.dorado, C.azulClaro, C.rojoClaro, C.verdeClaro]
 const celda = { padding: '7px 10px', borderBottom: `1px solid ${B.borde}`, textAlign: 'left', verticalAlign: 'top' }
 const num = { ...celda, textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }
 const cab = { ...celda, color: B.secundario, fontWeight: 600, fontSize: 12, background: B.cabecera }
@@ -59,7 +60,7 @@ export function Ampliable({ titulo, children }) {
     <div data-ampliable={titulo}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 2 }}><button type="button" data-amplia={titulo} onClick={() => setOn(true)} title="Ver este gráfico a pantalla completa (Esc para volver)" style={{ fontFamily: B.letra, fontSize: 12, padding: '2px 8px', borderRadius: 5, cursor: 'pointer', border: `1px solid ${B.borde}`, background: B.fondo, color: B.secundario }}>⤢ Ampliar</button></div>
       {!on && children}
-      {on && <div data-ampliado={titulo} role="dialog" aria-label={`${titulo} a pantalla completa`} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(8,12,18,0.97)', padding: '16px 24px', display: 'flex', flexDirection: 'column' }}>
+      {on && <div data-ampliado={titulo} role="dialog" aria-label={`${titulo} a pantalla completa`} style={{ position: 'fixed', inset: 0, zIndex: 3000, background: C.fondoAmpliado, padding: '16px 24px', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}><b style={{ color: B.titulo, fontSize: 16 }}>{titulo}</b>
           <button type="button" data-cierra-ampliado onClick={() => setOn(false)} style={{ marginLeft: 'auto', fontFamily: B.letra, fontSize: 13, padding: '5px 12px', borderRadius: 6, cursor: 'pointer', border: `1px solid ${B.borde}`, background: B.tarjeta, color: B.texto }}>✕ Cerrar (Esc)</button></div>
         <AmpliadoCtx.Provider value={{ alto }}><div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>{children}</div></AmpliadoCtx.Provider>
@@ -104,7 +105,7 @@ export function GraficoValores({ curvas, elegido = null, onElegir = null, ocioso
   return (
     <div ref={ref} style={{ width: '100%', marginTop: 6 }}>
       <svg data-grafico="valores" data-series={series.length} width={W} height={H + 20} role="img" aria-label={resumen} style={{ display: 'block', fontFamily: B.letra }}>
-        {marcasLineales(lo, hi).map((t, k) => <g key={k}><line x1={IZQ} x2={W - DER} y1={y(t)} y2={y(t)} stroke={t === 0 ? '#3a4656' : '#1b2430'}/><text x={IZQ - 6} y={y(t) + 4} textAnchor="end" fontSize={12} fill={B.apagado}>{conSigno(t)}</text></g>)}
+        {marcasLineales(lo, hi).map((t, k) => <g key={k}><line x1={IZQ} x2={W - DER} y1={y(t)} y2={y(t)} stroke={t === 0 ? C.ejeCero : C.rejilla}/><text x={IZQ - 6} y={y(t) + 4} textAnchor="end" fontSize={12} fill={B.apagado}>{conSigno(t)}</text></g>)}
         {anios.filter((_, k) => k % cada === 0).map(([i, a]) => <text key={a} x={x(i)} y={H - 6} fontSize={12} fill={B.apagado}>{a}</text>)}
         {series.filter(s => s.simbolo !== elegido).map(s => <polyline key={s.simbolo} data-linea-valor={s.simbolo} points={ruta(s.v)} fill="none" stroke={s.color} strokeWidth={1.3} strokeDasharray={s.rol === 'ocioso' ? '5 3' : undefined} strokeLinejoin="round" opacity={sel ? 0.25 : 0.95}/>)}
         {sel && <polyline data-linea-valor={sel.simbolo} data-elegida="si" points={ruta(sel.v)} fill="none" stroke={sel.color === GRIS ? B.titulo : sel.color} strokeWidth={2.6} strokeLinejoin="round"/>}
@@ -188,7 +189,7 @@ export function BarrasOperaciones({ datos, onPulsa = null }) {
     <div ref={ref} style={{ width: '100%' }}>
       <svg data-grafico="por-operacion" data-barras={n} width={W} height={H + 18} role="img" aria-label={`${n} operaciones: ${datos.ganan} ganan y ${datos.pierden} pierden.`} style={{ display: 'block', fontFamily: B.letra }}>
         {[hi, 0, lo].filter((t, k, a) => a.indexOf(t) === k).map(t => <text key={t} x={IZQ - 6} y={y(t) + 4} textAnchor="end" fontSize={11} fill={B.apagado}>{conSigno(t)}</text>)}
-        <line x1={IZQ} x2={W - DER} y1={y0} y2={y0} stroke="#3a4656"/>
+        <line x1={IZQ} x2={W - DER} y1={y0} y2={y0} stroke={C.ejeCero}/>
         {ops.map((op, i) => { const yv = y(op.resultado); return <rect key={i} x={IZQ + i * ancho + hueco / 2} width={Math.max(0.6, ancho - hueco)} y={Math.min(yv, y0)} height={Math.max(0.6, Math.abs(yv - y0))} fill={op.resultado >= 0 ? VERDE : ROJO} opacity={hov == null || hov === i ? 1 : 0.55}/> })}
         {o && <text data-operacion-dato x={IZQ} y={H + 13} fontSize={12} fill={B.texto}>{`${o.simbolo} · ${fechaCorta(o.entryDate)} → ${fechaCorta(o.exitDate)}${o.abierta ? ' (seguía abierta)' : ''} · ${conSigno(o.resultado, 2)} · ${o.pct == null ? '—' : `${o.pct > 0 ? '+' : ''}${pct(o.pct, 1)}`}`}</text>}
         <rect x={IZQ} y={ARR} width={Math.max(0, W - IZQ - DER)} height={H - ARR - ABJ} fill="transparent" style={onPulsa ? { cursor: 'pointer' } : undefined} onClick={onPulsa ? () => { if (hov != null) onPulsa(ops[hov]) } : undefined} onMouseLeave={() => setHov(null)} onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); const i = Math.floor((e.clientX - r.left) / Math.max(1, r.width) * n); setHov(Math.max(0, Math.min(n - 1, i))) }}/>
@@ -201,7 +202,7 @@ export function BarrasOperaciones({ datos, onPulsa = null }) {
 // «Excel» (exportHistorial del Backtesting, tal cual; se carga al pulsarlo).
 const POR_PAGINA = 50
 // §159: «Todos los movimientos» (movs): además de las operaciones, el ocioso, los impuestos y las aportaciones, con el dinero al cierre.
-const COLOR_MOV = { aportacion: '#79c0ff', impuesto: '#ff8b8b', ocioso: '#f2cc60', valor: undefined, otro: undefined }
+const COLOR_MOV = { aportacion: B.enlace, impuesto: C.rojo, ocioso: C.amarillo, valor: undefined, otro: undefined }
 export function Historial({ ops, movs = [], desde, hasta, nombre = 'plan', inicial = null, onOperacion = null }) {
   const [vista, setVista] = useState(inicial?.vista || 'tabla')
   const [busca, setBusca] = useState(inicial?.busca || '')
@@ -360,7 +361,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
             <tr data-fila-total style={{ fontWeight: 700, color: B.titulo }}>
               <td style={celda}><button type="button" data-pliega-valores aria-expanded={abierta} onClick={() => setAbierta(x => !x)} title={abierta ? 'Ocultar los valores' : 'Ver los valores'} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.titulo, fontFamily: B.letra, fontSize: 'inherit', fontWeight: 700 }}>{abierta ? '▾' : '▸'} {filas.length === 1 ? filas[0].simbolo : `Los ${numero(filas.length, 0)} valores`}</button></td>
               <td style={{ ...num, color: signo(total.aporto) }}>{conSigno(total.aporto)}</td><td style={{ ...num, color: signo(total.aportoPct) }}>{pctSigno(total.aportoPct)}</td><td style={{ ...num, color: signo(total.cagr) }}>{pct(total.cagr)}</td>
-              <td style={num}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>{numero(total.operaciones, 0)}{detalle.senales && <span data-senales title={textoSenales(detalle.senales)} style={{ fontSize: 10, fontWeight: 400, cursor: 'help', borderRadius: 3, padding: '1px 4px', color: detalle.senales.pct >= 0.995 ? VERDE : '#ff9f43', background: detalle.senales.pct >= 0.995 ? 'rgba(126,226,160,0.10)' : 'rgba(255,159,67,0.12)' }}>{Math.round(detalle.senales.pct * 100)} %</span>}</span></td><td style={num}>{pct(total.ganadoras, 1)}</td><td style={num}>{total.pf == null ? '—' : numero(total.pf, 2)}</td><td style={{ ...num, color: total.caidaEur < 0 ? ROJO : undefined }} title={total.caidaEur < 0 ? `${conSigno(total.caidaEur, 0)} de lo ganado con los valores` : 'Sin caídas'}>{total.caidaPct == null || !(total.caidaEur < 0) ? '—' : pct(total.caidaPct, 1)}</td>
+              <td style={num}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>{numero(total.operaciones, 0)}{detalle.senales && <span data-senales title={textoSenales(detalle.senales)} style={{ fontSize: 10, fontWeight: 400, cursor: 'help', borderRadius: 3, padding: '1px 4px', color: detalle.senales.pct >= 0.995 ? VERDE : C.naranjaVivo, background: detalle.senales.pct >= 0.995 ? 'rgba(126,226,160,0.10)' : 'rgba(255,159,67,0.12)' }}>{Math.round(detalle.senales.pct * 100)} %</span>}</span></td><td style={num}>{pct(total.ganadoras, 1)}</td><td style={num}>{total.pf == null ? '—' : numero(total.pf, 2)}</td><td style={{ ...num, color: total.caidaEur < 0 ? ROJO : undefined }} title={total.caidaEur < 0 ? `${conSigno(total.caidaEur, 0)} de lo ganado con los valores` : 'Sin caídas'}>{total.caidaPct == null || !(total.caidaEur < 0) ? '—' : pct(total.caidaPct, 1)}</td>
               <td style={num} title={`De media, ${euros(total.enValoresEur, 0)} en valores`}>{pct(total.enValores, 0)}</td><td style={num}>{pct(detalle.cifras?.tiempoInvertido, 0)}</td>
             </tr>
             {abierta && filas.length > 1 && filas.map(f => <tr key={f.simbolo} data-valor={f.simbolo} aria-selected={f.simbolo === elegido} style={f.simbolo === elegido ? { background: B.cabecera } : undefined}>

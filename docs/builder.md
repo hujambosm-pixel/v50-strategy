@@ -3296,3 +3296,12 @@ Decisión de Sergi (17/11): toda la app tendrá los dos tonos del screener: oscu
 - lib/builder/estilo.js: TEMAS_BUILDER sale de PALETAS; la reserva de cada variable sigue siendo el color de antes (lo que no pone variables, como Tesis, no cambia). El botón verde lleva fondo y texto propios (botonVerde, botonVerdeTexto): en el tono del screener, verde #2f7d45 con texto blanco.
 - Con esto el Builder (Estrategias, Planes, creador, validar y plan) se ve YA en el oscuro del screener (TEMA_BUILDER_LISTO sigue en false: el claro aún no se enciende). Los colores fijos de cada pantalla (cifras verdes/rojas, líneas de los gráficos) se ven bien sobre este gris; las cajas del Backtesting dentro del plan siguen con su azul oscuro (parte siguiente).
 - Ninguna cifra cambia.
+
+## 178. ☀/☾, parte 3: la pantalla del plan, lista para los dos tonos (17/11)
+
+- lib/temas.js y lib/builder/estilo.js: colores con significado como variables (C: verde, rojo, amarillo, azul, morado, naranja, cian…, rejilla y eje de los gráficos, fondo de «Ampliar», marca amarilla, fondo del «NO»). En el oscuro, los del Builder de antes; en el claro, más oscuros para leerse sobre el papel.
+- components/BuilderPlan.js, PlanDetalle.js, FiltrosDelPlan.js, BuilderPestanas.js, ListaEstrategias.js, BuilderFila.js, BuscadorValor.js, VentanaPregunta.js: sus colores fijos pasan a B/C (cifras que suman y restan, líneas del gráfico, colores de cada valor en «Valor a valor», movimientos del historial, botón rojo de borrar…). Sin ningún «color + transparencia» que se rompa con las variables (comprobado).
+- Las piezas del Backtesting dentro del plan (.bp-mc): sus variables de toda la app (--bg, --border, --text…) pasan a las del tono, y sus colores de texto escritos tal cual (#cde5ff, #d0e8fa…) se cambian por los del tono con una regla CSS solo dentro del plan (COLORES_PIEZAS). El Backtesting suelto no cambia.
+- Comprobado por mí en la app (plan 7) con el claro puesto a mano en el navegador: tarjetas, cifras, gráfico, «Detalle» y la lista de valores se leen bien. SIN HACER: el gráfico de velas (AssetSignalChart, de lightweight-charts: dibuja en canvas con sus colores, no admite variables) y el Gantt siguen oscuros en el claro; van en una parte aparte.
+- planes-pantalla.js compara los colores por signo con C (no con el color escrito).
+- Ninguna cifra cambia.

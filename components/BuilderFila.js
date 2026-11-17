@@ -2,14 +2,14 @@
 // escribe con coma, su menú «…» y el botón 🔗 de los parámetros enlazados. Nació dentro de components/BuilderEditor.js (el creador de
 // estrategias) y se sacó aquí TAL CUAL (docs/builder.md §151) para que la use también el bloque del plan (los filtros del plan).
 import { useState, useEffect, useRef } from 'react'
-import { B, S } from '../lib/builder/estilo'
+import { B, C, S } from '../lib/builder/estilo'
 import { CONDICIONES_EDITOR } from '../lib/editor/definicion'
 import { soloDelValor, avisoSoloValor, ayudaFila, AYUDA_NO, AYUDA_CRUZA, nombreCond, nombreQuien, AYUDA_QUIEN, opcionesQuien, plantillaFila, opcionesOp, opDe, opDesactivada, conOp, conVuelta, conCruce, puedeVuelta, puedeCruce, conNumero, tieneLado, notaFila,
   aTexto, deTexto, GRUPOS_FUERZA, avisoFila } from '../lib/builder/tarjetas'
 import Ayuda from './BuilderAyuda'
 import { AYUDA_ENLACE } from '../lib/builder/enlaces'
 
-const MORADO = '#a371f7', ROJO = '#ff8b8b', AMARILLO = '#f2cc60'
+const MORADO = C.moradoCaja, ROJO = C.rojo, AMARILLO = C.amarillo   // §178: variables (☀/☾)
 export const ASA = '⠿'   // seis puntos
 export const entrada = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '5px 8px', width: 'auto' }
 export const mini = { ...entrada, padding: '2px 4px', fontSize: 13, width: 'auto', display: 'inline-block' }
@@ -104,7 +104,7 @@ export function Fila({ f, errores, valores, tarjeta, color, onCambia, onValor, o
             <Ayuda texto={ayudaQuien} etiqueta="De quién"/>
           </span>
         )}
-        {f.env === 'NO' && <span data-no style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}><span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#3b1d22', color: ROJO }}>NO</span><Ayuda texto={AYUDA_NO} etiqueta="NO"/></span>}
+        {f.env === 'NO' && <span data-no style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}><span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: C.fondoNo, color: ROJO }}>NO</span><Ayuda texto={AYUDA_NO} etiqueta="NO"/></span>}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: B.titulo, fontWeight: 600, flexShrink: 0 }}>{plantillaFila(f.cond.c).map(campo)}</span>
         {enlace}
         {extra}

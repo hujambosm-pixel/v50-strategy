@@ -10,7 +10,7 @@
 //   velasPlan: 'diarias' | 'semanales'; valores: [{ simbolo, nombre }] con precios guardados (para «Otro símbolo…»).
 //   inicial (para las pruebas de montaje): { ventana: 'catalogo' | 'pregunta', buscar, otro: k }.
 import { useState, useEffect } from 'react'
-import { B, S } from '../lib/builder/estilo'
+import { B, C, S } from '../lib/builder/estilo'
 import Ayuda from './BuilderAyuda'
 import ConLimpiar from './LimpiarBusqueda'
 import BuscadorValor from './BuscadorValor'
@@ -20,7 +20,7 @@ import { buscaCatalogo, nombreCond, explicacionCond, INDICES } from '../lib/buil
 import { OTRO, filasDePantalla, respetaPropios, guardaFiltros, filaNuevaPlan, opcionesQuienPlan, soloDiaria, intervaloFila, filtrosPropios, fraseFilaPlan, erroresFilasPlan, filasRepetidas,
   AYUDA_FILTROS_PLAN, AYUDA_PROPIOS, AYUDA_QUIEN_PLAN, AYUDA_VELAS_FILA, TEXTO_SOLO_DIARIA } from '../lib/builder/filtrosPlan'
 
-const MORADO = '#a371f7', AZUL = '#58a6ff'
+const MORADO = C.moradoCaja, AZUL = C.azul   // §178: variables (☀/☾)
 const caja = (color) => ({ border: `1px solid ${B.borde}`, borderLeft: `3px solid ${color}`, borderRadius: B.radioBoton, background: B.fondo, padding: '10px 12px' })
 const chip = (apagado) => ({ display: 'inline-block', border: `1px solid ${B.borde}`, borderRadius: 12, padding: '2px 10px', background: B.cabecera, color: B.texto, fontSize: 13, ...(apagado ? { opacity: 0.45, textDecoration: 'line-through' } : {}) })
 const boton2 = (on) => ({ fontFamily: B.letra, fontSize: 13, padding: '4px 10px', cursor: 'pointer', border: `1px solid ${on ? B.siguienteBorde : B.borde}`, background: on ? B.siguienteFondo : 'transparent', color: on ? B.titulo : B.secundario, fontWeight: on ? 700 : 400 })
@@ -134,7 +134,7 @@ export default function FiltrosDelPlan({ estrategia, filtros, onCambia, velasPla
                 <div data-busqueda-plan="explicacion" style={{ marginBottom: 10 }}>
                   <div style={{ color: B.secundario, fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', padding: '2px 8px' }}>Lo mencionan en su explicación</div>
                   {busqueda.explicacion.map(x => (
-                    <div key={x.clave}>{condicion(x.clave)}<div style={{ ...S.apagado, padding: '0 8px 4px' }}>{x.antes}<mark style={{ background: '#5a4a12', color: B.titulo, borderRadius: 3, padding: '0 2px' }}>{x.palabra}</mark>{x.despues}</div></div>
+                    <div key={x.clave}>{condicion(x.clave)}<div style={{ ...S.apagado, padding: '0 8px 4px' }}>{x.antes}<mark style={{ background: C.marca, color: B.titulo, borderRadius: 3, padding: '0 2px' }}>{x.palabra}</mark>{x.despues}</div></div>
                   ))}
                 </div>
               )}
