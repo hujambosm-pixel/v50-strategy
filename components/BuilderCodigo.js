@@ -6,14 +6,14 @@
 //   fila: la estrategia ({ id?, name, description, code_js, params, definition, …, copiaDe? }). Para las pruebas de montaje:
 //   estadoInicial, enPruebaInicial y codigoAbierto.
 import { useState } from 'react'
-import { B, S } from '../lib/builder/estilo'
+import { B, C, S } from '../lib/builder/estilo'
 import { AVISO_CODIGO, AVISO_LEER, PASO2_CODIGO, leeParametros, estadoCodigo, erroresParametros, planGuardadoCodigo, paramsNuevos, mensajesResumen } from '../lib/builder/codigo'
 import { partesNombre, avisoVersion } from '../lib/builder/versiones'
 import { aTexto, deTexto } from '../lib/builder/tarjetas'
 import { llamaGroq, textoErrorGroq } from '../lib/groq'
 import Ayuda from './BuilderAyuda'
 
-const ROJO = '#ff8b8b', AMARILLO = '#f2cc60'
+const ROJO = C.rojo, AMARILLO = C.amarillo
 const entrada = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '5px 8px', width: 'auto' }
 const etiquetaCampo = { display: 'inline-flex', flexDirection: 'row', alignItems: 'center', fontFamily: B.letra, fontSize: B.base, fontWeight: 600, color: B.titulo }
 const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`
@@ -151,7 +151,7 @@ export default function BuilderCodigo({ fila, estrategias = [], apiFetch, onVolv
               <li data-comprueba="paso2" style={{ color: AMARILLO }}>✕ {PASO2_CODIGO}</li>
             </ul>
           </Tarjeta>
-          {plan.version && <div data-aviso="version" style={{ background: '#3a3220', border: `1px solid ${AMARILLO}`, borderRadius: B.radioBoton, padding: 12, marginBottom: 12, color: B.texto }}>{avisoVersion(plan.version)}</div>}
+          {plan.version && <div data-aviso="version" style={{ background: C.avisoFondo, border: `1px solid ${AMARILLO}`, borderRadius: B.radioBoton, padding: 12, marginBottom: 12, color: B.texto }}>{avisoVersion(plan.version)}</div>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button style={nErrores || guardando ? S.botonDesactivado : S.botonVerde} disabled={!!nErrores || guardando} onClick={guarda}>{guardando ? 'Guardando…' : plan.metodo === 'ninguno' ? 'Guardar (no hay cambios)' : 'Guardar'}</button>
             <button data-boton="paso2" style={S.botonDesactivado} disabled title={PASO2_CODIGO}>Pasar al paso 2</button>

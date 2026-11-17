@@ -6,10 +6,10 @@
 // tarjeta: cada rombo y cada caja, a la medida de su texto (nada se sale); si no cabe en una fila, en dos (la compra arriba y lo que
 // pasa con la acción abajo, unidas por una flecha); y si tampoco, se encoge un poco o hace scroll.
 import { useState, useEffect, useRef } from 'react'
-import { B } from '../lib/builder/estilo'
+import { B, C } from '../lib/builder/estilo'
 import { leeFiltro, leeCompra, leeVenta, leeOrden, leeProteccion, fraseFila, fraseStopTarjeta, nombreQuien, AJUSTES, leeModoStops } from '../lib/builder/tarjetas'
 
-const MORADO = '#a371f7', AZUL = '#58a6ff', NARANJA = '#f0883e', GRIS = '#9fb0c3', VERDE = '#3fb950', VERDE_AZULADO = '#3dd6c3', SI = '#56d364', NO = '#ff9b9b'
+const MORADO = C.moradoCaja, AZUL = C.azul, NARANJA = C.naranja, GRIS = C.grisSuave, VERDE = C.verdeVivo, VERDE_AZULADO = C.verdeAzulado, SI = C.si, NO = C.no
 const LETRA = 12, LINEA = 16, MAX = 3
 const corta = (t, n = 46) => t.length > n ? t.slice(0, n - 1) + '…' : t
 const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`
@@ -171,7 +171,7 @@ export default function BuilderDibujo({ def, valores, error = null, expandidosIn
     ro?.observe(el)
     return () => ro?.disconnect()
   }, [error])
-  if (error) return <div data-dibujo="error" style={{ color: '#ff8b8b', padding: '12px 4px' }}>{error}</div>
+  if (error) return <div data-dibujo="error" style={{ color: C.rojo, padding: '12px 4px' }}>{error}</div>
   const c = contenidoDibujo(def, valores)
   const alterna = (k) => setExpandidos(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
   const L = colocaDibujo(c, { expandidos, anchoDisp })
@@ -189,7 +189,7 @@ export default function BuilderDibujo({ def, valores, error = null, expandidosIn
         {L.etiquetas.map((e, k) => <text key={k} x={e.x} y={e.y} fontSize={LETRA} fontWeight="700" fill={e.color}>{e.t}</text>)}
         {L.nodos.map(n => {
           if (n.tipo === 'ovalo') return <g key={n.clave} data-nodo={n.clave}><rect x={n.x} y={n.y - n.alto / 2} width={n.ancho} height={n.alto} rx={Math.min(n.alto, n.ancho) / 2} fill={B.tarjeta} stroke={n.color} strokeWidth="2"/>{texto(n.texto, n.cx, n.y)}</g>
-          if (n.tipo === 'caja') return <g key={n.clave} data-nodo={n.clave}><rect x={n.x} y={n.y - n.alto / 2} width={n.ancho} height={n.alto} rx="8" fill={n.color === VERDE ? '#14301f' : B.tarjeta} stroke={n.color} strokeWidth="2"/>{texto(n.texto, n.cx, n.y)}</g>
+          if (n.tipo === 'caja') return <g key={n.clave} data-nodo={n.clave}><rect x={n.x} y={n.y - n.alto / 2} width={n.ancho} height={n.alto} rx="8" fill={n.color === VERDE ? C.cajaVerde : B.tarjeta} stroke={n.color} strokeWidth="2"/>{texto(n.texto, n.cx, n.y)}</g>
           const top = n.y - n.alto / 2, pts = `${n.cx},${top} ${n.x + n.ancho},${n.y} ${n.cx},${top + n.alto} ${n.x},${n.y}`
           const total = n.cab.length + n.filas.length, y1 = n.y - ((total - 1) * LINEA) / 2
           return (
@@ -208,7 +208,7 @@ export default function BuilderDibujo({ def, valores, error = null, expandidosIn
         <g data-nodo="noCompro"><rect x={cajaNo.x} y={cajaNo.y} width={cajaNo.ancho} height={cajaNo.alto} rx="8" fill={B.fondo} stroke={B.borde}/>{texto(['No compro hoy:', 'espero a la siguiente vela'], cajaNo.x + cajaNo.ancho / 2, cajaNo.y + cajaNo.alto / 2, B.secundario, 500)}</g>
         <g data-nodo="sigoDentro"><rect x={cajaSigo.x} y={cajaSigo.y} width={cajaSigo.ancho} height={cajaSigo.alto} rx="8" fill={B.fondo} stroke={B.borde}/>{texto(['Sigo dentro:', 'miro la siguiente vela'], cajaSigo.x + cajaSigo.ancho / 2, cajaSigo.y + cajaSigo.alto / 2, B.secundario, 500)}</g>
       </svg>
-      {!c.venta.lineas.length && !c.venta.proteccion.length && <div style={{ color: '#ff8b8b', fontSize: 13 }}>Falta una forma de salir: una condición de venta, un stop o una salida por tiempo.</div>}
+      {!c.venta.lineas.length && !c.venta.proteccion.length && <div style={{ color: C.rojo, fontSize: 13 }}>Falta una forma de salir: una condición de venta, un stop o una salida por tiempo.</div>}
     </div>
   )
 }

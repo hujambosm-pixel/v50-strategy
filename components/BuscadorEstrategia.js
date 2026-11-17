@@ -6,7 +6,7 @@
 //   grupos: [{ titulo, estrategias: [{ id, name }] }]; texto / onTexto: lo escrito; elegida: el id elegido (o null); onElige(s).
 //   abiertoInicial (para las pruebas de montaje): con la lista abierta.
 import { useState, useRef, useEffect } from 'react'
-import { B } from '../lib/builder/estilo'
+import { B, C } from '../lib/builder/estilo'
 import { coincide } from '../lib/builder/buscar'
 import Resaltado from './Resaltado'
 import { BotonLimpiar, SITIO_LIMPIAR } from './LimpiarBusqueda'
@@ -43,7 +43,7 @@ export default function BuscadorEstrategia({ grupos = [], texto = '', onTexto = 
       <BotonLimpiar visible={!!texto} onLimpia={() => { onTexto(''); setActivo(0); setAbierto(true) }}/>
       {abierto && plana.length > 0 && <ul id="buscador-estrategia-lista" role="listbox" aria-label={`Mis estrategias: ${plana.length}`} data-lista-copia={plana.length}
         style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, margin: '4px 0 0', padding: 4, listStyle: 'none', maxHeight: 320, overflowY: 'auto',
-          background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, boxShadow: '0 8px 24px rgba(0,0,0,0.45)' }}>
+          background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, boxShadow: '0 8px 24px var(--bd-sombra, rgba(0,0,0,0.45))' }}>
         {visibles.map(g => [
           <li key={`g-${g.titulo}`} role="presentation" data-grupo-copia={g.titulo} style={{ padding: '6px 8px 2px', fontSize: 12, fontWeight: 600, color: B.apagado }}>{g.titulo}</li>,
           ...g.estrategias.map(s => {
@@ -51,7 +51,7 @@ export default function BuscadorEstrategia({ grupos = [], texto = '', onTexto = 
             return (
               <li key={s.id} id={`buscador-estrategia-${i}`} ref={el => { filas.current[i] = el }} role="option" aria-selected={i === activo} data-opcion-copia={s.name}
                 onMouseDown={e => { e.preventDefault(); elige(s) }} onMouseEnter={() => setActivo(i)}
-                style={{ padding: '5px 8px 5px 14px', borderRadius: 4, cursor: 'pointer', background: i === activo ? '#1f3350' : 'transparent', color: String(s.id) === String(elegida) ? '#7ee2a0' : B.titulo,
+                style={{ padding: '5px 8px 5px 14px', borderRadius: 4, cursor: 'pointer', background: i === activo ? C.hover : 'transparent', color: String(s.id) === String(elegida) ? C.verde : B.titulo,
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><Resaltado texto={s.name} consulta={consulta}/></li>
             )
           }),

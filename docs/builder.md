@@ -3324,3 +3324,14 @@ Las portadas (components/BuilderPanel.js) y las piezas pequeñas que usan pasan 
 - Revisado por mí en la app forzando el claro por JS: portada de Planes (tabla, cifras en verde/rojo legibles, botones) y de Estrategias (lista, chips, resaltado del buscador); en oscuro, los colores medidos son los de antes. Pendiente para cuando se encienda el claro: la barra de desplazamiento horizontal sale oscura (color-scheme del navegador).
 - Ninguna cifra cambia (portada de Planes: 88.218 €, 75.123 €, 64.625 €).
 - comunes.sh: todo en verde salvo backtesting-panel.js, que da «distinto» en SelectorValores solo por la ✕ (su estilo dice ahora var(--bd-texto, #e6edf3)); con la ✕ nueva en los dos lados, 0 fallos. En el Backtesting se ve igual (allí la variable no existe y vale #e6edf3).
+
+## 181. ☀/☾ en el Builder, parte 5: el creador de estrategias (17/11)
+
+El creador (components/BuilderEditor.js), el dibujo de la regla (BuilderDibujo.js), el editor de las de código (BuilderCodigo.js), el buscador de estrategias (BuscadorEstrategia.js) y el menú de la fila de condición (BuilderFila.js) pasan sus colores fijos a las variables del tono. En el oscuro se ven igual: las claves nuevas llevan en oscuro el color de antes.
+
+- Claves nuevas en las dos paletas (lib/temas.js) y en C (lib/builder/estilo.js): cVerdeAzulado (protección), cGrisSuave (órdenes y cajas grises del dibujo), cSi / cNo (etiquetas del dibujo), cCajaVerde (caja «Compro…» del dibujo), cAvisoFondo (aviso de versión), cVerdeVivo. Las sombras de los menús, con --bd-sombra.
+- Única diferencia en oscuro: el resaltado de la fila activa del buscador de estrategias pasa de #1f3350 a C.hover (#263766), el mismo que el resto del plan.
+- Los gráficos de «Señales en el gráfico» (BuilderSenales.js) NO se tocan aquí: van a lightweight-charts y necesitan colorReal; parte aparte.
+- scripts/comprobaciones/screener.js: «la pantalla ya no lleva los colores fijos de antes» no cuenta las definiciones de las variables del tono (--sc-cAvisoFondo vale #3a3220 en oscuro y no se pinta en ningún sitio).
+- Revisado por mí en la app (Prueba editor EMA20): Tarjetas y Dibujo de la regla en oscuro (igual que antes) y en claro forzado (bien); «Señales en el gráfico» se dibuja, sin errores en la consola.
+- Ninguna cifra cambia.

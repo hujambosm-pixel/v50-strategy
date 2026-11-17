@@ -18,7 +18,7 @@
 //   Para las pruebas de montaje: estadoInicial (lo editado: { def, valores, nombre, descripcion }), enPruebaInicial (los nombres
 //   de las pruebas donde está; si no, se buscan por la huella) y buscarInicial.
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { B, S } from '../lib/builder/estilo'
+import { B, C, S } from '../lib/builder/estilo'
 import { CabeceraPasos } from './BuilderPanel'
 import { validaDefinicion, valoresDe, esquemaDe, paraHuella } from '../lib/editor/definicion'
 import { jsonCanonico } from '../lib/lotesLab'
@@ -43,10 +43,10 @@ import { propagaEnlaces, estadoEnlaces, enlazaUso, opcionesCasillas } from '../l
 import { conCasillas, hayCambios, listaCambios, resumenCambios } from '../lib/builder/barraCambios'
 // §148: ya no se importa esSemanal: «Usar en un plan» vale también para las semanales.
 
-const AZUL = '#58a6ff', NARANJA = '#f0883e', MORADO = '#a371f7', ROJO = '#ff8b8b', AMARILLO = '#f2cc60'
+const AZUL = C.azul, NARANJA = C.naranja, MORADO = C.moradoCaja, ROJO = C.rojo, AMARILLO = C.amarillo
 // V9.1049: Protección con su color, un verde azulado (ni el rojo de los errores ni el amarillo de los avisos; contraste alto sobre el
 // fondo oscuro), y Cómo compro en gris. Los colores de cada bloque de «La regla, en una frase».
-export const VERDE_AZULADO = '#3dd6c3', GRIS = '#9fb0c3'
+export const VERDE_AZULADO = C.verdeAzulado, GRIS = C.grisSuave
 export const COLOR_BLOQUE = Object.freeze({ filtro: MORADO, compra: AZUL, orden: GRIS, venta: NARANJA, proteccion: VERDE_AZULADO })
 const TITULO_BLOQUE = Object.freeze({ filtro: 'Solo opero cuando…', compra: 'Compro cuando…', orden: 'Cómo compro', venta: 'Vendo cuando…', proteccion: 'Protección' })
 // La regla por bloques: un párrafo por bloque con la marca de su color (la usan el editor y «Mis estrategias»).
@@ -366,7 +366,7 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
         <span data-estado style={{ ...S.secundario, fontSize: 13 }}>{estado}</span>
         {errNombre && <span data-error-nombre style={{ color: ROJO, fontSize: 13 }}>{errNombre}</span>}
         <span data-barra-cambios={cambiado ? 'cambios' : nueva ? 'nueva' : 'sin-cambios'} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <span data-estado-barra title={cambiosBarra.join(' · ') || undefined} style={{ fontSize: 13, maxWidth: 560, color: cambiado || nueva ? AMARILLO : '#7ee2a0' }}>
+          <span data-estado-barra title={cambiosBarra.join(' · ') || undefined} style={{ fontSize: 13, maxWidth: 560, color: cambiado || nueva ? AMARILLO : C.verde }}>
             {cambiado ? <>● Probando cambios sin guardar: {resumenCambios(cambiosBarra)}</> : nueva ? '● Estrategia nueva: todavía sin guardar' : '✓ Sin cambios: ves la estrategia guardada'}
           </span>
           {msgValores && <span data-error-barra style={{ color: ROJO, fontSize: 13 }}>{msgValores}</span>}
@@ -447,7 +447,7 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
                         <span style={{ flex: 1 }}>{nombreCond(x.clave)}</span>
                         <button style={{ ...S.boton, padding: '0 9px', fontWeight: 700 }} aria-label={`Añadir «${nombreCond(x.clave)}»`} onClick={() => setAnadiendo(anadiendo === x.clave ? null : x.clave)}>+</button>
                       </div>
-                      <div style={{ ...S.apagado, marginTop: 2 }}>{x.antes}<mark style={{ background: '#5a4a12', color: B.titulo, borderRadius: 3, padding: '0 2px' }}>{x.palabra}</mark>{x.despues}</div>
+                      <div style={{ ...S.apagado, marginTop: 2 }}>{x.antes}<mark style={{ background: C.marca, color: B.titulo, borderRadius: 3, padding: '0 2px' }}>{x.palabra}</mark>{x.despues}</div>
                       {anadiendo === x.clave && (
                         <div data-pregunta ref={cajaAnadir} style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           <button style={{ ...S.boton, padding: '3px 8px', fontSize: 13, color: MORADO, opacity: filtro.ok ? 1 : 0.5 }} disabled={!filtro.ok} onClick={() => anade(x.clave, 'filtro')}>Solo opero cuando</button>
@@ -636,7 +636,7 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
               {errClasico.map((e, k) => <li key={k} data-error-clasico style={{ color: ROJO, fontSize: 13 }}>{e}</li>)}
             </ul>
           </Tarjeta>
-          {plan.version && <div data-aviso="version" style={{ background: '#3a3220', border: `1px solid ${AMARILLO}`, borderRadius: B.radioBoton, padding: 12, marginBottom: 12, color: B.texto }}>{avisoVersion(plan.version)}</div>}
+          {plan.version && <div data-aviso="version" style={{ background: C.avisoFondo, border: `1px solid ${AMARILLO}`, borderRadius: B.radioBoton, padding: 12, marginBottom: 12, color: B.texto }}>{avisoVersion(plan.version)}</div>}
           {intervalo === 'semanal' ? <div data-semanal-paso2 style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <button style={S.botonDesactivado} disabled title={AVISO_SEMANAL_PASO2}>Guardar y validar ›</button>
             <span data-aviso="semanal" style={{ color: AMARILLO, fontSize: 13 }}>{AVISO_SEMANAL_PASO2}</span>

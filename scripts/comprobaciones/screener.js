@@ -438,7 +438,7 @@ const cerca = (a, b, tol = 1e-9) => a != null && b != null && Math.abs(a - b) <=
     ok(c.includes('data-tema="claro"') && c.includes('--sc-fondo:#d6d2c8') && c.includes('--sc-texto:#33302b'), 'tono claro: papel gris')
     ok(Object.keys(TEMAS.oscuro).join() === Object.keys(TEMAS.claro).join() && varsTema('raro')['--sc-fondo'] === '#22262f', 'los dos tonos tienen las mismas cifras; uno desconocido = oscuro')
     ok(o.includes(CSS_TABLA.split('&').join('&amp;').split('>').join('&gt;')) || o.includes(CSS_TABLA), 'filas alternas y la fila entera resaltada al pasar el ratón')
-    ok(!/#0d1117|#13283f|#1b2836|#3a3220/.test(o), 'la pantalla ya no lleva los colores fijos de antes')
+    ok(!/#0d1117|#13283f|#1b2836|#3a3220/.test(o.replace(/--sc-[\w-]+:[^;"]*/g, '')), 'la pantalla ya no lleva los colores fijos de antes (sin contar las definiciones de las variables del tono: §181)')
     const fi = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'pages', 'index.js'), 'utf8')
     ok(fi.includes('<button data-tema-app onClick={alternaTema}') && fi.includes("{temaApp==='claro'?'☾ Oscuro':'☀ Claro'}") && fi.includes('<ScreenerPanel tema={temaApp}') && fi.includes("localStorage.setItem('app.tema',n)"), 'botón «☀ Claro / ☾ Oscuro» en la barra de arriba, recordado, y el screener lo recibe')
   }
