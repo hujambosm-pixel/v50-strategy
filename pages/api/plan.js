@@ -16,7 +16,7 @@
 // la referencia de cada pieza de cartera que la tenga; con una pieza «estrategia», las del valor, del ocioso y de los índices de
 // su regla: docs/builder.md §47).
 import { exigeAuth } from '../../lib/verificaJwt'
-import { validaPlan, huellaPlan, usaEtf, motivoListaNoCalculable } from '../../lib/planes/plan'
+import { validaPlan, huellaPlan, usaEtf, motivoListaNoCalculable, esBloques } from '../../lib/planes/plan'
 import { comisionesDePlan, normalizaComisiones } from '../../lib/comisiones'
 import handlerMultibacktest from './multibacktest'
 import { evaluaPlan, iniciosRodantes, referenciasDe } from '../../lib/planes/evalua'
@@ -32,6 +32,8 @@ export const config = { maxDuration: 60 }
 // §146: con velas semanales del plan, la petición es la semanal del Backtesting; sus candidatos (fechados en el lunes de su semana) se
 // sitúan en su día con las velas diarias de cada valor (de la caché, que /api/multibacktest acaba de rellenar): listaEnSuDia.
 // §112: con el Nasdaq-100, los valores son los del universo en el periodo (las claves de la máscara, en orden) y el universo es el del bloque.
+// §185: con VARIOS BLOQUES, cuerposLista = { id del bloque: su petición } (una por bloque con lista, la misma que se haría con ese bloque
+// solo: capital = dinero inicial × su %) y los candidatos de cada uno van en datos.listas[id].
 export function errorCuerpoLista(plan, pieza, c) {
   if (!c || typeof c !== 'object' || !c.cfg) return 'Falta la petición de la lista (cuerpoLista).'
   const univ = pieza.lista?.universo && pieza.lista.universo !== 'manual' ? pieza.lista.universo : null
@@ -65,10 +67,16 @@ export default async function handler(req, res) {
   const errores = validaPlan(plan)
   if (rodantes && !(rodantes.duracion == null || (Number.isInteger(rodantes.duracion) && rodantes.duracion >= 1 && rodantes.duracion <= 30))) errores.push('La duración de los inicios rodantes, de 1 a 30 años.')
   if (errores.length) return res.status(400).json({ error: errores.join(' '), errores })
-  const pLista = plan.piezas.find(x => x.tipo === 'estrategia' && x.donde === 'lista')
+  // §185: con varios bloques, una petición por bloque con lista en cuerposLista: { id del bloque: petición }.
+  const BL = esBloques(plan), conLista = plan.piezas.filter(x => x.tipo === 'estrategia' && x.donde === 'lista')
+  const pLista = BL ? null : conLista[0] || null
   if (pLista) {   // §89
     const motivo = errorCuerpoLista(plan, pLista, req.body?.cuerpoLista) || motivoListaNoCalculable(plan, req.body.cuerpoLista.symbols)
     if (motivo) return res.status(400).json({ error: motivo })
+  }
+  if (BL) for (const p of conLista) {
+    const cu = req.body?.cuerposLista?.[p.id], motivo = errorCuerpoLista(plan, p, cu) || motivoListaNoCalculable(plan, cu.symbols, p)
+    if (motivo) return res.status(400).json({ error: `Bloque ${p.id}: ${motivo}` })
   }
   const t0 = Date.now()
   const headers = { apikey: SUPA_KEY, Authorization: `Bearer ${req.headers['x-supa-jwt']}` }
@@ -90,6 +98,20 @@ export default async function handler(req, res) {
       }
       const cc = r.json.compoundCurve || []
       finalPorDentro = cc.length ? cc[cc.length - 1].value : null
+    }
+    if (BL && conLista.length) {   // §185: los candidatos de cada bloque con lista, uno detrás de otro
+      c.datos.listas = {}
+      for (const p of conLista) {
+        const r = await pideMultibacktest(req, { ...req.body.cuerposLista[p.id], conCandidatos: true })
+        if (r.status !== 200 || !r.json?.candidatosAzar) return res.status(r.status === 401 ? 401 : 500).json({ error: `Bloque ${p.id}: ${r.json?.error || `la lista no se pudo calcular (HTTP ${r.status}).`}` })
+        let L = r.json.candidatosAzar
+        if (p.velas === 'semanales') {
+          const dd = await cargaDiarias(L.activos.map(ac => ac.symbol), { desde: plan.periodo.desde, hasta: plan.periodo.hasta, supaUrl: SUPA_URL, headers })
+          if (dd.error) return res.status(500).json({ error: dd.error })
+          L = listaEnSuDia(L, dd.velas, { hasta: plan.periodo.hasta, alCierre: p.estrategia?.definition?.entrada?.orden?.tipo === 'cierre' })
+        }
+        c.datos.listas[p.id] = L
+      }
     }
     const t1 = Date.now()
     const evaluacion = evaluaPlan(plan, c.datos, { detalle: true, libro: libro === true })
