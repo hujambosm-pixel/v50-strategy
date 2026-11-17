@@ -2,7 +2,7 @@
 // lightweight-charts, como el resto de la app. Cuatro vistas: tu estrategia (tus compras ▲ y ventas ▼ azules y la zona sombreada mientras estás dentro) o una copia (además, sus compras ● y ventas ○ naranjas). La leyenda enciende y apaga cada capa. Debajo, la tabla.
 //   v: lo que pinta la pestaña (lib/azarGraficos.js vistaPestana). inicial: 'estrategia' (solo tus operaciones) o la copia ('mejor', 'tipica', 'peor'). onCierra: × y Esc.
 import { useEffect, useRef, useState } from 'react'
-import { B, S } from '../lib/builder/estilo'
+import { B, S, C, colorReal } from '../lib/builder/estilo'
 import Ayuda from './BuilderAyuda'
 import { euros, numero } from '../lib/resultadoAzar'
 
@@ -79,7 +79,7 @@ export default function BuilderAzarVelas({ v, simbolo, velasTexto = 'diarias', i
     let vivo = true, ch = null, ro = null
     import('lightweight-charts').then(({ createChart, CrosshairMode, PriceScaleMode }) => {
       if (!vivo || !caja.current) return
-      ch = createChart(caja.current, { autoSize: true, layout: { background: { color: B.tarjeta }, textColor: B.secundario, attributionLogo: false }, grid: { vertLines: { color: '#1b2430' }, horzLines: { color: '#1b2430' } }, crosshair: { mode: CrosshairMode.Normal }, rightPriceScale: { borderColor: B.borde }, timeScale: { borderColor: B.borde, minBarSpacing: 0.1 } })   // Sin minBarSpacing (0,5 por defecto), en una ventana estrecha no cabe todo el periodo.
+      ch = createChart(caja.current, { autoSize: true, layout: { background: { color: colorReal(B.tarjeta, caja.current) }, textColor: colorReal(B.secundario, caja.current), attributionLogo: false }, grid: { vertLines: { color: colorReal(C.rejilla, caja.current) }, horzLines: { color: colorReal(C.rejilla, caja.current) } }, crosshair: { mode: CrosshairMode.Normal }, rightPriceScale: { borderColor: colorReal(B.borde, caja.current) }, timeScale: { borderColor: colorReal(B.borde, caja.current), minBarSpacing: 0.1 } })   // §179: colorReal   // Sin minBarSpacing (0,5 por defecto), en una ventana estrecha no cabe todo el periodo.
       grafico.current = ch
       const zona = ch.addHistogramSeries({ priceScaleId: 'zona', priceLineVisible: false, lastValueVisible: false, base: 0 })
       ch.priceScale('zona').applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false })

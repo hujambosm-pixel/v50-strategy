@@ -3305,3 +3305,12 @@ Decisión de Sergi (17/11): toda la app tendrá los dos tonos del screener: oscu
 - Comprobado por mí en la app (plan 7) con el claro puesto a mano en el navegador: tarjetas, cifras, gráfico, «Detalle» y la lista de valores se leen bien. SIN HACER: el gráfico de velas (AssetSignalChart, de lightweight-charts: dibuja en canvas con sus colores, no admite variables) y el Gantt siguen oscuros en el claro; van en una parte aparte.
 - planes-pantalla.js compara los colores por signo con C (no con el color escrito).
 - Ninguna cifra cambia.
+
+## 179. ARREGLO: los gráficos del creador y de «Validar» volvían a salir vacíos desde §176 (17/11)
+
+Fallo mío de §176 (V9.1238): lightweight-charts (dibuja en canvas) recibía los colores como «var(--bd-…, #…)» y fallaba con «Cannot parse color»: el gráfico de «Señales en el gráfico» del creador (components/BuilderSenales.js) y las velas de «Validar» (components/BuilderAzarVelas.js) salían vacíos. Las comprobaciones automáticas no dibujan estos gráficos y no lo vieron. Visto por mí en la app al revisar el creador.
+
+- lib/builder/estilo.js: colorReal(v, el) da el color real de una variable (la lee en el contenedor del tono; sin él, el de reserva); un color normal pasa tal cual.
+- BuilderSenales.js y BuilderAzarVelas.js: las opciones del gráfico usan colorReal (fondo, texto, bordes y la rejilla, que pasa a C.rejilla).
+- Comprobado en la app: el gráfico de señales de «Prueba editor EMA20» se dibuja; las velas de su prueba, también, con las cifras de referencia (55.706 €, 123 operaciones, 42,3 %, 29,1 %, 68,7 %); sin «Cannot parse color» en la consola.
+- LECCIÓN: todo color que vaya a lightweight-charts (o a un canvas) tiene que pasar por colorReal.

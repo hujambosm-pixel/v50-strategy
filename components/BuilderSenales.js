@@ -17,7 +17,7 @@
 //   verOpsInicial (V9.1063: las líneas de las operaciones, mostradas u ocultas), ocultosIniciales (V9.1065: las claves ocultas de
 //   la leyenda). entrada (V9.1065): cambia cada vez que se vuelve a entrar en el Builder; entonces todo se enseña otra vez.
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { B, S } from '../lib/builder/estilo'
+import { B, S, C, colorReal } from '../lib/builder/estilo'
 import { calculaSenales } from '../lib/builder/senales'
 import { leeFiltro, aTexto, deTexto, combinacionesImposibles } from '../lib/builder/tarjetas'
 import { validaDefinicion, valoresDe } from '../lib/editor/definicion'
@@ -177,8 +177,8 @@ function Graficos({ r, ocultos = new Set(), llaveZoom = '' }) {
     import('lightweight-charts').then(({ createChart, CrosshairMode, LineStyle, LineType }) => {
       if (!vivo || !precio.current) return
       // El eje de la derecha con el mismo ancho en todos: así los osciladores quedan alineados con las velas.
-      const opciones = (alto) => ({ height: alto, layout: { background: { color: B.fondo }, textColor: B.secundario, fontFamily: B.letra, attributionLogo: false }, grid: { vertLines: { color: '#1b2430' }, horzLines: { color: '#1b2430' } },
-        crosshair: { mode: CrosshairMode.Normal }, rightPriceScale: { borderColor: B.borde, minimumWidth: ANCHO_EJE }, timeScale: { borderColor: B.borde }, width: precio.current.clientWidth })
+      const opciones = (alto) => ({ height: alto, layout: { background: { color: colorReal(B.fondo, precio.current) }, textColor: colorReal(B.secundario, precio.current), fontFamily: B.letra, attributionLogo: false }, grid: { vertLines: { color: colorReal(C.rejilla, precio.current) }, horzLines: { color: colorReal(C.rejilla, precio.current) } },
+        crosshair: { mode: CrosshairMode.Normal }, rightPriceScale: { borderColor: colorReal(B.borde, precio.current), minimumWidth: ANCHO_EJE }, timeScale: { borderColor: colorReal(B.borde, precio.current) }, width: precio.current.clientWidth })   // §179: colorReal (lightweight-charts no entiende «var(…)»)
       const ch = createChart(precio.current, opciones(H + EJE_TIEMPO)); charts.push(ch)
       const altoDibujo = ch.paneSize?.().height
       if (altoDibujo > 0 && altoDibujo !== H) ch.resize(precio.current.clientWidth, H + EJE_TIEMPO + H - altoDibujo)
