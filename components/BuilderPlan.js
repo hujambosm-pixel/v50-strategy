@@ -194,6 +194,8 @@ function Leyenda({ curva, activo = null, visibles = LINEAS_DEFECTO, onMarca = nu
 }
 
 // §90: el color de una cifra según su signo (verde si suma, rojo si resta; 0 o sin número, el de siempre).
+// §174: alto de la franja de arriba de cada columna («◀ Ocultar el panel» y «Tu dinero / Detalle»), igual en las dos.
+const ALTO_BARRA_COL = 40
 const colorSigno = (v) => Number.isFinite(v) && v > 0 ? VERDE : Number.isFinite(v) && v < 0 ? ROJO : undefined
 function Cifra({ id, titulo, ayuda, valor, sub, color }) {
   return (
@@ -663,20 +665,20 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // §128: «Comparar planes», activo con al menos dos planes guardados.
   const botonComparar = <button data-boton="comparar" disabled={!hayComparar} title={hayComparar ? 'Ver tus planes guardados uno al lado del otro' : TEXTO_SIN_PLANES} onClick={() => setComparando(true)}
     style={{ ...S.boton, padding: '6px 12px', fontSize: 13, ...(hayComparar ? {} : { color: B.apagado, cursor: 'not-allowed' }) }}>Comparar planes</button>
-  // §54: una línea bajo las pestañas: los avisos (en el móvil, uno debajo del otro: .bp-avisos), «Calculando…» y, a la derecha, guardar y «Comparar planes».
-  const avisos = actual ? (
-    <div data-avisos className="bp-avisos" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 24px', alignItems: 'center', marginBottom: 12 }}>
+  // §54: una línea bajo las pestañas: los avisos (en el móvil, uno debajo del otro: .bp-avisos), «Calculando…» y, a la derecha, guardar.
+  // §174: en la misma línea, «La estrategia, tal como la usa este plan» (uso); «Comparar…» sube a la fila de las pestañas de planes.
+  const avisosDe = (uso) => actual ? (
+    <div data-avisos className="bp-avisos" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 24px', alignItems: 'center', marginBottom: 10 }}>
       {estrategia && (avisoPrueba || <div data-aviso="prueba" data-estado="leyendo" style={S.secundario}>Leyendo la prueba…</div>)}
       {enlaceTesis?.('plan', fila?.id)}
       {!enLista && <div data-aviso="a-mano" style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>⚠ {AVISO_A_MANO}<Ayuda texto={AYUDA_PLAN.aMano} etiqueta={AVISO_A_MANO}/></div>}
       {nuevaActual && <div data-aviso="sin-guardar" style={{ color: AMARILLO }}>Sin guardar: se perderá al recargar</div>}
       {calc.calculando && <div data-calculando style={{ color: AMARILLO }}>Calculando…</div>}
+      {uso}
       <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         {sinGuardar && <button data-boton="descartar" style={{ ...S.boton, padding: '6px 12px' }} disabled={guardando} onClick={descartaCambios}>Descartar cambios</button>}
         {hayCambios && <button data-boton="guardar-cambios" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={`Guardado por última vez el ${fechaCorta(fila.updated_at)}`} onClick={guardaAbierta}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>}
         {nuevaActual && <button data-boton="guardar" style={{ ...(puedeGuardar ? S.botonVerde : S.botonDesactivado), padding: '6px 12px' }} disabled={!puedeGuardar} title={!ctx ? 'Sin conexión con la base de datos: no se pueden guardar planes' : undefined} onClick={() => { limpiaDialogos(); setVentana('nuevo') }}>Guardar este plan</button>}
-        {estrategia && <MenuCompararEstrategias estrategias={tarjetas} actualId={estrategia.id} inicial={inicial?.menuCopias || null} onComparar={comparaEstrategias}/>}
-        {botonComparar}
       </span>
     </div>
   ) : null
@@ -690,9 +692,18 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // ── La fila de pestañas (components/BuilderPestanas.js) ──
   const pestanasPlanes = (
     <div data-planes style={{ marginBottom: 10 }}>
-      <BuilderPestanas pestanas={pestanas} actual={actual} planes={planes || []} abiertas={orden || []} finales={finales} ancho={inicial?.anchoPestanas ?? null} menuInicial={inicial?.menu ?? null} buscaInicial={inicial?.buscaMenu ?? ''}
-        onAbrir={c => pide({ tipo: 'abrir', clave: c })} onDuplicar={pideDuplicar} onBorrar={c => { limpiaDialogos(); setBorrando(c) }} onCerrar={pulsaCerrar} onCrear={() => pide({ tipo: 'crear' })}
-        onAnadir={id => { if (claveDe(id) !== actual) pide({ tipo: 'anadir', id }) }}/>
+      {/* §174: «Comparar con otras estrategias ▾» y «Comparar planes», a la derecha de las pestañas (antes, en la línea de los avisos). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px 10px', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 300px', minWidth: 0 }}>
+          <BuilderPestanas pestanas={pestanas} actual={actual} planes={planes || []} abiertas={orden || []} finales={finales} ancho={inicial?.anchoPestanas ?? null} menuInicial={inicial?.menu ?? null} buscaInicial={inicial?.buscaMenu ?? ''}
+            onAbrir={c => pide({ tipo: 'abrir', clave: c })} onDuplicar={pideDuplicar} onBorrar={c => { limpiaDialogos(); setBorrando(c) }} onCerrar={pulsaCerrar} onCrear={() => pide({ tipo: 'crear' })}
+            onAnadir={id => { if (claveDe(id) !== actual) pide({ tipo: 'anadir', id }) }}/>
+        </div>
+        {actual && <span data-comparar-arriba style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flex: 'none', marginLeft: 'auto' }}>
+          {estrategia && <MenuCompararEstrategias estrategias={tarjetas} actualId={estrategia.id} inicial={inicial?.menuCopias || null} onComparar={comparaEstrategias}/>}
+          {botonComparar}
+        </span>}
+      </div>
       {orden == null && <div style={{ ...S.apagado, marginTop: 6 }}>Leyendo tus planes…</div>}
       {avisoPlan && <div data-aviso="plan-no-existe" style={{ color: AMARILLO, marginTop: 6 }}>⚠ {avisoPlan}</div>}
       {falloPestanas && <div data-fallo-pestanas style={{ color: AMARILLO, marginTop: 6 }}>⚠ No se han podido guardar tus pestañas: al recargar puede salir otro orden.</div>}
@@ -715,7 +726,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // §152: «La estrategia, tal como la usa este plan», siempre a la vista: en azul, lo que el plan cambia respecto a la estrategia guardada.
   const dondeUso = enLista ? (L.universo && L.universo !== 'manual' ? 'en el Nasdaq-100' : (L.simbolos || []).length === 1 ? `en ${L.simbolos[0]}` : `en ${(L.simbolos || []).length} valores`) : `en ${a.activo}`
   const uso = estrategia && actual ? (
-    <div data-uso-estrategia title="En azul, lo que este plan cambia respecto a la estrategia guardada (la estrategia no se toca)" style={{ ...S.secundario, fontSize: 13, marginBottom: 10 }}>
+    <div data-uso-estrategia title="En azul, lo que este plan cambia respecto a la estrategia guardada (la estrategia no se toca)" style={{ ...S.secundario, fontSize: 13 }}>
       La estrategia, tal como la usa este plan:{' '}
       {usoDeLaEstrategia({ nombre: estrategia.name, velasEst, velasPlan, donde: dondeUso, propios: filtrosPropios(estrategia), respeta: respetaPropios(a.filtros), nPlan: (a.filtros?.filas || []).length })
         .map((p, k) => <span key={k}>{k ? ' · ' : ''}<span data-cambia={p.azul ? 'si' : undefined} style={{ color: p.azul ? AZUL : B.texto, fontWeight: k ? 400 : 600 }}>{p.t}</span></span>)}
@@ -867,7 +878,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const resLista = ajustesDelResultado?.donde === 'lista'
   const cifrasLista = enLista && resLista && !motivoLista ? cifras : null
   const resultado = enLista ? (<>
-    <div data-pestanas-der role="group" aria-label="Qué ver del plan" style={{ display: 'flex', borderBottom: `1px solid ${B.borde}` }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('detalle', 'Detalle', AYUDA_DETALLE.pestana)}</div>
+    <div data-pestanas-der className="bp-fijo" role="group" aria-label="Qué ver del plan" style={{ display: 'flex', alignItems: 'flex-end', height: ALTO_BARRA_COL, boxSizing: 'border-box', borderBottom: `1px solid ${B.borde}`, background: B.fondo }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('detalle', 'Detalle', AYUDA_DETALLE.pestana)}</div>
     {(motivoLista ? <div data-sin-motor-lista style={{ ...S.tarjeta, ...S.cuerpo, color: B.texto }}>{motivoLista}</div>
       : !cifrasLista ? <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{calc.error ? '' : 'Calculando tu plan…'}</div>
       : <>
@@ -880,7 +891,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   </>) : !cifras ? (
     <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{!estrategia ? 'Elige una estrategia de tarjetas.' : calc.calculando || clave ? 'Calculando tu plan…' : 'Sin resultado todavía.'}</div>
   ) : (<>   {/* §161: con un solo valor, «Tu dinero» y «Detalle» (sin «La cartera por dentro», que es del Backtesting con lista) */}
-    <div data-pestanas-der role="group" aria-label="Qué ver del plan" style={{ display: 'flex', borderBottom: `1px solid ${B.borde}` }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('detalle', 'Detalle', AYUDA_DETALLE.pestana)}</div>
+    <div data-pestanas-der className="bp-fijo" role="group" aria-label="Qué ver del plan" style={{ display: 'flex', alignItems: 'flex-end', height: ALTO_BARRA_COL, boxSizing: 'border-box', borderBottom: `1px solid ${B.borde}`, background: B.fondo }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('detalle', 'Detalle', AYUDA_DETALLE.pestana)}</div>
     {vistaDer === 'detalle' ? <PlanDetalle detalle={detalle} cifras={cifras} viejas={cifrasViejas} onIrAValor={onIrAValor} inicial={inicial?.detalle || null} nombre={nombreDe(actual) || null} version={version}
         graficoPlan={<><GraficoPlan curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles}/>
           <Leyenda curva={sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={activoRes} visibles={lineasVisibles} onMarca={marcaLinea}/></>}/>
@@ -950,8 +961,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
         onElegir={id => setComp(c => ({ ...c, elegidos: alterna(c.elegidos || [], id) }))} onRef={id => setComp(c => ({ ...c, refs: c.refs.includes(id) ? c.refs.filter(x => x !== id) : [...c.refs, id] }))}
         onLog={x => setComp(c => ({ ...c, log: x }))} onModo={x => setComp(c => ({ ...c, modo: x }))} onVolver={() => setComparando(false)}
         onAbrir={id => { const c = claveDe(id); if (c === actual) setComparando(false); else pide({ tipo: 'anadir', id }) }} onDuplicar={id => pideDuplicar(claveDe(id))}/> : <>
-      {avisos}
-      {uso}
+      {avisosDe(uso)}
       {errorCalculo}
       </>}
       {/* §49, §50 y §143: en escritorio (≥ 1000 px), esta página tiene el alto de la ventana menos lo de encima; con el plan abierto no se
@@ -968,13 +978,16 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   .bp-pagina:has(> .bp-cols) > * { flex-shrink: 0 }
   .bp-pagina > .bp-cols { flex: 1 1 0; min-height: 0; flex-wrap: nowrap !important; align-items: stretch !important }
   .bp-izq, .bp-der { overflow-y: auto; overscroll-behavior: contain; padding-right: 4px }
-  .bp-der > * { flex-shrink: 0 } }`}</style>
+  .bp-der > * { flex-shrink: 0 }
+  /* §174: «Ocultar el panel» y «Tu dinero / Detalle», siempre visibles arriba de su columna. */
+  .bp-fijo { position: sticky; top: 0; z-index: 6 } }`}</style>
       {comparando ? null : actual ? <div className="bp-cols" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {/* §165: el panel de la izquierda se puede plegar a una franja estrecha (se recuerda en este navegador). Plegado sigue montado (oculto), así no pierde nada. */}
         {panelOculto && <button type="button" data-abre-panel onClick={() => ponPanelOculto(false)} title="Ver otra vez «Cartera» y «Tu dinero»" aria-label="Ver el panel de la izquierda"
           style={{ flex: '0 0 34px', alignSelf: 'stretch', minHeight: 240, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, color: B.secundario, cursor: 'pointer', fontFamily: B.letra, fontSize: 13, writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0' }}>▶ Cartera · Tu dinero</button>}
         <div data-columna="izquierda" className="bp-izq" style={{ flex: '1 1 340px', maxWidth: 520, minWidth: 0, ...(panelOculto ? { display: 'none' } : {}) }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}><button type="button" data-oculta-panel onClick={() => ponPanelOculto(true)} title="Pliega «Cartera» y «Tu dinero» para que los gráficos y las tablas usen todo el ancho" style={{ fontFamily: B.letra, fontSize: 12, padding: '3px 9px', borderRadius: 6, cursor: 'pointer', border: `1px solid ${B.borde}`, background: B.fondo, color: B.secundario }}>◀ Ocultar el panel</button></div>
+          {/* §174: a la misma altura que «Tu dinero / Detalle» y, como ellas, fija arriba al bajar por la columna. */}
+          <div className="bp-fijo" data-barra-izq style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', height: ALTO_BARRA_COL, boxSizing: 'border-box', marginBottom: 10, background: B.fondo }}><button type="button" data-oculta-panel onClick={() => ponPanelOculto(true)} title="Pliega «Cartera» y «Tu dinero» para que los gráficos y las tablas usen todo el ancho" style={{ fontFamily: B.letra, fontSize: 12, padding: '3px 9px', borderRadius: 6, cursor: 'pointer', border: `1px solid ${B.borde}`, background: B.fondo, color: B.secundario }}>◀ Ocultar el panel</button></div>
           {bloques}{dinero}</div>
         <div data-columna="derecha" className="bp-der" style={{ flex: '2 1 480px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {resultado}

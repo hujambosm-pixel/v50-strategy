@@ -3256,3 +3256,12 @@ Boceto bocetos/detalle-final.html, pestaña 3 (punto 4 aceptado por Sergi el 16/
 - lib/builder/comparaPlanes.js: nombreParaGuardar, trasGuardarCopia; TITULO_COPIA lo menciona; AYUDA_TABLA aclara que la ganancia de cada VALOR es antes de comisiones e impuestos (como en «Detalle») y por eso no suman la del plan.
 - Comprobación: comparar-planes.js, apartado 9 (9 nuevas, con una base falsa que apunta lo que se guardaría).
 - Ninguna cifra cambia.
+
+## 174. Pantalla del plan: cabecera más compacta y franjas fijas (17/11)
+
+Pedido por Sergi el 18/11 con capturas del plan 4 (punto 1 de tres: después, selectores de estrategia y ☀/☾).
+
+- components/BuilderPlan.js: «Comparar con otras estrategias ▾» y «Comparar planes» suben a la fila de las pestañas de planes, a la derecha (data-comparar-arriba; las pestañas miden el ancho que les queda); la línea «La estrategia, tal como la usa este plan» va dentro de la línea de los avisos (avisosDe(uso)).
+- «◀ Ocultar el panel» en una franja de 40 px (ALTO_BARRA_COL, data-barra-izq) a la misma altura que las pestañas «Tu dinero / Detalle»; en escritorio (≥ 1000 px) las dos son position: sticky (clase bp-fijo) con fondo opaco: al bajar por cada columna se quedan arriba. En el móvil, como antes.
+- Comprobado por mí en la app (plan 7, 1400×800): con la rueda en cada columna las dos franjas se quedan arriba; el desplegable de comparar se abre por encima; 64.625 €; consola sin errores.
+- Ninguna cifra cambia.
