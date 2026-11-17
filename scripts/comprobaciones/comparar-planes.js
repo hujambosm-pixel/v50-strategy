@@ -9,6 +9,7 @@
 //   6 · §170: el botón «Comparar con otras estrategias ▾»: menú sin la del plan, hasta 3, base «tal como está», las copias se olvidan al volver.
 //   7 · §171: los costes se comparan por lo que significan (sin ⚠ falso entre un plan guardado y su copia).
 //   8 · §172: la vista «Tabla» (cifras de «Detalle» de cada plan; ★ y ⚠ como en las tarjetas; Buy&Hold solo con todo igual).
+//   9 · §173: «Guardar como plan» en una copia (nombre propuesto, se guarda tal cual, ocupa su sitio en la comparación).
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://falso.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-de-la-prueba'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
@@ -256,6 +257,34 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   D.pulsa(q('data-vista', 'tarjetas')[0]); await D.espera(20)
   ok(q('data-tarjeta-plan').length === 2 && q('data-fila-tabla').length === 0 && q('data-boton', 'plegar').length === 1, '§172: «Tarjetas»: vuelven las tarjetas y «Ocultar ▲»')
   m.quita(); await D.espera(5)
+
+  // ── 9 · §173: «Guardar como plan» en una copia ──
+  ok(K.nombreParaGuardar({ id: 'v-y', plan: K.copiaConEstrategia(Pa.ajustesDe(pA), ESTR2, 'Plan A').plan }, 'Plan A') === 'Plan A · EMA3' && K.nombreParaGuardar({ id: 'v-ahora', plan: pA }, 'Plan A') === 'Plan A (copia)', '§173: el nombre propuesto: «Plan A · EMA3»; el plan tal como está, «Plan A (copia)»')
+  ok(JSON.stringify(K.trasGuardarCopia({ elegidos: [1, 'v-y', 'v-w'], copias: ['y', 'w'], conAhora: false }, 'v-y', 99)) === JSON.stringify({ elegidos: [1, 99, 'v-w'], copias: ['w'], conAhora: false })
+    && JSON.stringify(K.trasGuardarCopia({ elegidos: ['v-ahora', 'v-y'], copias: ['y'], conAhora: true }, 'v-ahora', 98)) === JSON.stringify({ elegidos: [98, 'v-y'], copias: ['y'], conAhora: false }), '§173: tras guardar, el plan guardado ocupa el sitio de la copia y la copia se olvida')
+  ok(K.AYUDA_TABLA.includes('ANTES de comisiones e impuestos'), '§173: el «?» de la tabla dice que la ganancia de cada valor es antes de comisiones e impuestos')
+  { const posts = []
+    const filaNueva = (b) => ({ id: 99, nombre: b.nombre, plan: b.plan, huella: b.huella, created_at: '2026-11-18T10:00:00Z', updated_at: '2026-11-18T10:00:00Z' })
+    const fetchFalso = async (u, o = {}) => { const s = String(u), mt = o.method || 'GET'
+      if (s.includes('planes_inversion') && mt === 'POST') { const b = JSON.parse(o.body); posts.push(b); return { ok: true, status: 201, json: async () => [filaNueva(b)], text: async () => JSON.stringify([filaNueva(b)]) } }
+      if (s.includes('planes_inversion')) return { ok: true, status: 200, json: async () => filas, text: async () => JSON.stringify(filas) }
+      return { ok: true, status: 200, json: async () => [], text: async () => '[]' } }
+    const ctxF = { url: 'https://falso.invalid', headers: {}, fetch: fetchFalso }
+    m = D.monta(h(BPlan, { estrategias: [ESTR, ESTR2], deps: { ctx: ctxF, calcula: calcula2 }, tema: 'oscuro', inicial: { planes: filas, orden: ['g1', 'g2'], pestana: 'g1', simbolos: ['TEST'], pruebas: [], anchoPestanas: 1400, comparando: true, compararElegidos: [1, 'v-y'], compararCopias: ['y'], compararVista: 'tarjetas' } }), RDC)
+    await D.espera(150)
+    ok(q('data-guardar-copia', 'v-y').length === 1 && q('data-guardar-copia', '1').length === 0, '§173: «Guardar como plan» solo en la copia')
+    D.pulsa(q('data-guardar-copia', 'v-y')[0]); await D.espera(20)
+    const caja = q('data-pregunta', 'nombre-plan')[0] || m.raiz
+    const entrada = caja.conAtributo('aria-label', 'Nombre del plan')[0]
+    ok(m.raiz.textContent.includes('Guardar «Plan A · con EMA3» como plan nuevo') && entrada?.value === 'Plan A · EMA3', `§173: pide el nombre, con «Plan A · EMA3» propuesto (${entrada?.value})`)
+    D.pulsa(q('data-boton', 'confirmar-nombre')[0]); await D.espera(150)
+    const copiaPlan = K.copiaConEstrategia(Pa.ajustesDe(pA), ESTR2, 'Plan A').plan
+    ok(posts.length === 1 && posts[0].nombre === 'Plan A · EMA3' && JSON.stringify({ ...posts[0].plan, nombre: undefined }) === JSON.stringify({ ...copiaPlan, nombre: undefined }), '§173: se guarda UN plan nuevo, con ese nombre y el plan de la copia tal cual')
+    ok(q('data-comparar').length === 1 && q('data-tarjeta-plan').map(n => n.getAttribute('data-tarjeta-plan')).join() === '1,99' && q('data-copia-sin-guardar').length === 0, '§173: se sigue comparando; en el sitio de la copia, el plan guardado (99), sin «sin guardar»')
+    ok(q('data-abrir-plan', '99').length === 1 && q('data-elige-plan', '99')[0]?.textContent.includes('Plan A · EMA3'), '§173: el plan guardado, con «Abrir» y en las fichas con su nombre')
+    D.pulsa(q('data-boton', 'volver-plan')[0]); await D.espera(40)
+    ok(q('data-pestana', 'g99').length === 1 && q('data-pestana', 'g1')[0]?.getAttribute('aria-selected') === 'true', '§173: tiene su pestaña y el plan abierto sigue siendo el A')
+    m.quita(); await D.espera(5) }
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTodo bien')
   process.exit(fallos ? 1 : 0)

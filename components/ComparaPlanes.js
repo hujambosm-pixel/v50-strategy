@@ -76,8 +76,10 @@ function Grafico({ lineas, log, alto = 330 }) {
   )
 }
 
-// §169: en una copia sin guardar, en lugar de «Abrir» y «⧉», una etiqueta (no existe en la base; «Guardar como plan» llegará después).
-const SinGuardar = () => <span data-copia-sin-guardar title={TITULO_COPIA} style={{ fontSize: 12, color: v('amarillo'), border: `1px solid ${v('amarillo')}`, borderRadius: 4, padding: '1px 6px', cursor: 'help' }}>sin guardar</span>
+// §169: en una copia sin guardar, en lugar de «Abrir» y «⧉», una etiqueta (no existe en la base) y (§173) «Guardar como plan».
+const SinGuardar = ({ id, onGuardar }) => <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+  <span data-copia-sin-guardar title={TITULO_COPIA} style={{ fontSize: 12, color: v('amarillo'), border: `1px solid ${v('amarillo')}`, borderRadius: 4, padding: '1px 6px', cursor: 'help' }}>sin guardar</span>
+  {onGuardar && <button type="button" data-guardar-copia={id} title="Guardarla como un plan nuevo en «Planes» (tú eliges el nombre)" onClick={() => onGuardar(id)} style={{ ...btn(false), padding: '3px 8px', fontSize: 12, color: v('verde'), borderColor: v('verde') }}>Guardar como plan</button>}</span>
 
 // §172: cómo se escribe cada cifra de la vista «Tabla» (y su tooltip).
 const conSigno = (x, d = 0) => !Number.isFinite(x) ? '—' : `${x > 0 ? '+' : x < 0 ? '−' : ''}${euros(Math.abs(x), d)}`
@@ -89,7 +91,7 @@ const tituloTabla = (k, c) => k === 'ganancia' && Number.isFinite(c?.gananciaPct
 const colorTabla = (k, x) => !Number.isFinite(x) ? undefined : k === 'caidaPct' || k === 'caidaEur' ? (x < 0 ? v('rojo') : undefined) : k === 'pf' ? (x >= 1 ? v('verde') : v('rojo')) : k === 'cagr' || k === 'ganancia' ? (x >= 0 ? v('verde') : v('rojo')) : undefined
 
 export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], resultados = {}, prueba = () => null, log = true, modo = null, plegado = false, tema = 'oscuro', vista = 'tarjetas',
-  onVista, onElegir, onPlegar, onRef, onLog, onModo, onAbrir, onDuplicar, onVolver }) {
+  onVista, onGuardarCopia, onElegir, onPlegar, onRef, onLog, onModo, onAbrir, onDuplicar, onVolver }) {
   const col = COLORES[tema === 'claro' ? 'claro' : 'oscuro']
   // §169: ids como texto (los guardados son números; las copias sin guardar, «v-…»).
   const elegidas = useMemo(() => elegidos.map(id => planes.find(p => mismoId(p.id, id))).filter(Boolean), [planes, elegidos])
@@ -126,7 +128,7 @@ export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], r
           <td style={{ ...celda, minWidth: 220 }}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: colorDe(p.id), flex: 'none' }}/>
             {puede ? <button type="button" data-abre-valores={p.id} aria-expanded={abierta} title={abierta ? 'Ocultar sus valores' : 'Ver sus valores'} onClick={() => setAbiertas(a => abierta ? a.filter(x => x !== id) : [...a, id])}
               style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.titulo, fontFamily: 'inherit', fontSize: 'inherit' }}>{abierta ? '▾' : '▸'}</button> : <span style={{ width: 9 }}/>}
-            <div style={{ minWidth: 0 }}><div style={{ color: B.titulo, overflowWrap: 'anywhere' }}>{p.nombre}{p.copia && <span title={TITULO_COPIA} style={{ fontWeight: 400, color: v('amarillo'), fontSize: 12, cursor: 'help' }}> · sin guardar</span>}</div>
+            <div style={{ minWidth: 0 }}><div style={{ color: B.titulo, overflowWrap: 'anywhere' }}>{p.nombre}{p.copia && <span title={TITULO_COPIA} style={{ fontWeight: 400, color: v('amarillo'), fontSize: 12, cursor: 'help' }}> · sin guardar</span>}{p.copia && onGuardarCopia && <button type="button" data-guardar-copia={p.id} title="Guardarla como un plan nuevo en «Planes» (tú eliges el nombre)" onClick={() => onGuardarCopia(p.id)} style={{ ...btn(false), padding: '1px 7px', fontSize: 12, fontWeight: 400, marginLeft: 8, color: v('verde'), borderColor: v('verde') }}>Guardar como plan</button>}</div>
               <div style={{ fontWeight: 400, fontSize: 12, color: B.secundario }}>{fotoDelPlan(p.plan)?.name || ''}{ft?.unValor && ft.valores[0] ? ` · ${ft.valores[0].simbolo}` : ft ? ` · ${numero(ft.valores.length, 0)} valores con operaciones` : ''}</div></div></div></td>
           {!ft ? <td colSpan={COLUMNAS_TABLA.length} data-estado-plan={r?.estado || 'calculando'} style={{ ...celda, fontWeight: 400, color: r?.estado === 'error' ? v('rojo') : r?.estado === 'motivo' ? B.texto : B.secundario }}>
             {r?.estado === 'error' ? `✕ No se pudo calcular: ${r.texto}` : r?.estado === 'motivo' ? r.texto : r?.estado === 'ok' ? 'Sin el detalle de este plan.' : 'Calculando…'}</td>
@@ -166,7 +168,7 @@ export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], r
                 {av && <span style={{ color: v('amarillo'), cursor: 'help' }}>⚠ </span>}{hay ? valorCifra(f.k, x) : '—'}{esMej && <span style={{ color: v('amarillo') }}> ★</span>}</td> })}
             {refsVis.map(rf => { const b = cc.c.refs[rf.id]
               return <td key={rf.id} data-puntos={rf.id} title={textoRef(rf, p.plan, b, cc.c.valores.twr) || undefined} style={{ ...celda, textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', color: !b ? B.apagado : cc.c.valores.twr >= b.twr ? v('verde') : v('rojo') }}>{b ? puntosFrente(cc.c.valores.twr, b.twr) : '—'}</td> })}</>}
-          <td style={{ ...celda, whiteSpace: 'nowrap', textAlign: 'right' }}>{p.copia ? <SinGuardar/> : <>
+          <td style={{ ...celda, whiteSpace: 'nowrap', textAlign: 'right' }}>{p.copia ? <SinGuardar id={p.id} onGuardar={onGuardarCopia}/> : <>
             <button type="button" data-abrir-plan={p.id} title="Abrir este plan en su pestaña" onClick={() => onAbrir?.(p.id)} style={{ ...btn(false), padding: '3px 8px', fontSize: 12, marginRight: 4 }}>Abrir</button>
             <button type="button" data-duplicar-plan={p.id} title="Duplicar este plan" aria-label="Duplicar este plan" onClick={() => onDuplicar?.(p.id)} style={{ ...btn(false), padding: '3px 8px', fontSize: 12 }}>⧉</button></>}</td>
         </tr> })}</tbody>
@@ -182,7 +184,7 @@ export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], r
             <div style={{ color: B.secundario, fontSize: 12 }}>{textoBloque(p.plan)}</div>
             <div data-condiciones style={{ fontSize: 12, marginTop: 2, color: distinto ? v('amarillo') : B.texto, fontWeight: distinto ? 600 : 400 }}>{textoPeriodo(p.plan)} · {textoDinero(p.plan)}</div>
           </div>
-          <div style={{ display: 'flex', gap: 4, flex: 'none' }}>{p.copia ? <SinGuardar/> : <>
+          <div style={{ display: 'flex', gap: 4, flex: 'none' }}>{p.copia ? <SinGuardar id={p.id} onGuardar={onGuardarCopia}/> : <>
             <button type="button" data-abrir-plan={p.id} title="Abrir este plan en su pestaña" onClick={() => onAbrir?.(p.id)} style={{ ...btn(false), padding: '3px 8px', fontSize: 12 }}>Abrir</button>
             <button type="button" data-duplicar-plan={p.id} title="Duplicar este plan" aria-label="Duplicar este plan" onClick={() => onDuplicar?.(p.id)} style={{ ...btn(false), padding: '3px 8px', fontSize: 12 }}>⧉</button></>}
           </div>

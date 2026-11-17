@@ -3246,3 +3246,13 @@ Boceto bocetos/detalle-final.html, pestaña 3 (punto 3 aceptado por Sergi el 16/
 - components/BuilderPlan.js: comp.vista (null = tarjetas; desde «Comparar con otras estrategias», «tabla»; se olvida al salir).
 - Comprobación: comparar-planes.js, apartado 8 (las respuestas de prueba llevan ya el libro, como las de /api/plan). A mano: plan A +694,29 € (10.694,29 − 10.000), 1 operación ganadora, PF «—»; TEST aportó 857,14 € antes de impuestos.
 - Ninguna cifra cambia.
+
+## 173. «Comparar con otras estrategias», parte d: «Guardar como plan» (18/11)
+
+Boceto bocetos/detalle-final.html, pestaña 3 (punto 4 aceptado por Sergi el 16/11). Cierra «Comparar con otras estrategias».
+
+- components/ComparaPlanes.js: en cada copia sin guardar, junto a la etiqueta «sin guardar», el botón verde «Guardar como plan» (en las tarjetas, en la línea plegada y en la vista «Tabla»). Solo con conexión a la base.
+- components/BuilderPlan.js: pideGuardarCopia abre la ventana del nombre («Guardar «<copia>» como plan nuevo»), con «<plan> · <estrategia>» propuesto (el plan tal como está: «<plan> (copia)»); al guardar, crearPlan con el plan de la copia TAL CUAL, su pestaña detrás de la abierta, y se sigue comparando con el plan guardado en el sitio de la copia (trasGuardarCopia). El plan abierto no cambia (ni sus cambios sin guardar).
+- lib/builder/comparaPlanes.js: nombreParaGuardar, trasGuardarCopia; TITULO_COPIA lo menciona; AYUDA_TABLA aclara que la ganancia de cada VALOR es antes de comisiones e impuestos (como en «Detalle») y por eso no suman la del plan.
+- Comprobación: comparar-planes.js, apartado 9 (9 nuevas, con una base falsa que apunta lo que se guardaría).
+- Ninguna cifra cambia.

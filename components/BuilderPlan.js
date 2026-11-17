@@ -56,7 +56,7 @@ import PlanDetalle, { Ampliable, AmpliadoCtx } from './PlanDetalle'
 import { AYUDA_DETALLE, detallePlan } from '../lib/builder/detallePlan'
 // §128: «Comparar planes» (opción A: cada plan tal como está guardado).
 import ComparaPlanes from './ComparaPlanes'
-import { CLAVE_COMPARAR, REFS_COMPARAR, TEXTO_SIN_PLANES, alterna, copiaDeAhora, copiasDe, eleccionCopias, elegidosIniciales, mismoId, paraRecordar, pieza as piezaDe } from '../lib/builder/comparaPlanes'
+import { CLAVE_COMPARAR, REFS_COMPARAR, TEXTO_SIN_PLANES, alterna, copiaDeAhora, copiasDe, eleccionCopias, elegidosIniciales, mismoId, nombreParaGuardar, paraRecordar, pieza as piezaDe, trasGuardarCopia } from '../lib/builder/comparaPlanes'
 import MenuCompararEstrategias from './MenuCompararEstrategias'
 import { cargaUniversoMc, nDeUniverso, nombreUniverso, reglaDeUniverso } from '../lib/universoMc'
 import FiltrosDelPlan from './FiltrosDelPlan'
@@ -532,9 +532,22 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     limpiaDialogos(); setNombreNuevo(`${nombreDe(clave)} (copia)`); setVentana({ duplica: clave })
   }
   const pideDuplicar = (clave) => { if (clave === actual) duplica(clave); else pide({ tipo: 'duplicar', clave }) }
+  // §173: «Guardar como plan» de una copia de la comparación: pide el nombre y la guarda como plan nuevo (su pestaña, detrás de la abierta).
+  // Se sigue comparando: en su sitio queda el plan guardado. El plan abierto no cambia (ni sus cambios sin guardar).
+  const pideGuardarCopia = (id) => { const c = copiasComp.find(x => mismoId(x.id, id)); if (!c) return; limpiaDialogos(); setNombreNuevo(nombreParaGuardar(c, nombreDe(actual))); setVentana({ copia: c.id }) }
   const guardaVentana = async () => {
     if (!ventana || !nombreLimpio(nombreNuevo) || guardando) return
     if (ventana === 'nuevo') { if (await guardaAbierta()) limpiaDialogos(); return }
+    if (ventana.copia) {
+      const c = copiasComp.find(x => mismoId(x.id, ventana.copia))
+      if (!ctx || !c) return
+      setGuardando(true); setFalloGuardar(null)
+      try {
+        const r = await crearPlan(ctx, { nombre: nombreLimpio(nombreNuevo), plan: c.plan }), g = claveDe(r.id)
+        setPlanes(ps => [...(ps || []), r]); setOrden(o => trasDe(o || [], actual, g)); setComp(x => trasGuardarCopia(x, c.id, r.id)); limpiaDialogos()
+      } catch (e) { setFalloGuardar(e.message) }
+      setGuardando(false); return
+    }
     const src = ventana.duplica, r0 = (planes || []).find(p => claveDe(p.id) === src)
     if (!ctx || !r0 || (src === actual && (!plan || errores.length))) return
     setGuardando(true); setFalloGuardar(null)
@@ -933,7 +946,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       {!comparando && <CabeceraPasos zona="plan" plan={nombreDe(actual) || null} onVolver={(donde) => pide({ tipo: 'volver', donde })}/>}
       {comparando ? falloPlanes && <div data-fallo-planes style={{ color: ROJO, marginBottom: 10 }}>✕ {falloPlanes}</div> : pestanasPlanes}
       {comparando ? <ComparaPlanes planes={todosComp} elegidos={comp.elegidos || []} refs={comp.refs} resultados={resComp} prueba={pruebaComp} log={comp.log} modo={comp.modo} plegado={comp.plegado} tema={tema} vista={comp.vista || 'tarjetas'}
-        onVista={x => setComp(c => ({ ...c, vista: x }))} onPlegar={x => setComp(c => ({ ...c, plegado: x }))}
+        onVista={x => setComp(c => ({ ...c, vista: x }))} onGuardarCopia={ctx ? pideGuardarCopia : null} onPlegar={x => setComp(c => ({ ...c, plegado: x }))}
         onElegir={id => setComp(c => ({ ...c, elegidos: alterna(c.elegidos || [], id) }))} onRef={id => setComp(c => ({ ...c, refs: c.refs.includes(id) ? c.refs.filter(x => x !== id) : [...c.refs, id] }))}
         onLog={x => setComp(c => ({ ...c, log: x }))} onModo={x => setComp(c => ({ ...c, modo: x }))} onVolver={() => setComparando(false)}
         onAbrir={id => { const c = claveDe(id); if (c === actual) setComparando(false); else pide({ tipo: 'anadir', id }) }} onDuplicar={id => pideDuplicar(claveDe(id))}/> : <>
@@ -979,7 +992,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           <button data-salida="cancelar" disabled={guardando} onClick={() => responde('cancelar')} style={S.boton}>Cancelar</button>
         </Pregunta>)}
       {ventana && (
-        <Pregunta id="nombre-plan" texto={ventana === 'nuevo' ? 'Guardar este plan' : `Duplicar «${nombreDe(ventana.duplica)}»`} aviso={falloGuardar}
+        <Pregunta id="nombre-plan" texto={ventana === 'nuevo' ? 'Guardar este plan' : ventana.copia ? `Guardar «${copiasComp.find(x => mismoId(x.id, ventana.copia))?.nombre || 'la copia'}» como plan nuevo` : `Duplicar «${nombreDe(ventana.duplica)}»`} aviso={falloGuardar}
           extra={<input type="text" autoFocus aria-label="Nombre del plan" placeholder="Nombre del plan" maxLength={200} value={nombreNuevo} onChange={e => setNombreNuevo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') guardaVentana(); if (e.key === 'Escape') limpiaDialogos() }} style={{ ...campo, width: '100%', boxSizing: 'border-box', marginBottom: 16 }}/>}>
           <button data-boton="confirmar-nombre" disabled={guardando || !nombreLimpio(nombreNuevo)} onClick={guardaVentana} style={!guardando && nombreLimpio(nombreNuevo) ? S.botonVerde : S.botonDesactivado}>{guardando ? 'Guardando…' : 'Guardar'}</button>
           <button onClick={limpiaDialogos} style={S.boton}>Cancelar</button>
