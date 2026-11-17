@@ -3276,3 +3276,13 @@ Pedido por Sergi el 18/11 (punto 2 de tres). El desplegable de «Comparar con ot
 - Comprobaciones: comparar-planes.js apartado 6 adaptado (filas con role=checkbox) + 5 nuevas y apartado 10 (5 nuevas: selector del bloque); borrar.js mira el botón en vez de la <option>.
 - Comprobado por mí en la app (plan 7): las dos listas se ven bien; al cerrar sin elegir, 64.625 € y sin cambios pendientes; consola sin errores.
 - Ninguna cifra cambia.
+
+## 176. ☀/☾ en el Builder, parte 1: los colores, variables (17/11)
+
+Pedido por Sergi el 18/11 (punto 3 de tres). Se hace por partes; en esta NADA cambia a la vista.
+
+- lib/builder/estilo.js: B, CHIPS y S usan variables CSS con el color de siempre de reserva («var(--bd-fondo, #0f1419)»): donde nadie las pone (Tesis y lo demás que usa B) se ve igual. TEMAS_BUILDER: oscuro = los colores de siempre; claro = el «Papel gris» del screener (lib/screener/colores.js) más las claves que el screener no tiene (resultado, siguiente…, chips, botón desactivado). varsBuilder(tema) da las variables.
+- components/BuilderPanel.js: las pantallas del Builder van dentro de un contenedor (display: contents, data-tema-builder) con varsBuilder(t). TEMA_BUILDER_LISTO = false: de momento siempre el oscuro; el claro se enciende cuando todas las pantallas estén listas.
+- Probado a mano en el navegador poniendo las variables del claro: fondo, tarjetas, textos y botones cambian; falta, pantalla a pantalla, lo pintado con colores fijos (cifras verdes y rojas, gráficos, piezas del Backtesting en el plan, ventanas «?» que se abren fuera del Builder).
+- planes-montaje.js compara el fondo de los desplegables con B.tarjeta (antes con el color escrito).
+- Ninguna cifra cambia.

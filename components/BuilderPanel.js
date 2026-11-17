@@ -12,7 +12,7 @@ import { listarPlanes, listarPruebasUsuario } from '../lib/builder/planesGuardad
 import { fotoDelPlan } from '../lib/builder/planesGuardados'
 import { ajustesDe } from '../lib/builder/planPantalla'
 import { CLAVE_COMPARAR, MAX_COMPARAR, cifrasComparacion, elegidosIniciales, pieza as piezaPlan, pct, euros as eurosPlan, puntosFrente, textoDinero, textoPeriodo } from '../lib/builder/comparaPlanes'
-import { B, S } from '../lib/builder/estilo'
+import { B, S, varsBuilder } from '../lib/builder/estilo'
 import BuilderAzar from './BuilderAzar'
 import BuilderPlan from './BuilderPlan'
 import BuilderEditor from './BuilderEditor'
@@ -183,7 +183,14 @@ export const filaCopia = (s) => esDeCodigo(s) ? filaCopiaCodigo(s) : ({ id: null
 // «Código de la estrategia». onAbrirEstrategia(s, 'editor') las abre en el Editor clásico (la pestaña «Editor»). onBacktestValor:
 // el enlace «Backtest de un valor» (la pestaña donde se ejecutan y se ven en el gráfico). abrir ({ fila, n }): la página pide
 // abrir una estrategia (al pulsar su nombre en «Backtest de un valor»); cada n nuevo la abre. §55: { planId, n }, un plan en el paso 3. V9.1058: buscarInicial (para las pruebas de montaje): lo escrito en el buscador de «Mi trabajo».
-export default function BuilderPanel({ estrategias = [], salida = null, onAbrirEstrategia, onAbrirTesis = null, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '', datosLista = null, onIrAValor = null, tema = 'oscuro', zonaInicial = 'estrategias', ir = null, onZona = null }) {
+// §176: las pantallas del Builder dentro de un contenedor que pone las variables de color de su tono (display: contents: no cambia
+// la colocación). De momento, siempre el oscuro (= los colores de siempre): el claro se enciende cuando todas las pantallas estén listas.
+export const TEMA_BUILDER_LISTO = false
+export default function BuilderPanel(props) {
+  const t = TEMA_BUILDER_LISTO && props.tema === 'claro' ? 'claro' : 'oscuro'
+  return <div data-tema-builder={t} style={{ display: 'contents', ...varsBuilder(t) }}><PanelDelBuilder {...props}/></div>
+}
+function PanelDelBuilder({ estrategias = [], salida = null, onAbrirEstrategia, onAbrirTesis = null, onBacktestValor, onGuardada, datosIniciales = null, listasIniciales = null, visible, apiFetch, version, vistaInicial = null, abrir = null, comisiones = null, buscarInicial = '', datosLista = null, onIrAValor = null, tema = 'oscuro', zonaInicial = 'estrategias', ir = null, onZona = null }) {
   // §58: planes y pruebasAzar (null: no se han podido leer; entonces la fila dice «—»).
   const [datos, setDatos] = useState(() => datosIniciales || { planes: [], pruebasAzar: null, tesis: [], cargando: !datosIniciales, error: null })
   const [filasE, setFilasE] = useState(listasIniciales?.estrategias || null)

@@ -225,7 +225,7 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   // La plantilla: desplegable opaco
   D.pulsa(m.raiz.busca(n => n.getAttribute('data-boton') === 'desde-plantilla')); await D.espera(5)
   const menuPl = m.raiz.busca(n => n.getAttribute('data-menu') === 'plantillas')
-  ok(!!menuPl && menuPl.style.background === '#161f29' && menuPl.conAtributo('data-plantilla').length > 0, 'el desplegable de plantillas, con fondo opaco')
+  ok(!!menuPl && menuPl.style.background === require(R + '/lib/builder/estilo.js').B.tarjeta && menuPl.conAtributo('data-plantilla').length > 0, 'el desplegable de plantillas, con fondo opaco')
   // La papelera: cancelar no borra; si falla, lo dice y sigue; sí, borra solo esa
   const pulsaAtr = (k, v) => D.pulsa(m.raiz.busca(n => n.getAttribute(k) === v))
   pulsaAtr('data-borrar-estrategia', 'e9'); await D.espera(5)
@@ -247,7 +247,7 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   m = await portada()
   D.pulsa(filaDe(m, 'e7').busca(n => n.getAttribute('data-abrir-planes') != null && (n.getBoundingClientRect = () => ({ bottom: 100, left: 50 }), true))); await D.espera(5)
   const menuP = m.raiz.busca(n => n.getAttribute('data-menu') === 'planes')
-  ok(!!menuP && menuP.conAtributo('data-abrir-plan-fila').length === 2 && menuP.style.background === '#161f29' && menuP.style.position === 'fixed', 'con varios: un desplegable opaco con los nombres')
+  ok(!!menuP && menuP.conAtributo('data-abrir-plan-fila').length === 2 && menuP.style.background === require(R + '/lib/builder/estilo.js').B.tarjeta && menuP.style.position === 'fixed', 'con varios: un desplegable opaco con los nombres')
   D.pulsa(menuP.busca(n => n.getAttribute('data-abrir-plan-fila') === '8')); await D.espera(LARGO)
   ok(vista(m).activa === 'g8', 'y abre el elegido, aunque no sea el primero'); m.quita(); await D.espera(5)
   // «Qué toca ahora» y «Ver» llevan al paso 2; el nombre y duplicar, al paso 1 (la copia, sin id)
