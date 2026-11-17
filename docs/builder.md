@@ -3236,3 +3236,13 @@ Visto por mí en la app al probar §170 con la sesión de Sergi (plan 7 «Prueba
 - lib/builder/comparaPlanes.js: claveCostes compara el régimen de impuestos, el % de comisión, el mínimo por orden y las horquillas mayores que 0 (sin costes = ceros).
 - Comprobación: comparar-planes.js, apartado 7 (3 nuevas).
 - Ninguna cifra cambia (solo desaparece un ⚠ falso).
+
+## 172. «Comparar con otras estrategias», parte c: la vista «Tabla» (17/11)
+
+Boceto bocetos/detalle-final.html, pestaña 3 (punto 3 aceptado por Sergi el 16/11): como la tabla «COMPARATIVA DE ESTRATEGIAS» de «La cartera por dentro», pero con el cálculo del plan.
+
+- lib/builder/comparaPlanes.js: COLUMNAS_TABLA (Operaciones, CAGR, Ganancia, Ganadoras, Profit Factor, Peor caída, Peor caída €, Dinero en valores, Tiempo invertido); filaTabla(respuesta, plan) saca la fila del plan y las de sus valores de detallePlan (la pestaña «Detalle»: nada se calcula aparte); bhTabla: «Buy&Hold» de los valores del plan con sus reglas (referencia ACTIVO), SOLO si todos los planes tienen los mismos valores, dinero, periodo y costes; mejoresTabla (★); AYUDA_TABLA con ejemplo; eleccionCopias entra con vista «tabla».
+- components/ComparaPlanes.js: conmutador «Tabla / Tarjetas» junto a «Cifras de cada plan»; en «Tabla», una fila por plan (punto de color, nombre, «· sin guardar» en las copias, debajo la estrategia y el valor o cuántos valores) con ▸ para ver sus valores, «Expandir todo / Plegar todo», ⚠ y ★ como en las tarjetas (ganancia y caída en € dependen del dinero; CAGR y caída en %, del periodo) y la fila Buy&Hold; gráfico de 470 px. «Ocultar ▲» solo con las tarjetas.
+- components/BuilderPlan.js: comp.vista (null = tarjetas; desde «Comparar con otras estrategias», «tabla»; se olvida al salir).
+- Comprobación: comparar-planes.js, apartado 8 (las respuestas de prueba llevan ya el libro, como las de /api/plan). A mano: plan A +694,29 € (10.694,29 − 10.000), 1 operación ganadora, PF «—»; TEST aportó 857,14 € antes de impuestos.
+- Ninguna cifra cambia.

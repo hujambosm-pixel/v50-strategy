@@ -8,6 +8,7 @@
 //   5 · §169: ids como texto y copias sin guardar del plan abierto con otra estrategia (la copia con su misma estrategia = el plan).
 //   6 · §170: el botón «Comparar con otras estrategias ▾»: menú sin la del plan, hasta 3, base «tal como está», las copias se olvidan al volver.
 //   7 · §171: los costes se comparan por lo que significan (sin ⚠ falso entre un plan guardado y su copia).
+//   8 · §172: la vista «Tabla» (cifras de «Detalle» de cada plan; ★ y ⚠ como en las tarjetas; Buy&Hold solo con todo igual).
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://falso.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'clave-falsa-de-la-prueba'
 const path = require('path')
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
@@ -38,7 +39,7 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   D.pon(); await C0.prepara(); C0.registra(R)
   const P = require(R + '/lib/planes/plan.js'), E = require(R + '/lib/planes/evalua.js'), Pa = require(R + '/lib/builder/planPantalla.js'), K = require(R + '/lib/builder/comparaPlanes.js')
   // La respuesta de /api/plan, como la da ahora (§128: patrimonio y VL de las cuatro referencias). sinVlRefs: como antes (QQQ y SPY sin VL).
-  const conResp = (plan, datos, sinVlRefs = false) => { const e0 = E.evaluaPlan(plan, datos, { detalle: true }), ej0 = Object.fromEntries(E.referenciasDe(plan).filter(x => ['OCIOSO_LIQUIDEZ', 'ACTIVO', 'QQQ', 'SPY'].includes(x.id)).map(x => [x.id, P.ejecutaPlan(x.plan, datos, { detalle: false })]))
+  const conResp = (plan, datos, sinVlRefs = false) => { const e0 = E.evaluaPlan(plan, datos, { detalle: true, libro: true }), ej0 = Object.fromEntries(E.referenciasDe(plan).filter(x => ['OCIOSO_LIQUIDEZ', 'ACTIVO', 'QQQ', 'SPY'].includes(x.id)).map(x => [x.id, P.ejecutaPlan(x.plan, datos, { detalle: false })]))
     return { evaluacion: e0, curvas: Object.fromEntries(Object.entries(ej0).map(([id, r]) => [id, sinVlRefs && ['QQQ', 'SPY'].includes(id) ? { patrimonio: r.serie.map(x => x.patrimonio) } : { patrimonio: r.serie.map(x => x.patrimonio), vl: r.serie.map(x => x.vl) }])), ordenesReferencias: Object.fromEntries(Object.entries(ej0).map(([id, r]) => [id, r.costes.ordenes])) } }
 
   // ── 1 · Cifras ──
@@ -191,8 +192,8 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
 
   // ── 6 · §170: el botón «Comparar con otras estrategias ▾» del plan ──
   ok(K.MAX_COPIAS === 3, '§170: hasta 3 copias (con la base, 4 planes)')
-  ok(JSON.stringify(K.eleccionCopias({ idGuardado: 7, hayCambios: false, ids: ['y', 'z'] })) === JSON.stringify({ copias: ['y', 'z'], conAhora: false, elegidos: [7, 'v-y', 'v-z'] }), '§170: plan guardado sin cambios: la base es el plan guardado (7) + una copia por estrategia')
-  ok(JSON.stringify(K.eleccionCopias({ idGuardado: 7, hayCambios: true, ids: ['y'] })) === JSON.stringify({ copias: ['y'], conAhora: true, elegidos: ['v-ahora', 'v-y'] }) && K.eleccionCopias({ idGuardado: null, ids: ['y', 'a', 'b', 'c'] }).elegidos.join() === 'v-ahora,v-y,v-a,v-b', '§170: con cambios sin guardar o plan nuevo, la base es «tal como está»; como mucho 3 copias')
+  ok(JSON.stringify(K.eleccionCopias({ idGuardado: 7, hayCambios: false, ids: ['y', 'z'] })) === JSON.stringify({ copias: ['y', 'z'], conAhora: false, elegidos: [7, 'v-y', 'v-z'], vista: 'tabla' }), '§170: plan guardado sin cambios: la base es el plan guardado (7) + una copia por estrategia')
+  ok(JSON.stringify(K.eleccionCopias({ idGuardado: 7, hayCambios: true, ids: ['y'] })) === JSON.stringify({ copias: ['y'], conAhora: true, elegidos: ['v-ahora', 'v-y'], vista: 'tabla' }) && K.eleccionCopias({ idGuardado: null, ids: ['y', 'a', 'b', 'c'] }).elegidos.join() === 'v-ahora,v-y,v-a,v-b', '§170: con cambios sin guardar o plan nuevo, la base es «tal como está»; como mucho 3 copias')
   ok(K.copiaDeAhora(pA, 'Plan A').nombre === 'Plan A · tal como está' && K.copiaDeAhora(pA, 'Plan A').plan === pA && K.copiaDeAhora(null, 'x') === null, '§170: «Plan A · tal como está» lleva el plan de la pantalla tal cual')
   { const otra = (id, ema) => ({ id, name: `EMA${ema}`, definition: EMA, params: { ema } })
     const ESTRS = [ESTR, ESTR2, otra('w', 4), otra('u', 5), otra('t', 6)]
@@ -211,6 +212,9 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
     await marca('u'); await marca('w')
     ok(q('data-boton', 'comparar-marcadas')[0].textContent === 'Comparar (1)' && !casilla('t').hasAttribute('disabled'), '§170: desmarcar libera sitio')
     D.pulsa(q('data-boton', 'comparar-marcadas')[0]); await D.espera(120)
+    // §172: se entra en la vista «Tabla»; aquí se miran las tarjetas.
+    ok(q('data-vista', 'tabla')[0]?.getAttribute('aria-pressed') === 'true' && q('data-fila-tabla').map(n => n.getAttribute('data-fila-tabla')).join() === 'v-ahora,v-y,bh', `§172: desde el plan, se entra en la vista «Tabla» (filas ${q('data-fila-tabla').map(n => n.getAttribute('data-fila-tabla')).join()})`)
+    D.pulsa(q('data-vista', 'tarjetas')[0]); await D.espera(20)
     // El plan A abierto está hecho a mano (no con planDe): cuenta como cambiado → la base es «Plan A · tal como está».
     ok(q('data-comparar').length === 1 && q('data-tarjeta-plan').map(n => n.getAttribute('data-tarjeta-plan')).join() === 'v-ahora,v-y', `§170: «Comparar (1)»: a comparar, la base «tal como está» + la copia con EMA3 (${q('data-tarjeta-plan').map(n => n.getAttribute('data-tarjeta-plan')).join()})`)
     const fin = (id) => q('data-tarjeta-plan', id)[0]?.conAtributo('data-valor', 'final')[0]?.textContent || ''
@@ -228,6 +232,30 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
     ok(K.diferencias([fila(1, 'A', planMano(fs, { costes: c1 })), fila(2, 'B', planMano(fs, { costes: c2 }))]).costes, '§171: 0,37 € fijos guardados de dos formas (con y sin horquillas a 0): mismos costes, sin ⚠')
     ok(!K.diferencias([fila(1, 'A', planMano(fs, { costes: c1 })), fila(2, 'B', planMano(fs, { costes: { ...c1, comisionMinEur: 0.185 } }))]).costes && !K.diferencias([fila(1, 'A', planMano(fs, { costes: null })), fila(2, 'B', planMano(fs, { costes: c1 }))]).costes, '§171: 0,37 € frente a 0,185 €, o sin comisión frente a 0,37 €: costes distintos, con ⚠')
     ok(K.diferencias([fila(1, 'A', planMano(fs, { costes: null })), fila(2, 'B', planMano(fs, { costes: { comisionPct: 0, comisionMinEur: 0, horquillaPct: {} } }))]).costes && !K.diferencias([fila(1, 'A', pA), fila(2, 'B', planMano(fs, { impuestos: { regimen: 'ninguno', reglaDosMeses: true } }))]).costes, '§171: sin costes guardado como null o a ceros: iguales; impuestos distintos: con ⚠') }
+
+  // ── 8 · §172: la vista «Tabla» ──
+  // A mano (plan A, datosMano): 10.000 € compran a 105 y venden a 114: final 10.694,29 € → ganancia +694,29 €; 1 operación, ganadora (100 %);
+  // sin pérdidas, Profit Factor «—». Buy&Hold de TEST con las mismas reglas: compra a 100 el primer día y vende a 114 (14 % − impuestos).
+  { const ft = K.filaTabla(rA, pA)
+    ok(ft && cerca(ft.cifras.ganancia, FIN_PLAN - 10000, 1e-9) && ft.cifras.operaciones === 1 && ft.cifras.ganadoras === 1 && ft.cifras.pf === null, `§172: la fila del plan A: ganancia +694,29 €, 1 operación, 100 % ganadoras, PF «—» (ganancia ${ft?.cifras.ganancia})`)
+    ok(ft.cifras.cagr === cA.valores.twr && ft.cifras.caidaPct === cA.valores.caida, '§172: el CAGR y la peor caída de la tabla = los de la tarjeta del mismo plan')
+    ok(ft.unValor && ft.valores.length === 1 && ft.valores[0].simbolo === 'TEST' && cerca(ft.valores[0].ganancia + ft.aportado, 10000 * 114 / 105, 1e-9), '§172: su valor, TEST, aportó lo ganado antes de impuestos: 10.000 × 114 / 105 − 10.000 = 857,14 €')
+    const bh = K.bhTabla([{ plan: pA, respuesta: rA, aportado: ft.aportado }]), bhRef = rA.evaluacion.referencias.find(x => x.id === 'ACTIVO').medidas
+    ok(bh && bh.nombre === 'Buy&Hold TEST' && cerca(bh.ganancia, bhRef.valorNeto - 10000, 1e-12) && bh.enValores === 1 && bh.tiempo === 1, `§172: «Buy&Hold TEST» con las reglas del plan (ganancia ${bh && bh.ganancia.toFixed(2)} €)`)
+    ok(K.bhTabla([{ plan: pA, respuesta: rA, aportado: 10000 }, { plan: pB, respuesta: rB, aportado: 10000 }]) === null, '§172: con dinero distinto en los planes, sin fila Buy&Hold (cada uno tendría el suyo)')
+    ok(JSON.stringify(K.mejoresTabla([{ cagr: 0.1, ganancia: 5 }, { cagr: 0.2, ganancia: 9 }], { dinero: false, periodo: true })) === JSON.stringify({ cagr: 0.2 }), '§172: la ★ solo en lo que se compara (dinero distinto: sin ★ en la ganancia)') }
+  m = D.monta(h(BPlan, { estrategias: [ESTR, ESTR2], deps: { ctx: null, calcula: calcula2 }, tema: 'oscuro', inicial: { planes: filas, orden: ['g1', 'g2'], pestana: 'g1', simbolos: ['TEST'], pruebas: [], anchoPestanas: 1400, comparando: true, compararElegidos: [1, 2], compararVista: 'tabla' } }), RDC)
+  await D.espera(120)
+  ok(q('data-fila-tabla').map(n => n.getAttribute('data-fila-tabla')).join() === '1,2' && q('data-tarjeta-plan').length === 0, '§172: «Tabla»: una fila por plan; sin fila Buy&Hold (A y B no meten el mismo dinero)')
+  ok(q('data-columna-tabla').map(n => n.textContent).join('|') === 'Operaciones|CAGR|Ganancia|Ganadoras|Profit Factor|Peor caída|Peor caída €|Dinero en valores|Tiempo invertido', '§172: las columnas del boceto')
+  { const celdaDe = (id, k) => q('data-fila-tabla', String(id))[0]?.conAtributo('data-celda-tabla', k)[0]
+    ok(celdaDe(1, 'ganancia')?.textContent.startsWith('⚠') && (celdaDe(1, 'ganancia')?.getAttribute('title') || '').startsWith('⚠ No meten el mismo dinero') && !celdaDe(1, 'cagr')?.textContent.startsWith('⚠'), '§172: dinero distinto: ⚠ en la ganancia (con su aviso), no en el CAGR')
+    ok(celdaDe(1, 'ganancia')?.textContent.includes('694') && celdaDe(1, 'operaciones')?.textContent === '1', `§172: plan A en la tabla: +694 € y 1 operación (${celdaDe(1, 'ganancia')?.textContent})`) }
+  ok(q('data-abre-valores').length === 0 && q('data-boton', 'expandir-todo').length === 0, '§172: con un valor por plan, sin ▸ ni «Expandir todo»')
+  ok(Number(q('data-grafico', 'comparar')[0]?.getAttribute('height')) === 470, '§172: con la tabla, el gráfico de 470 px')
+  D.pulsa(q('data-vista', 'tarjetas')[0]); await D.espera(20)
+  ok(q('data-tarjeta-plan').length === 2 && q('data-fila-tabla').length === 0 && q('data-boton', 'plegar').length === 1, '§172: «Tarjetas»: vuelven las tarjetas y «Ocultar ▲»')
+  m.quita(); await D.espera(5)
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTodo bien')
   process.exit(fallos ? 1 : 0)

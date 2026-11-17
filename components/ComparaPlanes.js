@@ -11,9 +11,10 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import { B, S, varsTema, CSS_TABLA } from '../lib/screener/colores'
 import Ayuda from './BuilderAyuda'
 import { marcasLog, separaEtiquetas } from '../lib/builder/escalaGrafico'
-import { AYUDA_COMPARAR, FILAS_COMPARAR, MAX_COMPARAR, TITULO_COPIA, mismoId, NOTA_EUROS_FUERA, REFS_COMPARAR, TEXTO_SIN_PLANES, avisoCelda, cifrasComparacion, comparable, diferencias,
+import { AYUDA_COMPARAR, AYUDA_TABLA, COLUMNAS_TABLA, FILAS_COMPARAR, MAX_COMPARAR, TITULO_COPIA, bhTabla, filaTabla, mejoresTabla, mismoId, NOTA_EUROS_FUERA, REFS_COMPARAR, TEXTO_SIN_PLANES, avisoCelda, cifrasComparacion, comparable, diferencias,
   lineasGrafico, mejores, modoGrafico, notaCrecimiento, puntosFrente, tablaAnios, textoBloque, textoDinero, textoPeriodo, textoRef } from '../lib/builder/comparaPlanes'
-import { euros, pct } from '../lib/builder/planPantalla'
+import { euros, numero, pct } from '../lib/builder/planPantalla'
+import { fotoDelPlan } from '../lib/builder/planesGuardados'
 
 // El ancho real del gráfico (como useAncho de components/BuilderPlan.js, copiado aquí para que los dos archivos no se importen el uno al otro).
 function useAncho(defecto) {
@@ -78,8 +79,17 @@ function Grafico({ lineas, log, alto = 330 }) {
 // §169: en una copia sin guardar, en lugar de «Abrir» y «⧉», una etiqueta (no existe en la base; «Guardar como plan» llegará después).
 const SinGuardar = () => <span data-copia-sin-guardar title={TITULO_COPIA} style={{ fontSize: 12, color: v('amarillo'), border: `1px solid ${v('amarillo')}`, borderRadius: 4, padding: '1px 6px', cursor: 'help' }}>sin guardar</span>
 
-export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], resultados = {}, prueba = () => null, log = true, modo = null, plegado = false, tema = 'oscuro',
-  onElegir, onPlegar, onRef, onLog, onModo, onAbrir, onDuplicar, onVolver }) {
+// §172: cómo se escribe cada cifra de la vista «Tabla» (y su tooltip).
+const conSigno = (x, d = 0) => !Number.isFinite(x) ? '—' : `${x > 0 ? '+' : x < 0 ? '−' : ''}${euros(Math.abs(x), d)}`
+const textoTabla = (k, c) => { const x = c?.[k]
+  if (!Number.isFinite(x)) return '—'
+  return k === 'operaciones' ? numero(x, 0) : k === 'ganancia' || k === 'caidaEur' ? conSigno(x) : k === 'pf' ? numero(x, 2) : k === 'ganadoras' || k === 'caidaPct' ? pct(x, 1) : k === 'enValores' || k === 'tiempo' ? pct(x, 0) : pct(x) }
+const tituloTabla = (k, c) => k === 'ganancia' && Number.isFinite(c?.gananciaPct) ? `${c.gananciaPct >= 0 ? '+' : ''}${pct(c.gananciaPct, 1)} sobre lo aportado` : k === 'ganadoras' && Number.isFinite(c?.ganan) ? `${numero(c.ganan, 0)} de ${numero(c.operaciones, 0)} operaciones ganan`
+  : k === 'enValores' && Number.isFinite(c?.enValoresEur) ? `De media, ${euros(c.enValoresEur, 0)}` : undefined
+const colorTabla = (k, x) => !Number.isFinite(x) ? undefined : k === 'caidaPct' || k === 'caidaEur' ? (x < 0 ? v('rojo') : undefined) : k === 'pf' ? (x >= 1 ? v('verde') : v('rojo')) : k === 'cagr' || k === 'ganancia' ? (x >= 0 ? v('verde') : v('rojo')) : undefined
+
+export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], resultados = {}, prueba = () => null, log = true, modo = null, plegado = false, tema = 'oscuro', vista = 'tarjetas',
+  onVista, onElegir, onPlegar, onRef, onLog, onModo, onAbrir, onDuplicar, onVolver }) {
   const col = COLORES[tema === 'claro' ? 'claro' : 'oscuro']
   // §169: ids como texto (los guardados son números; las copias sin guardar, «v-…»).
   const elegidas = useMemo(() => elegidos.map(id => planes.find(p => mismoId(p.id, id))).filter(Boolean), [planes, elegidos])
@@ -96,6 +106,43 @@ export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], r
   const m = modoGrafico(modo, dif)
   const { lineas, refsFuera } = lineasGrafico(calculados, { modo: m, dif, refs: refsVis })
   const tabla = tablaAnios(calculados, refsVis)
+  // §172: la vista «Tabla»: la fila de cada plan (de su «Detalle») y, abajo, el Buy&Hold de sus valores.
+  const enTabla = vista === 'tabla'
+  const [abiertas, setAbiertas] = useState([])
+  const filasT = useMemo(() => !enTabla ? {} : Object.fromEntries(elegidas.map(p => { const r = resultados[p.id]; if (r?.estado !== 'ok') return [p.id, null]; try { return [p.id, filaTabla(r.respuesta, r.plan)] } catch (_) { return [p.id, null] } })), [enTabla, elegidas, resultados])
+  const bhT = useMemo(() => { if (!enTabla) return null; const its = elegidas.map(p => resultados[p.id]?.estado === 'ok' && filasT[p.id] ? { plan: resultados[p.id].plan, respuesta: resultados[p.id].respuesta, aportado: filasT[p.id].aportado } : null)
+    return its.length && its.every(Boolean) ? bhTabla(its) : null }, [enTabla, elegidas, resultados, filasT])
+  const mejT = mejoresTabla(elegidas.map(p => filasT[p.id]?.cifras), dif)
+  const desplegables = elegidas.filter(p => (filasT[p.id]?.valores || []).length > 1).map(p => String(p.id))
+  const todasAbiertas = desplegables.length > 0 && desplegables.every(id => abiertas.includes(id))
+  const celdaNum = { ...celda, textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }
+  const vistaTabla = () => (
+    <div data-vista-tabla style={{ ...S.tarjeta, marginBottom: 12, overflowX: 'auto' }}><table data-tabla="comparar-estrategias" style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <thead><tr><th style={{ ...celda, textAlign: 'left', background: v('cabecera'), color: B.secundario, fontSize: 12 }}>Plan · estrategia / valor</th>
+        {COLUMNAS_TABLA.map(col => <th key={col.k} data-columna-tabla={col.k} style={{ ...celdaNum, background: v('cabecera'), color: B.secundario, fontSize: 12 }}>{col.t}</th>)}</tr></thead>
+      <tbody>{elegidas.map(p => {
+        const r = resultados[p.id], ft = filasT[p.id], id = String(p.id), abierta = abiertas.includes(id), puede = (ft?.valores || []).length > 1
+        return [<tr key={id} data-fila-tabla={p.id} style={{ fontWeight: 700 }}>
+          <td style={{ ...celda, minWidth: 220 }}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: colorDe(p.id), flex: 'none' }}/>
+            {puede ? <button type="button" data-abre-valores={p.id} aria-expanded={abierta} title={abierta ? 'Ocultar sus valores' : 'Ver sus valores'} onClick={() => setAbiertas(a => abierta ? a.filter(x => x !== id) : [...a, id])}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.titulo, fontFamily: 'inherit', fontSize: 'inherit' }}>{abierta ? '▾' : '▸'}</button> : <span style={{ width: 9 }}/>}
+            <div style={{ minWidth: 0 }}><div style={{ color: B.titulo, overflowWrap: 'anywhere' }}>{p.nombre}{p.copia && <span title={TITULO_COPIA} style={{ fontWeight: 400, color: v('amarillo'), fontSize: 12, cursor: 'help' }}> · sin guardar</span>}</div>
+              <div style={{ fontWeight: 400, fontSize: 12, color: B.secundario }}>{fotoDelPlan(p.plan)?.name || ''}{ft?.unValor && ft.valores[0] ? ` · ${ft.valores[0].simbolo}` : ft ? ` · ${numero(ft.valores.length, 0)} valores con operaciones` : ''}</div></div></div></td>
+          {!ft ? <td colSpan={COLUMNAS_TABLA.length} data-estado-plan={r?.estado || 'calculando'} style={{ ...celda, fontWeight: 400, color: r?.estado === 'error' ? v('rojo') : r?.estado === 'motivo' ? B.texto : B.secundario }}>
+            {r?.estado === 'error' ? `✕ No se pudo calcular: ${r.texto}` : r?.estado === 'motivo' ? r.texto : r?.estado === 'ok' ? 'Sin el detalle de este plan.' : 'Calculando…'}</td>
+          : COLUMNAS_TABLA.map(col => { const x = ft.cifras[col.k], comp = !col.tipo || comparable(col, dif), esMej = comp && Number.isFinite(x) && mejT[col.k] != null && x === mejT[col.k], av = col.tipo && Number.isFinite(x) ? avisoCelda(col, dif) : null
+            return <td key={col.k} data-celda-tabla={col.k} data-mejor={esMej ? 'si' : undefined} title={av || tituloTabla(col.k, ft.cifras)} style={{ ...celdaNum, color: !comp ? B.apagado : colorTabla(col.k, x) || B.texto }}>
+              {av && <span style={{ color: v('amarillo'), cursor: 'help' }}>⚠ </span>}{textoTabla(col.k, ft.cifras)}{esMej && <span style={{ color: v('amarillo') }}> ★</span>}</td> })}
+        </tr>, ...(abierta && ft ? ft.valores.map(val => <tr key={`${id}-${val.simbolo}`} data-fila-valor={`${p.id}:${val.simbolo}`} style={{ color: B.secundario }}>
+          <td style={{ ...celda, paddingLeft: 48 }}>{val.simbolo}</td>
+          {COLUMNAS_TABLA.map(col => <td key={col.k} title={tituloTabla(col.k, val)} style={{ ...celdaNum, color: colorTabla(col.k, val[col.k]) || B.secundario }}>{textoTabla(col.k, val)}</td>)}
+        </tr>) : [])] })}
+        {bhT && <tr data-fila-tabla="bh" style={{ color: B.secundario }}>
+          <td style={celda}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span aria-hidden="true" style={{ width: 10, height: 10, background: B.secundario, flex: 'none' }}/>{bhT.nombre}<span style={{ fontSize: 12 }}>· con las reglas de tu plan</span></div></td>
+          {COLUMNAS_TABLA.map(col => <td key={col.k} title={tituloTabla(col.k, bhT)} style={{ ...celdaNum, color: colorTabla(col.k, bhT[col.k]) || B.secundario }}>{['operaciones', 'ganadoras', 'pf'].includes(col.k) ? '—' : textoTabla(col.k, bhT)}</td>)}
+        </tr>}
+      </tbody>
+    </table></div>)
 
   // §135: plegado, una línea por plan con lo esencial (las mismas cifras, ⚠ y ★ que su tarjeta).
   const ESENCIAL = ['final', 'twr', 'caida'].map(k => FILAS_COMPARAR.find(f => f.k === k))
@@ -178,11 +225,15 @@ export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], r
           <span style={{ color: B.secundario, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 2 }}>Sin estrategia:<Ayuda texto={AYUDA_COMPARAR.refs} etiqueta="Sin estrategia"/></span>
           {REFS_COMPARAR.map(r => <Ficha key={r.id} on={refs.includes(r.id)} color={col[r.id]} texto={r.nombre} data={{ 'data-elige-ref': r.id }} onClick={() => onRef?.(r.id)}/>)}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-          <span style={{ fontWeight: 700, color: B.titulo, fontSize: 14 }}>Cifras de cada plan</span>
-          <button type="button" data-boton="plegar" aria-expanded={!plegado} title={plegado ? 'Ver todas las cifras de cada plan' : 'Dejar cada plan en una línea para que el gráfico tenga más sitio'} onClick={() => onPlegar?.(!plegado)} style={{ ...btn(false), color: v('enlace') }}>{plegado ? 'Mostrar todas las cifras ▼' : 'Ocultar ▲'}</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 700, color: B.titulo, fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 2 }}>Cifras de cada plan{enTabla && <Ayuda texto={AYUDA_TABLA} etiqueta="La vista «Tabla»"/>}</span>
+          <span role="group" aria-label="Cómo se ven las cifras" style={{ display: 'inline-flex', gap: 4 }}>
+            <button type="button" data-vista="tabla" aria-pressed={enTabla} onClick={() => onVista?.('tabla')} style={btn(enTabla)}>Tabla</button>
+            <button type="button" data-vista="tarjetas" aria-pressed={!enTabla} onClick={() => onVista?.('tarjetas')} style={btn(!enTabla)}>Tarjetas</button></span>
+          {enTabla ? desplegables.length > 0 && <button type="button" data-boton="expandir-todo" onClick={() => setAbiertas(todasAbiertas ? [] : desplegables)} style={{ ...btn(false), color: v('enlace') }}>{todasAbiertas ? 'Plegar todo ▲' : 'Expandir todo ▼'}</button>
+          : <button type="button" data-boton="plegar" aria-expanded={!plegado} title={plegado ? 'Ver todas las cifras de cada plan' : 'Dejar cada plan en una línea para que el gráfico tenga más sitio'} onClick={() => onPlegar?.(!plegado)} style={{ ...btn(false), color: v('enlace') }}>{plegado ? 'Mostrar todas las cifras ▼' : 'Ocultar ▲'}</button>}
         </div>
-        {plegado ? resumen() : <div data-tarjetas style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10, marginBottom: 12 }}>{elegidas.map(tarjeta)}</div>}
+        {enTabla ? vistaTabla() : plegado ? resumen() : <div data-tarjetas style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10, marginBottom: 12 }}>{elegidas.map(tarjeta)}</div>}
         <div data-tarjeta="grafico-comparar" style={{ ...S.tarjeta, marginBottom: 12 }}>
           <div style={{ background: v('cabecera'), padding: '8px 14px', fontWeight: 700, color: B.titulo, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>Plan a plan<Ayuda texto={AYUDA_COMPARAR.grafico} etiqueta="Plan a plan"/></span>
@@ -195,7 +246,7 @@ export default function ComparaPlanes({ planes = [], elegidos = [], refs = [], r
             </span>
           </div>
           <div data-nota-grafico style={{ fontSize: 12, color: m === 'eur' && refsFuera ? v('amarillo') : B.secundario, padding: '6px 14px 0' }}>{m === 'crec' ? notaCrecimiento(calculados, dif) : refsFuera || (!dif.dinero || !dif.periodo) ? NOTA_EUROS_FUERA : 'Todos meten el mismo dinero en el mismo periodo: las líneas se comparan.'}</div>
-          <div style={{ padding: '6px 10px' }}>{lineas.length ? <Grafico lineas={lineas} log={log} alto={plegado ? 470 : 330}/> : <div style={{ color: B.secundario, padding: 8 }}>Calculando…</div>}</div>
+          <div style={{ padding: '6px 10px' }}>{lineas.length ? <Grafico lineas={lineas} log={log} alto={plegado || enTabla ? 470 : 330}/> : <div style={{ color: B.secundario, padding: 8 }}>Calculando…</div>}</div>
         </div>
         <div data-tarjeta="anios-comparar" style={S.tarjeta}>
           <div style={{ background: v('cabecera'), padding: '8px 14px', fontWeight: 700, color: B.titulo, display: 'flex', alignItems: 'center', gap: 2 }}>Año a año · rentabilidad del año<Ayuda texto={AYUDA_COMPARAR.anios} etiqueta="Año a año"/></div>

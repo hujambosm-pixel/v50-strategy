@@ -282,7 +282,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // en este navegador (CLAVE_COMPARAR); el modo del gráfico (null = el de por defecto), solo en esta visita. resComp: { id: estado de su cálculo }.
   const [comparando, setComparando] = useState(!!inicial?.comparando || !!comparar)   // §140: comparar: se entra comparando (desde la portada de Planes)
   // §169: copias: ids de las estrategias con las que se compara el plan abierto (copias sin guardar; ver copiasComp).
-  const [comp, setComp] = useState(() => ({ elegidos: inicial?.compararElegidos || null, refs: REFS_COMPARAR.map(r => r.id), log: true, modo: null, plegado: !!inicial?.compararPlegado, copias: inicial?.compararCopias || [], conAhora: !!inicial?.compararAhora }))
+  const [comp, setComp] = useState(() => ({ elegidos: inicial?.compararElegidos || null, refs: REFS_COMPARAR.map(r => r.id), log: true, modo: null, plegado: !!inicial?.compararPlegado, copias: inicial?.compararCopias || [], conAhora: !!inicial?.compararAhora, vista: inicial?.compararVista || null }))
   const [resComp, setResComp] = useState(inicial?.resComp || {})
   // §80: «Una lista». Lo que se guarda va en a.lista (lib/planes/lista.js); esto es solo de la vista (buscar, ★, la lista de la Watchlist, qué está desplegado).
   const [vistaLista, setVistaLista] = useState({ busca: '', favs: false, lista: '', seccion: { mode: true, strats: false }, universoDatos: {} })
@@ -578,7 +578,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   //   §170: conAhora: delante, el plan tal como está (si tiene cambios sin guardar o es nuevo), la base de «Comparar con otras estrategias».
   const copiasComp = useMemo(() => comparando && actual ? [...(comp.conAhora ? [copiaDeAhora(plan, nombreDe(actual))].filter(Boolean) : []), ...copiasDe(a, comp.copias, tarjetas, nombreDe(actual))] : [], [comparando, actual, a, plan, comp.copias, comp.conAhora, tarjetas, pestanas])
   // §170: al salir de la comparación, las copias se olvidan (la próxima vez, «Comparar planes» enseña solo los guardados).
-  useEffect(() => { if (!comparando) setComp(c => c.copias.length || c.conAhora ? { ...c, copias: [], conAhora: false, elegidos: c.elegidos && paraRecordar(c.elegidos) } : c) }, [comparando])
+  useEffect(() => { if (!comparando) setComp(c => c.copias.length || c.conAhora ? { ...c, copias: [], conAhora: false, vista: null, elegidos: c.elegidos && paraRecordar(c.elegidos) } : c) }, [comparando])
   const comparaEstrategias = (ids) => { setComp(c => ({ ...c, ...eleccionCopias({ idGuardado: fila?.id ?? null, hayCambios, ids }) })); setComparando(true) }
   const todosComp = useMemo(() => [...(planes || []), ...copiasComp], [planes, copiasComp])
   const idsTodosComp = todosComp.map(p => String(p.id)).join()
@@ -932,8 +932,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       {/* §135: al comparar, sin la cabecera de pasos (es de la estrategia) ni las pestañas de planes (se eligen con los círculos). */}
       {!comparando && <CabeceraPasos zona="plan" plan={nombreDe(actual) || null} onVolver={(donde) => pide({ tipo: 'volver', donde })}/>}
       {comparando ? falloPlanes && <div data-fallo-planes style={{ color: ROJO, marginBottom: 10 }}>✕ {falloPlanes}</div> : pestanasPlanes}
-      {comparando ? <ComparaPlanes planes={todosComp} elegidos={comp.elegidos || []} refs={comp.refs} resultados={resComp} prueba={pruebaComp} log={comp.log} modo={comp.modo} plegado={comp.plegado} tema={tema}
-        onPlegar={x => setComp(c => ({ ...c, plegado: x }))}
+      {comparando ? <ComparaPlanes planes={todosComp} elegidos={comp.elegidos || []} refs={comp.refs} resultados={resComp} prueba={pruebaComp} log={comp.log} modo={comp.modo} plegado={comp.plegado} tema={tema} vista={comp.vista || 'tarjetas'}
+        onVista={x => setComp(c => ({ ...c, vista: x }))} onPlegar={x => setComp(c => ({ ...c, plegado: x }))}
         onElegir={id => setComp(c => ({ ...c, elegidos: alterna(c.elegidos || [], id) }))} onRef={id => setComp(c => ({ ...c, refs: c.refs.includes(id) ? c.refs.filter(x => x !== id) : [...c.refs, id] }))}
         onLog={x => setComp(c => ({ ...c, log: x }))} onModo={x => setComp(c => ({ ...c, modo: x }))} onVolver={() => setComparando(false)}
         onAbrir={id => { const c = claveDe(id); if (c === actual) setComparando(false); else pide({ tipo: 'anadir', id }) }} onDuplicar={id => pideDuplicar(claveDe(id))}/> : <>
