@@ -3286,3 +3286,13 @@ Pedido por Sergi el 18/11 (punto 3 de tres). Se hace por partes; en esta NADA ca
 - Probado a mano en el navegador poniendo las variables del claro: fondo, tarjetas, textos y botones cambian; falta, pantalla a pantalla, lo pintado con colores fijos (cifras verdes y rojas, gráficos, piezas del Backtesting en el plan, ventanas «?» que se abren fuera del Builder).
 - planes-montaje.js compara el fondo de los desplegables con B.tarjeta (antes con el color escrito).
 - Ninguna cifra cambia.
+
+## 177. ☀/☾, parte 2: los dos tonos de toda la app son los del screener; el Builder ya va en el oscuro del screener (17/11)
+
+Decisión de Sergi (17/11): toda la app tendrá los dos tonos del screener: oscuro «Finviz» (menos oscuro que el de antes, con menos contraste: cansa menos la vista) y claro «Papel gris». Se llevará pantalla a pantalla a toda la app.
+
+- lib/temas.js (nuevo): PALETAS { oscuro, claro } con las MISMAS claves; los valores del screener tal cual + las claves que usaba el Builder (resultado, siguienteFondo/Borde, chips).
+- lib/screener/colores.js: TEMAS = PALETAS (mismos valores; el screener no cambia).
+- lib/builder/estilo.js: TEMAS_BUILDER sale de PALETAS; la reserva de cada variable sigue siendo el color de antes (lo que no pone variables, como Tesis, no cambia). El botón verde lleva fondo y texto propios (botonVerde, botonVerdeTexto): en el tono del screener, verde #2f7d45 con texto blanco.
+- Con esto el Builder (Estrategias, Planes, creador, validar y plan) se ve YA en el oscuro del screener (TEMA_BUILDER_LISTO sigue en false: el claro aún no se enciende). Los colores fijos de cada pantalla (cifras verdes/rojas, líneas de los gráficos) se ven bien sobre este gris; las cajas del Backtesting dentro del plan siguen con su azul oscuro (parte siguiente).
+- Ninguna cifra cambia.
