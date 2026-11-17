@@ -33,9 +33,14 @@ import { lunesDeSemana } from '../lib/velasSemanales'
 import { NOTA_LINEA_SWING, QUE_ES_LINEA_BAJISTA } from '../lib/builder/fichas'
 import { tramosLinea, lineaOperacion, COLOR_GANA, COLOR_PIERDE } from '../lib/graficoPaneles'
 import { colocaMarcas } from '../lib/builder/marcas'
-import { colorSigno, colorWinRate, colorFactor, COLOR_SUBE, COLOR_BAJA, COLOR_DRAWDOWN, COLOR_OPERACIONES, COLOR_TIEMPO, AYUDA_MAX_DD } from '../lib/coloresCifras'
+import { AYUDA_MAX_DD } from '../lib/coloresCifras'
+// §182: los colores de lib/coloresCifras.js, aquí con las variables del tono (mismas reglas; en oscuro, los mismos colores).
+const COLOR_SUBE = C.cifraSube, COLOR_BAJA = C.cifraBaja, COLOR_DRAWDOWN = COLOR_BAJA, COLOR_OPERACIONES = C.cifraCuenta, COLOR_TIEMPO = C.cifraCuenta
+const colorSigno = (v) => v >= 0 ? COLOR_SUBE : COLOR_BAJA, colorWinRate = (wr) => wr >= 50 ? COLOR_SUBE : COLOR_BAJA, colorFactor = (f) => f >= 1 ? COLOR_SUBE : COLOR_BAJA
 
-const VERDE = '#3fb950', NARANJA = '#f0883e', MORADO = '#a371f7', AZUL = '#58a6ff', AMARILLO = '#f2cc60', ROJO = '#ff8b8b', GRIS_BH = '#8b98a8'
+// §182: los colores del GRÁFICO (velas, flechas, puntos, líneas) son los mismos en los dos tonos; AMARILLO y ROJO, que se usan en el
+// texto de la página, siguen el tono (y lo que de ellos va al gráfico pasa por colorReal).
+const VERDE = '#3fb950', NARANJA = '#f0883e', MORADO = '#a371f7', AZUL = '#58a6ff', AMARILLO = C.amarillo, ROJO = C.rojo, GRIS_BH = '#8b98a8'
 const AMBAR = '#f0a020'   // V9.1077: los máximos de la línea bajista y el recuadro de la vela de rotura
 const fechaCorta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 const ESPERA_MS = 250
@@ -269,7 +274,7 @@ function Graficos({ r, ocultos = new Set(), llaveZoom = '' }) {
         o.lineas.forEach((l, k) => {
           const s = c2.addLineSeries({ color: k ? NARANJA : AZUL, lineWidth: 2, priceLineVisible: false, lastValueVisible: false })
           s.setData(r.velas.map((v, i) => l.valores[i] != null ? { time: v.date, value: l.valores[i] } : { time: v.date }))
-          if (k === 0 && o.nivel != null) s.createPriceLine({ price: o.nivel, color: AMARILLO, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: String(o.nivel).replace('.', ',') })
+          if (k === 0 && o.nivel != null) s.createPriceLine({ price: o.nivel, color: colorReal(AMARILLO, precio.current), lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: String(o.nivel).replace('.', ',') })
         })
         c2.timeScale().fitContent()
       })
@@ -404,10 +409,10 @@ function CasillaModo({ valor, guardado, onCambia }) {
   const distinto = guardado != null && valor !== guardado, nombre = (m) => MODOS_ORDEN.find(([k]) => k === m)?.[1] || m
   return (<>
     <select aria-label="Cómo compro" data-casilla-cambiada={distinto ? 'si' : undefined} value={valor || 'apertura'} onChange={e => onCambia(e.target.value)}
-      style={{ fontFamily: B.letra, fontSize: 14, padding: '3px 4px', borderRadius: 6, background: B.tarjeta, color: B.titulo, border: `1px solid ${distinto ? '#d9a53a' : B.borde}`, maxWidth: 300 }}>
+      style={{ fontFamily: B.letra, fontSize: 14, padding: '3px 4px', borderRadius: 6, background: B.tarjeta, color: B.titulo, border: `1px solid ${distinto ? C.cambioBorde : B.borde}`, maxWidth: 300 }}>
       {MODOS_ORDEN.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
     </select>
-    {distinto && <span data-guardado style={{ fontSize: 12, color: '#e0c27a' }}>(guardado: {nombre(guardado)})</span>}
+    {distinto && <span data-guardado style={{ fontSize: 12, color: C.cambioTexto }}>(guardado: {nombre(guardado)})</span>}
   </>)
 }
 // Una casilla de prueba: el número con coma; si es distinto del guardado, en ámbar y con «(guardado: X)».
@@ -419,8 +424,8 @@ function Casilla({ valor, guardado, etiqueta, onCambia }) {
     <input type="text" inputMode="decimal" value={t} aria-label={etiqueta} title={etiqueta} aria-invalid={malo} data-casilla-cambiada={distinto ? 'si' : undefined}
       onChange={e => { setT(e.target.value); const v = deTexto(e.target.value); if (typeof v === 'number') onCambia(v) }}
       style={{ fontFamily: B.letra, fontSize: 14, width: `${Math.max(2, String(t).length) + 2}ch`, minWidth: 0, textAlign: 'center', padding: '3px 4px', borderRadius: 6, background: B.tarjeta, color: B.titulo,
-        border: `1px solid ${malo ? ROJO : distinto ? '#d9a53a' : B.borde}` }}/>
-    {distinto && <span data-guardado style={{ fontSize: 12, color: '#e0c27a' }}>(guardado: {aTexto(guardado)})</span>}
+        border: `1px solid ${malo ? ROJO : distinto ? C.cambioBorde : B.borde}` }}/>
+    {distinto && <span data-guardado style={{ fontSize: 12, color: C.cambioTexto }}>(guardado: {aTexto(guardado)})</span>}
   </>)
 }
 
@@ -518,7 +523,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
   const velasCambiadas = intervalo !== intervaloGuardado
 
   if (error) return <div data-senales="error" style={{ color: ROJO, padding: '12px 4px' }}>{error}</div>
-  const seg = (activo) => ({ fontFamily: B.letra, fontSize: 13, minHeight: 34, padding: '0 12px', cursor: 'pointer', border: `1px solid ${activo ? AZUL : B.borde}`, background: activo ? '#1f3350' : B.fondo, color: activo ? B.titulo : B.secundario, fontWeight: activo ? 600 : 400 })
+  const seg = (activo) => ({ fontFamily: B.letra, fontSize: 13, minHeight: 34, padding: '0 12px', cursor: 'pointer', border: `1px solid ${activo ? AZUL : B.borde}`, background: activo ? C.hover : B.fondo, color: activo ? B.titulo : B.secundario, fontWeight: activo ? 600 : 400 })
   const nombreEnsayo = ensayo.aviso ? `Ensayo · ${ensayo.desde.slice(0, 4)}–${ensayo.hasta.slice(0, 4)}` : 'Ensayo · 2010–2015'
   // V9.1060: la columna de las cifras empieza a la altura de la fila de controles; la fila, los avisos y el gráfico ocupan el ancho
   // que queda. Si no caben (pantallas estrechas), la columna baja debajo del gráfico.
@@ -543,14 +548,14 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
           {errFechas && <span data-error-fechas style={{ color: ROJO, fontSize: 13 }}>{errFechas}</span>}</span>}
         <span data-velas style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: B.secundario }}>Velas:
           <select aria-label="Velas" data-casilla-cambiada={velasCambiadas ? 'si' : undefined} value={intervalo} onChange={e => onCambios({ ...cambios, intervalo: e.target.value })}
-            style={{ fontFamily: B.letra, fontSize: 14, padding: '3px 4px', borderRadius: 6, background: B.tarjeta, color: B.titulo, border: `1px solid ${velasCambiadas ? '#d9a53a' : B.borde}` }}>
+            style={{ fontFamily: B.letra, fontSize: 14, padding: '3px 4px', borderRadius: 6, background: B.tarjeta, color: B.titulo, border: `1px solid ${velasCambiadas ? C.cambioBorde : B.borde}` }}>
             <option value="diario">diarias</option><option value="semanal">semanales</option>
           </select>
-          {velasCambiadas && <span data-guardado style={{ fontSize: 12, color: '#e0c27a' }}>(guardado: {intervaloGuardado === 'semanal' ? 'semanales' : 'diarias'})</span>}</span>
+          {velasCambiadas && <span data-guardado style={{ fontSize: 12, color: C.cambioTexto }}>(guardado: {intervaloGuardado === 'semanal' ? 'semanales' : 'diarias'})</span>}</span>
         {intervalo === 'semanal' && <span data-aviso-semanal style={{ color: AMARILLO, fontSize: 13 }}>El paso 2 (prueba contra el azar) aún no admite velas semanales.</span>}
         {filasCampos.length > 0 && <span style={{ width: 1, height: 26, background: B.borde }}/>}
         {filasCampos.map((x, k) => (
-          <span key={k} data-casillas={x.nombre} title={x.nombre} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', border: `1px solid ${x.partes.some(y => typeof y === 'object' && distintos.includes(y)) ? '#d9a53a' : B.borde}`, borderRadius: 8, background: B.fondo, fontSize: 13, color: B.secundario, whiteSpace: 'nowrap' }}>
+          <span key={k} data-casillas={x.nombre} title={x.nombre} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', border: `1px solid ${x.partes.some(y => typeof y === 'object' && distintos.includes(y)) ? C.cambioBorde : B.borde}`, borderRadius: 8, background: B.fondo, fontSize: 13, color: B.secundario, whiteSpace: 'nowrap' }}>
             <span style={{ color: B.titulo, fontWeight: 600 }}>{x.bloque}:</span>
             {x.partes.map((y, j) => typeof y === 'string' ? <span key={j}>{y}</span>
               : y.campo.tipo === 'modoOrden' ? <CasillaModo key={j} valor={valorCampo(prueba.def, prueba.valores, y.campo)} guardado={enGuardado(y.campo)} onCambia={v => onCambios({ ...cambios, modoOrden: v })}/>
@@ -589,7 +594,7 @@ export default function BuilderSenales({ def, valores, guardado = null, interval
               ? <Interruptor clave="zona" ocultos={ocultos} onCambia={cambiaVisto} que="la zona gris donde el filtro no deja comprar (la franja del filtro sigue igual)" datos={{ 'data-interruptor-zona': '' }}>
                 <span style={{ display: 'inline-block', width: 14, height: 10, background: 'rgba(139,155,173,0.35)' }}/>filtro: no opero</Interruptor>
               : <span><span style={{ display: 'inline-block', width: 14, height: 10, background: 'rgba(139,155,173,0.35)', marginRight: 4 }}/>filtro: no opero</span>)}
-            {r.franjas.length > 0 && <Interruptor clave="franjas" ocultos={ocultos} onCambia={cambiaVisto} que="las franjas de las condiciones y de las piezas (todas)"><span style={{ color: '#8db8ff' }}>▬ franjas</span></Interruptor>}
+            {r.franjas.length > 0 && <Interruptor clave="franjas" ocultos={ocultos} onCambia={cambiaVisto} que="las franjas de las condiciones y de las piezas (todas)"><span style={{ color: C.azulFranja }}>▬ franjas</span></Interruptor>}
             {r.osciladores.map(o => <Interruptor key={o.nombre} clave={`osc:${o.nombre}`} ocultos={ocultos} onCambia={cambiaVisto} que={`el panel de ${o.nombre}`}><span style={{ color: AZUL }}>▭ {o.nombre}</span></Interruptor>)}
             <Ayuda texto={AYUDA} etiqueta="Señales en el gráfico"/>
             <strong data-cuenta style={{ marginLeft: 'auto' }}>En este periodo: {r.compras.length} {r.compras.length === 1 ? 'compra' : 'compras'} · {r.ventas.length} {r.ventas.length === 1 ? 'venta' : 'ventas'}</strong>

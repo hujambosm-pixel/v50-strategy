@@ -3335,3 +3335,15 @@ El creador (components/BuilderEditor.js), el dibujo de la regla (BuilderDibujo.j
 - scripts/comprobaciones/screener.js: «la pantalla ya no lleva los colores fijos de antes» no cuenta las definiciones de las variables del tono (--sc-cAvisoFondo vale #3a3220 en oscuro y no se pinta en ningún sitio).
 - Revisado por mí en la app (Prueba editor EMA20): Tarjetas y Dibujo de la regla en oscuro (igual que antes) y en claro forzado (bien); «Señales en el gráfico» se dibuja, sin errores en la consola.
 - Ninguna cifra cambia.
+
+## 182. ☀/☾ en el Builder, parte 6: «Señales en el gráfico» del creador (17/11)
+
+components/BuilderSenales.js. DECIDIDO por mí: el GRÁFICO (velas, flechas, puntos, medias, canales, etiquetas de cada operación y franjas con su recuadro oscuro) conserva sus colores en los dos tonos, como en las plataformas de gráficos; el fondo, los textos y la rejilla del gráfico ya seguían el tono (colorReal, §179). Lo que cambia es lo de la página alrededor:
+
+- AMARILLO y ROJO (avisos y errores) pasan a C.amarillo / C.rojo; la línea de nivel de los osciladores (RSI…), que va a lightweight-charts, con colorReal.
+- Lo cambiado frente a lo guardado (borde #d9a53a y texto #e0c27a) → C.cambioBorde / C.cambioTexto; el botón de periodo activo (#1f3350) → C.hover; «▬ franjas» de la leyenda → C.azulFranja.
+- Tabla «Las cifras de la regla»: los colores de lib/coloresCifras.js (sube #00e5a0, baja #ff4d6d, cuenta #ffd166), aquí con variables (C.cifraSube, C.cifraBaja, C.cifraCuenta) y las mismas reglas; lib/coloresCifras.js no se toca (lo usan el Backtesting y otros, y algunos de sus colores van a canvas).
+- Claves nuevas en las dos paletas: cCambioBorde, cCambioTexto, cAzulFranja, cCifraSube, cCifraBaja, cCifraCuenta (en oscuro, el color de antes).
+- Revisado por mí en la app con «Retroceso líderes RSI2» (tiene RSI): en claro forzado, gráfico de precio y RSI dibujados (14 lienzos), tabla legible; en oscuro, Win Rate #00e5a0 y Operaciones/Tiempo #ffd166 como antes; sin «Cannot parse color».
+- Pendiente al encender el claro: algunas medias (amarilla #f2cc60) y la línea del RSI se ven pálidas sobre el fondo claro; valorar con Sergi si el gráfico usa otros colores en claro.
+- Ninguna cifra cambia.
