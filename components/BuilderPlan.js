@@ -27,7 +27,7 @@
 // §54: la cabecera B (CabeceraPasos) y las PESTAÑAS DE PLANES (components/BuilderPestanas.js, lib/builder/pestanasPlan.js): una por plan abierto, con su orden guardado en la base
 // (builder_pestanas); con cambios sin guardar, cualquier salida pregunta (la misma ventana que en Tesis). Esto deja atrás lo de «una pestaña por plan guardado» de la parte 2 y la «×» de §49.
 //   planId: el plan que se pide abrir (desde una tesis). salida: un ref; la página pregunta por él antes de salir del Builder. inicial, además: orden, pregunta ({ tipo }), ventana ('nuevo' | { duplica }), borrando (la clave), avisoPlan, anchoPestanas.
-import { useState, useEffect, useMemo, useRef, useContext } from 'react'
+import { useState, useEffect, useMemo, useRef, useContext, useCallback } from 'react'
 import { B, C, S } from '../lib/builder/estilo'
 import { CabeceraPasos } from './BuilderPanel'
 import BuilderPestanas from './BuilderPestanas'
@@ -69,7 +69,9 @@ const listaDeAccion = (x) => ({ ...(x.lista || {}), universo: 'manual', simbolos
 import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, avisoPrueba as textoAvisoPrueba, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
   ayudaCaida, ayudaPrueba, avisoListaSimple, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, velasDeEstrategia, velasDelPlan, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
-  textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS } from '../lib/builder/planPantalla'
+  textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS, bloquesDe, estrategiaBloque, anadeBloque, quitaBloque, repartirResto, sumaPesos, AYUDA_BLOQUES } from '../lib/builder/planPantalla'
+// §187: los colores de los bloques (el 1, azul, como siempre).
+const COLORES_BLOQUE = [C.azul, C.naranja, C.morado, C.cian, C.verde]
 
 const CLAVE_PANEL = 'builder_plan_panel_oculto'   // §165
 // §178: los colores con significado, como variables (cambian con el tono ☀/☾).
@@ -260,6 +262,9 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const estBorrada = !!fotoG && String(fotoG.id) === estId && !estrategias.some(s => String(s.id) === estId)   // §60: se borró; el plan sigue con su copia
   const cambia = (k, v) => setA(x => ({ ...x, [k]: v }))
   const [otroForzado, setOtroForzado] = useState(false)
+  // §187: los bloques extra: { id: plegado (false) / abierto } (de entrada, abierto) y { id: su lista de valores abierta }.
+  const [extraAbiertos, setExtraAbiertos] = useState({})
+  const [valoresExtra, setValoresExtra] = useState({})
   const [bloqueAbierto, setBloqueAbierto] = useState(true)   // §142: la fila del bloque de «Cartera», abierta o plegada (solo en pantalla)
   const otroOcioso = otroForzado || !OCIOSOS_FIJOS.some(([k]) => k === a.ocioso)
   const setOtroOcioso = setOtroForzado
@@ -331,7 +336,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const nombre = estrategia?.name || 'tu estrategia'
 
   // El plan de los ajustes de ahora; sus errores (los del motor) y, sin errores, la clave que dispara el cálculo.
-  const plan = useMemo(() => estrategia ? planDe(a, estrategia) : null, [a, estrategia])
+  // §187: varios bloques. extra: los bloques 2, 3… (a.bloques); multi: hay más de uno. estrategiaDe: la estrategia de ahora de un bloque extra.
+  const extra = bloquesDe(a), multi = extra.length > 0
+  const estrategiaDe = useCallback((id) => diarias.find(s => String(s.id) === String(id)) || null, [diarias])
+  const plan = useMemo(() => estrategia ? planDe(a, estrategia, null, estrategiaDe) : null, [a, estrategia, estrategiaDe])
   const errores = useMemo(() => plan ? validaPlan(plan) : [], [plan])
   const enLista = a.donde === 'lista'
   // §84: el motor del Backtesting calcula con la estrategia de AHORA (por su id). Con la versión guardada de un plan, solo si su regla
@@ -347,27 +355,43 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // vez por universo; si falló, o tras «Regenerar universo», que lo vacía, se vuelve a leer).
   const universoLista = enLista ? (a.lista?.universo || 'manual') : 'manual'
   const universoDatos = vistaLista.universoDatos
-  const hayDatosUniverso = !!universoDatos[universoLista] && !universoDatos[universoLista].error
+  // §187: también los universos de los bloques extra (uno a uno, el primero que falte).
+  const universoPendiente = [universoLista, ...extra.filter(b => b.donde === 'lista').map(b => b.lista?.universo || 'manual')].find(u => nDeUniverso(u) && (u === universoLista ? !(universoDatos[u] && !universoDatos[u].error) : !universoDatos[u])) || null
   useEffect(() => {
-    const n = nDeUniverso(universoLista), u = universoLista
-    if (!n || hayDatosUniverso || !ctx) return
+    const u = universoPendiente, n = u ? nDeUniverso(u) : null
+    if (!n || !ctx) return
     let v = true
     cargaUniversoMc(n, { url: ctx.url, headers: ctx.headers, fetch: ctx.fetch, regla: reglaDeUniverso(u) })
       .then(d => { if (v) setVistaLista(x => ({ ...x, universoDatos: { ...x.universoDatos, [u]: d } })) })
       .catch(e => { if (v) setVistaLista(x => ({ ...x, universoDatos: { ...x.universoDatos, [u]: { error: e.message || 'No se pudo leer el universo.' } } })) })
     return () => { v = false }
-  }, [universoLista, hayDatosUniverso, ctx])
+  }, [universoPendiente, ctx])
   const cuerpoLista = useMemo(() => enLista && estPorDentro ? peticionPorDentro({ a, estrategia: estPorDentro, wlData: datosLista?.wlData || {}, universoDatos }) : null, [enLista, a, estPorDentro, datosLista?.wlData, universoDatos])
   const motivoLista = !enLista ? null : (motivoEstPorDentro || (calcLista && motivoListaNoCalculable(calcLista.plan, cuerpoLista?.symbols || null)) || (!cuerpoLista ? motivoSinPeticion({ a, estrategia: estPorDentro, universoDatos }) : null))
-  const clave = !actual || !plan || errores.length ? null : !enLista ? JSON.stringify(plan) : motivoLista || !cuerpoLista ? null : JSON.stringify({ plan: calcLista.plan, cuerpoLista })
+  // §187: con varios bloques, una petición de candidatos por cada bloque con lista (la de ese bloque solo: su parte del dinero inicial), en
+  // cuerposLista; si alguno no se puede pedir, el motivo (motivoMulti).
+  const bloquesConLista = useMemo(() => !multi || !plan ? [] : [{ id: 'e', b: a, est: estPorDentro }, ...extra.map(b => ({ id: b.id, b, est: estrategiaBloque(b, estrategiaDe) }))]
+    .filter(x => x.b.donde === 'lista').map(x => ({ ...x, ab: { ...a, activo: x.b.activo, donde: 'lista', lista: x.b.lista, velas: x.b.velas, filtros: x.b.filtros, capital: plan.dinero.capitalInicial * (plan.piezas.find(p => p.id === x.id)?.peso || 0) } })), [multi, plan, a, extra, estPorDentro, estrategiaDe])
+  const cuerposLista = useMemo(() => !multi ? null : Object.fromEntries(bloquesConLista.map(x => [x.id, x.est ? peticionPorDentro({ a: x.ab, estrategia: x.est, wlData: datosLista?.wlData || {}, universoDatos }) : null])), [multi, bloquesConLista, datosLista?.wlData, universoDatos])
+  const motivoMulti = !multi ? null : (() => {
+    for (const x of bloquesConLista) {
+      const nombreB = x.id === 'e' ? 'el bloque 1' : `el bloque ${extra.findIndex(b => b.id === x.id) + 2}`
+      if (!x.est) return x.id === 'e' && motivoEstPorDentro ? motivoEstPorDentro : `Elige la estrategia de ${nombreB}.`
+      if (!cuerposLista[x.id]) return `En ${nombreB}: ${motivoSinPeticion({ a: x.ab, estrategia: x.est, universoDatos }) || 'falta algo para pedir sus valores.'}`
+      const m = motivoListaNoCalculable(plan, cuerposLista[x.id].symbols || null, plan.piezas.find(p => p.id === x.id)); if (m) return `En ${nombreB}: ${m}`
+    }
+    return null
+  })()
+  const clave = !actual || !plan || errores.length ? null : multi ? (motivoMulti ? null : bloquesConLista.length ? JSON.stringify({ plan, cuerposLista }) : JSON.stringify(plan))
+    : !enLista ? JSON.stringify(plan) : motivoLista || !cuerpoLista ? null : JSON.stringify({ plan: calcLista.plan, cuerpoLista })
   const api = useRef(apiFetch); api.current = apiFetch
   // Un plan ya calculado (p. ej., al volver a una pestaña) se enseña sin repetir el cálculo.
   const hechos = useRef(new Map())
   const calculador = useRef(null)
   // §128: la llamada a /api/plan, en un ref para que «Comparar planes» pida con la misma (varios planes a la vez, sin el calculador).
   const pideApi = useRef(null)
-  if (!pideApi.current) pideApi.current = deps?.calcula || (async (p, cuerpoLista = null) => {
-    const r = await api.current('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: p, curvas: true, libro: true, ...(cuerpoLista ? { cuerpoLista } : {}) }) })   // §156/§161: siempre con el libro (la pestaña «Detalle», con lista o con un valor)
+  if (!pideApi.current) pideApi.current = deps?.calcula || (async (p, cuerpoLista = null, cuerposLista = null) => {
+    const r = await api.current('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: p, curvas: true, libro: true, ...(cuerpoLista ? { cuerpoLista } : {}), ...(cuerposLista ? { cuerposLista } : {}) }) })   // §156/§161: siempre con el libro (la pestaña «Detalle», con lista o con un valor)
     const j = await r.json().catch(() => ({}))
     if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`)
     return j
@@ -375,7 +399,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   if (!calculador.current) {
     const pide = pideApi.current
     // §89: con lista, lo que se pide es { plan, cuerpoLista }; el resultado guarda el plan calculado y su clave.
-    calculador.current = creaCalculador({ calcula: async (p) => p?.cuerpoLista ? ({ respuesta: await pide(p.plan, p.cuerpoLista), plan: p.plan, clave: JSON.stringify(p) }) : ({ respuesta: await pide(p), plan: p }),
+    calculador.current = creaCalculador({ calcula: async (p) => p?.cuerposLista ? ({ respuesta: await pide(p.plan, null, p.cuerposLista), plan: p.plan, clave: JSON.stringify(p) })   // §187
+      : p?.cuerpoLista ? ({ respuesta: await pide(p.plan, p.cuerpoLista), plan: p.plan, clave: JSON.stringify(p) }) : ({ respuesta: await pide(p), plan: p }),
       alEstado: (e) => {
         if (e.resultado) { hechos.current.set(e.resultado.clave || JSON.stringify(e.resultado.plan), e.resultado); if (hechos.current.size > 20) hechos.current.delete(hechos.current.keys().next().value) }
         if (vivo.current) setCalc(c => ({ calculando: e.calculando, resultado: e.resultado || c.resultado, error: e.resultado ? null : e.error ?? c.error }))
@@ -593,7 +618,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const cifrasViejas = !!clave && !!claveDelResultado && clave !== claveDelResultado
   // Lo que se enseña en «+ Añadir plan»: el final de los planes guardados ya calculados.
   useEffect(() => { if (fila && cifras && !hayCambios && clave === (calc.resultado?.clave || JSON.stringify(calc.resultado?.plan))) setFinales(x => ({ ...x, [fila.id]: cifras.seis.final })) }, [cifras, fila?.id, hayCambios])
-  const texto = () => textoParaClaudePlan({ ajustes: a, estrategia, plan, cifras: enLista ? null : cifras, estado, resultadoPrueba: resPrueba, version, nombre: fila?.nombre || null })
+  const texto = () => textoParaClaudePlan({ ajustes: a, estrategia, plan, cifras: enLista || multi ? null : cifras, estado, resultadoPrueba: resPrueba, version, nombre: fila?.nombre || null })
 
   // ── §128: «Comparar planes» (los planes GUARDADOS, tal como están guardados; mismo motor y misma respuesta que su pestaña) ──
   const compLeido = useRef(false), enCurso = useRef(new Set())
@@ -618,6 +643,9 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // dentro», que solo sabe calcular con la estrategia de AHORA: si su regla ha cambiado, se dice por qué no se calcula).
   const peticionComparar = (f) => {
     const p0 = f.plan
+    // §187: un plan de varios bloques: sin listas, tal cual; con alguna lista, de momento no se compara aquí (se ve en su pestaña).
+    const ests = (p0.piezas || []).filter(x => x.tipo === 'estrategia')
+    if (ests.length > 1) return ests.some(x => x.donde === 'lista') ? { motivo: 'Este plan tiene varios bloques y alguno con varios valores: de momento se ve en su pestaña, no aquí.' } : { clave: JSON.stringify(p0), plan: p0 }
     if (piezaDe(p0)?.donde !== 'lista') return { clave: JSON.stringify(p0), plan: p0 }
     const foto = fotoDelPlan(p0), actualE = estrategias.find(s => String(s.id) === String(foto?.id)) || null
     if (!actualE) return { motivo: 'La estrategia de este plan ya no está entre las tuyas: con una lista, solo se calcula con una estrategia que siga entre las tuyas.' }
@@ -677,9 +705,9 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // §174: en la misma línea, «La estrategia, tal como la usa este plan» (uso); «Comparar…» sube a la fila de las pestañas de planes.
   const avisosDe = (uso) => actual ? (
     <div data-avisos className="bp-avisos" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 24px', alignItems: 'center', marginBottom: 10 }}>
-      {estrategia && (avisoPrueba || <div data-aviso="prueba" data-estado="leyendo" style={S.secundario}>Leyendo la prueba…</div>)}
+      {estrategia && !multi && (avisoPrueba || <div data-aviso="prueba" data-estado="leyendo" style={S.secundario}>Leyendo la prueba…</div>)}
       {enlaceTesis?.('plan', fila?.id)}
-      {!enLista && <div data-aviso="a-mano" style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>⚠ {AVISO_A_MANO}<Ayuda texto={AYUDA_PLAN.aMano} etiqueta={AVISO_A_MANO}/></div>}
+      {!enLista && !multi && <div data-aviso="a-mano" style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>⚠ {AVISO_A_MANO}<Ayuda texto={AYUDA_PLAN.aMano} etiqueta={AVISO_A_MANO}/></div>}
       {nuevaActual && <div data-aviso="sin-guardar" style={{ color: AMARILLO }}>Sin guardar: se perderá al recargar</div>}
       {calc.calculando && <div data-calculando style={{ color: AMARILLO }}>Calculando…</div>}
       {uso}
@@ -733,7 +761,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const variosValores = enLista && ((L.universo && L.universo !== 'manual') || (L.simbolos || []).length >= 2)
   // §152: «La estrategia, tal como la usa este plan», siempre a la vista: en azul, lo que el plan cambia respecto a la estrategia guardada.
   const dondeUso = enLista ? (L.universo && L.universo !== 'manual' ? 'en el Nasdaq-100' : (L.simbolos || []).length === 1 ? `en ${L.simbolos[0]}` : `en ${(L.simbolos || []).length} valores`) : `en ${a.activo}`
-  const uso = estrategia && actual ? (
+  const uso = estrategia && actual && !multi ? (
     <div data-uso-estrategia title="En azul, lo que este plan cambia respecto a la estrategia guardada (la estrategia no se toca)" style={{ ...S.secundario, fontSize: 13 }}>
       La estrategia, tal como la usa este plan:{' '}
       {usoDeLaEstrategia({ nombre: estrategia.name, velasEst, velasPlan, donde: dondeUso, propios: filtrosPropios(estrategia), respeta: respetaPropios(a.filtros), nPlan: (a.filtros?.filas || []).length })
@@ -742,32 +770,121 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   ) : null
   // §144: el selector es el del Backtesting (los valores de la Watchlist); además, los marcados que no estén en ella y, al buscar, los
   // de los precios guardados (lo que antes ofrecía el buscador de «Acción»).
-  const watchlistPlan = (() => {
+  const watchlistDe = (Lx) => {
     const wl = datosLista?.watchlist || [], hay = new Set(wl.map(w => w.symbol)), mas = [], q = sinTildes(vistaLista.busca || '')
     const pon = (simbolo, nombre) => { if (simbolo && !hay.has(simbolo)) { hay.add(simbolo); mas.push({ symbol: simbolo, name: nombre || simbolo, list_ids: [] }) } }
-    for (const sb of L.simbolos || []) pon(sb, valoresLista.find(v => v.simbolo === sb)?.nombre)
+    for (const sb of Lx.simbolos || []) pon(sb, valoresLista.find(v => v.simbolo === sb)?.nombre)
     if (q) for (const v of valoresLista) if (sinTildes(v.simbolo).includes(q) || sinTildes(v.nombre || '').includes(q)) pon(v.simbolo, v.nombre)
     return mas.length ? [...wl, ...mas] : wl
-  })()
+  }
+  const watchlistPlan = watchlistDe(L)
+  const resumenDe = (Lx) => { const u = !!Lx.universo && Lx.universo !== 'manual', m = Lx.simbolos || []
+    return u ? nombreUniverso(nDeUniverso(Lx.universo), reglaDeUniverso(Lx.universo)) : !m.length ? 'Ningún valor marcado' : m.length === 1 ? m[0] : `${m.length} valores · ${m.slice(0, 4).join(', ')}${m.length > 4 ? '…' : ''}` }
   const esUniverso = !!L.universo && L.universo !== 'manual', marcados = L.simbolos || []
   const abiertoValores = valoresAbiertos ?? (!esUniverso && marcados.length === 0)
-  const resumenValores = esUniverso ? nombreUniverso(nDeUniverso(L.universo), reglaDeUniverso(L.universo)) : !marcados.length ? 'Ningún valor marcado' : marcados.length === 1 ? marcados[0] : `${marcados.length} valores · ${marcados.slice(0, 4).join(', ')}${marcados.length > 4 ? '…' : ''}`
+  const resumenValores = resumenDe(L)
+  // §187: los bloques 2, 3… Cada uno, en una fila plegable con lo mismo que el bloque 1 (estrategia, velas, valores, reparto entre sus
+  // valores y filtros) más su % y «Quitar»; sin ocioso propio (es de la cuenta), sin «Compra más acción» ni apalancamiento.
+  const ponBloque = (id, f) => setA(x => ({ ...x, bloques: bloquesDe(x).map(b => b.id === id ? f(b) : b) }))
+  const ponValoresB = (id, k) => (v) => ponBloque(id, b => {
+    const l0 = b.donde === 'lista' ? b.lista : listaDeAccion(b), l = { ...l0, [k]: typeof v === 'function' ? v(l0[k]) : v }
+    const uno = (l.universo || 'manual') === 'manual' && (l.simbolos || []).length === 1
+    return uno ? { ...b, lista: l, donde: 'accion', activo: l.simbolos[0] } : { ...b, lista: l, donde: 'lista' }
+  })
+  const ponListaB = (id, k) => (v) => ponBloque(id, b => ({ ...b, lista: { ...b.lista, [k]: typeof v === 'function' ? v(b.lista[k]) : v } }))
+  const campoPct = (valor, onCambia, etiqueta) => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero etiqueta={etiqueta} valor={valor} onCambia={onCambia} ancho={70}/> % de tu dinero</span>
+  const sumaPct = multi ? sumaPesos(a) : 100
+  const bloqueExtra = (b, k) => {
+    const n = k + 2, color = COLORES_BLOQUE[(k + 1) % COLORES_BLOQUE.length], est = estrategiaBloque(b, estrategiaDe), abierto = extraAbiertos[b.id] !== false
+    const Lb = b.donde === 'lista' ? (b.lista || {}) : listaDeAccion(b), uni = !!Lb.universo && Lb.universo !== 'manual', marc = Lb.simbolos || [], varios = b.donde === 'lista' && (uni || marc.length >= 2)
+    const abiertoV = valoresExtra[b.id] ?? (!uni && marc.length === 0)
+    const vEst = velasDeEstrategia(est), vPlan = velasDelPlan(b, est)
+    return (
+      <div key={b.id} data-bloque={n} style={{ border: `1px solid ${B.borde}`, borderRadius: B.radioBoton }}>
+        <button type="button" data-fila-bloque aria-expanded={abierto} onClick={() => setExtraAbiertos(x => ({ ...x, [b.id]: !abierto }))} title={abierto ? 'Plegar el bloque' : 'Abrir el bloque'} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, textAlign: 'left' }}>
+          <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: color, flex: 'none' }}/>
+          <span data-parte style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>{textoCampo(b.peso)} %</span>
+          <span style={{ minWidth: 0, flex: '1 1 auto' }}>
+            <span data-resumen-bloque style={{ display: 'block', color: B.titulo, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Estrategia · {est?.name || 'sin elegir'}</span>
+            <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>en {uni ? 'el Nasdaq-100' : marc.length === 1 ? marc[0] : `${marc.length} valores`} · velas {vPlan}</span>
+          </span>
+          <span aria-hidden="true" style={{ color: B.secundario, flex: 'none' }}>{abierto ? '▾' : '▸'}</span>
+        </button>
+        {abierto && <div data-cuerpo-bloque style={{ borderTop: `1px solid ${B.borde}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+            <div><Etiqueta texto="Parte de tu dinero" ayuda={AYUDA_BLOQUES.parte}/>{campoPct(b.peso, v => ponBloque(b.id, x => ({ ...x, peso: v })), `Parte del bloque ${n}`)}</div>
+            <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }}><button type="button" data-boton="quitar-bloque" title="Quitar este bloque (su % pasa al bloque 1)" onClick={() => setA(x => quitaBloque(x, b.id))} style={{ ...S.boton, padding: '4px 10px', fontSize: 13, color: ROJO, borderColor: ROJO }}>🗑 Quitar</button><Ayuda texto={AYUDA_BLOQUES.quitar} etiqueta="Quitar el bloque"/></span>
+          </div>
+          <div>
+            <Etiqueta texto="Estrategia" ayuda={AYUDA_PLAN.estrategia}/>
+            <SelectorEstrategia valor={b.estId} onElige={id => ponBloque(b.id, x => ({ ...x, estId: String(id), foto: null }))} estiloBoton={{ ...campo, maxWidth: '100%' }}
+              extra={b.foto && String(b.foto.id) === String(b.estId) && !tarjetas.some(s => String(s.id) === String(b.estId)) ? { id: b.estId, name: b.foto.name, etiqueta: ETIQUETA_BORRADA, colorEtiqueta: AMARILLO } : null}
+              estrategias={tarjetas.map(s => { const ep = estadosLista[s.id], ps = [ETIQUETA_PRUEBA[ep], esSemanal(s) ? 'semanal' : null].filter(Boolean)
+                return { id: s.id, name: s.name, etiqueta: ps.join(' · ') || null, colorEtiqueta: ep === 'pasa' ? VERDE : ep === 'noPasa' ? ROJO : undefined } })}/>
+          </div>
+          <div data-velas-plan={vPlan}>
+            <Etiqueta texto="Velas en este bloque" ayuda={AYUDA_PLAN.velas}/>
+            <Segmentos etiquetaGrupo={`Velas del bloque ${n}`} valor={vPlan} onCambia={v => ponBloque(b.id, x => ({ ...x, velas: v === vEst ? null : v }))} opciones={[['diarias', vEst === 'diarias' ? 'Diarias · las de la estrategia' : 'Diarias'], ['semanales', vEst === 'semanales' ? 'Semanales · las de la estrategia' : 'Semanales']]}/>
+          </div>
+          <div>
+            <Etiqueta texto="Valores · dónde se aplica" ayuda={AYUDA_PLAN.dondeSeAplica}/>
+            <div data-resumen-valores data-abierto={abiertoV ? 'si' : 'no'} style={{ display: 'flex', alignItems: 'center', gap: 10, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '6px 10px', background: B.fondo }}>
+              <span data-marcados style={{ flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, color: uni || marc.length ? B.titulo : AMARILLO }}>{resumenDe(Lb)}</span>
+              <button type="button" data-boton="cambiar-valores" aria-expanded={abiertoV} style={{ ...S.boton, padding: '4px 10px', fontSize: 13, flex: 'none' }} onClick={() => setValoresExtra(x => ({ ...x, [b.id]: !abiertoV }))}>{abiertoV ? 'Hecho ▴' : 'Cambiar ▾'}</button>
+            </div>
+            {abiertoV && <div data-lista="valores" className="bp-mc" style={{ marginTop: 6 }}>
+              <PanelUniverso mcUniverso={Lb.universo} mcUniversoDatos={vistaLista.universoDatos} setMcUniverso={ponValoresB(b.id, 'universo')} setMcUniversoDatos={ponVista('universoDatos')}/>
+              <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 330 }}>
+                <SelectorValores mcListFilter={vistaLista.lista} mcOnlyFavs={vistaLista.favs} mcSearch={vistaLista.busca} mcSelected={Lb.simbolos} mcUniverso={Lb.universo} rankingData={datosLista?.rankingData || {}}
+                  setMcListFilter={ponVista('lista')} setMcOnlyFavs={ponVista('favs')} setMcSearch={ponVista('busca')} setMcSelected={ponValoresB(b.id, 'simbolos')} watchlist={watchlistDe(Lb)} wlLists={datosLista?.wlLists || []} primero={marc}/>
+              </div>
+            </div>}
+          </div>
+          {varios && <div>
+            <Etiqueta texto="Reparto entre los valores del bloque" ayuda={AYUDA_PLAN.reparto}/>
+            <div data-lista="reparto" className="bp-mc">
+              <PanelAsignacion unSoloModo mcStratSelected={[b.estId]} mcUniverso={Lb.universo} selectedModos={[Lb.modo]} setSelectedModos={() => {}} mcMode={Lb.modo} setMcMode={ponListaB(b.id, 'modo')} mcSectionOpen={vistaLista.seccion} setMcSectionOpen={ponVista('seccion')}
+                mcAssumedStopPct={Lb.assumedStopPct} setMcAssumedStopPct={ponListaB(b.id, 'assumedStopPct')} mcCalculoPrioridad={Lb.calculoPrioridad} setMcCalculoPrioridad={ponListaB(b.id, 'calculoPrioridad')} mcCriterioUso={Lb.criterioUso} setMcCriterioUso={ponListaB(b.id, 'criterioUso')}
+                mcMaxAccumRisk={Lb.maxAccumRisk} setMcMaxAccumRisk={ponListaB(b.id, 'maxAccumRisk')} mcMaxPortfolioPct={Lb.maxPortfolioPct} setMcMaxPortfolioPct={ponListaB(b.id, 'maxPortfolioPct')} mcMaxPosiciones={Lb.maxPosiciones} setMcMaxPosiciones={ponListaB(b.id, 'maxPosiciones')}
+                mcMomGateThr={Lb.momGateThr} setMcMomGateThr={ponListaB(b.id, 'momGateThr')} mcMomentumN={Lb.momentumN} setMcMomentumN={ponListaB(b.id, 'momentumN')} mcPrioridad={Lb.prioridad} setMcPrioridad={ponListaB(b.id, 'prioridad')} mcProxGateThr={Lb.proxGateThr} setMcProxGateThr={ponListaB(b.id, 'proxGateThr')}
+                mcRiskPerTrade={Lb.riskPerTrade} setMcRiskPerTrade={ponListaB(b.id, 'riskPerTrade')} mcRsGateThr={Lb.rsGateThr} setMcRsGateThr={ponListaB(b.id, 'rsGateThr')} mcRsWindow={Lb.rsWindow} setMcRsWindow={ponListaB(b.id, 'rsWindow')}/>
+              <PanelPesos mcMode={Lb.modo} mcSelected={Lb.simbolos} mcWeights={Lb.pesos} setMcWeights={ponListaB(b.id, 'pesos')}/>
+            </div>
+          </div>}
+          {est && <FiltrosDelPlan estrategia={est} filtros={b.filtros} onCambia={v => ponBloque(b.id, x => ({ ...x, filtros: v }))} velasPlan={vPlan} valores={valoresLista} inicial={null}/>}
+        </div>}
+      </div>
+    )
+  }
+  // §187: el dinero ocioso: en el bloque con uno solo (como siempre); con varios, de la cuenta, en «Tu dinero».
+  const ociosoCampo = (
+    <div data-ocioso-de={multi ? 'cuenta' : 'bloque'}>
+      <Etiqueta texto={multi ? 'Dinero ocioso de la cuenta · mientras ningún bloque lo usa, espera en' : 'Dinero ocioso · mientras no hay señal, espera en'} ayuda={multi ? AYUDA_BLOQUES.ocioso : AYUDA_PLAN.ocioso}/>
+      <Segmentos etiquetaGrupo="Dinero ocioso" valor={otroOcioso ? 'OTRO' : a.ocioso} onCambia={v => { if (v === 'OTRO') setOtroOcioso(true); else { setOtroOcioso(false); cambia('ocioso', v) } }} opciones={[...OCIOSOS_FIJOS, ['OTRO', 'Otro símbolo']]}/>
+      {otroOcioso && <div style={{ marginTop: 10 }}><BuscadorValor valores={valoresLista} valor={OCIOSOS_FIJOS.some(([k]) => k === a.ocioso) ? '' : a.ocioso} onCambia={s => cambia('ocioso', s)} etiqueta="Símbolo del ocioso"/></div>}
+    </div>
+  )
   const bloques = (
     <div data-tarjeta="bloques" style={{ ...S.tarjeta, overflow: 'visible' }}>
       <div style={{ ...S.cabeceraTarjeta, borderRadius: `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0`, display: 'flex', alignItems: 'center', gap: 2 }}>Cartera<Ayuda texto={AYUDA_PLAN.cartera} etiqueta="Cartera"/><span data-subtitulo style={{ ...S.apagado, fontWeight: 400, marginLeft: 8 }}>en qué se invierte</span></div>
       <div style={{ ...S.cuerpo, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div data-barra-cartera aria-hidden="true" title="Todo el dinero del plan está en este bloque" style={{ height: 8, borderRadius: 4, background: AZUL }}/>
+        {!multi ? <div data-barra-cartera aria-hidden="true" title="Todo el dinero del plan está en este bloque" style={{ height: 8, borderRadius: 4, background: AZUL }}/>
+          : <div data-barra-cartera="bloques" title={`Cómo se reparte tu dinero entre los bloques${sumaPct !== 100 ? ` (suman ${textoCampo(sumaPct)} %, no 100 %)` : ''}`} style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: B.borde }}>
+            {[Number(a.peso) || 0, ...extra.map(b => Number(b.peso) || 0)].map((p, k) => <div key={k} style={{ width: `${Math.max(0, p) / Math.max(100, sumaPct) * 100}%`, background: COLORES_BLOQUE[k % COLORES_BLOQUE.length] }}/>)}
+          </div>}
+        {multi && sumaPct !== 100 && <div data-aviso="suma-bloques" style={{ color: ROJO, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>✕ Los bloques suman {textoCampo(sumaPct)} %: tienen que sumar 100 %.<button type="button" data-boton="repartir-resto" title="Ajusta los % en proporción para que sumen 100 %" onClick={() => setA(repartirResto)} style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }}>Repartir el resto</button></div>}
         <div data-bloque="1" style={{ border: `1px solid ${B.borde}`, borderRadius: B.radioBoton }}>
           <button type="button" data-fila-bloque aria-expanded={bloqueAbierto} onClick={() => setBloqueAbierto(x => !x)} title={bloqueAbierto ? 'Plegar el bloque' : 'Abrir el bloque'} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, textAlign: 'left' }}>
             <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: AZUL, flex: 'none' }}/>
-            <span data-parte title="Qué parte del dinero del plan va a este bloque. Por ahora, un solo bloque con todo: de 10.000 €, los 10.000 €." style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>100 %</span>
+            <span data-parte title={multi ? 'Qué parte del dinero del plan va a este bloque.' : 'Qué parte del dinero del plan va a este bloque. Con un solo bloque, todo: de 10.000 €, los 10.000 €.'} style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>{multi ? textoCampo(a.peso) : 100} %</span>
             <span style={{ minWidth: 0, flex: '1 1 auto' }}>
               <span data-resumen-bloque style={{ display: 'block', color: B.titulo, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Estrategia · {estrategia?.name || 'sin elegir'}</span>
-              <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>en {enLista ? (L.universo && L.universo !== 'manual' ? 'el Nasdaq-100' : (L.simbolos || []).length === 1 ? L.simbolos[0] : `${(L.simbolos || []).length} valores`) : a.activo} · ocioso en {(OCIOSOS_FIJOS.find(([k]) => k === a.ocioso)?.[1] || a.ocioso || '—')}</span>
+              <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>en {enLista ? (L.universo && L.universo !== 'manual' ? 'el Nasdaq-100' : (L.simbolos || []).length === 1 ? L.simbolos[0] : `${(L.simbolos || []).length} valores`) : a.activo}{multi ? ` · velas ${velasPlan}` : <> · ocioso en {(OCIOSOS_FIJOS.find(([k]) => k === a.ocioso)?.[1] || a.ocioso || '—')}</>}</span>
             </span>
             <span aria-hidden="true" style={{ color: B.secundario, flex: 'none' }}>{bloqueAbierto ? '▾' : '▸'}</span>
           </button>
           {bloqueAbierto && <div data-cuerpo-bloque style={{ borderTop: `1px solid ${B.borde}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {multi && <div><Etiqueta texto="Parte de tu dinero" ayuda={AYUDA_BLOQUES.parte}/>{campoPct(a.peso, v => cambia('peso', v), 'Parte del bloque 1')}</div>}
           <div>
             <Etiqueta texto="Estrategia" ayuda={AYUDA_PLAN.estrategia}/>
             {/* §175: como el selector de valores: botón con la elegida y lista con buscador (antes, un <select>). Las semanales ya se
@@ -820,19 +937,29 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           {/* §153: fuera el panel de filtros del Backtesting: los filtros del plan son los de arriba (catálogo). Un plan que aún llevara encendido alguno de los antiguos lo dice y deja quitarlos. */}
           {hayFiltrosActivos(L.filtros || []) && <div data-aviso="filtros-antiguos" style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>⚠ Este plan lleva {(L.filtros || []).filter(f => f.activo).length === 1 ? 'un filtro' : 'filtros'} del panel antiguo, que ya no se edita aquí: se sigue aplicando.<button type="button" data-boton="quitar-filtros-antiguos" style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }} onClick={() => ponValores('filtros')([])}>Quitarlo</button></div>}
           {/* §142: el dinero ocioso, «Si llega una aportación…» y el apalancamiento son de CÓMO se invierte este bloque (en el plan guardado ya eran de su pieza): van aquí, no en «Tu dinero». */}
-          <div>
-            <Etiqueta texto="Dinero ocioso · mientras no hay señal, espera en" ayuda={AYUDA_PLAN.ocioso}/>
-            <Segmentos etiquetaGrupo="Dinero ocioso" valor={otroOcioso ? 'OTRO' : a.ocioso} onCambia={v => { if (v === 'OTRO') setOtroOcioso(true); else { setOtroOcioso(false); cambia('ocioso', v) } }} opciones={[...OCIOSOS_FIJOS, ['OTRO', 'Otro símbolo']]}/>
-            {otroOcioso && <div style={{ marginTop: 10 }}><BuscadorValor valores={valoresLista} valor={OCIOSOS_FIJOS.some(([k]) => k === a.ocioso) ? '' : a.ocioso} onCambia={s => cambia('ocioso', s)} etiqueta="Símbolo del ocioso"/></div>}
-          </div>
+          {!multi && ociosoCampo}
           {/* §91: con una lista, la aportación siempre espera en el ocioso hasta la siguiente compra (no hay una sola operación abierta). */}
-          {!enLista && <div>
+          {!enLista && !multi && <div>
             <Etiqueta texto="Si llega una aportación con la operación abierta" ayuda={AYUDA_PLAN.dentro}/>
             <Segmentos etiquetaGrupo="Si llega una aportación con la operación abierta" valor={a.aportacionDentro} onCambia={v => cambia('aportacionDentro', v)} opciones={[['espera', 'Espera en el ocioso hasta la siguiente compra'], ['compra', 'Compra más acción']]}/>
           </div>}
-            <div><Etiqueta texto="Apalancamiento" ayuda={AYUDA_PLAN.apalancamiento}/><Segmentos etiquetaGrupo="Apalancamiento" valor={a.apalancamiento} onCambia={v => cambia('apalancamiento', v)} opciones={[[1, 'No'], [2, '×2'], [3, '×3']]}/></div>
+            {!multi && <div><Etiqueta texto="Apalancamiento" ayuda={AYUDA_PLAN.apalancamiento}/><Segmentos etiquetaGrupo="Apalancamiento" valor={a.apalancamiento} onCambia={v => cambia('apalancamiento', v)} opciones={[[1, 'No'], [2, '×2'], [3, '×3']]}/></div>}
+            {multi && <div data-aviso="todavia-bloques" style={{ ...S.apagado, display: 'flex', alignItems: 'center', gap: 2 }}>Con varios bloques, de momento sin «Compra más acción» ni apalancamiento.<Ayuda texto={AYUDA_BLOQUES.todavia} etiqueta="Lo que aún no hay con varios bloques"/></div>}
           </div>}
         </div>
+        {extra.map(bloqueExtra)}
+        {/* §187: «+ Añadir bloque» y, con varios, cómo se reparte el dinero entre ellos. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <button type="button" data-boton="anadir-bloque" disabled={!estrategia} title="Otra parte de tu dinero con su propia estrategia" onClick={() => setA(x => anadeBloque(x, estId))} style={{ ...S.boton, padding: '6px 12px', fontSize: 13 }}>+ Añadir bloque</button>
+          <Ayuda texto={AYUDA_BLOQUES.anadir} etiqueta="Añadir bloque"/>
+        </div>
+        {multi && <div data-reparto-bloques style={{ borderTop: `1px solid ${B.borde}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontWeight: 700, color: B.titulo }}>Reparto entre bloques</div>
+          <div><Etiqueta texto="El dinero libre y las aportaciones van…" ayuda={AYUDA_BLOQUES.dineroLibre}/>
+            <Segmentos etiquetaGrupo="El dinero libre entre bloques" valor={a.dineroLibre === 'prioridad' ? 'prioridad' : 'tope'} onCambia={v => cambia('dineroLibre', v)} opciones={[['tope', 'Con tope'], ['prioridad', 'Solo prioridad']]}/></div>
+          <div><Etiqueta texto="Vender para volver al reparto" ayuda={AYUDA_BLOQUES.vender}/>
+            <Segmentos etiquetaGrupo="Vender para volver al reparto" valor="nunca" onCambia={() => {}} opciones={[['nunca', 'Nunca'], ['anual', 'Cada año', 'Llegará más adelante'], ['desvio', 'Si se desvía', 'Llegará más adelante']]}/></div>
+        </div>}
       </div>
     </div>
   )
@@ -871,6 +998,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             {a.comisionTipo === 'fija' && <span title="Se cobra al comprar y otra vez al vender. Si tu bróker cobra 0,37 € solo al comprar, pon 0,185 € (0,185 + 0,185 = 0,37 €)." style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero enEuros etiqueta="Euros por operación" valor={a.comisionFija} onCambia={v => cambia('comisionFija', v)} ancho={70}/> € por operación</span>}
           </div>
         </div>
+        {multi && ociosoCampo}
       </div>
     </div>
   )
@@ -884,11 +1012,14 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       color: vistaDer === id ? B.titulo : B.secundario, fontWeight: vistaDer === id ? 700 : 400, paddingRight: ayuda ? 4 : 16 }}>{texto}</button>{ayuda && <Ayuda texto={ayuda} etiqueta={texto}/>}</span>
   // §89: el resultado de «Tu dinero» es de una lista solo si el plan calculado la tiene (al cambiar de «Una acción» a «Una lista», hasta
   // que llega el cálculo nuevo, no se enseña el de antes).
-  const resLista = ajustesDelResultado?.donde === 'lista'
-  const cifrasLista = enLista && resLista && !motivoLista ? cifras : null
-  const resultado = enLista ? (<>
+  // §187: con varios bloques, como con una lista (la parte del dinero en valores cada día, sin «Buy&Hold» de un valor).
+  const resMulti = (calc.resultado?.plan?.piezas || []).filter(p => p.tipo === 'estrategia').length > 1
+  const resLista = multi ? resMulti : ajustesDelResultado?.donde === 'lista' && !resMulti
+  const motivoDer = multi ? motivoMulti : motivoLista
+  const cifrasLista = (enLista || multi) && resLista && !motivoDer ? cifras : null
+  const resultado = enLista || multi ? (<>
     <div data-pestanas-der className="bp-fijo" role="group" aria-label="Qué ver del plan" style={{ display: 'flex', alignItems: 'flex-end', height: ALTO_BARRA_COL, boxSizing: 'border-box', borderBottom: `1px solid ${B.borde}`, background: B.fondo }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('detalle', 'Detalle', AYUDA_DETALLE.pestana)}</div>
-    {(motivoLista ? <div data-sin-motor-lista style={{ ...S.tarjeta, ...S.cuerpo, color: B.texto }}>{motivoLista}</div>
+    {(motivoDer ? <div data-sin-motor-lista style={{ ...S.tarjeta, ...S.cuerpo, color: B.texto }}>{motivoDer}</div>
       : !cifrasLista ? <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{calc.error ? '' : 'Calculando tu plan…'}</div>
       : <>
         {!!calcLista?.ignorado.length && <div data-aviso-lista-simple style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>{avisoListaSimple(calcLista.ignorado, a.ocioso)}<Ayuda texto={AYUDA_PLAN.listaSimple} etiqueta="Lo que todavía no cuenta con una lista"/></div>}

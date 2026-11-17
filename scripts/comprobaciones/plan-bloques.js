@@ -130,6 +130,11 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     ok(cerca(dos.valorNeto, uno.valorNeto), `dos bloques iguales al 50 % = un bloque con todo: ${dos.valorNeto} frente a ${uno.valorNeto}`)
     ok(dos.serie.every((x, k) => cerca(x.patrimonio, uno.serie[k].patrimonio)), 'y el mismo patrimonio cada día')
     ok(dos.serie.every(x => cerca(x.piezas.a, x.piezas.b)), 'cada bloque, la mitad')
+    // §187: y con un ocioso que cambia entre la apertura y el cierre: el dinero que hay a la apertura va al ocioso a la apertura (como con
+    // un bloque); con dos bloques iguales, el mismo resultado al céntimo.
+    const dO = () => { const x = d(); x.velas.OCI = F.map((date, k) => { const o = 50 + 5 * Math.sin(k / 7), c = o * (1 + 0.01 * Math.cos(k / 2)); return { date, open: o, high: Math.max(o, c), low: Math.min(o, c), close: c, volume: 1 } }); return x }
+    const unoO = P.ejecutaPlan({ ...base, piezas: [{ ...pieza('e', 'TEST', 1), ocioso: 'OCI' }] }, dO()), dosO = P.ejecutaPlan({ ...base, piezas: [{ ...pieza('a', 'TEST', 0.5), ocioso: 'OCI' }, { ...pieza('b', 'TEST2', 0.5), ocioso: 'OCI' }] }, dO())
+    ok(cerca(dosO.valorNeto, unoO.valorNeto) && dosO.serie.every((x, k) => cerca(x.patrimonio, unoO.serie[k].patrimonio)), `con un ocioso que se mueve: dos bloques iguales = un bloque, cada día (${dosO.valorNeto} frente a ${unoO.valorNeto})`)
     const refs = Ev.referenciasDe({ ...base, piezas: [pieza('a', 'TEST', 0.5), pieza('b', 'TEST2', 0.5)] }).map(x => x.id)
     ok(refs.includes('OCIOSO_LIQUIDEZ') && !refs.includes('ACTIVO'), `referencias con varios bloques: el ocioso en liquidez sí, comprar y mantener «el valor» no (${refs})`)
   }
@@ -160,6 +165,68 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     ok(cerca(r.valorNeto, 1355) && cerca(r.serie[1].piezas.cuenta, 585) && cerca(r.serie[1].piezas.y, 0), `los 585 € del stop pasan a la cuenta al acabar el día; final 1.355 € (obtenido ${r.valorNeto})`)
   }
 
+  // ── 7 · Los ajustes de la pantalla (§187): planDe / ajustesDe con varios bloques, añadir, quitar y repartir ──
+  const Pa = require(R + '/lib/builder/planPantalla.js'), Lt = require(R + '/lib/lotesLab.js')
+  const estS = { id: 'y', name: 'Sigue la tendencia', definition: EMA, params: { ema: 3 } }, deId = (id) => ({ x: FOTO, y: estS })[id] || null
+  {
+    const a0 = { ...Pa.AJUSTES_PLAN, activo: 'AAPL', ocioso: 'GLD', impuestos: 'ninguno' }
+    const a1 = Pa.anadeBloque(a0, 'x')
+    ok(a1.peso === 50 && a1.bloques.length === 1 && a1.bloques[0].peso === 50 && a1.bloques[0].estId === 'x' && a1.bloques[0].activo === 'AAPL' && a1.dineroLibre === 'tope', '«+ Añadir bloque» con uno: 50 % y 50 %, con la estrategia y el valor del bloque 1')
+    const a2 = { ...a1, peso: 60, bloques: [{ ...a1.bloques[0], peso: 40, estId: 'y', activo: 'MSFT' }] }
+    const p = Pa.planDe(a2, FOTO, null, deId)
+    ok(p.piezas.length === 2 && p.piezas[0].peso === 0.6 && p.piezas[1].peso === 0.4 && p.piezas.every(x => x.ocioso === 'GLD' && x.apalancamiento === 1 && x.aportacionDentro === 'espera') && p.piezas[1].estrategia.name === 'Sigue la tendencia' && p.piezas[1].activo === 'MSFT' && p.reparto.dineroLibre === 'tope', 'planDe: dos piezas (60 % y 40 %), el ocioso de la cuenta en las dos, la estrategia y el valor de cada bloque')
+    ok(P.validaPlan(p).length === 0, `y es un plan válido ${P.validaPlan(p).join(' ')}`)
+    const b = Pa.ajustesDe(p)
+    ok(b.peso === 60 && b.bloques.length === 1 && b.bloques[0].peso === 40 && b.bloques[0].estId === 'y' && Lt.jsonCanonico(Pa.planDe(b, FOTO, null, deId)) === Lt.jsonCanonico(p), 'ida y vuelta: planDe(ajustesDe(plan)) es el mismo plan')
+    ok(Lt.jsonCanonico(Pa.planDe(Pa.ajustesDe(p), FOTO, null, () => null)) === Lt.jsonCanonico(p), 'un plan guardado conserva la estrategia de cada bloque aunque ya no esté entre las tuyas (su foto)')
+    ok(Pa.planDe({ ...a2, dineroLibre: 'prioridad' }, FOTO, null, deId).reparto.dineroLibre === 'prioridad', '«Solo prioridad» se guarda en el plan')
+    const sin = Pa.quitaBloque(a2, 'b2')
+    ok(!('bloques' in sin) && !('peso' in sin) && Lt.jsonCanonico(Pa.planDe(sin, FOTO)) === Lt.jsonCanonico(Pa.planDe(a0, FOTO)), 'quitar el único bloque extra: el plan de un bloque de siempre, idéntico')
+    const a3 = Pa.anadeBloque(a2, 'x')
+    ok(a3.peso === 30 && a3.bloques[0].peso === 40 && a3.bloques[1].peso === 30 && a3.bloques[1].id === 'b3' && Pa.sumaPesos(a3) === 100, 'un tercer bloque se lleva la mitad del más grande: 30 / 40 / 30')
+    ok(Pa.quitaBloque(a3, 'b2').peso === 70 && Pa.quitaBloque(a3, 'b2').bloques.length === 1, 'quitar un bloque: su % pasa al bloque 1 (30 + 40 = 70)')
+    const r = Pa.repartirResto({ ...a2, peso: 30, bloques: [{ ...a2.bloques[0], peso: 30 }] })
+    ok(r.peso === 50 && r.bloques[0].peso === 50, '«Repartir el resto»: 30 y 30 pasan a 50 y 50')
+    const r3 = Pa.repartirResto({ ...a3, peso: 10, bloques: [{ ...a3.bloques[0], peso: 10 }, { ...a3.bloques[1], peso: 10 }] })
+    ok(Pa.sumaPesos(r3) === 100 && r3.peso === 33.34, `con tres iguales: 33,34 / 33,33 / 33,33 (${r3.peso}, ${r3.bloques.map(x => x.peso)})`)
+    ok(P.validaPlan(Pa.planDe(r3, FOTO, null, deId)).length === 0, 'y suman 100 % para el motor')
+  }
+
+  // ── 8 · La pantalla (§187): bloques en filas, «+ Añadir bloque», «Reparto entre bloques» y el ocioso en «Tu dinero» ──
+  {
+    const path = require('path'), React = require(path.join(R, 'node_modules', 'react')), RDC = require(path.join(R, 'node_modules', 'react-dom', 'client'))
+    const BP = require(R + '/components/BuilderPlan.js').default
+    let pedidos = []
+    const a2 = { activo: 'AAPL', ocioso: 'GLD', peso: 60, dineroLibre: 'tope', bloques: [Pa.bloqueNuevo('b2', 40, 'MSFT', 'y')] }
+    const props = (ini) => ({ estrategias: [FOTO, estS], estrategiaId: 'x', datosLista: { watchlist: [{ symbol: 'AAPL', name: 'Apple', list_ids: [] }, { symbol: 'MSFT', name: 'Microsoft', list_ids: [] }], wlLists: [], rankingData: {} },
+      deps: { ctx: null, calcula: async (...xs) => { pedidos.push(xs); throw new Error('sin motor en la prueba') } }, inicial: { planes: [], pestana: 'n1', simbolos: ['AAPL', 'MSFT', 'GLD'], pruebas: [], resultadoPrueba: null, ...ini } })
+    const hasta = async (cond, max = 20000) => { const t0 = Date.now(); do { await D.espera(5); try { if (cond()) { await D.espera(5); return true } } catch (_) {} } while (Date.now() - t0 < max); return false }
+    const m = D.monta(React.createElement(BP, props({ ajustes: a2 })), RDC); await D.espera(60)
+    const tarjeta = (id) => m.raiz.conAtributo('data-tarjeta', id)[0], boton = (id) => m.raiz.conAtributo('data-boton', id)[0]
+    ok(m.raiz.conAtributo('data-bloque', '1').length === 1 && m.raiz.conAtributo('data-bloque', '2').length === 1 && m.raiz.conAtributo('data-barra-cartera', 'bloques').length === 1, 'dos bloques en filas y la barra con los dos')
+    ok(m.raiz.conAtributo('data-parte').map(x => x.textContent).join('|') === '60 %|40 %', `cada fila con su % (${m.raiz.conAtributo('data-parte').map(x => x.textContent).join('|')})`)
+    ok(/Sigue la tendencia/.test(m.raiz.conAtributo('data-bloque', '2')[0].textContent) && /en MSFT/.test(m.raiz.conAtributo('data-bloque', '2')[0].textContent), 'el bloque 2 con su estrategia y su valor')
+    ok(m.raiz.conAtributo('data-reparto-bloques').length === 1 && /Con tope/.test(m.raiz.conAtributo('data-reparto-bloques')[0].textContent), '«Reparto entre bloques», con «Con tope»')
+    ok(tarjeta('tu-dinero').conAtributo('data-ocioso-de', 'cuenta').length === 1 && !m.raiz.conAtributo('data-bloque', '1')[0].conAtributo('data-ocioso-de').length, 'el dinero ocioso, de la cuenta: en «Tu dinero» y no en el bloque')
+    ok(!/Apalancamiento/.test(m.raiz.conAtributo('data-bloque', '1')[0].textContent) && m.raiz.conAtributo('data-aviso', 'todavia-bloques').length === 1, 'sin apalancamiento ni «Compra más acción» con varios bloques (y lo dice)')
+    await hasta(() => pedidos.length > 0)
+    const pp = pedidos[pedidos.length - 1]?.[0]
+    ok(pp?.piezas?.length === 2 && pp.piezas[1].activo === 'MSFT' && pp.piezas[1].peso === 0.4 && !pedidos[pedidos.length - 1][2], `lo que se calcula: el plan de dos bloques (sin listas, sin peticiones de candidatos)`)
+    D.pulsa(m.raiz.conAtributo('data-bloque', '2')[0].conAtributo('data-boton', 'quitar-bloque')[0]); await hasta(() => !m.raiz.conAtributo('data-bloque', '2').length)
+    ok(!m.raiz.conAtributo('data-bloque', '2').length && m.raiz.conAtributo('data-parte')[0]?.textContent === '100 %' && !m.raiz.conAtributo('data-reparto-bloques').length && m.raiz.conAtributo('data-bloque', '1')[0].conAtributo('data-ocioso-de', 'bloque').length === 1, '«Quitar»: vuelve a un bloque al 100 %, con el ocioso en el bloque')
+    D.pulsa(boton('anadir-bloque')); await hasta(() => m.raiz.conAtributo('data-bloque', '2').length === 1)
+    ok(m.raiz.conAtributo('data-parte').map(x => x.textContent).join('|') === '50 %|50 %', '«+ Añadir bloque»: 50 % y 50 %')
+    m.quita(); await D.espera(5)
+    // Con lista en el bloque 2: se pide una petición de candidatos para él (cuerposLista), con su parte del dinero inicial.
+    pedidos = []
+    const conLista = { ...a2, capital: 10000, bloques: [{ ...a2.bloques[0], donde: 'lista', lista: Li.mergeLista({ simbolos: ['AAPL', 'MSFT'], modo: 'concentrado' }) }] }
+    const m2 = D.monta(React.createElement(BP, props({ ajustes: conLista })), RDC)
+    await hasta(() => pedidos.length > 0)
+    const pl = pedidos[pedidos.length - 1]
+    ok(pl?.[2] && pl[2].b2 && pl[2].b2.cfg.capitalIni === 10000 * 0.4 && JSON.stringify(pl[2].b2.symbols) === '["AAPL","MSFT"]' && !pl[2].e, `con lista en el bloque 2: su petición de candidatos (4.000 €, AAPL y MSFT) en cuerposLista (${pl?.[2] ? Object.keys(pl[2]) : 'nada'})`)
+    m2.quita(); await D.espera(5)
+  }
+
   console.log(fallos ? `\n${fallos} FALLOS` : '\nplan-bloques: todo bien')
-  process.exitCode = fallos ? 1 : 0
-})().catch(e => { console.error(e); process.exitCode = 1 })
+  process.exit(fallos ? 1 : 0)
+})().catch(e => { console.error(e); process.exit(1) })
