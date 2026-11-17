@@ -12,7 +12,7 @@ export function BotonLimpiar({ visible, onLimpia, etiqueta = 'Limpiar la búsque
     <button type="button" data-limpiar-busqueda aria-label={etiqueta} title={etiqueta}
       onMouseDown={e => e.preventDefault()} onClick={e => { e.stopPropagation(); onLimpia() }}
       style={{ position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)', width: 18, height: 18, padding: 0, margin: 0, border: 'none', borderRadius: '50%',
-        background: 'rgba(139,155,173,0.28)', color: '#e6edf3', fontFamily: 'system-ui, -apple-system, Segoe UI, sans-serif', fontSize: 14, fontWeight: 400, lineHeight: '18px',
+        background: 'rgba(139,155,173,0.28)', color: 'var(--bd-texto, #e6edf3)', fontFamily: 'system-ui, -apple-system, Segoe UI, sans-serif', fontSize: 14, fontWeight: 400, lineHeight: '18px',
         textAlign: 'center', cursor: 'pointer', zIndex: 2 }}>×</button>
   )
 }

@@ -3314,3 +3314,13 @@ Fallo mío de §176 (V9.1238): lightweight-charts (dibuja en canvas) recibía lo
 - BuilderSenales.js y BuilderAzarVelas.js: las opciones del gráfico usan colorReal (fondo, texto, bordes y la rejilla, que pasa a C.rejilla).
 - Comprobado en la app: el gráfico de señales de «Prueba editor EMA20» se dibuja; las velas de su prueba, también, con las cifras de referencia (55.706 €, 123 operaciones, 42,3 %, 29,1 %, 68,7 %); sin «Cannot parse color» en la consola.
 - LECCIÓN: todo color que vaya a lightweight-charts (o a un canvas) tiene que pasar por colorReal.
+
+## 180. ☀/☾ en el Builder, parte 4: las portadas de Estrategias y de Planes (17/11)
+
+Las portadas (components/BuilderPanel.js) y las piezas pequeñas que usan pasan sus colores fijos a las variables del tono. En el oscuro no cambia nada que se vea (cada variable lleva de reserva su color de antes; fuera del Builder —Tesis, screener— se ven igual).
+
+- BuilderPanel.js: el ✓ de los pasos hechos, las cifras de la portada de Planes (CAGR, peor caída, puntos frente a QQQ: VERDE_P/ROJO_P = C.verde/C.rojo) y el aviso de error (C.amarillo); la sombra de los menús, con la variable --bd-sombra.
+- Resaltado.js (palabras encontradas en los buscadores): C.marca. ProteccionPanel.js (aviso «No se pudo enseñar…»): C.rojo. BorrarPrueba.js (aviso de suerte): C.amarillo. LimpiarBusqueda.js (la ✕): var(--bd-texto).
+- Revisado por mí en la app forzando el claro por JS: portada de Planes (tabla, cifras en verde/rojo legibles, botones) y de Estrategias (lista, chips, resaltado del buscador); en oscuro, los colores medidos son los de antes. Pendiente para cuando se encienda el claro: la barra de desplazamiento horizontal sale oscura (color-scheme del navegador).
+- Ninguna cifra cambia (portada de Planes: 88.218 €, 75.123 €, 64.625 €).
+- comunes.sh: todo en verde salvo backtesting-panel.js, que da «distinto» en SelectorValores solo por la ✕ (su estilo dice ahora var(--bd-texto, #e6edf3)); con la ✕ nueva en los dos lados, 0 fallos. En el Backtesting se ve igual (allí la variable no existe y vale #e6edf3).

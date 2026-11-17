@@ -12,7 +12,7 @@ import { listarPlanes, listarPruebasUsuario } from '../lib/builder/planesGuardad
 import { fotoDelPlan } from '../lib/builder/planesGuardados'
 import { ajustesDe } from '../lib/builder/planPantalla'
 import { CLAVE_COMPARAR, MAX_COMPARAR, cifrasComparacion, elegidosIniciales, pieza as piezaPlan, pct, euros as eurosPlan, puntosFrente, textoDinero, textoPeriodo } from '../lib/builder/comparaPlanes'
-import { B, S, varsBuilder } from '../lib/builder/estilo'
+import { B, C, S, varsBuilder } from '../lib/builder/estilo'
 import BuilderAzar from './BuilderAzar'
 import BuilderPlan from './BuilderPlan'
 import BuilderEditor from './BuilderEditor'
@@ -52,7 +52,7 @@ const copia = (x) => JSON.parse(JSON.stringify(x))
 const fila = { ...celda, padding: '6px 12px', verticalAlign: 'middle', whiteSpace: 'nowrap', fontSize: 13 }
 const botonPeque = { padding: '4px 12px', fontSize: 13 }
 const iconoFila = { background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 3px', display: 'inline-flex', alignItems: 'center', color: B.secundario }
-export const menuFijo = { zIndex: 40, padding: 6, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, boxShadow: '0 8px 24px rgba(0,0,0,0.45)', opacity: 1 }
+export const menuFijo = { zIndex: 40, padding: 6, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, boxShadow: '0 8px 24px var(--bd-sombra, rgba(0,0,0,0.45))', opacity: 1 }
 export const opcionMenu = { ...S.enlace, display: 'block', width: '100%', padding: '5px 6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
 
 // §58: un desplegable (fondo opaco) que se cierra al pulsar fuera o con Esc. boton(abierto, alterna, ref) lo pinta quien lo usa.
@@ -155,7 +155,7 @@ export function CabeceraPasos({ actual = 1, onPaso = null, desactivados = {}, he
             <Caja data-paso={n} data-hecho={hecho && !on ? '1' : undefined} aria-current={on ? 'step' : undefined} aria-label={`Paso ${n}: ${p}`} onClick={pulsable ? () => onPaso(n) : undefined} title={desactivados[n] || (pulsable ? `Ir al paso ${n}: ${p}` : `Paso ${n}: ${p}`)}
               style={{ padding: 0, background: 'transparent', border: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: B.letra, cursor: pulsable ? 'pointer' : 'default' }}>
               <span data-circulo style={{ width: 24, height: 24, flex: 'none', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700,
-                background: on ? B.verde : 'transparent', color: on ? B.sobreVerde : hecho ? '#7ee2a0' : desactivados[n] ? B.apagado : B.secundario, border: on ? 'none' : `1px solid ${hecho ? B.pasoBorde : pulsable ? B.siguienteBorde : B.borde}` }}>{hecho && !on ? '✓' : n}</span>
+                background: on ? B.verde : 'transparent', color: on ? B.sobreVerde : hecho ? C.verde : desactivados[n] ? B.apagado : B.secundario, border: on ? 'none' : `1px solid ${hecho ? B.pasoBorde : pulsable ? B.siguienteBorde : B.borde}` }}>{hecho && !on ? '✓' : n}</span>
               <span className="bp-nombre-paso" data-nombre-paso style={{ fontSize: 13, whiteSpace: 'nowrap', fontWeight: on ? 700 : 400, color: on ? B.titulo : B.apagado }}>{PASOS_ESTRATEGIA_CORTOS[k]}</span>
             </Caja>
           </span>)
@@ -362,7 +362,7 @@ function PanelDelBuilder({ estrategias = [], salida = null, onAbrirEstrategia, o
   const marcadosVivos = (marcados || []).filter(id => (datos.planes || []).some(p => Number(p.id) === Number(id)))
   const marca = (id) => setMarcados(m => { const xs = (m || []).map(Number), n = Number(id); return xs.includes(n) ? xs.filter(x => x !== n) : xs.length < MAX_COMPARAR ? [...xs, n] : xs })
   const comparaMarcados = () => { try { const g = JSON.parse(window.localStorage.getItem(CLAVE_COMPARAR)) || {}; window.localStorage.setItem(CLAVE_COMPARAR, JSON.stringify({ ...g, elegidos: marcadosVivos })) } catch (_) {} setPlan({ comparar: true, n: Date.now() }) }
-  const VERDE_P = '#7ee2a0', ROJO_P = '#ff8b8b', cifraTd = { ...fila, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
+  const VERDE_P = C.verde, ROJO_P = C.rojo, cifraTd = { ...fila, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
   const celdaCifra = (p, cual) => {
     if (piezaPlan(p.plan)?.donde === 'lista') return <span data-cifra-plan="lista" title="Con una lista de valores, las cifras se calculan al abrir el plan o en «Comparar planes»" style={{ color: B.apagado, textDecoration: 'underline dotted' }}>al abrirlo</span>
     const c = cifrasP[p.id]?.clave === JSON.stringify(p.plan) ? cifrasP[p.id] : null
@@ -386,7 +386,7 @@ function PanelDelBuilder({ estrategias = [], salida = null, onAbrirEstrategia, o
       <span data-titulo-lista style={{ ...S.secundario, fontWeight: 700, color: B.titulo, marginBottom: 6 }}>Mis planes{datos.cargando ? '' : ` (${planesVis.length === nPlanes ? nPlanes : `${planesVis.length} de ${nPlanes}`})`}</span>
     </div>
     <div style={{ ...S.tarjeta, borderTopLeftRadius: 0 }}>
-      {datos.error && <div style={{ color: '#f2cc60', padding: '10px 16px' }}>{datos.error}</div>}
+      {datos.error && <div style={{ color: C.amarillo, padding: '10px 16px' }}>{datos.error}</div>}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '12px 12px 4px', flexWrap: 'wrap' }}>
         <ConLimpiar valor={buscarP} onLimpia={() => setBuscarP('')} bloque estilo={{ flex: '0 1 360px', minWidth: 160 }}><input type="text" role="searchbox" aria-label="Buscar en Planes" placeholder="Buscar por nombre, estrategia o valor…" value={buscarP} onChange={e => setBuscarP(e.target.value)} data-buscar="planes" style={{ ...campoSel, fontSize: 13, fontWeight: 400, padding: '5px 8px', minWidth: 0 }}/></ConLimpiar>
       </div>
@@ -432,7 +432,7 @@ function PanelDelBuilder({ estrategias = [], salida = null, onAbrirEstrategia, o
         <span data-titulo-lista style={{ ...S.secundario, fontWeight: 700, color: B.titulo, marginBottom: 6 }}>Mis estrategias{cuenta(buscadasE, filasE) != null ? ` (${cuenta(buscadasE, filasE)})` : ''}</span>
       </div>
       <div style={{ ...S.tarjeta, borderTopLeftRadius: 0 }}>
-        {datos.error && <div style={{ color: '#f2cc60', padding: '10px 16px' }}>{datos.error}</div>}
+        {datos.error && <div style={{ color: C.amarillo, padding: '10px 16px' }}>{datos.error}</div>}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '12px 12px 4px', flexWrap: 'wrap' }}>
             <ConLimpiar valor={buscar} onLimpia={() => setBuscar('')} bloque estilo={{ flex: '0 1 360px', minWidth: 160 }}><input ref={casillaMiTrabajo} type="text" role="searchbox" aria-label="Buscar en Mi trabajo" placeholder="Buscar por nombre o por la regla…" value={buscar} onChange={e => setBuscar(e.target.value)} data-buscar="mi-trabajo" style={{ ...campoSel, fontSize: 13, fontWeight: 400, padding: '5px 8px', minWidth: 0 }}/></ConLimpiar>
             <Ayuda texto={AYUDA_MI_TRABAJO.fila} etiqueta="Cada fila"/>

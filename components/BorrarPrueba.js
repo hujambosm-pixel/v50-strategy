@@ -1,11 +1,11 @@
 // components/BorrarPrueba.js — las ventanas de borrar una prueba contra el azar y de borrar una estrategia con sus pruebas (docs/builder.md, §60; boceto «Avisos al borrar»). Las mismas en el resultado del paso 2, en sus pruebas anteriores y en «Mi trabajo». El borrado lo hace quien las abre.
-import { B, S } from '../lib/builder/estilo'
+import { B, C, S } from '../lib/builder/estilo'
 import { AVISO_BORRAR_PRUEBAS, descripcionPrueba } from '../lib/pruebaAzar'
 import { Pregunta, ROJO_PAPELERA } from './VentanaPregunta'
 
 export const botonRojo = { ...S.botonVerde, background: ROJO_PAPELERA, borderColor: ROJO_PAPELERA, color: '#fff' }
 const fecha = (d) => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '—'
-const AvisoSuerte = () => <div data-aviso-suerte style={{ color: '#f2cc60', background: 'rgba(210,153,34,0.12)', borderRadius: B.radioBoton, padding: '10px 12px', marginBottom: 16, fontSize: 13 }}>⚠ {AVISO_BORRAR_PRUEBAS}</div>
+const AvisoSuerte = () => <div data-aviso-suerte style={{ color: C.amarillo, background: 'rgba(210,153,34,0.12)', borderRadius: B.radioBoton, padding: '10px 12px', marginBottom: 16, fontSize: 13 }}>⚠ {AVISO_BORRAR_PRUEBAS}</div>
 const filaLista = { display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '5px 0', borderBottom: `1px solid ${B.borde}` }
 const titulo = { fontSize: 12, color: B.secundario, margin: '8px 0 2px' }
 
