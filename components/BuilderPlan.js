@@ -52,7 +52,7 @@ import SelectorValores from './backtesting/SelectorValores'
 // §168: del Backtesting solo queda la petición de los candidatos (la de «Tu dinero» con varios valores); la pestaña «La cartera por dentro» ya no está.
 import { peticionPorDentro, motivoSinPeticion } from './backtesting/PlanPorDentro'
 // §156: la pestaña «Detalle» (un solo cálculo, parte 2): el mismo cálculo de «Tu dinero», por dentro.
-import PlanDetalle, { Ampliable, AmpliadoCtx } from './PlanDetalle'
+import PlanDetalle, { Ampliable, AmpliadoCtx, COLORES_BLOQUE } from './PlanDetalle'
 import { AYUDA_DETALLE, detallePlan } from '../lib/builder/detallePlan'
 // §128: «Comparar planes» (opción A: cada plan tal como está guardado).
 import ComparaPlanes from './ComparaPlanes'
@@ -70,8 +70,7 @@ import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, avisoPrueba as textoAvisoPrueba, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
   ayudaCaida, ayudaPrueba, avisoListaSimple, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, velasDeEstrategia, velasDelPlan, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS, bloquesDe, estrategiaBloque, anadeBloque, quitaBloque, repartirResto, sumaPesos, AYUDA_BLOQUES } from '../lib/builder/planPantalla'
-// §187: los colores de los bloques (el 1, azul, como siempre).
-const COLORES_BLOQUE = [C.azul, C.naranja, C.morado, C.cian, C.verde]
+// §187: los colores de los bloques (el 1, azul, como siempre): COLORES_BLOQUE de PlanDetalle (§188: los mismos en «Detalle»).
 
 const CLAVE_PANEL = 'builder_plan_panel_oculto'   // §165
 // §178: los colores con significado, como variables (cambian con el tono ☀/☾).
