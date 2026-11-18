@@ -69,10 +69,15 @@ const listaDeAccion = (x) => ({ ...(x.lista || {}), universo: 'manual', simbolos
 import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, avisoPrueba as textoAvisoPrueba, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
   ayudaCaida, ayudaPrueba, avisoListaSimple, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, velasDeEstrategia, velasDelPlan, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
-  textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS, bloquesDe, estrategiaBloque, anadeBloque, quitaBloque, repartirResto, sumaPesos, AYUDA_BLOQUES } from '../lib/builder/planPantalla'
+  textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS, resumenDinero, bloquesDe, estrategiaBloque, anadeBloque, quitaBloque, repartirResto, sumaPesos, AYUDA_BLOQUES } from '../lib/builder/planPantalla'
 // §187: los colores de los bloques (el 1, azul, como siempre): COLORES_BLOQUE de PlanDetalle (§188: los mismos en «Detalle»).
 
 const CLAVE_PANEL = 'builder_plan_panel_oculto'   // §165
+// §189: cada bloque, con un marco de su color (más grueso a la izquierda) y la cabecera teñida de su color, para distinguirlos de un vistazo.
+const marcoBloque = (color) => ({ borderTop: `1px solid color-mix(in srgb, ${color} 55%, ${B.borde})`, borderRight: `1px solid color-mix(in srgb, ${color} 55%, ${B.borde})`, borderBottom: `1px solid color-mix(in srgb, ${color} 55%, ${B.borde})`, borderLeft: `5px solid ${color}`, borderRadius: B.radioBoton, background: `color-mix(in srgb, ${color} 4%, ${B.tarjeta})` })
+const fondoCabeceraBloque = (color) => `color-mix(in srgb, ${color} 16%, transparent)`
+// §189: el ancho del panel de la izquierda, arrastrando su borde (se recuerda en este navegador; doble clic = el de siempre).
+const CLAVE_ANCHO = 'builder_plan_ancho_panel', ANCHO_MIN = 300, ANCHO_MAX = 760
 // §178: los colores con significado, como variables (cambian con el tono ☀/☾).
 const AMARILLO = C.amarillo, ROJO = C.rojo, VERDE = C.verde, AZUL = C.azul, GRIS_FRANJA = C.ejeCero
 const campo = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px' }
@@ -253,7 +258,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const [a, setA] = useState(inicio.a)
   const [cualVersion, setCualVersion] = useState(inicio.version)   // en un plan guardado: 'guardada' (la foto del plan) o 'actual' (la estrategia de ahora)
   const edic = useRef({}), cuentaNuevas = useRef(1), ultimasIds = useRef(null)
-  const fila = actual?.startsWith('g') ? (planes || []).find(p => `g${p.id}` === actual) || null : null
+  const fila = actual?.startsWith('g') ?(planes || []).find(p => `g${p.id}` === actual) || null : null
   const fotoG = fila ? fotoDelPlan(fila.plan) : null
   const estrategiaActual = diarias.find(s => String(s.id) === estId) || null
   const usaGuardada = !!fotoG && String(fotoG.id) === estId && (cualVersion === 'guardada' || !estrategiaActual)
@@ -264,7 +269,23 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // §187: los bloques extra: { id: plegado (false) / abierto } (de entrada, abierto) y { id: su lista de valores abierta }.
   const [extraAbiertos, setExtraAbiertos] = useState({})
   const [valoresExtra, setValoresExtra] = useState({})
+  // §189: «Tu dinero», plegado en una línea en los planes guardados y abierto en los nuevos (por plan; solo en pantalla).
+  const [dineroAb, setDineroAb] = useState({})
   const [bloqueAbierto, setBloqueAbierto] = useState(true)   // §142: la fila del bloque de «Cartera», abierta o plegada (solo en pantalla)
+  // §189: el ancho del panel de la izquierda (null = el de siempre: hasta 520 px).
+  const [anchoIzq, setAnchoIzq] = useState(() => { try { const v = Number(localStorage.getItem(CLAVE_ANCHO)); return v >= ANCHO_MIN && v <= ANCHO_MAX ? v : null } catch (_) { return null } })
+  const izqRef = useRef(null)
+  const arrastraBorde = (e) => {
+    e.preventDefault()
+    const x0 = izqRef.current?.getBoundingClientRect?.().left ?? 0
+    const mueve = (ev) => setAnchoIzq(Math.round(Math.max(ANCHO_MIN, Math.min(ANCHO_MAX, ev.clientX - x0))))
+    const suelta = () => { window.removeEventListener('mousemove', mueve); window.removeEventListener('mouseup', suelta); document.body.style.userSelect = ''
+      setAnchoIzq(v => { try { if (v != null) localStorage.setItem(CLAVE_ANCHO, String(v)) } catch (_) {} return v }) }
+    document.body.style.userSelect = 'none'
+    window.addEventListener('mousemove', mueve); window.addEventListener('mouseup', suelta)
+  }
+  const anchoNormal = () => { setAnchoIzq(null); try { localStorage.removeItem(CLAVE_ANCHO) } catch (_) {} }
+  const dineroAbierto = dineroAb[actual] ?? inicial?.dineroAbierto ?? !String(actual || '').startsWith('g')   // §189
   const otroOcioso = otroForzado || !OCIOSOS_FIJOS.some(([k]) => k === a.ocioso)
   const setOtroOcioso = setOtroForzado
   const [cambio, setCambio] = useState(inicial?.cambio || null)   // { cambiada, borrada } del plan guardado abierto
@@ -799,8 +820,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     const abiertoV = valoresExtra[b.id] ?? (!uni && marc.length === 0)
     const vEst = velasDeEstrategia(est), vPlan = velasDelPlan(b, est)
     return (
-      <div key={b.id} data-bloque={n} style={{ border: `1px solid ${B.borde}`, borderRadius: B.radioBoton }}>
-        <button type="button" data-fila-bloque aria-expanded={abierto} onClick={() => setExtraAbiertos(x => ({ ...x, [b.id]: !abierto }))} title={abierto ? 'Plegar el bloque' : 'Abrir el bloque'} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, textAlign: 'left' }}>
+      <div key={b.id} data-bloque={n} style={marcoBloque(color)}>
+        <button type="button" data-fila-bloque aria-expanded={abierto} onClick={() => setExtraAbiertos(x => ({ ...x, [b.id]: !abierto }))} title={abierto ? 'Plegar el bloque' : 'Abrir el bloque'} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: fondoCabeceraBloque(color), border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, textAlign: 'left' }}>
           <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: color, flex: 'none' }}/>
           <span data-parte style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>{textoCampo(b.peso)} %</span>
           <span style={{ minWidth: 0, flex: '1 1 auto' }}>
@@ -864,7 +885,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     </div>
   )
   const bloques = (
-    <div data-tarjeta="bloques" style={{ ...S.tarjeta, overflow: 'visible' }}>
+    <div data-tarjeta="bloques" style={{ ...S.tarjeta, marginTop: 16, overflow: 'visible' }}>
       <div style={{ ...S.cabeceraTarjeta, borderRadius: `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0`, display: 'flex', alignItems: 'center', gap: 2 }}>Cartera<Ayuda texto={AYUDA_PLAN.cartera} etiqueta="Cartera"/><span data-subtitulo style={{ ...S.apagado, fontWeight: 400, marginLeft: 8 }}>en qué se invierte</span></div>
       <div style={{ ...S.cuerpo, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {!multi ? <div data-barra-cartera aria-hidden="true" title="Todo el dinero del plan está en este bloque" style={{ height: 8, borderRadius: 4, background: AZUL }}/>
@@ -872,8 +893,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             {[Number(a.peso) || 0, ...extra.map(b => Number(b.peso) || 0)].map((p, k) => <div key={k} style={{ width: `${Math.max(0, p) / Math.max(100, sumaPct) * 100}%`, background: COLORES_BLOQUE[k % COLORES_BLOQUE.length] }}/>)}
           </div>}
         {multi && sumaPct !== 100 && <div data-aviso="suma-bloques" style={{ color: ROJO, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>✕ Los bloques suman {textoCampo(sumaPct)} %: tienen que sumar 100 %.<button type="button" data-boton="repartir-resto" title="Ajusta los % en proporción para que sumen 100 %" onClick={() => setA(repartirResto)} style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }}>Repartir el resto</button></div>}
-        <div data-bloque="1" style={{ border: `1px solid ${B.borde}`, borderRadius: B.radioBoton }}>
-          <button type="button" data-fila-bloque aria-expanded={bloqueAbierto} onClick={() => setBloqueAbierto(x => !x)} title={bloqueAbierto ? 'Plegar el bloque' : 'Abrir el bloque'} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, textAlign: 'left' }}>
+        <div data-bloque="1" style={marcoBloque(AZUL)}>
+          <button type="button" data-fila-bloque aria-expanded={bloqueAbierto} onClick={() => setBloqueAbierto(x => !x)} title={bloqueAbierto ? 'Plegar el bloque' : 'Abrir el bloque'} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: fondoCabeceraBloque(AZUL), border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, textAlign: 'left' }}>
             <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: AZUL, flex: 'none' }}/>
             <span data-parte title={multi ? 'Qué parte del dinero del plan va a este bloque.' : 'Qué parte del dinero del plan va a este bloque. Con un solo bloque, todo: de 10.000 €, los 10.000 €.'} style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>{multi ? textoCampo(a.peso) : 100} %</span>
             <span style={{ minWidth: 0, flex: '1 1 auto' }}>
@@ -964,9 +985,12 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   )
   const fs = fechasDe(a)
   const dinero = (
-    <div data-tarjeta="tu-dinero" style={{ ...S.tarjeta, marginTop: 16, overflow: 'visible' }}>
-      <div style={{ ...S.cabeceraTarjeta, borderRadius: `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0` , display: 'flex', alignItems: 'baseline', gap: 8 }}>Tu dinero<span data-subtitulo style={{ ...S.apagado, fontWeight: 400 }}>cuánto, cuándo y costes</span></div>
-      <div style={{ ...S.cuerpo, display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div data-tarjeta="tu-dinero" data-abierta={dineroAbierto ? 'si' : 'no'} style={{ ...S.tarjeta, overflow: 'visible' }}>
+      <button type="button" data-pliega-dinero aria-expanded={dineroAbierto} onClick={() => setDineroAb(x => ({ ...x, [actual]: !dineroAbierto }))} title={dineroAbierto ? 'Plegar «Tu dinero» en una línea' : 'Abrir «Tu dinero» para cambiarlo'}
+        style={{ ...S.cabeceraTarjeta, borderRadius: dineroAbierto ? `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0` : B.radioTarjeta, display: 'flex', alignItems: 'baseline', gap: 8, width: '100%', boxSizing: 'border-box', cursor: 'pointer', textAlign: 'left', fontFamily: B.letra, ...(dineroAbierto ? {} : { borderBottom: 'none' }) }}>
+        Tu dinero<span data-subtitulo style={{ ...S.apagado, fontWeight: 400 }}>cuánto, cuándo y costes</span><span aria-hidden="true" style={{ marginLeft: 'auto', color: B.secundario, fontWeight: 400 }}>{dineroAbierto ? '▾' : '▸'}</span></button>
+      {!dineroAbierto && <button type="button" data-resumen-dinero onClick={() => setDineroAb(x => ({ ...x, [actual]: true }))} title="Pulsa para cambiarlo" style={{ display: 'block', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 14px 11px', fontFamily: B.letra, fontSize: 13, color: B.texto, lineHeight: 1.5 }}>{resumenDinero(a, multi)}</button>}
+      {dineroAbierto && <div style={{ ...S.cuerpo, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div>
           <Etiqueta texto="Periodo" ayuda={AYUDA_PLAN.periodo}/>
           <Segmentos etiquetaGrupo="Periodo" valor={a.periodo} onCambia={v => setA(x => ({ ...x, ...(v === 'otras' ? fechasDe(x) : {}), periodo: v }))} opciones={PERIODOS_PLAN.map(p => [p.id, p.nombre])}/>
@@ -998,7 +1022,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           </div>
         </div>
         {multi && ociosoCampo}
-      </div>
+      </div>}
     </div>
   )
 
@@ -1116,6 +1140,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
 .bp-mc { --bg: var(--bd-caja, #080c14); --bg2: var(--bd-tarjeta, #0d1520); --bg3: var(--bd-cabecera, #111d2e); --border: var(--bd-borde, #1a2d45); --border2: var(--bd-borde, #243d5c);
   --text: var(--bd-texto, #e2eaf5); --text2: var(--bd-secundario, #7a9bc0); --text3: var(--bd-apagado, #6a8aa8); --accent: var(--bd-enlace, #00d4ff);
   background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; color: var(--text) }
+/* §189: sus casillas y desplegables llevan un fondo oscuro escrito tal cual: dentro del plan, el del tono (en claro no se leían). */
+.bp-mc input:not([type="checkbox"]):not([type="radio"]), .bp-mc select { background: ${B.fondo} !important; border-color: var(--border) !important; color: var(--text) !important }
 @media (min-width: 1000px) { .bp-pagina { box-sizing: border-box; height: calc(100vh - var(--bp-arriba, 56px)); flex: none !important }
   /* §143: con el plan abierto, la página NO se desplaza: lo de arriba queda fijo y cada columna tiene su barra, sin pasarse la rueda. */
   .bp-pagina:has(> .bp-cols) { display: flex; flex-direction: column; overflow: hidden !important }
@@ -1124,15 +1150,21 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   .bp-izq, .bp-der { overflow-y: auto; overscroll-behavior: contain; padding-right: 4px }
   .bp-der > * { flex-shrink: 0 }
   /* §174: «Ocultar el panel» y «Tu dinero / Detalle», siempre visibles arriba de su columna. */
-  .bp-fijo { position: sticky; top: 0; z-index: 6 } }`}</style>
+  .bp-fijo { position: sticky; top: 0; z-index: 6 } }
+/* §189: el borde arrastrable del panel: una raya que se ve al pasar el ratón; en pantallas estrechas no hay. */
+.bp-borde { background: linear-gradient(to right, transparent 3px, ${B.borde} 3px, ${B.borde} 5px, transparent 5px); opacity: 0.35; transition: opacity 0.15s }
+.bp-borde:hover { opacity: 1; background: linear-gradient(to right, transparent 2px, ${B.enlace} 2px, ${B.enlace} 6px, transparent 6px) }
+@media (max-width: 999px) { .bp-borde { display: none } }`}</style>
       {comparando ? null : actual ? <div className="bp-cols" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {/* §165: el panel de la izquierda se puede plegar a una franja estrecha (se recuerda en este navegador). Plegado sigue montado (oculto), así no pierde nada. */}
         {panelOculto && <button type="button" data-abre-panel onClick={() => ponPanelOculto(false)} title="Ver otra vez «Cartera» y «Tu dinero»" aria-label="Ver el panel de la izquierda"
           style={{ flex: '0 0 34px', alignSelf: 'stretch', minHeight: 240, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, color: B.secundario, cursor: 'pointer', fontFamily: B.letra, fontSize: 13, writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0' }}>▶ Cartera · Tu dinero</button>}
-        <div data-columna="izquierda" className="bp-izq" style={{ flex: '1 1 340px', maxWidth: 520, minWidth: 0, ...(panelOculto ? { display: 'none' } : {}) }}>
+        <div data-columna="izquierda" ref={izqRef} data-ancho={anchoIzq ?? ''} className="bp-izq" style={{ ...(anchoIzq ? { flex: `0 0 ${anchoIzq}px`, maxWidth: ANCHO_MAX } : { flex: '1 1 340px', maxWidth: 520 }), minWidth: 0, ...(panelOculto ? { display: 'none' } : {}) }}>
           {/* §174: a la misma altura que «Tu dinero / Detalle» y, como ellas, fija arriba al bajar por la columna. */}
           <div className="bp-fijo" data-barra-izq style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', height: ALTO_BARRA_COL, boxSizing: 'border-box', marginBottom: 10, background: B.fondo }}><button type="button" data-oculta-panel onClick={() => ponPanelOculto(true)} title="Pliega «Cartera» y «Tu dinero» para que los gráficos y las tablas usen todo el ancho" style={{ fontFamily: B.letra, fontSize: 12, padding: '3px 9px', borderRadius: 6, cursor: 'pointer', border: `1px solid ${B.borde}`, background: B.fondo, color: B.secundario }}>◀ Ocultar el panel</button></div>
-          {bloques}{dinero}</div>
+          {dinero}{bloques}</div>
+        {!panelOculto && <div data-borde-panel className="bp-borde" role="separator" aria-orientation="vertical" aria-label="Arrastra para cambiar el ancho del panel" onMouseDown={arrastraBorde} onDoubleClick={anchoNormal}
+          title="Arrastra para estrechar o ensanchar el panel de la izquierda. Doble clic: el ancho de siempre." style={{ flex: '0 0 8px', alignSelf: 'stretch', cursor: 'col-resize', margin: '0 -12px 0 -8px', position: 'relative', zIndex: 5 }}/>}
         <div data-columna="derecha" className="bp-der" style={{ flex: '2 1 480px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {resultado}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>

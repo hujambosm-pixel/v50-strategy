@@ -115,7 +115,9 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   ok(m.raiz.busca(n => n.getAttribute('data-builder') != null).getAttribute('data-builder') === 'tesis', 'sin cambios: pasa a la pestaña Tesis')
   ok(m.raiz.busca(n => n.getAttribute('data-item') === '1')?.getAttribute('aria-current') === 'true', 'con esa tesis abierta, no con la más reciente')
   m.quita(); await D.espera(5)
-  b = base(); m = D.monta(h(Pagina, { inicial: 'builder' }), RDC); await hasta(() => !!enlace(m, 1) && !!m.raiz.busca(n => n.nodeName === 'INPUT' && n.getAttribute('aria-label') === 'Dinero inicial'))
+  b = base(); m = D.monta(h(Pagina, { inicial: 'builder' }), RDC); await hasta(() => !!enlace(m, 1) && !!m.raiz.busca(n => n.getAttribute('data-pliega-dinero') != null))
+  { const pd = m.raiz.busca(n => n.getAttribute('data-pliega-dinero') != null); if (pd.getAttribute('aria-expanded') === 'false') D.pulsa(pd) }   // §189: «Tu dinero» plegado en los guardados
+  await hasta(() => !!m.raiz.busca(n => n.nodeName === 'INPUT' && n.getAttribute('aria-label') === 'Dinero inicial'))
   const cap = m.raiz.busca(n => n.nodeName === 'INPUT' && n.getAttribute('aria-label') === 'Dinero inicial')
   const con25000 = () => String(D.propsDe(cap).value).replace(/\D/g, '') === '25000'
   D.propsDe(cap).onFocus(); D.escribe(cap, '25000'); await hasta(con25000); D.propsDe(cap).onBlur(); await hasta(con25000)

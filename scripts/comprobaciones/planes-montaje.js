@@ -124,6 +124,10 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   ok(Pa.textoEuros(10000) === '10.000' && Pa.textoEuros(1000) === '1.000' && Pa.textoEuros(300) === '300' && Pa.textoEuros(1234.5) === '1.234,5' && Pa.textoEuros(0.37) === '0,37' && Pa.textoEuros('') === '' && Pa.textoEuros(1234567) === '1.234.567', 'textoEuros, a mano: 10.000, 1.000, 300, 1.234,5, 0,37, vacío, 1.234.567')
   const r0 = PLANES[0]
   b = base([4]); m = D.monta(h(BPlan, { estrategias: ests, apiFetch: api, planId: 4 }), RDC); await D.espera(LARGO)
+  // §189: en un plan guardado, «Tu dinero» sale plegado en una línea; se abre pulsándolo.
+  { const pd = m.raiz.busca(n => n.getAttribute('data-pliega-dinero') != null), rs = m.raiz.busca(n => n.getAttribute('data-resumen-dinero') != null)
+    ok(pd?.getAttribute('aria-expanded') === 'false' && /^10\.000 € · \+ 300 €\/mes · /.test(rs?.textContent || ''), `§189: «Tu dinero» plegado en una línea (${rs?.textContent})`)
+    D.pulsa(pd); await D.espera(10) }
   const casilla = (t) => m.raiz.busca(n => n.nodeName === 'INPUT' && n.getAttribute('aria-label') === t)
   const cap = casilla('Dinero inicial'), apo = casilla('Aportación mensual')
   ok(cap.value === '10.000' && apo.value === '300', `se ven con punto de miles: «${cap.value}», «${apo.value}»`)
