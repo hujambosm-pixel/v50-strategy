@@ -195,6 +195,10 @@ const sum = (xs, f) => xs.reduce((s, x) => s + f(x), 0)
     { const De = require(R + '/lib/builder/detallePlan.js'), dd = De.detallePlan({ evaluacion: { plan: { medidas: { valorNeto: r.valorNeto }, ejecucion: r } } }, p)
       ok([0, 0, 99.9, gO].every((v, k) => cerca(L.curvas.O[k], v)) && dd.ocioso.simbolo === 'O' && dd.ocioso.ordenes === 4 && cerca(dd.ocioso.aporto, gO) && dd.cabecera.ordenesValores === 2 && dd.cabecera.ordenes === 6 && dd.filas.length === 1 && dd.curvas.series.length === 2 && dd.curvas.series[1].rol === 'ocioso' && dd.suma.cuadra,
         `a mano, el ocioso día a día: 0 · 0 · 99,90 · 127,08 € y 4 de las 6 órdenes son suyas (${L.curvas.O.map(v => v.toFixed(2)).join(' · ')}; ${dd.ocioso.ordenes} de ${dd.cabecera.ordenes})`)
+      // §191: el CAGR de su aportación = (1.300 + 127,08) / 1.300 elevado a 1 / años (la misma cuenta que un valor); su curva solo sube (0 · 0 ·
+      // 99,90 · 127,08): sin caída; y el día 0 ya hay dinero en el ocioso.
+      { const an = (Date.parse(G[3] + 'T00:00:00Z') - Date.parse(G[0] + 'T00:00:00Z')) / (365.25 * 864e5)
+        ok(cerca(dd.ocioso.cagr, Math.pow((1300 + gO) / 1300, 1 / an) - 1) && !(dd.ocioso.caidaEur < 0) && dd.ocioso.dentro > 0 && dd.ocioso.dentro <= 1, `§191: el ocioso con su CAGR, sin caída y su tiempo dentro (${dd.ocioso.cagr}, ${dd.ocioso.caidaEur}, ${dd.ocioso.dentro})`) }
       // §157. Enero: entran 1.000 € y acaba con 999 € (el oro, tras 1 € de comisión): −1 €, −0,1 %. Febrero: 1.640,46 − 999 − 300 aportados = +341,46 €.
       // El año: −1 + 341,46 = 340,46 € = 1.640,46 − 1.300 aportados. Día 1: 999 € en el oro → 100 % en el ocioso.
       const mm = dd.mensuales[0]

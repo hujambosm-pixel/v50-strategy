@@ -338,43 +338,58 @@ function celdasCifras(f, { quien, enElTexto = null, opsExtra = null } = {}) {
     <td key="i" style={num}>{pct(f.dentro, 0)}</td>,
   ]
 }
-function TablaBloques({ bloques, total, ocioso, s, cifras, senales, abiertos, todosAbiertos, onAbre, onTodos, onVelas, onIrAValor, elegido }) {
-  const sinOcioso = ocioso.simbolo === 'LIQUIDEZ', nombreOc = nombreOcioso(ocioso.simbolo)
+// §191: la fila del dinero ocioso (las dos tablas): lo que aportó, su CAGR, sus órdenes, su peor caída, cuánto dinero tuvo de media y la parte
+// de los días con algo en él. Sin ganadoras ni Profit Factor («—» con el motivo al pasar el ratón).
+const SIN_OPERACIONES_OCIOSO = 'El dinero ocioso no hace operaciones con resultado: entra y sale a trozos cuando los bloques sueltan o piden dinero, sin ninguna regla que acierte o falle. Para saber si te ayuda, mira lo que aportó y la fila «El mismo plan con el dinero ocioso en liquidez» de «Tu dinero».'
+function celdasOcioso(ocioso, s) {
+  const sinOc = ocioso.simbolo === 'LIQUIDEZ', gris = { ...num, fontWeight: 400, color: B.secundario }
+  return [
+    <td key="a" style={{ ...num, color: signo(ocioso.aporto) }}>{sinOc ? euros(0, 0) : conSigno(ocioso.aporto)}</td>,
+    <td key="b" style={{ ...num, color: signo(ocioso.aporto) }}>{sinOc ? '' : pctSigno(s.aportado > 0 ? ocioso.aporto / s.aportado : null)}</td>,
+    <td key="c" data-cagr-ocioso style={{ ...num, color: signo(ocioso.cagr) }} title={sinOc ? undefined : 'Lo que aportó el ocioso a tu plan, al año (no es la rentabilidad del oro: tu dinero solo estuvo ahí parte del tiempo)'}>{sinOc ? '' : pct(ocioso.cagr)}</td>,
+    <td key="d" style={gris}>{sinOc ? 'sin órdenes' : `${numero(ocioso.ordenes, 0)} órdenes`}</td>,
+    <td key="e" style={gris} title={sinOc ? undefined : SIN_OPERACIONES_OCIOSO}>{sinOc ? '' : '—'}</td>,
+    <td key="f" style={gris} title={sinOc ? undefined : SIN_OPERACIONES_OCIOSO}>{sinOc ? '' : '—'}</td>,
+    <td key="g" data-caida-ocioso style={{ ...num, color: ocioso.caidaEur < 0 ? ROJO : undefined }} title={sinOc ? undefined : ocioso.caidaEur < 0 ? `${conSigno(ocioso.caidaEur, 0)} de lo ganado con el ocioso` : 'Sin caídas'}>{sinOc || ocioso.caidaPct == null || !(ocioso.caidaEur < 0) ? (sinOc ? '' : '—') : pct(ocioso.caidaPct, 1)}</td>,
+    <td key="h" style={gris} title={sinOc ? 'En liquidez, de media' : `En el ocioso, de media${ocioso.liquidez >= 0.005 ? `; además, ${pct(ocioso.liquidez, 0)} en liquidez` : ''}`}>{pct(sinOc ? ocioso.liquidez : (ocioso.media || 0), 0)}</td>,
+    <td key="i" data-dentro-ocioso style={num}>{sinOc ? '' : pct(ocioso.dentro, 0)}</td>,
+  ]
+}
+function TablaBloques({ bloques, total, ocioso, s, cifras, senales, abiertos, abiertoTotal, todosAbiertos, onTotal, onAbre, onTodos, onVelas, onIrAValor, elegido }) {
+  const nombreOc = nombreOcioso(ocioso.simbolo)
   return (
     <Tarjeta id="detalle-bloques" titulo="Qué aportó cada bloque" ayuda={`${AYUDA_DETALLE.bloques} ${AYUDA_DETALLE.ocioso}`}
       derecha={<button type="button" data-expande-bloques aria-expanded={todosAbiertos} onClick={onTodos} style={boton(false)}>{todosAbiertos ? 'Plegar todo ▴' : 'Expandir todo ▾'}</button>}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="detalle-bloques" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr><th style={cab}>Bloque / valor</th>{COLUMNAS_DETALLE.map(([h, a]) => <th key={h} data-columna={h} style={cabNum}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{h}{a && <Ayuda texto={a} etiqueta={h}/>}</span></th>)}</tr></thead>
         <tbody>
-          {bloques.map(b => { const ab = abiertos.has(b.n)
+          <tr data-fila-total style={{ fontWeight: 700, color: B.titulo, background: B.cabecera }}>
+            <td style={celda}><button type="button" data-pliega-total aria-expanded={abiertoTotal} onClick={onTotal} title={abiertoTotal ? 'Ocultar los bloques' : 'Ver los bloques'} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.titulo, fontFamily: B.letra, fontSize: 'inherit', fontWeight: 700, textAlign: 'left' }}>{abiertoTotal ? '▾' : '▸'} Los {numero(bloques.length, 0)} bloques <span style={{ fontWeight: 400, color: B.secundario }}>(sin el ocioso)</span></button></td>
+            {celdasCifras({ ...total, dentro: cifras?.tiempoInvertido, enEl: total.enValores, enElEur: total.enValoresEur }, { quien: 'los valores',
+              opsExtra: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>{numero(total.operaciones, 0)}{senales && <span data-senales title={textoSenales(senales)} style={{ fontSize: 10, fontWeight: 400, cursor: 'help', borderRadius: 3, padding: '1px 4px', color: senales.pct >= 0.995 ? VERDE : C.naranjaVivo, background: senales.pct >= 0.995 ? 'rgba(126,226,160,0.10)' : 'rgba(255,159,67,0.12)' }}>{Math.round(senales.pct * 100)} %</span>}</span> })}
+          </tr>
+          {abiertoTotal && bloques.map(b => { const ab = abiertos.has(b.n)
             return <Fragment key={b.n}>
               <tr data-fila-bloque={b.n} style={{ fontWeight: 700, color: B.titulo }}>
-                <td style={celda}>
+                <td style={{ ...celda, paddingLeft: 24 }}>
                   <button type="button" data-pliega-bloque={b.n} aria-expanded={ab} onClick={() => onAbre(b.n)} title={ab ? 'Ocultar sus valores' : 'Ver sus valores'} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.titulo, fontFamily: B.letra, fontSize: 'inherit', fontWeight: 700, display: 'inline-flex', alignItems: 'center', textAlign: 'left' }}>{ab ? '▾' : '▸'}&nbsp;<Punto n={b.n}/>Bloque {b.n} · {b.nombre}</button>
                   <div data-resumen-bloque-detalle style={{ ...S.apagado, fontWeight: 400, paddingLeft: 30 }}>{pct(b.peso, 0)} de tu dinero · {b.donde} · velas {b.velas}</div>
                 </td>
                 {celdasCifras(b, { quien: `el bloque ${b.n}` })}
               </tr>
               {ab && b.valores.map(v => <tr key={v.simbolo} data-valor-bloque={`${b.n}-${v.simbolo}`} aria-selected={v.simbolo === elegido} style={v.simbolo === elegido ? { background: B.cabecera } : undefined}>
-                <td style={{ ...celda, paddingLeft: 36 }}>
+                <td style={{ ...celda, paddingLeft: 60 }}>
                   <button type="button" data-elige-valor={v.simbolo} onClick={() => onVelas(v.simbolo)} title={`Pulsa para ver las velas de ${v.simbolo} con sus operaciones`} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.texto, fontFamily: B.letra, fontSize: 'inherit' }}>{v.simbolo}</button>
                   {onIrAValor && <button type="button" data-ir-valor={v.simbolo} onClick={() => onIrAValor(v.simbolo)} title={`Abrir ${v.simbolo} en la Watchlist`} style={{ background: 'none', border: 'none', padding: '0 0 0 6px', cursor: 'pointer', color: B.enlace, fontSize: 13 }}>↗</button>}
                   {v.compartido && <span title="Este valor está también en otro bloque" style={{ ...S.apagado, marginLeft: 6 }}>· en varios bloques</span>}
                 </td>
                 {celdasCifras(v, { quien: v.simbolo })}
               </tr>)}
-              {ab && !b.valores.length && <tr><td colSpan={10} style={{ ...celda, ...S.apagado, paddingLeft: 36 }}>Sin operaciones en el periodo.</td></tr>}
+              {ab && !b.valores.length && <tr><td colSpan={10} style={{ ...celda, ...S.apagado, paddingLeft: 60 }}>Sin operaciones en el periodo.</td></tr>}
             </Fragment> })}
           <tr data-fila-ocioso style={{ fontWeight: 700, color: B.titulo }}>
             <td style={celda}>Dinero ocioso de la cuenta · {nombreOc}</td>
-            <td style={{ ...num, color: signo(ocioso.aporto) }}>{sinOcioso ? euros(0, 0) : conSigno(ocioso.aporto)}</td><td style={{ ...num, color: signo(ocioso.aporto) }}>{sinOcioso ? '' : pctSigno(s.aportado > 0 ? ocioso.aporto / s.aportado : null)}</td><td style={num}></td>
-            <td style={{ ...num, fontWeight: 400, color: B.secundario }}>{sinOcioso ? 'sin órdenes' : `${numero(ocioso.ordenes, 0)} órdenes`}</td><td style={num}></td><td style={num}></td><td style={num}></td>
-            <td style={{ ...num, fontWeight: 400, color: B.secundario }} title={sinOcioso ? 'En liquidez, de media' : `En el ocioso, de media${ocioso.liquidez >= 0.005 ? `; además, ${pct(ocioso.liquidez, 0)} en liquidez` : ''}`}>{pct(sinOcioso ? ocioso.liquidez : (ocioso.media || 0), 0)}</td><td style={num}></td>
-          </tr>
-          <tr data-fila-total style={{ fontWeight: 700, color: B.titulo, background: B.cabecera }}>
-            <td style={celda}>Los {numero(bloques.length, 0)} bloques juntos</td>
-            {celdasCifras({ ...total, dentro: cifras?.tiempoInvertido, enEl: total.enValores, enElEur: total.enValoresEur }, { quien: 'los valores',
-              opsExtra: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>{numero(total.operaciones, 0)}{senales && <span data-senales title={textoSenales(senales)} style={{ fontSize: 10, fontWeight: 400, cursor: 'help', borderRadius: 3, padding: '1px 4px', color: senales.pct >= 0.995 ? VERDE : C.naranjaVivo, background: senales.pct >= 0.995 ? 'rgba(126,226,160,0.10)' : 'rgba(255,159,67,0.12)' }}>{Math.round(senales.pct * 100)} %</span>}</span> })}
+            {celdasOcioso(ocioso, s)}
           </tr>
         </tbody>
       </table></div>
@@ -389,6 +404,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
   // §188: con varios bloques, los bloques abiertos en «Qué aportó cada bloque» (de entrada, plegados) y el resaltado de «Bloque a bloque».
   const [abiertosB, setAbiertosB] = useState(() => new Set(inicial?.bloquesAbiertos || []))
   const [elegidoB, setElegidoB] = useState(null)
+  const [abiertoTotalB, setAbiertoTotalB] = useState(!!inicial?.totalBloquesAbierto)   // §191: «Los N bloques» arriba, plegada al entrar
   // §160: el valor cuyas velas se ven en «Cómo crece» (null = el gráfico del plan) y si la «Vista de gráficos» está abierta.
   const [verValor, setVerValor] = useState(inicial?.verValor || null)
   const [vistaG, setVistaG] = useState(!!inicial?.vistaGraficos)
@@ -401,7 +417,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
   const unValor = !!detalle.unValor, simVelas = unValor ? detalle.simbolo : verValor
   const nombreOc = nombreOcioso(ocioso.simbolo), sinOcioso = ocioso.simbolo === 'LIQUIDEZ'
   const parte = (id, color, texto) => <span key={id} data-suma={id} style={{ color, whiteSpace: 'nowrap', ...(detalle.bloques ? { display: 'inline-flex', alignItems: 'center' } : {}) }}>{texto}</span>
-  const bloques = detalle.bloques || null, todosAbiertos = !!bloques && bloques.every(b => abiertosB.has(b.n))
+  const bloques = detalle.bloques || null, todosAbiertos = !!bloques && abiertoTotalB && bloques.every(b => abiertosB.has(b.n))
   const ganadoTexto = (v, donde) => `${v < 0 ? '−' : '+'} ${euros(Math.abs(v), 0)} ${v < 0 ? 'perdidos' : 'ganados'} ${donde}`
   const elige = (sim) => { setElegido(sim); setModo('valores') }
   const abreOperacion = (o) => { const fo = focoDeOperacion(detalle.porOperacion?.ops || [], o); if (fo) abreVelas(o.simbolo, fo) }
@@ -431,8 +447,8 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
       {/* §162: la fila de cifras (las de la tabla del Backtesting que más se miran) */}
       {detalle.cifras && <FilaCifras c={detalle.cifras}/>}
 
-      {bloques && <TablaBloques bloques={bloques} total={total} ocioso={ocioso} s={s} cifras={detalle.cifras} senales={detalle.senales} abiertos={abiertosB} todosAbiertos={todosAbiertos}
-        onAbre={(n) => setAbiertosB(x => { const y = new Set(x); if (y.has(n)) y.delete(n); else y.add(n); return y })} onTodos={() => setAbiertosB(todosAbiertos ? new Set() : new Set(bloques.map(b => b.n)))} onVelas={abreVelas} onIrAValor={onIrAValor} elegido={verValor}/>}
+      {bloques && <TablaBloques bloques={bloques} total={total} ocioso={ocioso} s={s} cifras={detalle.cifras} senales={detalle.senales} abiertos={abiertosB} abiertoTotal={abiertoTotalB} onTotal={() => setAbiertoTotalB(x => !x)} todosAbiertos={todosAbiertos}
+        onAbre={(n) => setAbiertosB(x => { const y = new Set(x); if (y.has(n)) y.delete(n); else y.add(n); return y })} onTodos={() => { setAbiertoTotalB(!todosAbiertos); setAbiertosB(todosAbiertos ? new Set() : new Set(bloques.map(b => b.n))) }} onVelas={abreVelas} onIrAValor={onIrAValor} elegido={verValor}/>}
       {!unValor && !bloques && <Tarjeta id="detalle-valores" titulo="Qué aportó cada valor" ayuda={`${AYUDA_DETALLE.tabla} ${AYUDA_DETALLE.ocioso}`}>
         <div style={{ overflowX: 'auto' }}><table data-tabla="detalle-valores" style={{ borderCollapse: 'collapse', width: '100%' }}>
           <thead><tr><th style={cab}>Valor</th>{[['Aportó', AYUDA_DETALLE.tabla], ['Aportó %', AYUDA_DETALLE.aportoPct], ['CAGR de su aportación', AYUDA_DETALLE.cagrValor], ['Operaciones'], ['Ganadoras'], ['Profit Factor'], ['Peor caída', AYUDA_DETALLE.caidaValor], ['Dinero en él', AYUDA_DETALLE.enEl], ['Tiempo dentro']].map(([h, a]) => <th key={h} data-columna={h} style={cabNum}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{h}{a && <Ayuda texto={a} etiqueta={h}/>}</span></th>)}</tr></thead>
@@ -455,9 +471,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
             </tr>)}
             <tr data-fila-ocioso style={{ fontWeight: 700, color: B.titulo }}>
               <td style={celda}>Dinero ocioso · {nombreOc}</td>
-              <td style={{ ...num, color: signo(ocioso.aporto) }}>{sinOcioso ? euros(0, 0) : conSigno(ocioso.aporto)}</td><td style={{ ...num, color: signo(ocioso.aporto) }}>{sinOcioso ? '' : pctSigno(s.aportado > 0 ? ocioso.aporto / s.aportado : null)}</td><td style={num}></td>
-              <td style={{ ...num, fontWeight: 400, color: B.secundario }}>{sinOcioso ? 'sin órdenes' : `${numero(ocioso.ordenes, 0)} órdenes`}</td><td style={num}></td><td style={num}></td><td style={num}></td>
-              <td style={{ ...num, fontWeight: 400, color: B.secundario }} title={sinOcioso ? 'En liquidez, de media' : `En el ocioso, de media${ocioso.liquidez >= 0.005 ? `; además, ${pct(ocioso.liquidez, 0)} en liquidez` : ''}`}>{pct(sinOcioso ? ocioso.liquidez : (ocioso.media || 0), 0)}</td><td style={num}></td>
+              {celdasOcioso(ocioso, s)}
             </tr>
           </tbody>
         </table></div>
