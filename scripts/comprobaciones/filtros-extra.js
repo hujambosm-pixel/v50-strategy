@@ -11,9 +11,10 @@
 //     → de un momento: el cruce de d10 estaba bloqueado y no hay otro → NINGUNA operación.
 //   REF2: 20 plano hasta d16; d17 = 21. Con las dos filas (REF y REF2): compra a la apertura de d18 = cierre de d17 = 118.
 //   REFW (para la fila SEMANAL): semanas 0 y 1 a 50, semana 2 a 60, semana 3 a 70… Cierre semanal > SMA (2) semanal: semana 1, 50 > 50
-//     no; semana 2, 60 > 55 sí. La semana 2 se conoce el lunes de la semana 3 (d15): durante la semana 2 (d10–d14) vale la semana 1
-//     (no) → compra a la apertura de d16 = cierre de d15 = 114. El viernes d14 (la semana 2 acaba de cerrar) todavía NO deja comprar.
-//   VAL en semanal («Este valor», semanas): semana 1 cierra a 100 (SMA 100: no), semana 2 a 112 (SMA 106: sí) → también d16 a 114.
+//     no; semana 2, 60 > 55 sí. §195: la semana 2 se conoce AL CIERRE de su última sesión, el viernes d14 (como en la realidad); del
+//     lunes al jueves (d10–d13) vale la semana 1 (no) → compra a la apertura del lunes d15 = cierre de d14 = 112. (Antes de §195 se
+//     esperaba al lunes para mirarla y compraba el martes d16 a 114.)
+//   VAL en semanal («Este valor», semanas): semana 1 cierra a 100 (SMA 100: no), semana 2 a 112 (SMA 106: sí) → también d15 a 112.
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'clave-falsa-del-arnes'
 const C0 = require('./cargador'), R = C0.RAIZ
 let fallos = 0
@@ -64,9 +65,9 @@ const ok = (c, t) => { console.log(`${c ? 'OK  ' : 'MAL '} ${t}`); if (!c) fallo
   // ── 5 · Una fila SEMANAL sobre velas diarias: la última semana ya cerrada ──
   const fSem = { quien: 'REFW', si: sobre(2), velas: 'semanal' }
   const rSem = corre(con(ESTADO, [fSem]))
-  ok(txt(rSem) === txt([[dias[16], 114]]), `semanal de otro símbolo: la semana 2 vale desde el lunes de la semana 3 → d16 a 114 (${txt(rSem)})`)
+  ok(txt(rSem) === txt([[dias[15], 112]]), `semanal de otro símbolo: la semana 2 se conoce al cierre del viernes d14 → compra el lunes d15 a 112 (${txt(rSem)})`)
   const rValSem = corre(con(ESTADO, [{ quien: 'valor', si: sobre(2), velas: 'semanal' }]))
-  ok(txt(rValSem) === txt([[dias[16], 114]]), `semanal de «este valor»: d16 a 114 (${txt(rValSem)})`)
+  ok(txt(rValSem) === txt([[dias[15], 112]]), `semanal de «este valor»: el lunes d15 a 112 (${txt(rValSem)})`)
   ok(txt(corre(con(ESTADO, [{ quien: 'REFW', si: sobre(2) }]))) !== txt(rSem), 'la misma fila en diarias no es la semanal (otra cuenta)')
   ok(corre(con(MOMENTO, [fSem])).length === 0, 'semanal con señal de un momento: el cruce de d10 estaba bloqueado → ninguna')
 

@@ -7,7 +7,8 @@
 //     el cierre está sobre su SMA (3), a la apertura siguiente. Sin filtros: compra en d11 a 104 → acaba en 10.000 × 142 / 104.
 //   REF (50 plano hasta d12; d13 = 52…): con la fila «REF: cierre > SMA (3)» compra en d14 a 110 → 10.000 × 142 / 110 = 12.909,09 €.
 //   REF2 (20 plano hasta d16; d17 = 21…): con las dos filas compra en d18 a 118 → 10.000 × 142 / 118.
-//   REFW (semanas a 50, 50, 60, 70…): con la fila semanal «cierre > SMA (2)» compra en d16 a 114 → 10.000 × 142 / 114.
+//   REFW (semanas a 50, 50, 60, 70…): con la fila semanal «cierre > SMA (2)» compra en d15 a 112 (§195: la semana se conoce al cierre
+//     del viernes) → 10.000 × 142 / 112.
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'clave-falsa-del-arnes'
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
 let fallos = 0
@@ -55,7 +56,7 @@ const txt = (x) => JSON.stringify(x)
   const dos = corre(plan({ filtros: { filas: [fREF, fREF2] } }))
   ok(txt(dos.ops) === txt([[per[18], 118]]) && cerca(dos.final, 10000 * 142 / 118), `dos símbolos: compra en d18 a 118 (${txt(dos.ops)})`)
   const sem = corre(plan({ filtros: { filas: [fSem] } }))
-  ok(txt(sem.ops) === txt([[per[16], 114]]) && cerca(sem.final, 10000 * 142 / 114), `una fila semanal sobre velas diarias: compra en d16 a 114 (${txt(sem.ops)})`)
+  ok(txt(sem.ops) === txt([[per[15], 112]]) && cerca(sem.final, 10000 * 142 / 112), `una fila semanal sobre velas diarias: compra el lunes d15 a 112 (${txt(sem.ops)})`)
   const efSem = Es.definicionEfectiva(plan({ velas: 'semanales', filtros: { filas: [fSem] } }).piezas[0]), efDia = Es.definicionEfectiva(plan({ filtros: { filas: [fSem] } }).piezas[0])
   ok(efDia.filtrosExtra[0].velas === 'semanal' && !('velas' in efSem.filtrosExtra[0]), 'con el plan en velas semanales, la fila ya es semanal de por sí (sin la marca)')
 

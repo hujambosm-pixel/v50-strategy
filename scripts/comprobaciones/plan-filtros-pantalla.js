@@ -81,7 +81,7 @@ const hasta = async (cond, max = 20000) => { const t0 = Date.now(); do { await D
   ok(txt(con.ops) === txt([[per[14], 110]]) && cerca(con.final, 10000 * 142 / 110), `con la fila de la pantalla «REF: cierre sobre su SMA (3)»: compra en d14 a 110 y acaba en 12.909,09 € (${con.final})`)
   ok(txt(con.ops) === txt(aMano.ops) && con.final === aMano.final, 'igual que la misma fila escrita a mano en el plan')
   const semW = corre(F.guardaFiltros([{ ...conNumeros(F.filaNuevaPlan(cMedia), { tipo: 'SMA', periodo: 2 }), quien: 'REFW', velas: 'semanal' }], true))
-  ok(txt(semW.ops) === txt([[per[16], 114]]) && cerca(semW.final, 10000 * 142 / 114), `con una fila semanal hecha en la pantalla: compra en d16 a 114 (${txt(semW.ops)})`)
+  ok(txt(semW.ops) === txt([[per[15], 112]]) && cerca(semW.final, 10000 * 142 / 112), `con una fila semanal hecha en la pantalla: compra el lunes d15 a 112 (${txt(semW.ops)})`)
   ok(con.p.piezas[0].donde === undefined && Es.cambiaFiltros(con.p.piezas[0]), 'con filtros y un valor, el plan sigue siendo de «una acción»')
 
   // ── 3 · La caja, montada ──
