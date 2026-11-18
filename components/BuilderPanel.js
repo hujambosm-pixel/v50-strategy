@@ -276,11 +276,13 @@ function PanelDelBuilder({ estrategias = [], salida = null, onAbrirEstrategia, o
   useEffect(() => { onZona?.(zonaEf) }, [zonaEf])
   // §141: las cifras de cada plan en la portada de Planes: el plan tal como está guardado, por /api/plan (el mismo cálculo de su pantalla y de «Comparar planes»), uno detrás de otro y solo
   // con la portada a la vista; se recuerdan mientras el plan no cambie. Con una lista de valores no se calculan aquí (su petición es la de «La cartera por dentro»): al abrirlo o al comparar.
+  // §190: si algún bloque del plan lleva una lista de valores (con varios bloques, cualquiera, no solo el primero).
+  const conListaPlan = (pl) => (pl?.piezas || []).some(x => x.tipo === 'estrategia' && x.donde === 'lista')
   const [cifrasP, setCifrasP] = useState({})   // { [id]: { clave, estado: 'ok' | 'error', v?, qqq?, error? } }
   const cacheCifras = useRef(new Map())
   useEffect(() => {
     if (visible === false || zonaEf !== 'planes' || plan || !apiFetch) return
-    const pend = (datos.planes || []).filter(p => piezaPlan(p.plan)?.donde !== 'lista' && cifrasP[p.id]?.clave !== JSON.stringify(p.plan))
+    const pend = (datos.planes || []).filter(p => !conListaPlan(p.plan) &&cifrasP[p.id]?.clave !== JSON.stringify(p.plan))
     if (!pend.length) return
     let vivo = true
     ;(async () => {
@@ -358,14 +360,16 @@ function PanelDelBuilder({ estrategias = [], salida = null, onAbrirEstrategia, o
   if (plan) return <ProteccionPanel nombre="Convertirla en plan"><BuilderPlan key={plan.n} estrategias={estrategiasEf} estrategiaId={plan.estrategiaId} planId={plan.planId ?? null} nuevo={!!plan.nuevo} comparar={!!plan.comparar} salida={salida} apiFetch={apiFetch} version={version}
     cargaSimbolos={cargaSimbolosCache} datosLista={datosLista} onIrAValor={onIrAValor} tema={tema} onVolver={alVolver(() => setPlan(null), 'planes')} onPaso1={f => { setPlan(null); if (f) abreEditor(f); else recarga() }} onPaso2={id => { setPlan(null); abreAzar(id) }} enlaceTesis={enlaceTesis}/></ProteccionPanel>
   // §140: la portada de PLANES: los planes guardados, con su cartera y su dinero. Las cifras se ven al abrirlo o en «Comparar planes» (se calculan allí).
-  const carteraDe = (p) => { try { const a = ajustesDe(p.plan), n = fotoDelPlan(p.plan)?.name || 'Estrategia'; return `100 % · «${n}» en ${a.donde === 'lista' ? (a.lista?.universo && a.lista.universo !== 'manual' ? 'el Nasdaq-100' : `una lista de ${(a.lista?.simbolos || []).length} valores`) : a.activo}` } catch (_) { return '—' } }
+  // §190: con varios bloques, «2 bloques · «Cruce de medias 50/200» (60 %) + «Sigue la tendencia» (40 %)».
+  const carteraDe = (p) => { try { const bs = (p.plan?.piezas || []).filter(x => x.tipo === 'estrategia'); if (bs.length > 1) return `${bs.length} bloques · ${bs.map(x => `«${x.estrategia?.name || 'Estrategia'}» (${Math.round((Number(x.peso) || 0) * 1000) / 10} %)`.replace('.', ',')).join(' + ')}`
+    const a = ajustesDe(p.plan), n = fotoDelPlan(p.plan)?.name || 'Estrategia'; return `100 % · «${n}» en ${a.donde === 'lista' ? (a.lista?.universo && a.lista.universo !== 'manual' ? 'el Nasdaq-100' : `una lista de ${(a.lista?.simbolos || []).length} valores`) : a.activo}` } catch (_) { return '—' } }
   const planesVis = (datos.planes || []).filter(p => coincide(buscarP, p.nombre, carteraDe(p))), nPlanes = (datos.planes || []).length
   const marcadosVivos = (marcados || []).filter(id => (datos.planes || []).some(p => Number(p.id) === Number(id)))
   const marca = (id) => setMarcados(m => { const xs = (m || []).map(Number), n = Number(id); return xs.includes(n) ? xs.filter(x => x !== n) : xs.length < MAX_COMPARAR ? [...xs, n] : xs })
   const comparaMarcados = () => { try { const g = JSON.parse(window.localStorage.getItem(CLAVE_COMPARAR)) || {}; window.localStorage.setItem(CLAVE_COMPARAR, JSON.stringify({ ...g, elegidos: marcadosVivos })) } catch (_) {} setPlan({ comparar: true, n: Date.now() }) }
   const VERDE_P = C.verde, ROJO_P = C.rojo, cifraTd = { ...fila, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
   const celdaCifra = (p, cual) => {
-    if (piezaPlan(p.plan)?.donde === 'lista') return <span data-cifra-plan="lista" title="Con una lista de valores, las cifras se calculan al abrir el plan o en «Comparar planes»" style={{ color: B.apagado, textDecoration: 'underline dotted' }}>al abrirlo</span>
+    if (conListaPlan(p.plan)) return <span data-cifra-plan="lista" title="Con una lista de valores, las cifras se calculan al abrir el plan o en «Comparar planes»" style={{ color: B.apagado, textDecoration: 'underline dotted' }}>al abrirlo</span>
     const c = cifrasP[p.id]?.clave === JSON.stringify(p.plan) ? cifrasP[p.id] : null
     if (!c) return <span data-cifra-plan="calculando" title="Calculando…" style={{ color: B.apagado }}>…</span>
     if (c.estado !== 'ok') return <span data-cifra-plan="error" title={`No se ha podido calcular: ${c.error}`} style={{ color: B.apagado }}>—</span>

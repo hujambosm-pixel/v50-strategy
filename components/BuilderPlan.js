@@ -663,9 +663,27 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // dentro», que solo sabe calcular con la estrategia de AHORA: si su regla ha cambiado, se dice por qué no se calcula).
   const peticionComparar = (f) => {
     const p0 = f.plan
-    // §187: un plan de varios bloques: sin listas, tal cual; con alguna lista, de momento no se compara aquí (se ve en su pestaña).
+    // §187: un plan de varios bloques: sin listas, tal cual. §190: con listas, una petición de candidatos por bloque con lista (cuerposLista),
+    // la misma que arma su pantalla (con su parte del dinero inicial y la estrategia de ahora, que tiene que tener la misma regla que la guardada).
     const ests = (p0.piezas || []).filter(x => x.tipo === 'estrategia')
-    if (ests.length > 1) return ests.some(x => x.donde === 'lista') ? { motivo: 'Este plan tiene varios bloques y alguno con varios valores: de momento se ve en su pestaña, no aquí.' } : { clave: JSON.stringify(p0), plan: p0 }
+    if (ests.length > 1) {
+      if (!ests.some(x => x.donde === 'lista')) return { clave: JSON.stringify(p0), plan: p0 }
+      const a2 = ajustesDe(p0), cuerpos = {}
+      for (const [k, x] of ests.entries()) {
+        if (x.donde !== 'lista') continue
+        const nombreB = `el bloque ${k + 1}`, actualB = estrategias.find(s => String(s.id) === String(x.estrategia?.id)) || null
+        if (!actualB) return { motivo: `La estrategia de ${nombreB} ya no está entre las tuyas: con una lista, solo se calcula con una estrategia que siga entre las tuyas.` }
+        const rgB = reglaDe(x.estrategia), raB = reglaDe(actualB)
+        if (rgB == null || raB == null || rgB !== raB) return { motivo: `La estrategia de ${nombreB} ha cambiado desde que guardaste este plan: con una lista, solo se calcula con la de ahora. Ábrelo para verlo.` }
+        const b = k === 0 ? a2 : (a2.bloques || []).find(y => y.id === x.id) || {}
+        const ab = { ...a2, activo: b.activo, donde: 'lista', lista: b.lista, velas: b.velas, filtros: b.filtros, capital: (p0.dinero?.capitalInicial || 0) * (Number(x.peso) || 0) }
+        const cuerpo = peticionPorDentro({ a: ab, estrategia: actualB, wlData: datosLista?.wlData || {}, universoDatos })
+        if (!cuerpo) return { motivo: `En ${nombreB}: ${motivoSinPeticion({ a: ab, estrategia: actualB, universoDatos }) || 'no se puede calcular.'}` }
+        const m = motivoListaNoCalculable(p0, cuerpo.symbols || null, x); if (m) return { motivo: `En ${nombreB}: ${m}` }
+        cuerpos[x.id] = cuerpo
+      }
+      return { clave: JSON.stringify({ plan: p0, cuerposLista: cuerpos }), plan: p0, cuerposLista: cuerpos }
+    }
     if (piezaDe(p0)?.donde !== 'lista') return { clave: JSON.stringify(p0), plan: p0 }
     const foto = fotoDelPlan(p0), actualE = estrategias.find(s => String(s.id) === String(foto?.id)) || null
     if (!actualE) return { motivo: 'La estrategia de este plan ya no está entre las tuyas: con una lista, solo se calcula con una estrategia que siga entre las tuyas.' }
@@ -696,8 +714,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       if (enCurso.current.has(p.clave)) return
       enCurso.current.add(p.clave)
       setResComp(r => ({ ...r, [p.id]: { estado: 'calculando', clave: p.clave } }))
-      Promise.resolve(p.cuerpoLista ? pideApi.current(p.plan, p.cuerpoLista) : pideApi.current(p.plan)).then(respuesta => {
-        hechos.current.set(p.clave, p.cuerpoLista ? { respuesta, plan: p.plan, clave: p.clave } : { respuesta, plan: p.plan }); if (hechos.current.size > 20) hechos.current.delete(hechos.current.keys().next().value)
+      Promise.resolve(p.cuerposLista ? pideApi.current(p.plan, null, p.cuerposLista) : p.cuerpoLista ? pideApi.current(p.plan, p.cuerpoLista) : pideApi.current(p.plan)).then(respuesta => {   // §190: varios bloques con listas
+        hechos.current.set(p.clave, p.cuerpoLista || p.cuerposLista ? { respuesta, plan: p.plan, clave: p.clave } : { respuesta, plan: p.plan }); if (hechos.current.size > 20) hechos.current.delete(hechos.current.keys().next().value)
         if (vivo.current) setResComp(r => ({ ...r, [p.id]: { estado: 'ok', clave: p.clave, respuesta, plan: p.plan } }))
       }).catch(e => { if (vivo.current) setResComp(r => ({ ...r, [p.id]: { estado: 'error', clave: p.clave, texto: e.message || 'error' } })) })
         .finally(() => enCurso.current.delete(p.clave))
@@ -1089,11 +1107,11 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           : <tr key={x.anio} data-anio={x.anio}><td style={celda}>{x.anio}</td><td style={{ ...celda, color: colorSigno(x.plan) || B.texto, fontWeight: 700 }}>{pct(x.plan)}</td><td style={{ ...celda, color: colorSigno(x.activo) || B.texto }}>{pct(x.activo)}</td><td style={{ ...celda, color: colorSigno(x.caidaPlan) || B.texto }}>{pct(x.caidaPlan)}</td><td style={{ ...celda, color: colorSigno(x.caidaActivo) || B.texto }}>{pct(x.caidaActivo)}</td><td style={celda}>{pct(x.enOcioso, 1)}</td></tr>)}</tbody>
       </table></div>
     </Tarjeta>
-    <Tarjeta id="alternativas" titulo={TITULO_ALTERNATIVAS} ayuda={conLista ? `${AYUDA_PLAN.alternativas} ${AYUDA_PLAN.bhLista}` : AYUDA_PLAN.alternativas}>
+    <Tarjeta id="alternativas" titulo={cifras.bloques ? 'Frente a cada bloque solo y a no tener estrategia' : TITULO_ALTERNATIVAS} ayuda={`${conLista ? `${AYUDA_PLAN.alternativas} ${AYUDA_PLAN.bhLista}` : AYUDA_PLAN.alternativas}${cifras.bloques ? ` ${AYUDA_BLOQUES.soloBloque}` : ''}`}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="alternativas" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr>{['', 'Final', 'CAGR', ...(conTir ? ['TIR'] : []), 'Peor caída', 'Impuestos', 'Comisiones'].map(h => <th key={h} style={cab}>{h}</th>)}<th style={cab}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>Órdenes<Ayuda texto={AYUDA_PLAN.ordenes} etiqueta="Órdenes"/></span></th></tr></thead>
         <tbody>{cifras.alternativas.filter(x => !(sinOcioso && x.id === 'OCIOSO_LIQUIDEZ')).map(x => <tr key={x.id} data-fila={x.id} style={x.id === 'PLAN' ? { fontWeight: 700, color: B.titulo } : undefined}>
-          <td style={celda}>{x.nombre}</td><td style={{ ...celda, whiteSpace: 'nowrap', color: colorSigno(x.final - s.aportado) }}>{euros(x.final, 0)}</td><td style={{ ...celda, color: colorSigno(x.twr) }}>{pct(x.twr)}</td>{conTir && <td style={{ ...celda, color: colorSigno(x.tir) }}>{pct(x.tir)}</td>}<td style={{ ...celda, color: colorSigno(x.caida) }}>{pct(x.caida)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.impuestos, 0)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.costes, 0)}</td><td style={celda}>{x.ordenes}</td>
+          <td style={celda}>{x.bloque ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: '50%', background: COLORES_BLOQUE[(x.bloque - 1) % COLORES_BLOQUE.length], flex: 'none' }}/>{x.nombre}</span> : x.nombre}</td><td style={{ ...celda, whiteSpace: 'nowrap', color: colorSigno(x.final - s.aportado) }}>{euros(x.final, 0)}</td><td style={{ ...celda, color: colorSigno(x.twr) }}>{pct(x.twr)}</td>{conTir && <td style={{ ...celda, color: colorSigno(x.tir) }}>{pct(x.tir)}</td>}<td style={{ ...celda, color: colorSigno(x.caida) }}>{pct(x.caida)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.impuestos, 0)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.costes, 0)}</td><td style={celda}>{x.ordenes}</td>
         </tr>)}</tbody>
       </table></div>
     </Tarjeta>

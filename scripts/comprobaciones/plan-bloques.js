@@ -225,6 +225,18 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     const pl = pedidos[pedidos.length - 1]
     ok(pl?.[2] && pl[2].b2 && pl[2].b2.cfg.capitalIni === 10000 * 0.4 && JSON.stringify(pl[2].b2.symbols) === '["AAPL","MSFT"]' && !pl[2].e, `con lista en el bloque 2: su petición de candidatos (4.000 €, AAPL y MSFT) en cuerposLista (${pl?.[2] ? Object.keys(pl[2]) : 'nada'})`)
     m2.quita(); await D.espera(5)
+    // §190: «Comparar planes» con un plan GUARDADO de dos bloques con lista en el 2: pide su cálculo con una petición de candidatos para
+    // ese bloque (cuerposLista, con su 40 % del dinero inicial) en lugar de decir «de momento se ve en su pestaña».
+    pedidos = []
+    const pGuardado = Pa.planDe({ ...conLista, periodo: 'todo' }, FOTO, null, deId), pUno = Pa.planDe({ ...Pa.ajustesDe(pGuardado), bloques: undefined, peso: undefined }, FOTO)
+    const filasC = [{ id: 1, nombre: 'Dos bloques', huella: 'h', created_at: '2026-10-01T10:00:00Z', updated_at: '2026-10-01T10:00:00Z', plan: pGuardado },
+      { id: 2, nombre: 'Uno', huella: 'h2', created_at: '2026-10-01T10:00:00Z', updated_at: '2026-10-01T10:00:00Z', plan: pUno }]
+    const m3 = D.monta(React.createElement(BP, { ...props({}), inicial: { planes: filasC, orden: ['g1', 'g2'], pestana: 'g1', simbolos: ['AAPL', 'MSFT', 'GLD'], pruebas: [], anchoPestanas: 1400, comparando: true, compararElegidos: [1, 2] } }), RDC)
+    await hasta(() => pedidos.some(x => x[2]))
+    const pc = pedidos.find(x => x[2])
+    ok(pc && pc[0].piezas.length === 2 && pc[2].b2 && pc[2].b2.cfg.capitalIni === 10000 * 0.4 && JSON.stringify(pc[2].b2.symbols) === '["AAPL","MSFT"]' && !pc[2].e, `«Comparar planes» calcula el plan de dos bloques con lista: petición del bloque 2 con 4.000 € (${pc ? Object.keys(pc[2]) : 'nada'})`)
+    ok(!/de momento se ve en su pestaña/.test(m3.raiz.textContent) && m3.raiz.textContent.includes('2 bloques: Cruce de medias 50/200 (60 %) + Sigue la tendencia (40 %)'), 'y ya no dice «de momento se ve en su pestaña»; su tarjeta dice «2 bloques: … (60 %) + … (40 %)»')
+    m3.quita(); await D.espera(5)
   }
 
   // ── 9 · «Detalle» con varios bloques (§188): un piso por bloque, con las cuentas del caso 1 y del caso 3 ──
@@ -256,6 +268,15 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     ok(dt.donde.dias.every(z => cerca(z.bq[0] + z.bq[1], z.valores)) && cerca(dt.donde.dias[0].bq[0], 0.6) && dt.donde.bloques.length === 2, '«Dónde está tu dinero»: los bloques suman «en valores» cada día (el día 0, el bloque 1 es el 60 %)')
     ok(!dt.unValor && dt.cabecera.bloques === 2 && dt.cabecera.valores === 3, 'con varios bloques no es «un valor»: 2 bloques, 3 valores')
     ok(/QUÉ APORTÓ CADA BLOQUE/.test(De.textoDetalle(dt)) && /Bloque 2 · Sigue la tendencia/.test(De.textoDetalle(dt)), '«Copiar para Claude» con los bloques')
+    // §190: las filas «Solo el bloque N con todo tu dinero»: el bloque 1 solo con 10.000 € compra 1.000 A a 10 y las vende a 12 → 12.000 €;
+    // el bloque 2 solo, lo mismo que calcular aparte ese plan de un bloque.
+    { const Ev2 = require(R + '/lib/planes/evalua.js'), ev = Ev2.evaluaPlan(p1, d1, { detalle: true })
+      const rx = ev.referencias.find(x => x.id === 'BLOQUE_x'), ry = ev.referencias.find(x => x.id === 'BLOQUE_y')
+      const solo = P.ejecutaPlan({ ...p1, piezas: [{ ...p1.piezas[1], peso: 1 }], reparto: { aportacionesA: 'pesos', rebalanceo: { calendario: 'nunca', banda: null } } }, { ...d1, lista: d1.listas.y })
+      ok(rx?.nombre === 'Solo el bloque 1 con todo tu dinero' && cerca(rx.medidas.valorNeto, 12000) && cerca(ry?.medidas.valorNeto, solo.valorNeto), `«Solo el bloque 1» 12.000 € y «Solo el bloque 2» = su plan de un bloque (${rx?.medidas.valorNeto}, ${ry?.medidas.valorNeto} / ${solo.valorNeto})`)
+      const Pa2 = require(R + '/lib/builder/planPantalla.js'), cf = Pa2.cifrasPlan({ evaluacion: ev, ordenesReferencias: { BLOQUE_x: 3, BLOQUE_y: 5 } }, p1)
+      ok(cf.alternativas.map(x => x.id).slice(0, 3).join() === 'PLAN,BLOQUE_x,BLOQUE_y' && cf.alternativas[1].bloque === 1 && cf.alternativas[2].bloque === 2 && cf.alternativas[1].ordenes === 3, 'en la tabla, detrás de «Tu plan», una fila por bloque (con su número y sus órdenes)')
+      ok(!Ev2.referenciasDe({ ...p1, piezas: [p1.piezas[0]] }).some(x => x.id.startsWith('BLOQUE_')), 'con un solo bloque, ninguna fila «Solo el bloque…»') }
     // Caso 3: un valor en los dos bloques
     const F3 = ['2020-06-01', '2020-06-02', '2020-12-01', '2021-03-01', '2021-07-01', '2021-07-02'], pA = [100, 150, 160, 170, 170, 170]
     const p3 = planListas([{ id: 'x', peso: 0.5, simbolos: ['A'], max: 1 }, { id: 'y', peso: 0.5, simbolos: ['A'], max: 1 }], { capital: 2000, impuestos: 'ES-ahorro', desde: F3[0], hasta: F3[5] })
