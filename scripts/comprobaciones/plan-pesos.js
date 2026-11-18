@@ -57,7 +57,7 @@ const txt = (x) => JSON.stringify(x)
   ok(W.validaPiezaPesos(bloque([['A', 0.7], ['LIQUIDEZ', 0.3]])).length === 0 && txt(W.simbolosPesos(bloque([['A', 0.7], ['LIQUIDEZ', 0.3]]))) === txt(['A']), 'la liquidez del bloque vale como peso (no se compra)')
   const pv = plan([bloque([['A', 1]])], { desde: '2020-01-01', hasta: '2020-12-31' })
   ok(P.validaPlan(pv).length === 0, `un plan con un bloque «Con pesos» es válido (${txt(P.validaPlan(pv))})`)
-  ok(P.validaPlan({ ...pv, piezas: [{ ...pv.piezas[0], peso: 0.5 }, activo('q', 'QQQ', 0.5)] }).some(x => x.includes('va solo en el plan')), 'de momento va solo en el plan')
+  ok(P.validaPlan({ ...pv, piezas: [{ ...pv.piezas[0], peso: 0.5 }, activo('q', 'QQQ', 0.5)] }).some(x => x.includes('solo puede ir con otros bloques')), 'con una pieza de activo, no (solo con otros bloques: §196)')
 
   // ── 1–3 · Pruebas de oro ──
   const F = habiles('2018-01-02', 620)
