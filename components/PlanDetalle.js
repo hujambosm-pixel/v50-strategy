@@ -355,6 +355,34 @@ function celdasOcioso(ocioso, s) {
     <td key="i" data-dentro-ocioso style={num}>{sinOc ? '' : pct(ocioso.dentro, 0)}</td>,
   ]
 }
+// §200 · las reglas de un bloque «Con pesos»: franja de estado (gris = ninguna regla en curso; cada regla, su color) y «Cuándo actuó cada regla».
+export const COLORES_REGLA = [C.naranja, C.morado, C.cian, C.verde, C.rojo]
+const colorRegla = (e) => e ? COLORES_REGLA[(e - 1) % COLORES_REGLA.length] : GRIS
+const nombreEstado = (e) => e ? `regla ${e} en curso` : 'ninguna regla en curso'
+function TarjetaReglas({ r }) {
+  const total = r.tramos.reduce((t, x) => t + x.dias, 0) || 1
+  let x0 = 0
+  return (
+    <Tarjeta id={`detalle-reglas-${r.n}`} titulo={<span style={{ display: 'inline-flex', alignItems: 'center' }}><Punto n={r.n}/>Bloque {r.n} · cuándo actuó cada regla</span>} ayuda={AYUDA_DETALLE.reglas}
+      derecha={<span data-reglas-veces style={{ color: B.secundario, fontSize: 13 }}>{r.filas.filter(f => !f.vuelta).length === 1 ? 'actuó 1 vez' : `actuó ${numero(r.filas.filter(f => !f.vuelta).length, 0)} veces`}</span>}>
+      <div data-reglas-frases style={{ display: 'grid', gap: 3, fontSize: 12.5, color: B.secundario, marginBottom: 10 }}>{r.reglas.map(x => <div key={x.n}><span aria-hidden="true" style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: colorRegla(x.n), marginRight: 6 }}/>{x.frase}</div>)}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: B.secundario, marginBottom: 4 }}>Estado del bloque cada día<Ayuda texto={AYUDA_DETALLE.franjaReglas} etiqueta="Estado del bloque cada día"/></div>
+      <svg data-franja-reglas={r.n} viewBox={`0 0 1000 18`} preserveAspectRatio="none" width="100%" height={18} role="img" aria-label={r.tiempo.map(t => `${nombreEstado(t.estado)} ${pct(t.parte, 0)}`).join(', ')} style={{ display: 'block', borderRadius: 3 }}>
+        {r.tramos.map((t, k) => { const x = x0 / total * 1000, w = t.dias / total * 1000; x0 += t.dias
+          return <rect key={k} data-tramo-regla={t.estado} x={x} y={0} width={Math.max(w, 0.6)} height={18} fill={colorRegla(t.estado)} opacity={t.estado ? 0.9 : 0.35}><title>{`${nombreEstado(t.estado)} · ${fechaCorta(t.desde)} → ${fechaCorta(t.hasta)}`}</title></rect> })}
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: B.apagado, marginTop: 2 }}><span>{fechaCorta(r.tramos[0]?.desde)}</span><span>{fechaCorta(r.tramos[r.tramos.length - 1]?.hasta)}</span></div>
+      <div data-reglas-tiempo style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12, color: B.secundario, margin: '6px 0 10px' }}>{r.tiempo.map(t => <span key={t.estado}><span aria-hidden="true" style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: colorRegla(t.estado), opacity: t.estado ? 0.9 : 0.35, marginRight: 5 }}/>{nombreEstado(t.estado)} · {pct(t.parte, 0)} del tiempo</span>)}</div>
+      {r.filas.length ? <div style={{ overflowX: 'auto' }}><table data-tabla={`reglas-${r.n}`} style={{ borderCollapse: 'collapse', width: '100%' }}>
+        <thead><tr>{['Se cumplió', 'Actuó', 'Regla', 'Qué hizo'].map(h => <th key={h} style={cab}>{h}</th>)}<th style={cabNum}>Movió</th><th style={cab}>Pesos después</th></tr></thead>
+        <tbody>{r.filas.map((f, k) => <tr key={k} data-fila-regla={f.regla} style={f.vuelta ? { color: B.secundario } : undefined}>
+          <td style={{ ...celda, whiteSpace: 'nowrap' }}>{fechaCorta(f.cumple)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{fechaCorta(f.actua)}</td>
+          <td style={{ ...celda, whiteSpace: 'nowrap' }}><span aria-hidden="true" style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: colorRegla(f.regla), marginRight: 6 }}/>{f.regla}</td>
+          <td style={celda}>{f.que}</td><td style={num}>{euros(f.movido, 0)}</td><td style={celda}>{f.pesos}</td></tr>)}</tbody>
+      </table></div> : <div data-reglas-ninguna style={S.secundario}>Ninguna regla llegó a cumplirse en este periodo: el bloque se quedó con sus pesos.</div>}
+    </Tarjeta>
+  )
+}
 function TablaBloques({ bloques, total, ocioso, s, cifras, senales, abiertos, abiertoTotal, todosAbiertos, onTotal, onAbre, onTodos, onVelas, onIrAValor, elegido }) {
   const nombreOc = nombreOcioso(ocioso.simbolo)
   return (
@@ -449,6 +477,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
 
       {bloques && <TablaBloques bloques={bloques} total={total} ocioso={ocioso} s={s} cifras={detalle.cifras} senales={detalle.senales} abiertos={abiertosB} abiertoTotal={abiertoTotalB} onTotal={() => setAbiertoTotalB(x => !x)} todosAbiertos={todosAbiertos}
         onAbre={(n) => setAbiertosB(x => { const y = new Set(x); if (y.has(n)) y.delete(n); else y.add(n); return y })} onTodos={() => { setAbiertoTotalB(!todosAbiertos); setAbiertosB(todosAbiertos ? new Set() : new Set(bloques.map(b => b.n))) }} onVelas={abreVelas} onIrAValor={onIrAValor} elegido={verValor}/>}
+      {(detalle.reglas || []).map(r => <TarjetaReglas key={r.id} r={r}/>)}
       {!unValor && !bloques && <Tarjeta id="detalle-valores" titulo="Qué aportó cada valor" ayuda={`${AYUDA_DETALLE.tabla} ${AYUDA_DETALLE.ocioso}`}>
         <div style={{ overflowX: 'auto' }}><table data-tabla="detalle-valores" style={{ borderCollapse: 'collapse', width: '100%' }}>
           <thead><tr><th style={cab}>Valor</th>{[['Aportó', AYUDA_DETALLE.tabla], ['Aportó %', AYUDA_DETALLE.aportoPct], ['CAGR de su aportación', AYUDA_DETALLE.cagrValor], ['Operaciones'], ['Ganadoras'], ['Profit Factor'], ['Peor caída', AYUDA_DETALLE.caidaValor], ['Dinero en él', AYUDA_DETALLE.enEl], ['Tiempo dentro']].map(([h, a]) => <th key={h} data-columna={h} style={cabNum}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{h}{a && <Ayuda texto={a} etiqueta={h}/>}</span></th>)}</tr></thead>
