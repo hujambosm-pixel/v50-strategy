@@ -214,8 +214,8 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     ok(pp?.piezas?.length === 2 && pp.piezas[1].activo === 'MSFT' && pp.piezas[1].peso === 0.4 && !pedidos[pedidos.length - 1][2], `lo que se calcula: el plan de dos bloques (sin listas, sin peticiones de candidatos)`)
     D.pulsa(m.raiz.conAtributo('data-bloque', '2')[0].conAtributo('data-boton', 'quitar-bloque')[0]); await hasta(() => !m.raiz.conAtributo('data-bloque', '2').length)
     ok(!m.raiz.conAtributo('data-bloque', '2').length && m.raiz.conAtributo('data-parte')[0]?.textContent === '100 %' && !m.raiz.conAtributo('data-reparto-bloques').length && m.raiz.conAtributo('data-bloque', '1')[0].conAtributo('data-ocioso-de', 'bloque').length === 1, '«Quitar»: vuelve a un bloque al 100 %, con el ocioso en el bloque')
-    D.pulsa(boton('anadir-bloque')); await hasta(() => m.raiz.conAtributo('data-bloque', '2').length === 1)
-    ok(m.raiz.conAtributo('data-parte').map(x => x.textContent).join('|') === '50 %|50 %', '«+ Añadir bloque»: 50 % y 50 %')
+    D.pulsa(boton('anadir-bloque')); await hasta(() => !!boton('anadir-bloque-estrategia')); D.pulsa(boton('anadir-bloque-estrategia')); await hasta(() => m.raiz.conAtributo('data-bloque', '2').length === 1)
+    ok(m.raiz.conAtributo('data-parte').map(x => x.textContent).join('|') === '50 %|50 %', '«+ Añadir bloque ▾» → «Con una estrategia»: 50 % y 50 %')
     m.quita(); await D.espera(5)
     // Con lista en el bloque 2: se pide una petición de candidatos para él (cuerposLista), con su parte del dinero inicial.
     pedidos = []
