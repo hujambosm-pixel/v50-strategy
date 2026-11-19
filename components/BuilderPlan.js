@@ -73,6 +73,8 @@ import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, avisoPrueba as textoAvisoP
   esBloquePesos, sumaPesosBloque, resumenPesos, AYUDA_PESOS, VOLVER_OPCIONES, LLEGA_OPCIONES, PUNTOS_BANDA_DEFECTO } from '../lib/builder/planPantalla'
 import { MAX_SIMBOLOS_PESOS } from '../lib/planes/pesos'
 import ReglasPesos from './ReglasPesos'
+import OciosoRegla from './OciosoRegla'
+import { reglaOciosoNueva, AYUDA_OCIOSO_REGLA } from '../lib/builder/ociosoReglaPantalla'
 import { fraseBloquePesos, EJEMPLOS_PESOS, AYUDA_REGLAS } from '../lib/builder/reglasPesos'
 // §187: los colores de los bloques (el 1, azul, como siempre): COLORES_BLOQUE de PlanDetalle (§188: los mismos en «Detalle»).
 
@@ -974,6 +976,12 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       <Etiqueta texto={multi ? 'Dinero ocioso de la cuenta · mientras ningún bloque lo usa, espera en' : 'Dinero ocioso · mientras no hay señal, espera en'} ayuda={multi ? AYUDA_BLOQUES.ocioso : AYUDA_PLAN.ocioso}/>
       <Segmentos etiquetaGrupo="Dinero ocioso" valor={otroOcioso ? 'OTRO' : a.ocioso} onCambia={v => { if (v === 'OTRO') setOtroOcioso(true); else { setOtroOcioso(false); cambia('ocioso', v) } }} opciones={[...OCIOSOS_FIJOS, ['OTRO', 'Otro símbolo']]}/>
       {otroOcioso && <div style={{ marginTop: 10 }}><BuscadorValor valores={valoresLista} valor={OCIOSOS_FIJOS.some(([k]) => k === a.ocioso) ? '' : a.ocioso} onCambia={s => cambia('ocioso', s)} etiqueta="Símbolo del ocioso"/></div>}
+      {/* §204: «Cuándo está dentro»: siempre (lo de siempre) o solo cuando lo diga una regla (lib/planes/ociosoRegla.js). Con liquidez, no hace falta. */}
+      {a.ocioso !== 'LIQUIDEZ' && <div data-cuando-ocioso={a.ociosoRegla ? 'regla' : 'siempre'} style={{ marginTop: 12 }}>
+        <Etiqueta texto="Cuándo está dentro" ayuda={AYUDA_OCIOSO_REGLA.cuando}/>
+        <Segmentos etiquetaGrupo="Cuándo está dentro el dinero ocioso" valor={a.ociosoRegla ? 'regla' : 'siempre'} onCambia={v => cambia('ociosoRegla', v === 'regla' ? (a.ociosoRegla || reglaOciosoNueva(a.ocioso)) : null)} opciones={[['siempre', 'Siempre'], ['regla', 'Solo cuando lo diga una regla']]}/>
+        {a.ociosoRegla && <OciosoRegla regla={a.ociosoRegla} ocioso={a.ocioso} onCambia={r => cambia('ociosoRegla', r)} valores={valoresLista} estrategia={multi ? null : estrategia?.name || null} multi={multi} Segmentos={Segmentos}/>}
+      </div>}
     </div>
   )
   const bloques = (
