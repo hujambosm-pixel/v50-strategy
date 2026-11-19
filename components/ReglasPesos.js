@@ -16,7 +16,7 @@ import { OTRO_REGLA, MAX_REGLAS, MAX_FILAS_REGLA, simbolosBloque, filaDePantalla
   reglaNueva, accionNueva, despuesNuevo, mueveRegla, ACCIONES_TEXTO, DESPUES_TEXTO, REPETIR_TEXTO, AYUDA_REGLAS } from '../lib/builder/reglasPesos'
 
 const ROJO = C.rojo, VERDE = C.verde
-const eti = { color: B.secundario, fontSize: 12, fontWeight: 700, letterSpacing: '.05em', paddingTop: 6 }
+const eti = { color: B.secundario, fontSize: 12, fontWeight: 700, letterSpacing: '.05em', display: 'flex', alignItems: 'center', marginBottom: 4 }
 const iconoRojo = (on) => ({ ...S.boton, padding: '3px 8px', fontSize: 13, color: on ? ROJO : B.apagado, borderColor: on ? ROJO : B.borde })
 const flecha = (on) => ({ ...S.boton, padding: '2px 8px', fontSize: 13, color: on ? B.texto : B.apagado })
 const lista = (r, donde) => (donde === 'si' ? r?.filas : r?.despues?.filas) || []
@@ -91,7 +91,7 @@ export default function ReglasPesos({ b, n, onCambia, valores = [], color = C.az
   // ENTONCES: el tipo y sus datos.
   const accion = (k, r) => {
     const a = r.accion || {}, ponA = (f) => ponRegla(k, x => ({ ...x, accion: f(x.accion || {}) }))
-    const sim = (clave, vs, et) => <span style={{ display: 'inline-flex' }}><BuscadorValor valores={vs} valor={a[clave] || ''} onCambia={s => ponA(x => ({ ...x, [clave]: s }))} etiqueta={et} anchoNombre={90}/></span>
+    const sim = (clave, vs, et) => <span style={{ display: 'inline-flex' }}><BuscadorValor valores={vs} valor={a[clave] || ''} onCambia={s => ponA(x => ({ ...x, [clave]: s }))} etiqueta={et} anchoNombre={0}/></span>
     const ps = a.tipo === 'pesos' ? (a.pesos || []) : [], suma = ps.reduce((t, p) => t + (Number(p.peso) || 0), 0)
     return (
       <div>
@@ -103,7 +103,7 @@ export default function ReglasPesos({ b, n, onCambia, valores = [], color = C.az
           <div data-pesos-regla style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
             {ps.map((p, j) => (
               <div key={j} data-peso-regla={j} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <BuscadorValor valores={valores} valor={p.simbolo || ''} onCambia={s => ponA(x => ({ ...x, pesos: x.pesos.map((y, q) => q === j ? { ...y, simbolo: s } : y) }))} etiqueta={`Activo ${j + 1} de la regla ${k + 1}`} anchoNombre={90}/>
+                <BuscadorValor valores={valores} valor={p.simbolo || ''} onCambia={s => ponA(x => ({ ...x, pesos: x.pesos.map((y, q) => q === j ? { ...y, simbolo: s } : y) }))} etiqueta={`Activo ${j + 1} de la regla ${k + 1}`} anchoNombre={0}/>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Numero valor={pct(p.peso)} etiqueta={`Peso del activo ${j + 1} de la regla ${k + 1}`} onCambia={v => ponA(x => ({ ...x, pesos: x.pesos.map((y, q) => q === j ? { ...y, peso: typeof v === 'number' ? v / 100 : v } : y) }))}/> %</span>
                 <button type="button" data-boton="quitar-peso-regla" disabled={ps.length <= 1} title="Quitar este activo" onClick={() => ponA(x => ({ ...x, pesos: x.pesos.filter((_, q) => q !== j) }))} style={iconoRojo(ps.length > 1)}>🗑</button>
               </div>
@@ -126,7 +126,7 @@ export default function ReglasPesos({ b, n, onCambia, valores = [], color = C.az
   }
 
   const paso = (t, ayuda, contenido) => (
-    <div style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: 8, alignItems: 'start', marginTop: 8 }}>
+    <div data-paso-regla={t} style={{ marginTop: 10 }}>
       <div style={eti}>{t}{ayuda && <Ayuda texto={ayuda} etiqueta={t}/>}</div><div style={{ minWidth: 0 }}>{contenido}</div>
     </div>
   )
