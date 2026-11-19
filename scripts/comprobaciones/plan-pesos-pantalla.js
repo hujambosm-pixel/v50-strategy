@@ -100,6 +100,8 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
       await hasta(() => m.raiz.conAtributo('data-errores-plan').length > 0)
       { const tx = m.raiz.conAtributo('data-errores-plan')[0]?.textContent || ''
         ok(/Bloque 2: Falta elegir el activo en «1 · Pesos de partida»/.test(tx) && !/Pieza|no es un símbolo válido/.test(tx), `sin activo elegido no se calcula y lo dice en palabras («${tx}»)`) }
+      { const sr = m.raiz.conAtributo('data-sin-resultado').map(z => z.textContent).join('|')
+        ok(sr === 'Tu plan se calculará cuando arregles lo que sale en rojo arriba.', `§202: a la derecha, que se calculará al arreglarlo (no «Calculando tu plan…» sin fin): «${sr}»`) }
       m.quita(); await D.espera(5)
     }
     {

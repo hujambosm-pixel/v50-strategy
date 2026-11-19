@@ -3506,3 +3506,8 @@ Visto en la app (19/11): al pulsar «+ Añadir bloque ▾» → «Con pesos», e
 - lib/planes/pesos.js (validaPiezaPesos): con el activo sin elegir, «Falta elegir el activo en «1 · Pesos de partida».» (un símbolo mal escrito sigue diciendo que no es válido).
 - components/BuilderPlan.js: `enBloques(texto, plan)` (exportada) cambia en pantalla el «Pieza <id>:» del motor por «Bloque N:» (N = su puesto en plan.piezas, el mismo número de la columna izquierda); un id que no está o un texto sin pieza quedan igual. Ahora sale «✕ Bloque 2: Falta elegir el activo en «1 · Pesos de partida».».
 - plan-pesos-pantalla.js: las dos pruebas del bloque en blanco miran el texto nuevo, más una de enBloques. Solo cambian textos de aviso: ninguna cifra cambia.
+
+## 202. Plan con un aviso rojo: la columna derecha dice que espera (19/11)
+Visto en la app (19/11) tras §201: con un aviso rojo arriba (el plan no es válido, p. ej. el bloque «Con pesos» en blanco), el plan no se calcula, pero la columna derecha se quedaba en «Calculando tu plan…» para siempre (con un solo bloque decía «Sin resultado todavía.»).
+- components/BuilderPlan.js: en los dos `data-sin-resultado`, si hay errores de validaPlan, `ESPERA_ERRORES` = «Tu plan se calculará cuando arregles lo que sale en rojo arriba.». Sin errores, igual que antes.
+- plan-pesos-pantalla.js: una prueba más (bloque en blanco → ese texto). Solo cambia un texto: ninguna cifra cambia.

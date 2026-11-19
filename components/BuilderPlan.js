@@ -93,6 +93,8 @@ const seg = (on, desactivado) => ({ fontFamily: B.letra, fontSize: 14, padding: 
 const borde = (i, n) => ({ borderRadius: n === 1 ? 6 : i === 0 ? '6px 0 0 6px' : i === n - 1 ? '0 6px 6px 0' : 0, ...(i ? { borderLeft: 'none' } : {}) })
 
 // Un grupo de botones (uno elegido). opciones: [[valor, texto, desactivado?]].
+// §202: con un aviso rojo arriba (el plan no es válido), el plan no se calcula: la columna derecha lo dice (antes, «Calculando tu plan…» sin fin).
+export const ESPERA_ERRORES = 'Tu plan se calculará cuando arregles lo que sale en rojo arriba.'
 // §201: el motor nombra cada bloque por su id interno («Pieza b2: …»); en pantalla, «Bloque 2: …» (el número de la columna izquierda).
 export function enBloques(texto, plan) {
   return String(texto).replace(/^Pieza ([^:]+):/, (m, id) => {
@@ -1143,7 +1145,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const resultado = enLista || multi ? (<>
     <div data-pestanas-der className="bp-fijo" role="group" aria-label="Qué ver del plan" style={{ display: 'flex', alignItems: 'flex-end', height: ALTO_BARRA_COL, boxSizing: 'border-box', borderBottom: `1px solid ${B.borde}`, background: B.fondo }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('detalle', 'Detalle', AYUDA_DETALLE.pestana)}</div>
     {(motivoDer ? <div data-sin-motor-lista style={{ ...S.tarjeta, ...S.cuerpo, color: B.texto }}>{motivoDer}</div>
-      : !cifrasLista ? <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{calc.error ? '' : 'Calculando tu plan…'}</div>
+      : !cifrasLista ? <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{errores.length ? ESPERA_ERRORES : calc.error ? '' : 'Calculando tu plan…'}</div>
       : <>
         {!!calcLista?.ignorado.length && <div data-aviso-lista-simple style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>{avisoListaSimple(calcLista.ignorado, a.ocioso)}<Ayuda texto={AYUDA_PLAN.listaSimple} etiqueta="Lo que todavía no cuenta con una lista"/></div>}
         {vistaDer === 'detalle' ? <PlanDetalle detalle={detalle} cifras={cifrasLista} viejas={cifrasViejas} onIrAValor={onIrAValor} inicial={inicial?.detalle || null} nombre={nombreDe(actual) || null} version={version}
@@ -1152,7 +1154,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           : vistaDinero(cifrasLista, true)}
       </>)}
   </>) : !cifras ? (
-    <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{!estrategia ? 'Elige una estrategia de tarjetas.' : calc.calculando || clave ? 'Calculando tu plan…' : 'Sin resultado todavía.'}</div>
+    <div data-sin-resultado style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>{!estrategia ? 'Elige una estrategia de tarjetas.' : errores.length ? ESPERA_ERRORES : calc.calculando || clave ? 'Calculando tu plan…' : 'Sin resultado todavía.'}</div>
   ) : (<>   {/* §161: con un solo valor, «Tu dinero» y «Detalle» (sin «La cartera por dentro», que es del Backtesting con lista) */}
     <div data-pestanas-der className="bp-fijo" role="group" aria-label="Qué ver del plan" style={{ display: 'flex', alignItems: 'flex-end', height: ALTO_BARRA_COL, boxSizing: 'border-box', borderBottom: `1px solid ${B.borde}`, background: B.fondo }}>{pestanaDer('dinero', 'Tu dinero')}{pestanaDer('detalle', 'Detalle', AYUDA_DETALLE.pestana)}</div>
     {vistaDer === 'detalle' ? <PlanDetalle detalle={detalle} cifras={cifras} viejas={cifrasViejas} onIrAValor={onIrAValor} inicial={inicial?.detalle || null} nombre={nombreDe(actual) || null} version={version}
