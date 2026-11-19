@@ -3527,3 +3527,11 @@ Lo que se ve de §203 (boceto bocetos/ocioso-con-regla.html, pestañas 1 y 4). D
 - Los avisos rojos de arriba son los del motor (validaOciosoRegla), p. ej. «Si no se cumple» igual que el ocioso.
 - Comprobación nueva plan-ocioso-regla-pantalla.js (en comunes.sh): lo puro (fila por defecto, frases, ida y vuelta con uno y con varios bloques) y el montaje con estado.
 - Falta (parte 3): la fila «El mismo plan con el ocioso siempre dentro», la cifra «En el ocioso: en <símbolo> X % · esperando Y %», la franja en «Detalle» y «por la regla del ocioso» en «Todos los movimientos».
+
+## 205. El dinero ocioso con su propia regla, parte 3: «¿aporta algo?» y «Detalle» (20/11)
+Lo que falta del boceto bocetos/ocioso-con-regla.html (pestañas 1 y 3). Solo con regla: sin ella, nada cambia.
+- lib/planes/evalua.js: referencia nueva OCIOSO_SIEMPRE «El mismo plan con el dinero ocioso siempre dentro» (las piezas con sinReglaOcioso), con un bloque y con varios; pages/api/plan.js le cuenta sus órdenes. En «Tu dinero» es la primera fila tras «Tu plan» (ORDEN_ALTERNATIVAS) y su explicación va en el «?» de la tabla (AYUDA_OCIOSO_SIEMPRE).
+- «En el ocioso»: debajo, «en oro X % · esperando Y %» (reparteOciosoRegla de lib/builder/ociosoReglaPantalla.js, con los estados del motor y la franja de la estrategia: con un valor, parte del tiempo; con lista o varios bloques, parte del dinero de media). cifrasPlan da cifras.ociosoRegla.
+- lib/planes/plan.js: el libro marca con regla: true las órdenes del ocioso que manda su regla (la venta del ocioso de antes en cambiaOcioso y la compra del nuevo ese mismo día); en «Historial › Todos los movimientos» dicen «· por la regla del ocioso». Las cifras no cambian.
+- «Detalle»: tarjeta «El dinero ocioso, día a día» (franjaOciosoRegla de lib/builder/detallePlan.js, FranjaOciosoRegla de components/PlanDetalle.js): por día, en el ocioso (amarillo), esperando (naranja) o sin dinero libre (gris, menos del 1 % del patrimonio en el ocioso o en liquidez), con la parte de los días de cada uno.
+- plan-ocioso-regla.js, apartado 5 (a mano con las velas de §203): «siempre dentro» 11.818,18 € frente a 8.863,64 €; en G 6 de 8 días y esperando 2; franja 1 1 1 2 2 1 1 1; las órdenes del 04 y el 08 «por la regla».

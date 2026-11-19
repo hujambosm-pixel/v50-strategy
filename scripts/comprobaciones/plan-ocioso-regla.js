@@ -105,6 +105,26 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     ok(O.sinReglaOcioso(pieza({ ociosoRegla: regla() })).ociosoRegla === undefined && O.sinReglaOcioso(pieza()).ocioso === 'G', 'sinReglaOcioso quita solo la regla')
   }
 
+  // ── 5 · §204: lo que se ve en «Tu dinero» y en «Detalle» ──
+  {
+    const Pa = require(R + '/lib/builder/planPantalla.js'), Dp = require(R + '/lib/builder/detallePlan.js'), Or = require(R + '/lib/builder/ociosoReglaPantalla.js')
+    const p = plan([pieza({ id: 'e', ociosoRegla: regla() })])   // la pantalla busca la pieza «e» (la de un bloque)
+    const ev = Ev.evaluaPlan(p, D, { detalle: true, libro: true })
+    const si = ev.referencias.find(x => x.id === 'OCIOSO_SIEMPRE')
+    ok(si && cerca(si.medidas.valorNeto, SIEMPRE) && cerca(ev.plan.medidas.valorNeto, FINAL), `fila «el ocioso siempre dentro»: 11.818,18 € (${si?.medidas.valorNeto}); tu plan, 8.863,64 €`)
+    ok(!Ev.referenciasDe(plan([pieza()])).some(x => x.id === 'OCIOSO_SIEMPRE'), 'sin regla, no hay esa fila')
+    const marcadas = ev.plan.ejecucion.libro.movimientos.filter(m => m.regla).map(m => `${m.fecha.slice(8)} ${m.tipo} ${m.simbolo}`)
+    ok(marcadas.join(',') === '04 venta G,08 compra G', `movimientos «por la regla del ocioso»: el 04 vende y el 08 compra (${marcadas.join(', ')})`)
+    const c = Pa.cifrasPlan({ evaluacion: ev, curvas: {} }, p)
+    ok(c.alternativas.some(x => x.id === 'OCIOSO_SIEMPRE') && cerca(c.ociosoRegla?.enDentro, 6 / 8) && cerca(c.ociosoRegla?.esperando, 2 / 8), `«En el ocioso»: en G 6 de 8 días (75 %) y esperando 2 (25 %) (${c.ociosoRegla?.enDentro}, ${c.ociosoRegla?.esperando})`)
+    const d = Dp.detallePlan({ evaluacion: ev }, p)
+    ok(d.ociosoRegla?.dias?.join('') === '11122111' && cerca(d.ociosoRegla.enDentro, 6 / 8), `franja de «Detalle»: 1 1 1 2 2 1 1 1 (${d.ociosoRegla?.dias?.join(' ')})`)
+    ok(d.movimientos.filter(m => /por la regla del ocioso/.test(m.que)).length === 2, 'el historial dice «por la regla del ocioso» en esas dos órdenes')
+    const lista = Or.reparteOciosoRegla([1, 1, 0, 0], [0.5, 1, 0, 0.75], true)
+    ok(cerca(lista.enDentro, 0.5 / 4) && cerca(lista.esperando, 1.25 / 4) && lista.dias.join('') === '1022', `con lista, por la parte del dinero: (0,5 + 0) / 4 en el ocioso y (1 + 0,25) / 4 esperando (${lista.enDentro}, ${lista.esperando})`)
+    ok(!Dp.detallePlan({ evaluacion: Ev.evaluaPlan(plan([pieza()]), D, { detalle: true, libro: true }) }, plan([pieza()])).ociosoRegla, 'sin regla, sin franja')
+  }
+
   console.log(fallos ? `plan-ocioso-regla: ${fallos} FALLOS` : 'plan-ocioso-regla: todo bien')
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(1) })

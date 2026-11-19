@@ -182,6 +182,29 @@ export function GraficoDondeEsta({ donde, ocioso = 'LIQUIDEZ' }) {
     </div>
   )
 }
+// §204 · La franja del dinero ocioso con su regla (detalle.ociosoRegla de lib/builder/detallePlan.js): tramos seguidos del mismo estado.
+const COLOR_OCIOSO_REGLA = [GRIS, AMARILLO, C.naranja]
+export function FranjaOciosoRegla({ o }) {
+  const [ref, W] = useAncho()
+  const n = o.dias.length, IZQ = 6, DER = 6, H = 26
+  if (n < 2) return null
+  const x = (i) => IZQ + i / n * (W - IZQ - DER), tramos = []
+  for (let i = 0; i < n; i++) { const t = tramos[tramos.length - 1]; if (t && t.v === o.dias[i]) t.h = i + 1; else tramos.push({ v: o.dias[i], d: i, h: i + 1 }) }
+  const anios = []; o.fechas.forEach((f, i) => { if (i === 0 || f.slice(0, 4) !== o.fechas[i - 1].slice(0, 4)) anios.push([i, f.slice(0, 4)]) })
+  const cada = Math.max(1, Math.ceil(anios.length / Math.max(1, Math.floor((W - IZQ - DER) / 44))))
+  const nom = (s) => s === 'LIQUIDEZ' ? 'liquidez' : nombreOcioso(s)
+  return (
+    <div ref={ref} style={{ width: '100%' }}>
+      <svg data-grafico="ocioso-regla" data-tramos={tramos.length} width={W} height={H + 16} role="img" aria-label={`El dinero ocioso día a día: en ${nom(o.dentro)} el ${pct(o.enDentro, 0)} de los días, esperando el ${pct(o.esperando, 0)} y sin dinero libre el ${pct(o.sin, 0)}.`} style={{ display: 'block', fontFamily: B.letra }}>
+        {tramos.map((t, k) => <rect key={k} x={x(t.d)} y={2} width={Math.max(0.5, x(t.h) - x(t.d))} height={H - 4} fill={COLOR_OCIOSO_REGLA[t.v]} opacity={t.v ? 0.85 : 0.35}><title>{`${fechaCorta(o.fechas[t.d])} → ${fechaCorta(o.fechas[t.h - 1])} · ${t.v === 1 ? `en ${nom(o.dentro)}` : t.v === 2 ? `esperando en ${nom(o.fuera)}` : 'sin dinero libre'}`}</title></rect>)}
+        {anios.filter((_, k) => k % cada === 0).map(([i, a]) => <text key={a} x={x(i)} y={H + 12} fontSize={11} fill={B.apagado}>{a}</text>)}
+      </svg>
+      <div data-leyenda-ocioso-regla style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12, color: B.secundario, marginTop: 4 }}>
+        {[[1, `en ${nom(o.dentro)}`, o.enDentro], [2, `esperando en ${nom(o.fuera)}`, o.esperando], [0, 'sin dinero libre', o.sin]].map(([v, t, p]) => <span key={v}><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: COLOR_OCIOSO_REGLA[v], opacity: v ? 0.85 : 0.35, marginRight: 5 }}/>{t} · {pct(p, 0)} de los días</span>)}
+      </div>
+    </div>
+  )
+}
 // §157 · Resultados por operación: una barra por operación (verde gana, roja pierde), en euros.
 export function BarrasOperaciones({ datos, onPulsa = null }) {
   const [ref, W] = useAncho()
@@ -532,6 +555,8 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
       {/* §157 (parte 3a) */}
       {detalle.mensuales?.length > 0 && <Tarjeta id="detalle-mensual" titulo="Ganancias mensuales" ayuda={AYUDA_DETALLE.mensuales}><Ampliable titulo="Ganancias mensuales"><TablaMensual anios={detalle.mensuales}/></Ampliable></Tarjeta>}
       {detalle.donde && <Tarjeta id="detalle-donde" titulo="Dónde está tu dinero cada día" ayuda={bloques ? `${AYUDA_DETALLE.dondeEsta} ${AYUDA_DETALLE.dondeBloques}` : AYUDA_DETALLE.dondeEsta}><Ampliable titulo="Dónde está tu dinero cada día"><GraficoDondeEsta donde={detalle.donde} ocioso={ocioso.simbolo}/></Ampliable></Tarjeta>}
+      {/* §204 */}
+      {detalle.ociosoRegla && <Tarjeta id="detalle-ocioso-regla" titulo="El dinero ocioso, día a día" ayuda={AYUDA_DETALLE.ociosoRegla}><Ampliable titulo="El dinero ocioso, día a día"><FranjaOciosoRegla o={detalle.ociosoRegla}/></Ampliable></Tarjeta>}
       {detalle.porOperacion && <Tarjeta id="detalle-por-operacion" titulo="Resultados por operación" ayuda={AYUDA_DETALLE.porOperacion}
         derecha={<span data-resumen-operaciones style={{ color: B.secundario, fontSize: 13 }}>{numero(detalle.porOperacion.ops.length, 0)} · <span style={{ color: VERDE }}>{numero(detalle.porOperacion.ganan, 0)} ganan</span> · <span style={{ color: ROJO }}>{numero(detalle.porOperacion.pierden, 0)} pierden</span></span>}>
         <Ampliable titulo="Resultados por operación"><BarrasOperaciones datos={detalle.porOperacion} onPulsa={abreOperacion}/></Ampliable></Tarjeta>}

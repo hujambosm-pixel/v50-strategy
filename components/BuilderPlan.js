@@ -74,7 +74,7 @@ import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, avisoPrueba as textoAvisoP
 import { MAX_SIMBOLOS_PESOS } from '../lib/planes/pesos'
 import ReglasPesos from './ReglasPesos'
 import OciosoRegla from './OciosoRegla'
-import { reglaOciosoNueva, AYUDA_OCIOSO_REGLA } from '../lib/builder/ociosoReglaPantalla'
+import { reglaOciosoNueva, AYUDA_OCIOSO_REGLA, AYUDA_OCIOSO_SIEMPRE } from '../lib/builder/ociosoReglaPantalla'
 import { fraseBloquePesos, EJEMPLOS_PESOS, AYUDA_REGLAS } from '../lib/builder/reglasPesos'
 // §187: los colores de los bloques (el 1, azul, como siempre): COLORES_BLOQUE de PlanDetalle (§188: los mismos en «Detalle»).
 
@@ -1140,6 +1140,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const s = cifras?.seis, activoRes = ajustesDelResultado?.activo || a.activo, ociosoRes = ajustesDelResultado?.ocioso || a.ocioso
   // §49: con el ocioso en liquidez, el plan con el ocioso en liquidez es el mismo plan: ni su fila, ni su línea, ni «El ocioso añadió», ni caídas.
   const sinOcioso = ociosoRes === 'LIQUIDEZ'
+  // §204: con la regla del ocioso, la línea de debajo de «En el ocioso»: en su símbolo y esperando (en liquidez o en el otro símbolo).
+  const subOcioso = (dec) => { const o = cifras?.ociosoRegla; return o && Number.isFinite(o.enDentro) ? `en ${o.dentro === 'GLD' ? 'oro' : o.dentro} ${pct(o.enDentro, dec)} · esperando${o.fuera === 'LIQUIDEZ' ? '' : ` en ${o.fuera}`} ${pct(o.esperando, dec)}` : undefined }
   const pestanaDer = (id, texto, ayuda) => <span style={{ display: 'inline-flex', alignItems: 'center', borderBottom: `2px solid ${vistaDer === id ? B.enlace : 'transparent'}`, paddingRight: ayuda ? 8 : 0 }}>
     <button type="button" data-vista-der={id} aria-pressed={vistaDer === id} onClick={() => setVistaDer(id)} style={{ background: 'none', border: 'none', padding: '8px 4px 8px 16px', fontSize: 14, cursor: 'pointer',
       color: vistaDer === id ? B.titulo : B.secundario, fontWeight: vistaDer === id ? 700 : 400, paddingRight: ayuda ? 4 : 16 }}>{texto}</button>{ayuda && <Ayuda texto={ayuda} etiqueta={texto}/>}</span>
@@ -1181,9 +1183,9 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       <Cifra id="twr" color={colorSigno(s.twr)} titulo="CAGR del plan" ayuda={AYUDA_PLAN.twr} valor={pct(s.twr)}/>
       {conTir && <Cifra id="tir" color={colorSigno(s.tir)} titulo="Rentabilidad de tu dinero (TIR)" ayuda={AYUDA_PLAN.tir} valor={pct(s.tir)}/>}
       <Cifra id="caida" color={colorSigno(s.caidaPct)} titulo="Peor caída" ayuda={ayudaCaida(s)} valor={pct(s.caidaPct)} sub={`${fechaCorta(s.caidaPctValle)} · ${euros(s.caidaEuros, 0)}`}/>
-      {!conLista && <Cifra id="ocioso" titulo="En el ocioso" ayuda={AYUDA_PLAN.enOcioso} valor={<span style={{ whiteSpace: 'nowrap' }}>{pct(cifras.enOcioso, 1)}<span style={{ fontSize: 13, fontWeight: 400, color: B.secundario }}> del tiempo</span></span>}/>}
+      {!conLista && <Cifra id="ocioso" titulo="En el ocioso" ayuda={AYUDA_PLAN.enOcioso} valor={<span style={{ whiteSpace: 'nowrap' }}>{pct(cifras.enOcioso, 1)}<span style={{ fontSize: 13, fontWeight: 400, color: B.secundario }}> del tiempo</span></span>} sub={subOcioso(1)}/>}
       {/* §93: con una lista, la parte del dinero en el ocioso, de media. */}
-      {conLista && <Cifra id="ocioso" titulo="En el ocioso" ayuda={AYUDA_PLAN.enOciosoLista} valor={<span style={{ whiteSpace: 'nowrap' }}>{pct(cifras.enOcioso, 0)}<span style={{ fontSize: 13, fontWeight: 400, color: B.secundario }}> de media</span></span>} sub={Number.isFinite(cifras.enOcioso) ? `de tu dinero · en valores, el ${pct(1 - cifras.enOcioso, 0)}` : undefined}/>}
+      {conLista && <Cifra id="ocioso" titulo="En el ocioso" ayuda={AYUDA_PLAN.enOciosoLista} valor={<span style={{ whiteSpace: 'nowrap' }}>{pct(cifras.enOcioso, 0)}<span style={{ fontSize: 13, fontWeight: 400, color: B.secundario }}> de media</span></span>} sub={subOcioso(0) || (Number.isFinite(cifras.enOcioso) ? `de tu dinero · en valores, el ${pct(1 - cifras.enOcioso, 0)}` : undefined)}/>}
       {/* §57: en una línea; el detalle de las órdenes, en su tooltip y en su «?». */}
       <Cifra id="costes" titulo="Impuestos y comisiones" ayuda={`${AYUDA_PLAN.costes} En este plan: ${euros(s.impuestos, 0)} de impuestos y ${euros(s.costes, 0)} de comisiones en ${cifras.ordenes} órdenes.`} valor={<span title={`Impuestos ${euros(s.impuestos, 0)} · Comisiones ${euros(s.costes, 0)} (${cifras.ordenes} órdenes)`} style={{ fontSize: 16, whiteSpace: 'nowrap' }}>
         <span data-impuestos>{euros(s.impuestos, 0)}</span> · <span data-comisiones>{euros(s.costes, 0)}</span></span>}/>
@@ -1199,7 +1201,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           : <tr key={x.anio} data-anio={x.anio}><td style={celda}>{x.anio}</td><td style={{ ...celda, color: colorSigno(x.plan) || B.texto, fontWeight: 700 }}>{pct(x.plan)}</td><td style={{ ...celda, color: colorSigno(x.activo) || B.texto }}>{pct(x.activo)}</td><td style={{ ...celda, color: colorSigno(x.caidaPlan) || B.texto }}>{pct(x.caidaPlan)}</td><td style={{ ...celda, color: colorSigno(x.caidaActivo) || B.texto }}>{pct(x.caidaActivo)}</td><td style={celda}>{pct(x.enOcioso, 1)}</td></tr>)}</tbody>
       </table></div>
     </Tarjeta>
-    <Tarjeta id="alternativas" titulo={cifras.bloques ? 'Frente a cada bloque solo y a no tener estrategia' : TITULO_ALTERNATIVAS} ayuda={`${conLista ? `${AYUDA_PLAN.alternativas} ${AYUDA_PLAN.bhLista}` : AYUDA_PLAN.alternativas}${cifras.bloques ? ` ${AYUDA_BLOQUES.soloBloque}` : ''}${cifras.conSinReglas ? ` ${AYUDA_PESOS.sinReglas}` : ''}`}>
+    <Tarjeta id="alternativas" titulo={cifras.bloques ? 'Frente a cada bloque solo y a no tener estrategia' : TITULO_ALTERNATIVAS} ayuda={`${conLista ? `${AYUDA_PLAN.alternativas} ${AYUDA_PLAN.bhLista}` : AYUDA_PLAN.alternativas}${cifras.bloques ? ` ${AYUDA_BLOQUES.soloBloque}` : ''}${cifras.conSinReglas ? ` ${AYUDA_PESOS.sinReglas}` : ''}${cifras.ociosoRegla ? ` ${AYUDA_OCIOSO_SIEMPRE}` : ''}`}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="alternativas" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr>{['', 'Final', 'CAGR', ...(conTir ? ['TIR'] : []), 'Peor caída', 'Impuestos', 'Comisiones'].map(h => <th key={h} style={cab}>{h}</th>)}<th style={cab}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>Órdenes<Ayuda texto={AYUDA_PLAN.ordenes} etiqueta="Órdenes"/></span></th></tr></thead>
         <tbody>{cifras.alternativas.filter(x => !(sinOcioso && x.id === 'OCIOSO_LIQUIDEZ')).map(x => <tr key={x.id} data-fila={x.id} style={x.id === 'PLAN' ? { fontWeight: 700, color: B.titulo } : undefined}>
