@@ -32,7 +32,9 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     ok(a1.peso === 50 && b.peso === 50 && b.tipo === 'pesos' && b.pesos.length === 1 && b.pesos[0].simbolo === '' && b.pesos[0].peso === 100 && b.volver.cada === 'nunca' && b.aportaciones === 'ahora' && !b.reglas,
       '«+ Añadir bloque ▾» → «Con pesos»: 50 % y 50 %, en blanco (un activo sin elegir al 100 %), sin volver a los pesos y sin reglas')
     const pv = Pa.planDe(a1, FOTO)
-    ok(P.validaPlan(pv).some(e => /no es un símbolo válido/.test(e)), `en blanco no se calcula y lo dice (${P.validaPlan(pv).join(' ')})`)
+    ok(P.validaPlan(pv).some(e => /Falta elegir el activo en «1 · Pesos de partida»/.test(e)) && !P.validaPlan(pv).some(e => /no es un símbolo válido/.test(e)), `en blanco no se calcula y lo dice en palabras (${P.validaPlan(pv).join(' ')})`)
+    { const BPm = require(R + '/components/BuilderPlan.js')
+      ok(BPm.enBloques('Pieza b2: Falta algo.', pv) === 'Bloque 2: Falta algo.' && BPm.enBloques('Pieza zz: algo', pv) === 'Pieza zz: algo' && BPm.enBloques('Sin capital.', pv) === 'Sin capital.', '§201: en pantalla «Pieza b2:» pasa a «Bloque 2:» (un id que no está, o un texto sin pieza, igual)') }
     ok(Pa.resumenPesos(b) === '100 % ¿?', `resumen en blanco: «${Pa.resumenPesos(b)}»`)
     const a2 = { ...a1, peso: 60, bloques: [{ ...b, peso: 40, pesos: [{ simbolo: 'SPY', peso: 80 }, { simbolo: 'TQQQ', peso: 20 }], volver: { cada: 'banda', puntos: 15 }, aportaciones: 'atras' }] }
     const p = Pa.planDe(a2, FOTO)
@@ -96,7 +98,8 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
       ok(['1', '2', '3'].every(s => bq.conAtributo('data-seccion-pesos', s).length === 1) && /1 · Pesos de partida/.test(bq.textContent) && /2 · Volver a los pesos del bloque/.test(bq.textContent) && /3 · El dinero que le llega/.test(bq.textContent), 'con sus tres secciones')
       ok(/Con pesos · 100 % ¿\?/.test(bq.textContent) && bq.conAtributo('data-suma-pesos', '100').length === 1, 'en blanco: «Con pesos · 100 % ¿?» y «Suman 100 % ✓»')
       await hasta(() => m.raiz.conAtributo('data-errores-plan').length > 0)
-      ok(/no es un símbolo válido/.test(m.raiz.conAtributo('data-errores-plan')[0]?.textContent || ''), 'sin símbolo elegido no se calcula y lo dice')
+      { const tx = m.raiz.conAtributo('data-errores-plan')[0]?.textContent || ''
+        ok(/Bloque 2: Falta elegir el activo en «1 · Pesos de partida»/.test(tx) && !/Pieza|no es un símbolo válido/.test(tx), `sin activo elegido no se calcula y lo dice en palabras («${tx}»)`) }
       m.quita(); await D.espera(5)
     }
     {

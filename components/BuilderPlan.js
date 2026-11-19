@@ -93,6 +93,14 @@ const seg = (on, desactivado) => ({ fontFamily: B.letra, fontSize: 14, padding: 
 const borde = (i, n) => ({ borderRadius: n === 1 ? 6 : i === 0 ? '6px 0 0 6px' : i === n - 1 ? '0 6px 6px 0' : 0, ...(i ? { borderLeft: 'none' } : {}) })
 
 // Un grupo de botones (uno elegido). opciones: [[valor, texto, desactivado?]].
+// §201: el motor nombra cada bloque por su id interno («Pieza b2: …»); en pantalla, «Bloque 2: …» (el número de la columna izquierda).
+export function enBloques(texto, plan) {
+  return String(texto).replace(/^Pieza ([^:]+):/, (m, id) => {
+    const k = (plan?.piezas || []).findIndex(x => x?.id === id)
+    return k >= 0 ? `Bloque ${k + 1}:` : m
+  })
+}
+
 function Segmentos({ opciones, valor, onCambia, etiquetaGrupo }) {
   return (
     <div role="group" aria-label={etiquetaGrupo} style={{ display: 'flex', flexWrap: 'wrap' }}>
@@ -765,7 +773,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   ) : null
   const errorCalculo = (!!errores.length || calc.error) && (
     <div data-estado-calculo style={{ marginBottom: 10 }}>
-      {!!errores.length && <div data-errores-plan style={{ color: ROJO }}>✕ {errores.join(' ')}</div>}
+      {!!errores.length && <div data-errores-plan style={{ color: ROJO }}>✕ {errores.map(t => enBloques(t, plan)).join(' ')}</div>}
       {calc.error && !errores.length && <div data-error-plan style={{ color: ROJO }}>✕ No se pudo calcular: {calc.error}</div>}
     </div>
   )
