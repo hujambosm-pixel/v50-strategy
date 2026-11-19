@@ -72,6 +72,8 @@ import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, avisoPrueba as textoAvisoP
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS, resumenDinero, bloquesDe, estrategiaBloque, anadeBloque, quitaBloque, repartirResto, sumaPesos, AYUDA_BLOQUES,
   esBloquePesos, sumaPesosBloque, resumenPesos, AYUDA_PESOS, VOLVER_OPCIONES, LLEGA_OPCIONES, PUNTOS_BANDA_DEFECTO } from '../lib/builder/planPantalla'
 import { MAX_SIMBOLOS_PESOS } from '../lib/planes/pesos'
+import ReglasPesos from './ReglasPesos'
+import { fraseBloquePesos, EJEMPLOS_PESOS, AYUDA_REGLAS } from '../lib/builder/reglasPesos'
 // §187: los colores de los bloques (el 1, azul, como siempre): COLORES_BLOQUE de PlanDetalle (§188: los mismos en «Detalle»).
 
 const CLAVE_PANEL = 'builder_plan_panel_oculto'   // §165
@@ -272,6 +274,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const [extraAbiertos, setExtraAbiertos] = useState({})
   const [valoresExtra, setValoresExtra] = useState({})
   const [menuBloque, setMenuBloque] = useState(false)   // §197: el desplegable de «+ Añadir bloque ▾»
+  const [ejemploPesos, setEjemploPesos] = useState(null)   // §199: { id del bloque, ejemplo } a la espera de «Sí, cargarlo»
   // §189: «Tu dinero», plegado en una línea en los planes guardados y abierto en los nuevos (por plan; solo en pantalla).
   const [dineroAb, setDineroAb] = useState({})
   const [bloqueAbierto, setBloqueAbierto] = useState(true)   // §142: la fila del bloque de «Cartera», abierta o plegada (solo en pantalla)
@@ -837,7 +840,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const campoPct = (valor, onCambia, etiqueta) => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero etiqueta={etiqueta} valor={valor} onCambia={onCambia} ancho={70}/> % de tu dinero</span>
   const sumaPct = multi ? sumaPesos(a) : 100
   // §197: un bloque «Con pesos» (boceto bocetos/bloque-con-pesos.html, pestaña 1): su %, los pesos de partida (símbolos con precios guardados
-  // y «Liquidez»), volver a los pesos y el dinero que le llega. Las reglas «si… entonces…» se guardan tal cual (su pantalla, más adelante).
+  // y «Liquidez»), volver a los pesos y el dinero que le llega. §199: sus reglas «si… entonces…» (components/ReglasPesos.js), «Así se lee»
+  // y «Cargar un ejemplo» (si el bloque ya tiene algo, pregunta antes de cambiarlo).
   const valoresPesos = useMemo(() => [{ simbolo: 'LIQUIDEZ', nombre: 'Liquidez del bloque · efectivo que no rinde' }, ...valoresLista], [valoresLista])
   const bloquePesos = (b, k) => {
     const n = k + 2, color = COLORES_BLOQUE[(k + 1) % COLORES_BLOQUE.length], abierto = extraAbiertos[b.id] !== false
@@ -861,6 +865,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             <div><Etiqueta texto="Parte de tu dinero" ayuda={AYUDA_BLOQUES.parte}/>{campoPct(b.peso, v => ponBloque(b.id, x => ({ ...x, peso: v })), `Parte del bloque ${n}`)}</div>
             <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }}><span style={{ ...S.apagado, marginRight: 10, display: 'inline-flex', alignItems: 'center' }}>Bloque con pesos<Ayuda texto={AYUDA_PESOS.bloque} etiqueta="Bloque con pesos"/></span><button type="button" data-boton="quitar-bloque" title="Quitar este bloque (su % pasa al bloque 1)" onClick={() => setA(x => quitaBloque(x, b.id))} style={{ ...S.boton, padding: '4px 10px', fontSize: 13, color: ROJO, borderColor: ROJO }}>🗑 Quitar</button><Ayuda texto={AYUDA_BLOQUES.quitar} etiqueta="Quitar el bloque"/></span>
           </div>
+          <div data-ejemplos-pesos style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ ...S.secundario, display: 'inline-flex', alignItems: 'center' }}>Cargar un ejemplo<Ayuda texto={AYUDA_REGLAS.ejemplos} etiqueta="Cargar un ejemplo"/>:</span>
+            {EJEMPLOS_PESOS.map(e => <button key={e.id} type="button" data-ejemplo={e.id} onClick={() => { const vacio = !(b.pesos || []).some(p => p.simbolo) && !(b.reglas || []).length; if (vacio) ponBloque(b.id, x => ({ ...x, ...e.bloque() })); else setEjemploPesos({ id: b.id, n, e }) }} style={{ ...S.boton, padding: '3px 9px', fontSize: 13 }}>{e.nombre}</button>)}
+          </div>
           {seccion(1, 'Pesos de partida', AYUDA_PESOS.partida, <>
             {ps.map((p, j) => (
               <div key={j} data-fila-peso={j} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -879,7 +887,11 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             {cada === 'banda' && <span data-banda style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>más de <CampoNumero etiqueta={`Puntos del bloque ${n}`} valor={b.volver?.puntos} onCambia={v => ponBloque(b.id, x => ({ ...x, volver: { ...x.volver, puntos: v } }))} ancho={50} minimo={1}/> puntos</span>}
           </div>)}
           {seccion(3, 'El dinero que le llega', AYUDA_PESOS.llega, <Segmentos etiquetaGrupo={`El dinero que le llega al bloque ${n}`} valor={b.aportaciones || 'ahora'} onCambia={v => ponBloque(b.id, x => ({ ...x, aportaciones: v }))} opciones={LLEGA_OPCIONES}/>)}
-          {Array.isArray(b.reglas) && b.reglas.length > 0 && <div data-aviso="reglas-guardadas" style={S.apagado}>Este bloque lleva {b.reglas.length === 1 ? '1 regla «si… entonces…»' : `${b.reglas.length} reglas «si… entonces…»`}: se aplican; su pantalla llegará en el siguiente paso.</div>}
+          {seccion(4, 'Reglas «si… entonces…»', AYUDA_REGLAS.reglas, <ReglasPesos b={b} n={n} color={color} valores={valoresPesos} onCambia={rs => ponBloque(b.id, x => { const y = { ...x }; if (rs.length) y.reglas = rs; else delete y.reglas; return y })}/>)}
+          <div data-asi-se-lee style={{ border: `1px dashed ${B.borde}`, borderRadius: B.radioBoton, padding: '8px 10px', background: B.fondo }}>
+            <div style={{ fontWeight: 700, color: B.titulo, marginBottom: 4 }}>Así se lee</div>
+            {fraseBloquePesos(b).map((t, j) => <div key={j} data-frase-pesos={j} style={{ color: j ? B.texto : B.titulo, marginTop: j ? 4 : 0, lineHeight: 1.45 }}>{t}</div>)}
+          </div>
         </div>}
       </div>
     )
@@ -1265,6 +1277,11 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           extra={<input type="text" autoFocus aria-label="Nombre del plan" placeholder="Nombre del plan" maxLength={200} value={nombreNuevo} onChange={e => setNombreNuevo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') guardaVentana(); if (e.key === 'Escape') limpiaDialogos() }} style={{ ...campo, width: '100%', boxSizing: 'border-box', marginBottom: 16 }}/>}>
           <button data-boton="confirmar-nombre" disabled={guardando || !nombreLimpio(nombreNuevo)} onClick={guardaVentana} style={!guardando && nombreLimpio(nombreNuevo) ? S.botonVerde : S.botonDesactivado}>{guardando ? 'Guardando…' : 'Guardar'}</button>
           <button onClick={limpiaDialogos} style={S.boton}>Cancelar</button>
+        </Pregunta>)}
+      {ejemploPesos && (
+        <Pregunta id="ejemplo-pesos" texto={`¿Cargar «${ejemploPesos.e.nombre}» en el bloque ${ejemploPesos.n}?`} detalle="Cambia sus pesos, «volver a los pesos», el dinero que le llega y sus reglas (no su % del plan). Si no te gusta, «Descartar cambios» vuelve a lo guardado.">
+          <button type="button" data-boton="si-ejemplo" onClick={() => { const { id, e } = ejemploPesos; ponBloque(id, x => ({ ...x, ...e.bloque() })); setEjemploPesos(null) }} style={S.botonVerde}>Sí, cargarlo</button>
+          <button type="button" data-boton="no-ejemplo" onClick={() => setEjemploPesos(null)} style={S.boton}>Cancelar</button>
         </Pregunta>)}
       {borrando && (
         <Pregunta id="borrar-plan" texto={`¿Borrar «${nombreDe(borrando)}»? Se borra de la base y no se puede deshacer.`} detalle="Para quitarlo solo de la vista, usa la ×." aviso={falloGuardar}>
