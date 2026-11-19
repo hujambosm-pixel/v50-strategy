@@ -1091,14 +1091,14 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           <div><Etiqueta texto="Impuestos" ayuda={AYUDA_PLAN.impuestos}/><Segmentos etiquetaGrupo="Impuestos" valor={a.impuestos} onCambia={v => cambia('impuestos', v)} opciones={[['ES-ahorro', 'España · base del ahorro'], ['ninguno', 'Sin impuestos']]}/></div>
         </div>
         <div>
-          <Etiqueta texto="Comisión por operación" ayuda={AYUDA_PLAN.comision}/>
+          <Etiqueta texto="Comisión por orden" ayuda={AYUDA_PLAN.comision}/>
           <div role="group" aria-label="Cómo es la comisión" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 10px', alignItems: 'center' }}>
             {TIPOS_COMISION.map(([k, t]) => <span key={k} style={{ display: 'inline-flex', alignItems: 'center' }}><button type="button" data-comision={k} aria-pressed={(a.comisionTipo || 'pct') === k} onClick={() => cambia('comisionTipo', k)} style={{ ...seg((a.comisionTipo || 'pct') === k), borderRadius: 6 }}>{t}</button><Ayuda texto={AYUDA_COMISION[k]} etiqueta={`Comisión: ${t}`}/></span>)}
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
             {(a.comisionTipo || 'pct') !== 'fija' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero etiqueta="Comisión en %" valor={a.comision} onCambia={v => cambia('comision', v)} ancho={80}/> %</span>}
             {a.comisionTipo === 'pctMin' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>con mínimo de <CampoNumero enEuros etiqueta="Mínimo en euros" valor={a.comisionMin} onCambia={v => cambia('comisionMin', v)} ancho={70}/> €</span>}
-            {a.comisionTipo === 'fija' && <span title="Se cobra al comprar y otra vez al vender. Si tu bróker cobra 0,37 € solo al comprar, pon 0,185 € (0,185 + 0,185 = 0,37 €)." style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero enEuros etiqueta="Euros por operación" valor={a.comisionFija} onCambia={v => cambia('comisionFija', v)} ancho={70}/> € por operación</span>}
+            {a.comisionTipo === 'fija' && <span title="Se cobra al comprar y otra vez al vender. Si tu bróker cobra 0,37 € solo al comprar, pon 0,185 € (0,185 + 0,185 = 0,37 €)." style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero enEuros etiqueta="Euros por orden" valor={a.comisionFija} onCambia={v => cambia('comisionFija', v)} ancho={70}/> € por orden</span>}
           </div>
         </div>
         {multi && ociosoCampo}

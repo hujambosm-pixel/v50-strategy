@@ -156,7 +156,7 @@ function universoPrueba(SIMB, regla, n) {
   ok(pedidas.length === 1 && JSON.stringify(pedidas[0]) === JSON.stringify(cuerpo), 'a ~1 s, una petición: la del plan')
   const caja = m.raiz.conAtributo('data-cartera-por-dentro')
   ok(caja.length === 1 && caja[0].textContent.includes('📊 Multicartera') && caja[0].textContent.includes('Capital compartido'), 'pinta los paneles del Backtesting («📊 Multicartera», «Capital compartido»)')
-  ok(m.raiz.conAtributo('data-linea-por-dentro')[0]?.textContent.includes('con las comisiones del plan (0,10 % por operación; «Comprar y mantener», sin comisión)'), `la línea dice con qué se calcula y con qué comisiones: «${m.raiz.conAtributo('data-linea-por-dentro')[0]?.textContent}»`)
+  ok(m.raiz.conAtributo('data-linea-por-dentro')[0]?.textContent.includes('con las comisiones del plan (0,10 % por orden; «Comprar y mantener», sin comisión)'), `la línea dice con qué se calcula y con qué comisiones: «${m.raiz.conAtributo('data-linea-por-dentro')[0]?.textContent}»`)
   m.quita()
   { const m0 = D.monta(React.createElement(PD.default, { a: { ...aFoto, comision: 0 }, estrategia: est, estrategias: [est], visible: true, calcula: async () => JSON.parse(r.cuerpo) }), RDC); await D.espera(30)
     ok((m0.raiz.conAtributo('data-linea-por-dentro')[0]?.textContent || '').includes('sin comisiones (el plan no tiene)'), 'un plan sin comisión: la línea dice «sin comisiones (el plan no tiene)»')
