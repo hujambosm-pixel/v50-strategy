@@ -11,7 +11,7 @@ import Resaltado from './Resaltado'
 import ConLimpiar from './LimpiarBusqueda'
 
 const MAX_FILAS = 200
-export default function BuscadorValor({ valores = [], valor, onCambia = () => {}, etiqueta = 'Valor', textoInicial = null }) {
+export default function BuscadorValor({ valores = [], valor, onCambia = () => {}, etiqueta = 'Valor', textoInicial = null, anchoNombre }) {
   const [texto, setTexto] = useState(textoInicial)   // null: no se está escribiendo
   const [abierto, setAbierto] = useState(textoInicial != null)
   const [activo, setActivo] = useState(0)
@@ -36,7 +36,7 @@ export default function BuscadorValor({ valores = [], valor, onCambia = () => {}
         onChange={e => { setTexto(e.target.value); setActivo(0); setAbierto(true) }}
         onBlur={() => { setTexto(null); setAbierto(false) }} onKeyDown={tecla}
         style={{ fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '5px 8px', width: '12ch' }}/></ConLimpiar>
-      {texto == null && nombre && <span data-nombre-valor style={{ fontWeight: 400, fontSize: 13, color: B.secundario, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</span>}
+      {texto == null && nombre && <span data-nombre-valor {...(anchoNombre ? { title: nombre } : {})} style={{ fontWeight: 400, fontSize: 13, color: B.secundario, maxWidth: anchoNombre || 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</span>}
       {abierto && <ul id="buscador-valor-lista" role="listbox" aria-label={`${etiqueta}: ${lista.length} ${lista.length === 1 ? 'valor' : 'valores'}`} data-lista-valores={lista.length}
         style={{ position: 'absolute', top: '100%', left: 0, zIndex: 20, margin: '4px 0 0', padding: 4, listStyle: 'none', minWidth: 300, maxHeight: 320, overflowY: 'auto',
           background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, boxShadow: '0 8px 24px rgba(0,0,0,0.45)', fontWeight: 400 }}>
