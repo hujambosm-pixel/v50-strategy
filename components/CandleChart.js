@@ -14,7 +14,7 @@ import { calcEMA, calcSMA, calcRSI, calcMACD, calcBollinger, calcVolumeAvg } fro
 // Metadatos, valores por defecto y persistencia de los indicadores del usuario. El CÁLCULO se queda
 // aquí (TIPOS_INDICADOR, más abajo); lo que comparten los dos sitios es la cadena `tipo`, así que al
 // añadir un tipo hay que tocar los dos.
-import { CATALOGO_INDICADORES, TIPOS_DISPONIBLES, rotuloIndicador, nuevoIndicador } from '../lib/indicadores'
+import { CATALOGO_INDICADORES, rotuloIndicador } from '../lib/indicadores'
 import { planDeclarado, planPaneles, flechasDeOperaciones, marcasRazonamiento, quitaDuplicados, campoEnVela,
          etiquetasDeNiveles, altoPanelDe, ALTO_PANEL_MIN, ALTO_PANEL_MAX, coma, lineaOperacion, COLOR_GANA } from '../lib/graficoPaneles'
 // Dibujar sobre el gráfico (docs/builder.md §208): solo con la prop `dibujar`; sin ella, nada cambia.
@@ -680,7 +680,6 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
   const openTradeLinesRef=useRef([])     // price lines SÓLIDAS de entrada de posiciones abiertas (tlOpenTrades)
   // Lista de indicadores sobre el gráfico: fila con el cursor encima, y menú de añadir abierto.
   const [indHover,setIndHover]=useState(null)
-  const [indMenu,setIndMenu]=useState(false)
   const indClicRef=useRef(null)   // temporizador del clic simple, para que el doble clic pueda cancelarlo
   const [chartReadyTick,setChartReadyTick]=useState(0)  // nonce: se incrementa al recrear el chart → re-dibuja pendientes con candlesRef fresco
   const dragRef=useRef(null)             // {lineObj} while dragging
@@ -2307,28 +2306,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
               </div>
             )
           })}
-          {/* Añadir */}
-          <div style={{position:'relative'}}>
-            <div onClick={()=>setIndMenu(v=>!v)} title="Añadir indicador"
-              style={{display:'inline-flex',alignItems:'center',gap:5,padding:'2px 8px',borderRadius:4,
-                background:'rgba(8,12,20,0.82)',border:'1px solid #1a2d45',color:'#7a9bc0',cursor:'pointer'}}>
-              + Indicador
-            </div>
-            {indMenu&&(
-              <div style={{position:'absolute',top:'100%',left:0,marginTop:3,zIndex:12,
-                background:'#0d1824',border:'1px solid #1e3a52',borderRadius:5,padding:3,
-                boxShadow:'0 6px 24px rgba(0,0,0,0.7)',display:'flex',flexDirection:'column',minWidth:150}}>
-                {TIPOS_DISPONIBLES.map(t=>(
-                  <div key={t} onClick={()=>{setIndMenu(false);const n=nuevoIndicador(t,indicadoresUsuario.length);if(n)onIndicadores([...indicadoresUsuario,n])}}
-                    style={{padding:'5px 9px',borderRadius:3,cursor:'pointer',color:'#c8dff5',whiteSpace:'nowrap'}}
-                    onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.10)'}
-                    onMouseOut={e=>e.currentTarget.style.background='transparent'}>
-                    {CATALOGO_INDICADORES[t].nombre}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* «+ Indicador»: retirado (§212). Se añaden con el botón «📈 Indicadores» de la barra de arriba (components/VentanaIndicadores.js). */}
           {/* ── De la ESTRATEGIA, separados y sin controles ──
               Se listan para que se vea de dónde sale cada línea, pero no se configuran desde aquí: vienen
               calculados dentro de las barras y pueden estar en otro intervalo. */}

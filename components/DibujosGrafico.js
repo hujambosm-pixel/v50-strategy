@@ -36,7 +36,7 @@ const estiloDe = (tipo) => estiloRecordado(leeEstilos(), tipo)
 // La 🎯 (§210): no es un dibujo; un clic en el gráfico abre la ventana de alarma de precio con ese precio.
 const HERR_ALERTA = { id: 'alerta', nombre: 'Alerta de precio', atajo: '', ayuda: 'un clic en el precio (con Ctrl, pegado a la apertura, máximo, mínimo o cierre de la vela) y se abre la ventana de la alarma' }
 const MAX_HISTORIAL = 60
-const MONO = "'JetBrains Mono', monospace"
+import { MONO } from '../lib/utils'
 
 const IC = {
   cursor: <><path d="M5 3 L5 16 L8.3 12.8 L10.6 17.3 L12.6 16.3 L10.3 11.9 L14.8 11.9 Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></>,

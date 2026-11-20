@@ -127,6 +127,8 @@ const VELAS = F.map((date, k) => ({ date, open: 100 + k, high: 104 + k, low: 98 
   const lanza = (t, e) => { for (const f of wrap.oyentes[t] || []) f(e); return e }
   const tecla = (key, extra = {}) => { for (const f of OV.keydown || []) f({ key, target: document.body, preventDefault() {}, stopPropagation() {}, ...extra }) }
   const boton = (id) => slot.busca(n => n.getAttribute('data-herr') === id)
+  // La barra va por un portal que se monta tras un efecto: se espera a que esté (hasta 2 s; con el equipo cargado tarda más).
+  for (let k = 0; k < 100 && !boton('tendencia'); k++) await D.espera(20)
   ok(!!boton('tendencia') && !!boton('canal') && !!boton('iman') && !!boton('papelera') && slot.todos(n => n.nodeName === 'BUTTON' && n.getAttribute('data-herr')).length === 16, 'la barra lateral, en su hueco: 12 herramientas + seguir dibujando, imán, deshacer y borrar todo')
   ok(boton('papelera').getAttribute('disabled') != null || D.propsDe(boton('papelera')).disabled === true, 'sin dibujos, «borrar todo» está apagado')
 

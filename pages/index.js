@@ -6,7 +6,7 @@ import { WATCHLIST_DEFAULT } from '../lib/constants'
 import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt, fetchConSesion, setOnSesionCaducada, hayConfigSupabase } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
 import { mergeFiltros, loadFiltros, guardarFiltros, hayFiltroActivo } from '../lib/filtros'
-import { cargarIndicadores, guardarIndicadores, CATALOGO_INDICADORES, validaIndicador, rotuloIndicador } from '../lib/indicadores'
+import { cargarIndicadores, guardarIndicadores, CATALOGO_INDICADORES, validaIndicador, rotuloIndicador, nuevoIndicador } from '../lib/indicadores'
 import { loadAsignacionMc, guardarAsignacionMc } from '../lib/mcAsignacion'
 import { capitalDeOperacion } from '../lib/capitalOperacion'
 import FiltrosPanel from '../components/FiltrosPanel'
@@ -19,6 +19,7 @@ import { filtrosDelRanking, tandaDelRanking, diasToleranciaDelRanking, activosPe
 import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
 import CandleChart from '../components/CandleChart'
+import VentanaIndicadores from '../components/VentanaIndicadores'
 import FundamentalsPanel from '../components/FundamentalsPanel'
 import EquityChart from '../components/EquityChart'
 import Tip from '../components/Tip'
@@ -33,7 +34,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1275'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1276'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1368,6 +1369,7 @@ export default function Home() {
   // Indicador en edición: se trabaja sobre una COPIA y solo se vuelca a la lista al aceptar, para que
   // cancelar deje las cosas como estaban y el gráfico no parpadee con cada tecla.
   const [indEditando,setIndEditando]=useState(null)
+  const [ventanaInd,setVentanaInd]=useState(false)   // ventana «📈 Indicadores» (§212)
   const [indError,setIndError]=useState('')
   const abrirIndicador=useCallback((ind)=>{ setIndError(''); setIndEditando({...ind}) },[])
   const guardarIndicadorEditado=useCallback(()=>{
@@ -5651,7 +5653,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1275</title>
+        <title>Trading Simulator V9.1276</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5740,7 +5742,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1275
+            <span className="dot"/>Trading Simulator V9.1276
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7682,6 +7684,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                               fontFamily:MONO,fontSize:11,padding:'0 5px',borderRadius:3,
                               cursor:'pointer',lineHeight:'18px',flexShrink:0,height:18}}>+</button>
                         )}
+                        {/* 📈 Indicadores (§212): ventana con grupos y buscador para añadirlos al gráfico */}
+                        <button onClick={()=>setVentanaInd(true)} data-boton-indicadores=""
+                          title="Añadir indicadores al gráfico (medias, Bollinger, RSI, MACD, volumen)"
+                          style={{pointerEvents:'all',background:'rgba(0,212,255,0.08)',border:'1px solid #2f5b85',color:'#e2eaf5',
+                            fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',lineHeight:1,flexShrink:0,height:18}}>
+                          📈 Indicadores
+                        </button>
                         {/* OHLC dinámico — CandleChart escribe aquí via externalLegendRef */}
                         <span ref={chartLegendRef} style={{flex:1,minWidth:0,overflow:'hidden',
                           whiteSpace:'nowrap',textOverflow:'ellipsis'}}/>
@@ -7908,6 +7917,13 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           style={{cursor:'pointer',fontWeight:700,color:'#e2eaf5',fontSize:13,flexShrink:0,pointerEvents:'all',userSelect:'none'}}>
                           {displayedSimbolo||simbolo}
                         </span>
+                        {/* 📈 Indicadores (§212): ventana con grupos y buscador para añadirlos al gráfico */}
+                        <button onClick={()=>setVentanaInd(true)} data-boton-indicadores=""
+                          title="Añadir indicadores al gráfico (medias, Bollinger, RSI, MACD, volumen)"
+                          style={{pointerEvents:'all',background:'rgba(0,212,255,0.08)',border:'1px solid #2f5b85',color:'#e2eaf5',
+                            fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',lineHeight:1,flexShrink:0,height:18}}>
+                          📈 Indicadores
+                        </button>
                         <span ref={chartLegendRef} style={{flex:1,minWidth:0,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}/>
                         {stratName&&(
                           <span style={{flexShrink:0,fontSize:9,color:'#7a9bc0',background:'rgba(13,21,32,0.85)',
@@ -10759,6 +10775,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
           al pulsar fuera, caja #0d1824 con borde #1e3a52 y cabecera con la ✕.
           Los campos salen del catálogo (CATALOGO_INDICADORES[tipo].params), así que añadir un parámetro
           a un tipo no obliga a tocar este modal. */}
+      {ventanaInd&&<VentanaIndicadores enGrafico={indicadores} onCerrar={()=>setVentanaInd(false)}
+        onAnadir={t=>{const n=nuevoIndicador(t,indicadores.length);if(n)ponIndicadores([...indicadores,n])}}/>}
       {indEditando&&(()=>{
         const cat=CATALOGO_INDICADORES[indEditando.tipo]
         if(!cat) return null
