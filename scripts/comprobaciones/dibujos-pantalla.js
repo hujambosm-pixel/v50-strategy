@@ -130,7 +130,13 @@ const VELAS = F.map((date, k) => ({ date, open: 100 + k, high: 104 + k, low: 98 
   // La barra va por un portal que se monta tras un efecto: se espera a que esté (hasta 2 s; con el equipo cargado tarda más).
   for (let k = 0; k < 100 && !boton('tendencia'); k++) await D.espera(20)
   ok(!!boton('tendencia') && !!boton('canal') && !!boton('iman') && !!boton('papelera') && slot.todos(n => n.nodeName === 'BUTTON' && n.getAttribute('data-herr')).length === 16, 'la barra lateral, en su hueco: 12 herramientas + seguir dibujando, imán, deshacer y borrar todo')
-  ok(boton('papelera').getAttribute('disabled') != null || D.propsDe(boton('papelera')).disabled === true, 'sin dibujos, «borrar todo» está apagado')
+  // La papelera abre la ventana «Borrar dibujos» (§213): «Los de este valor» o «Los de todos los valores».
+  const borraEste = async () => { D.pulsa(boton('papelera')); await D.espera(20); const b = document.body.busca(n => n.getAttribute('data-borrar') === 'este'); D.pulsa(b); await D.espera(20) }
+  D.pulsa(boton('papelera')); await D.espera(20)
+  const bEste = () => document.body.busca(n => n.getAttribute('data-borrar') === 'este')
+  ok(!!bEste() && (bEste().getAttribute('disabled') != null || D.propsDe(bEste()).disabled === true), 'sin dibujos, en la ventana de borrar «Los de este valor» está apagado')
+  D.pulsa(document.body.busca(n => n.nodeName === 'BUTTON' && n.textContent === 'Cancelar')); await D.espera(20)
+  ok(!document.body.busca(n => n.hasAttribute('data-ventana-borrar')), '«Cancelar» cierra la ventana')
 
   // Línea con dos clics.
   D.pulsa(boton('tendencia')); await D.espera(20)
@@ -188,8 +194,8 @@ const VELAS = F.map((date, k) => ({ date, open: 100 + k, high: 104 + k, low: 98 
   tecla('Escape'); await D.espera(20)
   lanza('mousedown', ev(30, 60)); await D.espera(20)
   ok(memo().length === 3, 'Esc cancela una línea a medias (y vuelve al cursor)')
-  D.pulsa(boton('papelera')); await D.espera(20)
-  ok(memo().length === 0, 'borrar todo')
+  await borraEste()
+  ok(memo().length === 0, 'borrar los de este valor')
   D.pulsa(boton('deshacer')); await D.espera(20)
   ok(memo().length === 3, '… y se puede deshacer')
 
@@ -221,7 +227,9 @@ const VELAS = F.map((date, k) => ({ date, open: 100 + k, high: 104 + k, low: 98 
       llamadas.push({ metodo, s, cuerpo: o.body ? JSON.parse(o.body) : null })
       if (lenta) await new Promise(r => setTimeout(r, lenta))
       if (falla) return { ok: false, status: 500, json: async () => ({ message: 'caída' }) }
+      if (metodo === 'GET' && !u.searchParams.get('simbolo')) return { ok: true, status: 200, json: async () => [...filas].map(([simbolo, dibujos]) => ({ simbolo, dibujos })) }
       if (metodo === 'GET') return { ok: true, status: 200, json: async () => (filas.has(s) ? [{ dibujos: filas.get(s) }] : []) }
+      if (metodo === 'DELETE' && s === 'not.is.null') { filas.clear(); return { ok: true, status: 204, json: async () => null } }
       if (metodo === 'DELETE') { filas.delete(s); return { ok: true, status: 204, json: async () => null } }
       const b = JSON.parse(o.body); filas.set(b.simbolo, b.dibujos); return { ok: true, status: 201, json: async () => null }
     }
@@ -267,7 +275,8 @@ const VELAS = F.map((date, k) => ({ date, open: 100 + k, high: 104 + k, low: 98 
     const slot2 = document.createElement('div'); document.body.appendChild(slot2)
     const m3 = D.monta(React.createElement(Dib, { ...props('NVDA', ctx), barraRef: { current: slot2 } }), RDC); await D.espera(40)
     ok(m3.raiz.busca(n => n.getAttribute('data-dibujos') === '2') != null && llamadas.filter(l => l.metodo === 'GET').length === 1, 'la pantalla completa abre con los mismos 2 dibujos (sin volver a leer)')
-    D.pulsa(slot2.busca(n => n.getAttribute('data-herr') === 'papelera')); await D.espera(20)
+    D.pulsa(slot2.busca(n => n.getAttribute('data-herr') === 'papelera')); await D.espera(30)
+    D.pulsa(document.body.busca(n => n.getAttribute('data-borrar') === 'este')); await D.espera(20)
     ok(m2.raiz.busca(n => n.getAttribute('data-dibujos') === '0') != null, 'borrar todo en una instancia: la otra también se queda sin dibujos')
     m3.quita(); await D.espera(30)
     ok(!filas.has('NVDA'), 'al cerrar la pantalla completa se guarda ya (sin dibujos: la fila se borra)')
@@ -281,6 +290,15 @@ const VELAS = F.map((date, k) => ({ date, open: 100 + k, high: 104 + k, low: 98 
     D.pulsa(boton('horizontal')); await D.espera(20); lanza('mousedown', ev(20, 60)); await D.espera(400)
     lenta = 0; await D.espera(900)
     ok((filas.get('TSLA') || []).length === 2 && filas.get('TSLA')[0].id === 'viejo', 'lo dibujado mientras se leía se junta con lo guardado (2 en TSLA)')
+    // Borrar los de TODOS los valores: cuenta lo de la base y lo borra todo (no se puede deshacer).
+    filas.set('META', [P.creaDibujo('horizontal', [pt(3, 150)], { id: 'm1' }), P.creaDibujo('horizontal', [pt(3, 140)], { id: 'm2' })])
+    D.pulsa(boton('papelera')); await D.espera(60)
+    const bTodos = document.body.busca(n => n.getAttribute('data-borrar') === 'todos')
+    const txtTodos = bTodos.textContent
+    // En la base de mentira: TSLA 2 (el abierto), NVDA 1, META 2 y ^GSPC 1 (de más arriba) → 4 valores, 6 dibujos.
+    ok(/\(4 valores, 6 dibujos\)/.test(txtTodos) && /META \(2\)/.test(txtTodos) && /No se puede deshacer/.test(txtTodos), `la ventana cuenta todos los valores: «${txtTodos.slice(0, 60)}…»`)
+    D.pulsa(bTodos); await D.espera(60)
+    ok(filas.size === 0 && llamadas.at(-1).metodo === 'DELETE' && m2.raiz.busca(n => n.getAttribute('data-dibujos') === '0') != null && !document.body.busca(n => n.hasAttribute('data-ventana-borrar')), '«Los de todos los valores»: la base queda vacía y el gráfico también')
     // Si guardar falla, sale el aviso en rojo.
     falla = true
     D.pulsa(boton('horizontal')); await D.espera(20); lanza('mousedown', ev(20, 70)); await D.espera(950)
@@ -346,6 +364,49 @@ const VELAS = F.map((date, k) => ({ date, open: 100 + k, high: 104 + k, low: 98 
     const m6 = D.monta(React.createElement(Dib, props('INTC')), RDC); await D.espera(30)
     ok(!boton('alerta') && slot.busca(n => n.hasAttribute('data-barra-dibujos')).style.padding === '6px 0 6px', 'sin onAlerta no hay 🎯, y sin barra encima la barra lateral empieza arriba')
     m6.quita()
+  }
+
+  // ── 7 · Ctrl+Z con el ratón encima aunque no llegara «mouseenter» (§213) ──
+  {
+    DG._memoriaDibujos.clear(); DG._leidosDibujos.clear()
+    const m8 = D.monta(React.createElement(Dib, props('ORCL')), RDC); await D.espera(40)
+    for (let k = 0; k < 100 && !boton('tendencia'); k++) await D.espera(20)
+    for (const fl of wrap.oyentes.mouseleave || []) fl({})
+    D.pulsa(boton('horizontal')); await D.espera(20); lanza('mousedown', ev(20, 50)); await D.espera(20)
+    lanza('mousemove', ev(40, 60)); tecla('z', { ctrlKey: true }); await D.espera(20)
+    ok((DG._memoriaDibujos.get('ORCL') || []).length === 0, 'Ctrl+Z funciona con el ratón moviéndose por el gráfico (aunque no se viera «mouseenter»)')
+    D.pulsa(boton('horizontal')); await D.espera(20); lanza('mousedown', ev(20, 50)); await D.espera(20)
+    for (const fl of wrap.oyentes.mouseleave || []) fl({})
+    D.propsDe(slot.busca(n => n.hasAttribute('data-barra-dibujos'))).onMouseEnter(); tecla('z', { ctrlKey: true }); await D.espera(20)
+    ok((DG._memoriaDibujos.get('ORCL') || []).length === 0, 'Ctrl+Z funciona con el ratón sobre la barra lateral')
+    m8.quita()
+  }
+  // ── 8 · El ojo: ocultar lo de la estrategia (§213) ──
+  {
+    const { propsDelGrafico } = require(R + '/components/CandleChart.js')
+    const tr = [{ entryDate: F[1] }], cm = [{ date: F[2] }], pon = () => {}
+    const base = { data: VELAS, trades: tr, customMarkers: cm, slopeChanges: [1], filterZones: [2], razonamiento: true, pendingOrders: [3], visuals: { a: 1 } }
+    ok(propsDelGrafico(base, true, pon) === base, 'sin «dibujar», el gráfico recibe sus props tal cual (aunque el ojo estuviera tachado)')
+    const vis = propsDelGrafico({ ...base, dibujar: true }, false, pon)
+    ok(vis.trades === tr && vis.customMarkers === cm && vis.razonamiento === true && vis.sinEstrategia === false && vis.onSinEstrategia === pon, 'con el ojo abierto, todo lo de la estrategia a la vista')
+    const oc = propsDelGrafico({ ...base, dibujar: true }, true, pon)
+    ok(oc.trades.length === 0 && oc.customMarkers.length === 0 && oc.slopeChanges.length === 0 && oc.filterZones.length === 0 && oc.razonamiento === false, 'con el ojo tachado: sin operaciones (etiquetas, flechas, líneas de entrada y salida), eventos, pendientes, zonas ni razonamiento')
+    ok(oc.pendingOrders === base.pendingOrders && oc.visuals === base.visuals && oc.data === VELAS, '… y se quedan las órdenes reales, las medias de la estrategia y las velas')
+    let pedido = null
+    DG._memoriaDibujos.clear()
+    const m9 = D.monta(React.createElement(Dib, { ...props('KO'), sinEstrategia: false, onSinEstrategia: v => { pedido = v } }), RDC); await D.espera(40)
+    for (let k = 0; k < 100 && !boton('ojo'); k++) await D.espera(20)
+    ok(!!boton('ojo'), 'la barra tiene el ojo')
+    D.pulsa(boton('ojo')); await D.espera(10)
+    ok(pedido === true, 'pulsarlo pide ocultar lo de la estrategia')
+    m9.pinta(React.createElement(Dib, { ...props('KO'), sinEstrategia: true, onSinEstrategia: v => { pedido = v } })); await D.espera(20)
+    D.pulsa(boton('ojoTachado')); await D.espera(10)
+    ok(!!boton('ojoTachado') && pedido === false, 'tachado; pulsarlo otra vez pide mostrarlo')
+    m9.quita()
+    const m10 = D.monta(React.createElement(Dib, props('KO')), RDC); await D.espera(30)
+    for (let k = 0; k < 50 && !boton('tendencia'); k++) await D.espera(20)
+    ok(!boton('ojo') && !boton('ojoTachado'), 'sin onSinEstrategia, no hay ojo')
+    m10.quita()
   }
 
   // ── 6 · Parte 5: posiciones, medir y seguir dibujando (§211) ──

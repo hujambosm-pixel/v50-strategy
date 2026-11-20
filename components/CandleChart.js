@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo } from 'react'
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react'
 import { MONO, f2, fmtDate } from '../lib/utils'
 import { capitalDeOperacion } from '../lib/capitalOperacion'
 // ── Indicadores: UNA sola implementación, la de lib/backtester.js ──────
@@ -536,7 +536,25 @@ const MAX_TRAMOS = 200
 // Los textos del razonamiento los escribe el code_js de cada estrategia y acaban en innerHTML: se escapan.
 const escapaHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null }) {
+// ── Envoltorio (§213): con `dibujar`, el ojo de la barra de dibujos oculta lo que pinta la ESTRATEGIA (operaciones con sus etiquetas,
+// flechas y líneas de entrada y salida, eventos y marcas del razonamiento, zonas de filtro y cambios de pendiente) para dibujar más
+// limpio. Sus medias e indicadores se quedan. Se recuerda en el navegador. Sin `dibujar`, pasa las props tal cual (nada cambia).
+const CLAVE_SIN_ESTRATEGIA='dibujos.sinEstrategia'
+export default function CandleChart(props){
+  const [sinEstrategia,setSinEstrategia]=useState(false)
+  useEffect(()=>{ if(!props.dibujar) return; try{ if(localStorage.getItem(CLAVE_SIN_ESTRATEGIA)==='1') setSinEstrategia(true) }catch(_){} },[props.dibujar])
+  const ponSin=useCallback(v=>{ setSinEstrategia(v); try{ localStorage.setItem(CLAVE_SIN_ESTRATEGIA,v?'1':'0') }catch(_){} },[])
+  return <CandleChartBase {...propsDelGrafico(props,sinEstrategia,ponSin)}/>
+}
+const VACIO=[]
+// Las props con las que se pinta el gráfico: sin `dibujar`, las mismas; con el ojo tachado, sin lo que pinta la estrategia.
+export function propsDelGrafico(props,sinEstrategia,ponSin){
+  if(!props.dibujar) return props
+  const p={...props,sinEstrategia,onSinEstrategia:ponSin}
+  if(sinEstrategia) Object.assign(p,{trades:VACIO,customMarkers:VACIO,slopeChanges:VACIO,filterZones:VACIO,razonamiento:false})
+  return p
+}
+function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null, sinEstrategia=false, onSinEstrategia=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   // Dibujar (§208): el contenedor de las velas (para los clics) y el hueco de la izquierda donde va su barra lateral.
   const wrapRef=useRef(null), barraDibujosRef=useRef(null)
@@ -2329,7 +2347,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
       )}
       <div ref={containerRef} style={{minHeight:0,...(fillHeight?{height:'100%'}:{})}}/>
       <svg ref={svgRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:5}}/>
-      {dibujar&&<DibujosGrafico chartRef={chartRef} seriesRef={candlesRef} containerRef={containerRef} wrapRef={wrapRef} barraRef={barraDibujosRef} data={data} simbolo={simbolo} arriba={dibujarArriba} onAlerta={onAlertaPrecio} arriesgoDefecto={arriesgoDefecto}/>}
+      {dibujar&&<DibujosGrafico chartRef={chartRef} seriesRef={candlesRef} containerRef={containerRef} wrapRef={wrapRef} barraRef={barraDibujosRef} data={data} simbolo={simbolo} arriba={dibujarArriba} onAlerta={onAlertaPrecio} arriesgoDefecto={arriesgoDefecto} sinEstrategia={sinEstrategia} onSinEstrategia={onSinEstrategia}/>}
       <div ref={tooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #00e5a0',borderRadius:6,padding:'8px 12px',fontFamily:MONO,fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:200,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
       {/* ── Overlay de captura de clics en modo risk ── */}
       {riskMode&&(

@@ -18,7 +18,7 @@ import { createPortal } from 'react-dom'
 import { escala, fechaDeIndice, indiceDeFecha, iman, PUNTOS_DE } from '../lib/dibujos/geometria'
 import { HERRAMIENTAS, ATAJOS, COLORES, TAMANOS_TEXTO, necesita, colocaPosicion, formasMedir, formas, provisional, creaDibujo, mueve, mueveAsa, duplica, colorDe, grosorDe, tamDe, pasoFlecha, estiloRecordado } from '../lib/dibujos/pantalla'
 import Ayuda from './BuilderAyuda'
-import { leerDibujos, guardarDibujos, simboloDe } from '../lib/dibujos/guardados'
+import { leerDibujos, guardarDibujos, simboloDe, resumenDibujos, borrarTodosLosDibujos } from '../lib/dibujos/guardados'
 import { hayConfigSupabase, ctxConSesion } from '../lib/supabase'
 
 const MEMORIA = new Map()   // valor → sus dibujos (copia de lo de la base)
@@ -56,6 +56,8 @@ const IC = {
   medir: <><g fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M2.5 13.5 L13.5 2.5 L17.5 6.5 L6.5 17.5 Z"/><path d="M6 10 L8 12 M8.5 7.5 L10 9 M11 5 L13 7"/></g></>,
   candado: <><g fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9 V6.5 A3 3 0 0 1 13 6.5 V9"/></g></>,
   alerta: <><g fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="10" cy="10" r="7.5"/><circle cx="10" cy="10" r="4.2"/></g><circle cx="10" cy="10" r="1.6" fill="currentColor"/></>,
+  ojo: <><g fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 10 C5 4.5 15 4.5 18 10 C15 15.5 5 15.5 2 10 Z"/><circle cx="10" cy="10" r="2.6"/></g></>,
+  ojoTachado: <><g fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 10 C5 4.5 15 4.5 18 10 C15 15.5 5 15.5 2 10 Z"/><circle cx="10" cy="10" r="2.6"/><line x1="3" y1="17" x2="17" y2="3"/></g></>,
   duplicar: <><g fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="7" y="7" width="9" height="10" rx="1"/><path d="M4 13 V4 A1 1 0 0 1 5 3 H12"/></g></>,
 }
 const Icono = ({ n }) => <svg viewBox="0 0 20 20" width="18" height="18" style={{ display: 'block' }}>{IC[n]}</svg>
@@ -70,11 +72,14 @@ const AYUDA = 'Herramientas para dibujar encima de las velas, como en TradingVie
   + '• Posición larga / corta: clic en la entrada y clic en el stop; el objetivo sale a 2 R (el doble de lo que arriesgas por acción) y se arrastra. Con «Arriesgo» en € te dice cuántas acciones: entrada 182,40 y stop 178,00 → 4,40 por acción; arriesgando 100 €, 100 ÷ 4,40 = 22,7 → 22 acciones (4.012,80 €, arriesgas 96,80 €). Dice también si después tocó antes el stop o el objetivo.\n'
   + '• Medir: clic en dos puntos (o Mayús + arrastrar con el cursor): cuánto sube o baja, en % y en velas. No se guarda.\n'
   + '• 🔒 Seguir dibujando: la herramienta sigue elegida después de cada dibujo, para poner varias seguidas.\n'
-  + '• Ctrl+Z deshace; Esc cancela lo que estés dibujando.\n'
+  + '• 👁 Oculta lo que pinta la estrategia (etiquetas, flechas, líneas de entrada y salida, marcas del razonamiento) para dibujar más limpio; sus medias se quedan.\n'
+  + '• Papelera: borra los dibujos de este valor (se deshace con Ctrl+Z) o los de todos los valores (no se puede deshacer).\n'
+  + '• Ctrl+Z deshace (con el ratón encima del gráfico o de esta barra); Esc cancela lo que estés dibujando.\n'
   + '• Ejemplo de Fibonacci: de un mínimo en 100 a un máximo en 150, el nivel 0,618 queda en 150 − 50 × 0,618 = 119,10.\n\n'
   + 'Los dibujos se guardan solos con cada valor (un momento después de cada cambio) y valen igual en velas diarias y semanales: cada punto va por su fecha y su precio.'
 
-export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrapRef, barraRef, data, simbolo, ctx: ctxProp = undefined, arriba = 0, onAlerta = null, arriesgoDefecto = null }) {
+export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrapRef, barraRef, data, simbolo, ctx: ctxProp = undefined, arriba = 0, onAlerta = null, arriesgoDefecto = null, sinEstrategia = false, onSinEstrategia = null }) {
+  // sinEstrategia / onSinEstrategia (§213): el ojo de la barra oculta lo que pinta la estrategia (lo lleva CandleChart).
   // arriesgoDefecto: € que se arriesgan por operación según el perfil de riesgo (lo pone pages/index.js); la posición nueva sale con él
   // (o con el último que se escribió en una posición).
   // arriba: px que tapa una barra de la página puesta encima del gráfico (la de Watchlist mide 30): la barra lateral y la barrita bajan eso.
@@ -90,7 +95,8 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
   const [elegido, setElegido] = useState(null)
   const [texto, setTexto] = useState(null)   // { id (null = nuevo), fecha, precio, valor }
   const [slot, setSlot] = useState(null)
-  const [medida, setMedida] = useState(null)   // { a, b } de «Medir»: se ve hasta el siguiente clic o Esc
+  const [medida, setMedida] = useState(null)
+  const [borrar, setBorrar] = useState(null)   // ventana «Borrar dibujos»: { cargando, valores: [{ simbolo, n }], error }   // { a, b } de «Medir»: se ve hasta el siguiente clic o Esc
   const [seguir, setSeguir] = useState(false)
   useEffect(() => { setSeguir(leeSeguir()) }, [])
   const [, setTick] = useState(0)
@@ -290,6 +296,7 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
     const tapa = e => { if (S.current.herr !== 'cursor' && dentro(e)) e.stopPropagation() }
     const move = e => {
       const st = S.current
+      st.encima = true   // Ctrl+Z y los atajos solo con el ratón encima: si ya lo estaba al montar, no llega «mouseenter»
       if (st.arrastre) return
       if (st.herr !== 'cursor' && st.pend.length) { const q = st.punto(e, conIman(e)); if (q) st.setCursor({ fecha: q.fecha, precio: q.precio }) }
     }
@@ -491,8 +498,53 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
     </button>
   )
   const sep = k => <span key={k} style={{ width: 20, height: 1, background: '#1e3a52', margin: '3px 0' }} />
+  // ── Borrar dibujos: de este valor o de todos ──
+  const abreBorrar = () => {
+    setBorrar({ cargando: !!ctx, valores: [] })
+    if (!ctx) return
+    resumenDibujos(ctx).then(v => setBorrar(b => b && { ...b, cargando: false, valores: v }))
+      .catch(e => setBorrar(b => b && { ...b, cargando: false, error: e?.message || String(e) }))
+  }
+  const borraEste = () => { setBorrar(null); if (dibujos.length) { cambia([]); setElegido(null) } }
+  const borraTodos = () => {
+    setBorrar(b => ({ ...b, borrando: true }))
+    guardado.current.clave = null; clearTimeout(guardado.current.timer)
+    borrarTodosLosDibujos(ctx).then(() => {
+      MEMORIA.clear(); hist.current = []
+      for (const k of LEIDOS) MEMORIA.set(k, [])
+      pon([], { sinGuardar: true }); setElegido(null); setBorrar(null)
+    }).catch(e => setBorrar(b => b && { ...b, borrando: false, error: e?.message || String(e) }))
+  }
+  const otros = (borrar?.valores || []).filter(v => v.simbolo !== claveRef.current)
+  const totalTodos = (borrar?.valores || []).reduce((s, v) => s + (v.simbolo === claveRef.current ? 0 : v.n), 0) + dibujos.length
+  const nValores = otros.length + (dibujos.length ? 1 : 0)
+  const btnV = (color, fondo) => ({ padding: '7px 12px', borderRadius: 4, cursor: 'pointer', fontFamily: MONO, fontSize: 12, border: '1px solid ' + color, color, background: fondo, textAlign: 'left' })
+  const ventanaBorrar = borrar ? (
+    <div data-ventana-borrar="" onMouseDown={e => e.stopPropagation()} onClick={e => { if (e.target === e.currentTarget) setBorrar(null) }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 400, background: '#0d1824', border: '1px solid #1e3a52', borderRadius: 8, padding: 18, fontFamily: MONO, fontSize: 12, color: '#c8dff5', boxShadow: '0 10px 40px rgba(0,0,0,0.7)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}><b style={{ fontSize: 14, color: '#e2eaf5' }}>Borrar dibujos</b>
+          <span onClick={() => setBorrar(null)} style={{ cursor: 'pointer', color: '#7a9bc0' }}>✕</span></div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button type="button" data-borrar="este" disabled={!dibujos.length} onClick={borraEste} style={{ ...btnV(dibujos.length ? '#ff4d6d' : '#2e4258', 'rgba(255,77,109,0.08)'), cursor: dibujos.length ? 'pointer' : 'default' }}>
+            Los de este valor ({claveRef.current || '—'}: {dibujos.length} {dibujos.length === 1 ? 'dibujo' : 'dibujos'})<br />
+            <span style={{ color: '#7a9bc0', fontSize: 11 }}>Se puede deshacer con Ctrl+Z.</span>
+          </button>
+          <button type="button" data-borrar="todos" disabled={!ctx || borrar.cargando || borrar.borrando || !totalTodos} onClick={borraTodos}
+            style={{ ...btnV(ctx && totalTodos ? '#ff4d6d' : '#2e4258', 'rgba(255,77,109,0.14)'), cursor: ctx && totalTodos ? 'pointer' : 'default' }}>
+            Los de todos los valores {borrar.cargando ? '(contando…)' : `(${nValores} ${nValores === 1 ? 'valor' : 'valores'}, ${totalTodos} ${totalTodos === 1 ? 'dibujo' : 'dibujos'})`}<br />
+            <span style={{ color: '#ffd166', fontSize: 11 }}>⚠ No se puede deshacer.</span>
+            {otros.length > 0 && <span style={{ display: 'block', color: '#7a9bc0', fontSize: 11 }}>Otros: {otros.slice(0, 8).map(v => `${v.simbolo} (${v.n})`).join(', ')}{otros.length > 8 ? '…' : ''}</span>}
+          </button>
+          {borrar.error && <div style={{ color: '#ff4d6d', fontSize: 11 }}>⚠ {borrar.error}</div>}
+          <button type="button" onClick={() => setBorrar(null)} style={btnV('#1e3a52', 'transparent')}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  ) : null
+
   const barra = (
-    <div data-barra-dibujos="" style={{ width: 36, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: `${6 + arriba}px 0 6px`,
+    <div data-barra-dibujos="" onMouseEnter={() => { S.current.encima = true }} onMouseLeave={() => { S.current.encima = false }} style={{ width: 36, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: `${6 + arriba}px 0 6px`,
       background: '#0b1420', borderRight: '1px solid #1a2d45' }}>
       {HERRAMIENTAS.map(x => boton(x.id, `${x.nombre} · ${x.atajo}`, herr === x.id, () => elige(herr === x.id && x.id !== 'cursor' ? 'cursor' : x.id)))}
       {onAlerta && sep('s0')}
@@ -501,7 +553,9 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
       {boton('candado', `Seguir dibujando: la herramienta sigue elegida después de cada dibujo, hasta pulsar el cursor o Esc · ${seguir ? 'encendido' : 'apagado'}`, seguir, () => { const v = !seguir; setSeguir(v); try { localStorage.setItem(CLAVE_SEGUIR, v ? '1' : '0') } catch (_) {} })}
       {boton('iman', `Imán: pega cada punto a la apertura, máximo, mínimo o cierre de su vela · ${imanFijo ? 'encendido' : 'apagado'} (o mantén pulsado Ctrl)`, imanFijo, () => setImanFijo(v => !v))}
       {boton('deshacer', 'Deshacer · Ctrl+Z', false, deshaz, null, !hist.current.length)}
-      {boton('papelera', 'Borrar todos los dibujos de este valor (se puede deshacer con Ctrl+Z)', false, () => { cambia([]); setElegido(null) }, '#ff4d6d', !dibujos.length)}
+      {boton('papelera', 'Borrar dibujos: los de este valor (se puede deshacer con Ctrl+Z) o los de todos los valores', false, abreBorrar, '#ff4d6d')}
+      {onSinEstrategia && sep('s3')}
+      {onSinEstrategia && boton(sinEstrategia ? 'ojoTachado' : 'ojo', sinEstrategia ? 'Mostrar otra vez lo de la estrategia (etiquetas, flechas, líneas de entrada y salida, marcas del razonamiento)' : 'Ocultar lo de la estrategia (etiquetas, flechas, líneas de entrada y salida, marcas del razonamiento) para dibujar más limpio. Sus medias e indicadores se quedan.', sinEstrategia, () => onSinEstrategia(!sinEstrategia))}
       {sep('s2')}
       <Ayuda texto={AYUDA} etiqueta="Dibujar" />
     </div>
@@ -510,6 +564,7 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
   return (
     <>
       {slot && createPortal(barra, slot)}
+      {ventanaBorrar}
       {capa}
       {cuadroTexto}
       {barrita}
