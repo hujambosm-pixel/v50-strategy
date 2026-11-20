@@ -6,6 +6,7 @@
 // 4) Guardar y leer en la base (§209), con una base de mentira: lib/dibujos/guardados.js y el componente (leer al abrir, guardar tras
 //    800 ms, al soltar un arrastre y no a cada paso, al cambiar de valor; juntar lo dibujado mientras se leía; dos instancias a la vez).
 // 5) Lo pedido por Sergi al ver la parte 3 (§210): estilo recordado por tipo, tamaño de letra, flechas, la barra bajo la cabecera y la 🎯.
+// 6) Parte 5 (§211): posición larga y corta (acciones según lo que se arriesga y qué tocó antes), «Medir» y 🔒 «seguir dibujando».
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'clave-falsa-del-arnes'
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
 let fallos = 0
@@ -126,7 +127,7 @@ const VELAS = F.map((date, k) => ({ date, open: 100 + k, high: 104 + k, low: 98 
   const lanza = (t, e) => { for (const f of wrap.oyentes[t] || []) f(e); return e }
   const tecla = (key, extra = {}) => { for (const f of OV.keydown || []) f({ key, target: document.body, preventDefault() {}, stopPropagation() {}, ...extra }) }
   const boton = (id) => slot.busca(n => n.getAttribute('data-herr') === id)
-  ok(!!boton('tendencia') && !!boton('canal') && !!boton('iman') && !!boton('papelera') && slot.todos(n => n.nodeName === 'BUTTON' && n.getAttribute('data-herr')).length === 12, 'la barra lateral, en su hueco: 9 herramientas + imán, deshacer y borrar todo')
+  ok(!!boton('tendencia') && !!boton('canal') && !!boton('iman') && !!boton('papelera') && slot.todos(n => n.nodeName === 'BUTTON' && n.getAttribute('data-herr')).length === 16, 'la barra lateral, en su hueco: 12 herramientas + seguir dibujando, imán, deshacer y borrar todo')
   ok(boton('papelera').getAttribute('disabled') != null || D.propsDe(boton('papelera')).disabled === true, 'sin dibujos, «borrar todo» está apagado')
 
   // Línea con dos clics.
@@ -343,6 +344,63 @@ const VELAS = F.map((date, k) => ({ date, open: 100 + k, high: 104 + k, low: 98 
     const m6 = D.monta(React.createElement(Dib, props('INTC')), RDC); await D.espera(30)
     ok(!boton('alerta') && slot.busca(n => n.hasAttribute('data-barra-dibujos')).style.padding === '6px 0 6px', 'sin onAlerta no hay 🎯, y sin barra encima la barra lateral empieza arriba')
     m6.quita()
+  }
+
+  // ── 6 · Parte 5: posiciones, medir y seguir dibujando (§211) ──
+  {
+    // Larga: entrada 100 en la vela 0 (02/01), stop 95 → objetivo 100 + 2 × 5 = 110; la caja llega a la vela 0 + 12.
+    const pos = P.colocaPosicion('larga', pt(0, 100), pt(1, 95), esc)
+    ok(pos[1].precio === 95 && pos[2].precio === 110 && pos[1].fecha === G.fechaDeIndice(esc, 12) && pos[2].fecha === pos[1].fecha, `posición larga: stop 95, objetivo 110 (2 R), caja hasta la vela 12 (${pos[1].fecha})`)
+    const mal = P.colocaPosicion('larga', pt(0, 100), pt(1, 105), esc)
+    ok(mal[1].precio === 97 && mal[2].precio === 106, 'stop al otro lado: se pone a un 3 % (97) y el objetivo a 2 R (106)')
+    const cor = P.colocaPosicion('corta', pt(0, 100), pt(1, 104), esc)
+    ok(cor[1].precio === 104 && cor[2].precio === 92, 'posición corta: entrada 100, stop 104 → objetivo 100 − 2 × 4 = 92')
+    // Las velas: máximo 104 + k, mínimo 98 + k: el 110 lo toca la vela 6 (10/01) y el 95 nunca.
+    const d = P.creaDibujo('larga', pos, { arriesgo: 100 })
+    const tx = P.formas(d, { ...cv, velas: VELAS }).trazos.filter(e => e.el === 'rotulo' || e.el === 'text').map(e => e.txt)
+    ok(tx.includes('Objetivo 110,00 · gana 10,0 % · 2,0 R') && tx.includes('Stop 95,00 · pierde 5,0 %'), `rótulos: «${tx[0]}» y «${tx[1]}»`)
+    ok(tx.includes('Entrada 100,00 · 20 acciones (2.000 €) arriesgando 100 €'), `arriesgando 100 € con 5 € por acción: 20 acciones (${tx[2]})`)
+    ok(tx.includes('→ llegó al OBJETIVO el 10/01/2024'), 'después: llegó al objetivo el 10/01/2024 (la vela 6, máximo 110)')
+    const dS = P.creaDibujo('larga', [pt(0, 100), pt(4, 99.5), pt(4, 101)], {})
+    ok(P.formas(dS, { ...cv, velas: VELAS }).trazos.some(e => e.txt === '→ tocó el STOP el 03/01/2024'), 'con el stop en 99,5 lo toca antes la vela 1 (mínimo 99): «tocó el STOP el 03/01/2024»')
+    ok(P.mueveAsa(d, 1, pt(3, 102)) === d && P.mueveAsa(d, 1, pt(3, 96)).puntos[1].precio === 96, 'mover el stop por encima de la entrada no se acepta; a 96, sí')
+    ok(P.mueveAsa(d, 3, pt(7, 0)).puntos[1].fecha === F[7] && P.mueveAsa(d, 3, pt(0, 0)) === d, 'tirar del borde derecho cambia dónde acaba la caja (no antes de la entrada)')
+    const md = P.formasMedir(pt(0, 100), pt(4, 110), cv)
+    ok(md.txt === '+10,00 (+10,00 %) · 4 velas', `medir de (02/01, 100) a (08/01, 110): «${md.txt}»`)
+    ok(P.formasMedir(pt(4, 110), pt(0, 99), cv).txt === '−11,00 (−10,00 %) · 4 velas', 'medir bajando: −11,00 (−10,00 %)')
+
+    localStorage.removeItem('dibujos.estilo'); localStorage.removeItem('dibujos.seguir')
+    DG._memoriaDibujos.clear(); DG._leidosDibujos.clear()
+    const m7 = D.monta(React.createElement(Dib, { ...props('AMZN'), arriesgoDefecto: 150 }), RDC); await D.espera(40)
+    const mem = () => DG._memoriaDibujos.get('AMZN') || []
+    // Larga con dos clics: entrada en (vela 0, 100), stop en (vela 1, 95).
+    D.pulsa(boton('larga')); await D.espera(20); lanza('mousedown', ev(0, 100)); lanza('mousedown', ev(10, 105)); await D.espera(20)
+    ok(mem().length === 1 && mem()[0].tipo === 'larga' && mem()[0].puntos[2].precio === 110 && mem()[0].arriesgo === 150, 'posición larga con dos clics: objetivo 110 y «Arriesgo» 150 € (el del perfil de riesgo)')
+    const inp = m7.raiz.busca(n => n.hasAttribute('data-arriesgo'))
+    ok(!!inp, 'su barrita tiene «Arriesgo … €»')
+    inp.value = '200'; D.propsDe(inp).onBlur({ currentTarget: inp }); await D.espera(20)
+    ok(mem()[0].arriesgo === 200, 'cambiar «Arriesgo» a 200 €')
+    D.pulsa(boton('corta')); await D.espera(20); lanza('mousedown', ev(30, 100)); lanza('mousedown', ev(40, 96)); await D.espera(20)
+    ok(mem()[1].tipo === 'corta' && mem()[1].arriesgo === 200, 'la siguiente posición recuerda los 200 € (la corta también)')
+    // Medir: no se guarda; el siguiente clic lo quita.
+    D.pulsa(boton('medir')); await D.espera(20); lanza('mousedown', ev(0, 100)); lanza('mousedown', ev(40, 90)); await D.espera(20)
+    const rot = () => m7.raiz.todos(n => n.nodeName === 'text').map(n => n.textContent).find(x => /velas$/.test(x))
+    ok(mem().length === 2 && rot() === '+10,00 (+10,00 %) · 4 velas', `medir: «${rot()}» y no crea ningún dibujo`)
+    await D.espera(520); lanza('mousedown', ev(70, 50)); await D.espera(20)
+    ok(!rot(), 'el siguiente clic en el gráfico quita la medida')
+    // Mayús + arrastrar con el cursor.
+    const em = lanza('mousedown', ev(0, 100, { shiftKey: true })); lanza('mouseup', ev(20, 90, { shiftKey: true })); await D.espera(20)
+    ok(em.parado && rot() === '+10,00 (+10,00 %) · 2 velas', `Mayús + arrastrar con el cursor mide («${rot()}»)`)
+    // 🔒 Seguir dibujando: dos líneas seguidas sin volver a elegir la herramienta.
+    D.pulsa(boton('candado')); await D.espera(20)
+    D.pulsa(boton('tendencia')); await D.espera(20)
+    lanza('mousedown', ev(0, 100)); lanza('mousedown', ev(20, 80)); await D.espera(20)
+    lanza('mousedown', ev(30, 100)); lanza('mousedown', ev(50, 80)); await D.espera(20)
+    ok(mem().filter(x => x.tipo === 'tendencia').length === 2 && /rgba\(76, ?154, ?255/.test(boton('tendencia').style.background), '🔒: dos líneas seguidas y la herramienta sigue elegida')
+    ok(localStorage.getItem('dibujos.seguir') === '1', '🔒 se recuerda en el navegador')
+    tecla('Escape'); await D.espera(20)
+    ok(!/rgba\(76, ?154, ?255/.test(boton('tendencia').style.background), 'Esc vuelve al cursor')
+    m7.quita()
   }
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTodo en verde')

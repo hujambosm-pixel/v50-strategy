@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1274'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1275'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -5651,7 +5651,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1274</title>
+        <title>Trading Simulator V9.1275</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5740,7 +5740,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1274
+            <span className="dot"/>Trading Simulator V9.1275
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7783,17 +7783,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             {lbl}
                           </button>
                         ))}
-                        {/* Regla */}
-                        <button onClick={()=>setRulerOn(r=>!r)}
-                          title={rulerOn?'Desactivar regla':'Activar regla de medición'}
-                          style={{pointerEvents:'all',
-                            background:rulerOn?'rgba(255,209,102,0.18)':'rgba(8,12,20,0.7)',
-                            border:`1px solid ${rulerOn?'#ffd166':'#2a3d55'}`,
-                            color:rulerOn?'#ffd166':'#5a7a95',
-                            fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer',
-                            display:'flex',alignItems:'center',gap:2,lineHeight:1,flexShrink:0}}>
-                          📏{rulerOn&&<span style={{fontSize:9}}> ON</span>}
-                        </button>
+                        {/* Regla 📏: retirada (§211); la sustituye «Medir» de la barra de dibujos (también Mayús + arrastrar). */}
                         {/* % / All — label mode */}
                         {(()=>{
                           const cfgs=[{label:'🏷',active:false},{label:'%',active:true},{label:'All',active:true}]
@@ -7844,7 +7834,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
                         pendingOrders={pendingOrdersForSym}
                         simbolo={simbolo}
-                        dibujar dibujarArriba={30}
+                        dibujar dibujarArriba={30} arriesgoDefecto={(()=>{const _a=(contributions||[]).reduce((s,c)=>s+(c.type==='aportacion'?1:c.type==='retirada'?-1:0)*Number(c.amount||0),0)+(tlFifo.closedTrades||[]).reduce((s,t)=>s+(t.pnl_eur||t._pnl_eur||0),0)+(tlFifo.openPositions||[]).reduce((s,p)=>s+(p._pnl_float_eur||0),0);const _v=riskActiveProfile?.risk_per_trade_value;if(_v==null)return null;return (riskActiveProfile?.risk_per_trade_type||'%')==='%'?_a*_v/100:Number(_v)})()}
                         onAlertaPrecio={(price,ultimo)=>setPriceAlarmDlg({price,symbol:simbolo,cond:ultimo!=null&&price<ultimo?'price_below':'price_above'})}
                         trades={result.isBareChart?[]:result.trades||[]}
                         isBareChart={result.isBareChart??false}
@@ -7964,17 +7954,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             {lbl}
                           </button>
                         ))}
-                        {/* Regla */}
-                        <button onClick={()=>setRulerOn(r=>!r)}
-                          title={rulerOn?'Desactivar regla':'Activar regla de medición'}
-                          style={{pointerEvents:'all',
-                            background:rulerOn?'rgba(255,209,102,0.18)':'rgba(8,12,20,0.7)',
-                            border:`1px solid ${rulerOn?'#ffd166':'#2a3d55'}`,
-                            color:rulerOn?'#ffd166':'#5a7a95',
-                            fontFamily:MONO,fontSize:10,padding:'2px 5px',borderRadius:3,cursor:'pointer',
-                            display:'flex',alignItems:'center',gap:2,lineHeight:1,flexShrink:0}}>
-                          📏{rulerOn&&<span style={{fontSize:9}}> ON</span>}
-                        </button>
+                        {/* Regla 📏: retirada (§211); la sustituye «Medir» de la barra de dibujos (también Mayús + arrastrar). */}
                         {/* % / All — label mode */}
                         {(()=>{
                           const cfgs=[{label:'🏷',active:false},{label:'%',active:true},{label:'All',active:true}]
@@ -8017,7 +7997,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
                         pendingOrders={pendingOrdersForSym}
                         simbolo={simbolo}
-                        dibujar
+                        dibujar arriesgoDefecto={(()=>{const _a=(contributions||[]).reduce((s,c)=>s+(c.type==='aportacion'?1:c.type==='retirada'?-1:0)*Number(c.amount||0),0)+(tlFifo.closedTrades||[]).reduce((s,t)=>s+(t.pnl_eur||t._pnl_eur||0),0)+(tlFifo.openPositions||[]).reduce((s,p)=>s+(p._pnl_float_eur||0),0);const _v=riskActiveProfile?.risk_per_trade_value;if(_v==null)return null;return (riskActiveProfile?.risk_per_trade_type||'%')==='%'?_a*_v/100:Number(_v)})()}
                         onAlertaPrecio={(price,ultimo)=>setPriceAlarmDlg({price,symbol:simbolo,cond:ultimo!=null&&price<ultimo?'price_below':'price_above'})}
                           trades={result.isBareChart?[]:result.trades||[]}
                           isBareChart={result.isBareChart??false}

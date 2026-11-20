@@ -16,7 +16,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { escala, fechaDeIndice, indiceDeFecha, iman, PUNTOS_DE } from '../lib/dibujos/geometria'
-import { HERRAMIENTAS, ATAJOS, COLORES, TAMANOS_TEXTO, formas, provisional, creaDibujo, mueve, mueveAsa, duplica, colorDe, grosorDe, tamDe, pasoFlecha, estiloRecordado } from '../lib/dibujos/pantalla'
+import { HERRAMIENTAS, ATAJOS, COLORES, TAMANOS_TEXTO, necesita, colocaPosicion, formasMedir, formas, provisional, creaDibujo, mueve, mueveAsa, duplica, colorDe, grosorDe, tamDe, pasoFlecha, estiloRecordado } from '../lib/dibujos/pantalla'
 import Ayuda from './BuilderAyuda'
 import { leerDibujos, guardarDibujos, simboloDe } from '../lib/dibujos/guardados'
 import { hayConfigSupabase, ctxConSesion } from '../lib/supabase'
@@ -28,6 +28,8 @@ const avisa = (clave, dibujos, quien) => { for (const f of OYENTES) f(clave, dib
 const ESPERA_GUARDAR = 800
 // Lo último elegido de cada tipo de dibujo (color, grosor, tamaño de letra), en el navegador (§210).
 const CLAVE_ESTILO = 'dibujos.estilo'
+const CLAVE_SEGUIR = 'dibujos.seguir'   // 🔒 «seguir dibujando»: la herramienta no vuelve al cursor tras cada dibujo
+const leeSeguir = () => { try { return localStorage.getItem(CLAVE_SEGUIR) === '1' } catch (_) { return false } }
 const leeEstilos = () => { try { const j = JSON.parse(localStorage.getItem(CLAVE_ESTILO) || '{}'); return j && typeof j === 'object' ? j : {} } catch (_) { return {} } }
 const recuerdaEstilo = (tipo, cambios) => { try { const m = leeEstilos(); m[tipo] = { ...(m[tipo] || {}), ...cambios }; localStorage.setItem(CLAVE_ESTILO, JSON.stringify(m)) } catch (_) {} }
 const estiloDe = (tipo) => estiloRecordado(leeEstilos(), tipo)
@@ -49,6 +51,10 @@ const IC = {
   iman: <><g fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M5 3 V10 A5 5 0 0 0 15 10 V3"/><path d="M5 6 H8 M12 6 H15" strokeWidth="2.4"/><path d="M8 3 V10 A2 2 0 0 0 12 10 V3"/></g></>,
   deshacer: <><g fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4 L3 7.5 L6 11"/><path d="M3 7.5 H12 A4.5 4.5 0 0 1 12 16.5 H8"/></g></>,
   papelera: <><path d="M3.5 5.5 H16.5 M8 5.5 V3.5 H12 V5.5 M5 5.5 L6 17 H14 L15 5.5 M8.5 8.5 V14 M11.5 8.5 V14" fill="none" stroke="currentColor" strokeWidth="1.5"/></>,
+  larga: <><rect x="3" y="3" width="14" height="7" fill="#26a69a" fillOpacity=".55"/><rect x="3" y="10" width="14" height="5" fill="#ef5350" fillOpacity=".55"/><line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" strokeWidth="1.3"/></>,
+  corta: <><rect x="3" y="5" width="14" height="5" fill="#ef5350" fillOpacity=".55"/><rect x="3" y="10" width="14" height="7" fill="#26a69a" fillOpacity=".55"/><line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" strokeWidth="1.3"/></>,
+  medir: <><g fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M2.5 13.5 L13.5 2.5 L17.5 6.5 L6.5 17.5 Z"/><path d="M6 10 L8 12 M8.5 7.5 L10 9 M11 5 L13 7"/></g></>,
+  candado: <><g fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9 V6.5 A3 3 0 0 1 13 6.5 V9"/></g></>,
   alerta: <><g fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="10" cy="10" r="7.5"/><circle cx="10" cy="10" r="4.2"/></g><circle cx="10" cy="10" r="1.6" fill="currentColor"/></>,
   duplicar: <><g fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="7" y="7" width="9" height="10" rx="1"/><path d="M4 13 V4 A1 1 0 0 1 5 3 H12"/></g></>,
 }
@@ -61,11 +67,16 @@ const AYUDA = 'Herramientas para dibujar encima de las velas, como en TradingVie
   + '• Con un dibujo elegido, las flechas del teclado lo mueven: ← → una vela, ↑ ↓ un poco de precio (con Mayús, 10 veces más).\n'
   + '• Cada tipo de dibujo recuerda el último color, grosor y tamaño de letra que elegiste.\n'
   + '• 🎯 Alerta de precio: un clic en el gráfico abre la ventana de la alarma con ese precio (con Ctrl, pegado a la vela).\n'
+  + '• Posición larga / corta: clic en la entrada y clic en el stop; el objetivo sale a 2 R (el doble de lo que arriesgas por acción) y se arrastra. Con «Arriesgo» en € te dice cuántas acciones: entrada 182,40 y stop 178,00 → 4,40 por acción; arriesgando 100 €, 100 ÷ 4,40 = 22,7 → 22 acciones (4.012,80 €, arriesgas 96,80 €). Dice también si después tocó antes el stop o el objetivo.\n'
+  + '• Medir: clic en dos puntos (o Mayús + arrastrar con el cursor): cuánto sube o baja, en % y en velas. No se guarda.\n'
+  + '• 🔒 Seguir dibujando: la herramienta sigue elegida después de cada dibujo, para poner varias seguidas.\n'
   + '• Ctrl+Z deshace; Esc cancela lo que estés dibujando.\n'
   + '• Ejemplo de Fibonacci: de un mínimo en 100 a un máximo en 150, el nivel 0,618 queda en 150 − 50 × 0,618 = 119,10.\n\n'
   + 'Los dibujos se guardan solos con cada valor (un momento después de cada cambio) y valen igual en velas diarias y semanales: cada punto va por su fecha y su precio.'
 
-export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrapRef, barraRef, data, simbolo, ctx: ctxProp = undefined, arriba = 0, onAlerta = null }) {
+export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrapRef, barraRef, data, simbolo, ctx: ctxProp = undefined, arriba = 0, onAlerta = null, arriesgoDefecto = null }) {
+  // arriesgoDefecto: € que se arriesgan por operación según el perfil de riesgo (lo pone pages/index.js); la posición nueva sale con él
+  // (o con el último que se escribió en una posición).
   // arriba: px que tapa una barra de la página puesta encima del gráfico (la de Watchlist mide 30): la barra lateral y la barrita bajan eso.
   // onAlerta(precio, ultimoCierre): con él sale la 🎯 en la barra lateral.
   const clave = simboloDe(simbolo)
@@ -79,6 +90,9 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
   const [elegido, setElegido] = useState(null)
   const [texto, setTexto] = useState(null)   // { id (null = nuevo), fecha, precio, valor }
   const [slot, setSlot] = useState(null)
+  const [medida, setMedida] = useState(null)   // { a, b } de «Medir»: se ve hasta el siguiente clic o Esc
+  const [seguir, setSeguir] = useState(false)
+  useEffect(() => { setSeguir(leeSeguir()) }, [])
   const [, setTick] = useState(0)
   const hist = useRef([])
   const claveRef = useRef(clave)
@@ -155,7 +169,7 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
       return {
         esc, ancho: ts.width(), alto: Math.max(0, cont.clientHeight - ts.height()),
         offX: rc.left - rw.left + izq, offY: rc.top - rw.top, left: rc.left + izq, top: rc.top,
-        x: i => x0 + i * sp, i: x => (x - x0) / sp, y: p => s.priceToCoordinate(p), p: y => s.coordinateToPrice(y),
+        x: i => x0 + i * sp, i: x => (x - x0) / sp, y: p => s.priceToCoordinate(p), p: y => s.coordinateToPrice(y), velas: data,
       }
     } catch (_) { return null }
   }
@@ -186,11 +200,17 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
 
   // ── Acciones ──
   const termina = (pts) => {
-    const st = S.current
-    const d = creaDibujo(st.herr, pts, estiloDe(st.herr))
-    st.fin = Date.now(); st.pend = []; st.herr = 'cursor'
-    setPend([]); setCursor(null); setHerr('cursor')
-    if (d) { cambia([...(st.dibujos || []), d]); setElegido(d.id) }
+    const st = S.current, h = st.herr
+    st.fin = Date.now(); st.pend = []
+    setPend([]); setCursor(null)
+    // Con el 🔒 encendido la herramienta sigue elegida; «Medir» (que no es un dibujo) vuelve siempre al cursor.
+    const sigue = st.seguir && h !== 'medir'
+    if (!sigue) { st.herr = 'cursor'; setHerr('cursor') }
+    if (h === 'medir') { setMedida({ a: pts[0], b: pts[1] }); return }
+    const estilo = estiloDe(h)
+    if ((h === 'larga' || h === 'corta') && estilo.arriesgo == null && st.arriesgoDefecto > 0) estilo.arriesgo = Math.round(st.arriesgoDefecto * 100) / 100
+    const d = creaDibujo(h, h === 'larga' || h === 'corta' ? colocaPosicion(h, pts[0], pts[1], st.esc) : pts, estilo)
+    if (d) { cambia([...(st.dibujos || []), d]); if (!sigue) setElegido(d.id) }
   }
   const cancela = () => { S.current.pend = []; S.current.herr = 'cursor'; setPend([]); setCursor(null); setHerr('cursor') }
   const elige = (h) => { S.current.pend = []; S.current.herr = h; setPend([]); setCursor(null); setTexto(null); setHerr(h); if (h !== 'cursor') setElegido(null) }
@@ -198,7 +218,11 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
   const deshaz = () => { if (!hist.current.length) return; pon(hist.current.pop()); setElegido(null); setPend([]) }
   const editaDibujo = (id, f) => cambia((S.current.dibujos || []).map(d => d.id === id ? f(d) : d))
   // Cambiar el estilo de un dibujo lo recuerda para los siguientes de su tipo.
-  const estilo = (d, cambios) => { recuerdaEstilo(d.tipo, cambios); editaDibujo(d.id, x => ({ ...x, ...cambios })) }
+  const estilo = (d, cambios) => {
+    // «Arriesgo» vale igual para la larga y la corta.
+    if ((d.tipo === 'larga' || d.tipo === 'corta') && cambios.arriesgo != null) { recuerdaEstilo('larga', cambios); recuerdaEstilo('corta', cambios) } else recuerdaEstilo(d.tipo, cambios)
+    editaDibujo(d.id, x => ({ ...x, ...cambios }))
+  }
   // Flechas: mueve el dibujo elegido (una serie de pulsaciones seguidas cuenta como un solo paso para deshacer).
   const mueveConFlecha = (paso) => {
     const st = S.current, d = (st.dibujos || []).find(x => x.id === st.elegido), c = conversor()
@@ -221,7 +245,7 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
     if (d) { cambia([...(S.current.dibujos || []), d]); setElegido(d.id) }
   }
 
-  S.current = { ...S.current, dibujos, herr, pend, elegido, imanFijo, termina, cancela, elige, borra, deshaz, punto, esc, setElegido, setCursor, setPend, setTexto, setHerr, pon, cambia, historia, mueveConFlecha, onAlerta, ultimoCierre }
+  S.current = { ...S.current, dibujos, herr, pend, elegido, imanFijo, termina, cancela, elige, borra, deshaz, punto, esc, setElegido, setCursor, setPend, setTexto, setHerr, pon, cambia, historia, mueveConFlecha, onAlerta, ultimoCierre, seguir, arriesgoDefecto, medida, setMedida }
 
   // ── El ratón sobre el gráfico (fase de captura) y el teclado ──
   useEffect(() => {
@@ -231,6 +255,9 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
     const down = e => {
       const st = S.current
       if (e.button !== 0 || !dentro(e)) return
+      if (st.medida) st.setMedida(null)
+      // Mayús + arrastrar con el cursor = medir (como TradingView).
+      if (st.herr === 'cursor' && e.shiftKey) { st.herr = 'medir'; st.setHerr('medir') }
       if (st.herr === 'cursor') { if (st.elegido) st.setElegido(null); return }
       e.stopPropagation(); e.preventDefault()
       const q = st.punto(e, conIman(e)); if (!q) return
@@ -238,7 +265,7 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
       if (st.herr === 'alerta') { st.fin = Date.now(); st.elige('cursor'); st.onAlerta?.(Math.round(q.precio * 100) / 100, st.ultimoCierre); return }
       const nuevos = [...st.pend, { fecha: q.fecha, precio: q.precio }]
       st.abajo = { x: e.clientX, y: e.clientY, n: nuevos.length }
-      if (nuevos.length >= PUNTOS_DE[st.herr]) st.termina(nuevos)
+      if (nuevos.length >= necesita(st.herr)) st.termina(nuevos)
       else { st.pend = nuevos; st.setPend(nuevos); st.setCursor({ fecha: q.fecha, precio: q.precio }) }
     }
     const up = e => {
@@ -250,7 +277,7 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
       if (a && a.n === 1 && st.pend.length === 1 && Math.hypot(e.clientX - a.x, e.clientY - a.y) > 5) {
         const q = st.punto(e, conIman(e)); if (!q) return
         const nuevos = [...st.pend, { fecha: q.fecha, precio: q.precio }]
-        if (nuevos.length >= PUNTOS_DE[st.herr]) st.termina(nuevos)
+        if (nuevos.length >= necesita(st.herr)) st.termina(nuevos)
         else { st.pend = nuevos; st.setPend(nuevos); st.setCursor({ fecha: q.fecha, precio: q.precio }) }
       }
     }
@@ -291,10 +318,10 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
       const st = S.current
       const t = e.target
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
-      const enJuego = st.encima || st.herr !== 'cursor' || st.pend.length || st.elegido
+      const enJuego = st.encima || st.herr !== 'cursor' || st.pend.length || st.elegido || st.medida
       if (!enJuego) return
       if (e.key === 'Escape') {
-        if (st.herr !== 'cursor' || st.pend.length) st.cancela(); else if (st.elegido) st.setElegido(null); else return
+        if (st.herr !== 'cursor' || st.pend.length) st.cancela(); else if (st.elegido) st.setElegido(null); else if (st.medida) st.setMedida(null); else return
         e.preventDefault(); e.stopPropagation(); return
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && st.elegido) { st.borra(st.elegido); e.preventDefault(); return }
@@ -328,6 +355,13 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
   const cursorHerr = herr !== 'cursor'
   const pinta = (el, key, extra = {}) => {
     const { el: tag, a, txt } = el
+    if (tag === 'rotulo') {
+      // El de la entrada (con «izq»): a la derecha de la caja si cabe; si no, a su izquierda; si tampoco, dentro, bajo la línea de entrada.
+      const w = txt.length * 6.4 + 10
+      let x = a.x, y = a.y
+      if (a.izq != null && c && x + w > c.ancho) { if (a.izq - w - 4 >= 0) x = a.izq - w - 4; else { x = Math.max(0, Math.min(a.izq + 2, c.ancho - w)); y = a.y + 18 } }
+      return <g key={key}><rect x={x} y={y - 13} width={w} height={18} rx={3} fill={a.fondo} /><text x={x + 5} y={y} fill="#fff" fontSize={11.5} fontFamily={MONO}>{txt}</text></g>
+    }
     if (tag === 'etiqueta') {
       const w = Math.max(40, txt.length * 6.6 + 10)
       const x = a.ancla === 'eje' ? a.x + 1 : a.x - w / 2, y = a.ancla === 'eje' ? a.y - 9 : a.y + 2
@@ -347,7 +381,11 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
       lista.push({ d, f: formas(d, c, { elegido: d.id === elegido }) })
     }
     let prev = null
-    if (cursorHerr && pend.length && cursor) { const pd = provisional(herr, pend, cursor); if (pd) prev = formas(pd, c, { elegido: true }) }
+    if (cursorHerr && pend.length && cursor) {
+      if (herr === 'medir') prev = { ...formasMedir(pend[0], cursor, c), eje: [] }
+      else { const pd = provisional(herr, pend, cursor, esc); if (pd) prev = formas(pd, c, { elegido: true }) }
+    }
+    if (!prev && medida) prev = { ...formasMedir(medida.a, medida.b, c), eje: [] }
     capa = (
       <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 6, overflow: 'visible' }} data-dibujos={dibujos.length}>
         <defs><clipPath id={clip}><rect x={0} y={0} width={c.ancho} height={c.alto} /></clipPath></defs>
@@ -418,6 +456,15 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
           <span title="Letra más grande" data-tam="mas" onClick={() => cambiaTam(1)} style={{ cursor: 'pointer', padding: '0 4px', border: '1px solid #1e3a52', borderRadius: 3 }}>A+</span>
         </span>
       })()}
+      {(del.tipo === 'larga' || del.tipo === 'corta') && (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 4 }} title="Lo que pierdes si salta el stop: con él se calcula cuántas acciones comprar (redondeando hacia abajo)">
+          Arriesgo
+          <input key={del.id + ':' + (del.arriesgo ?? '')} data-arriesgo="" defaultValue={del.arriesgo != null ? String(del.arriesgo).replace('.', ',') : ''} placeholder="€"
+            onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') e.currentTarget.blur() }}
+            onBlur={e => { const v = Number(String(e.currentTarget.value).replace(/\./g, '').replace(',', '.')); if (Number.isFinite(v) && v >= 0 && v !== del.arriesgo) estilo(del, { arriesgo: v }) }}
+            style={{ width: 62, fontFamily: MONO, fontSize: 11, background: '#0a1320', color: '#e2eaf5', border: '1px solid #1e3a52', borderRadius: 3, padding: '1px 4px' }} /> €
+        </span>
+      )}
       {del.tipo === 'texto' && <span title="Cambiar el texto" onClick={() => setTexto({ id: del.id, fecha: del.puntos[0].fecha, precio: del.puntos[0].precio, valor: del.texto || '' })} style={{ cursor: 'pointer', padding: '0 3px' }}>✎</span>}
       <span title="Duplicar" onClick={() => { const n = duplica(del, esc); cambia([...dibujos, n]); setElegido(n.id) }} style={{ cursor: 'pointer', color: '#9fb6cf' }}><Icono n="duplicar" /></span>
       <span title="Borrar este dibujo (Supr)" onClick={() => borra(del.id)} style={{ cursor: 'pointer', color: '#ff4d6d' }}><Icono n="papelera" /></span>
@@ -429,7 +476,7 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
   const pista = cursorHerr && h ? (
     <div style={{ position: 'absolute', left: (c?.offX || 0) + 8, top: (c ? c.offY + c.alto : 300) - 28, zIndex: 20, pointerEvents: 'none', fontFamily: MONO, fontSize: 11,
       color: '#c8dff5', background: 'rgba(8,12,20,0.9)', border: '1px solid #1e3a52', borderRadius: 4, padding: '2px 8px', whiteSpace: 'nowrap' }}>
-      <b>{h.nombre}:</b> {h.ayuda}{pend.length ? ` · punto ${pend.length + 1} de ${PUNTOS_DE[herr]}` : ''}. Esc cancela.
+      <b>{h.nombre}:</b> {h.ayuda}{pend.length ? ` · punto ${pend.length + 1} de ${necesita(herr)}` : ''}. Esc cancela.
     </div>
   ) : null
 
@@ -451,6 +498,7 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
       {onAlerta && sep('s0')}
       {onAlerta && boton('alerta', 'Alerta de precio: un clic en el gráfico abre la ventana de la alarma con ese precio (con Ctrl, pegado a la vela)', herr === 'alerta', () => elige(herr === 'alerta' ? 'cursor' : 'alerta'), herr === 'alerta' ? null : '#ffd166')}
       {sep('s1')}
+      {boton('candado', `Seguir dibujando: la herramienta sigue elegida después de cada dibujo, hasta pulsar el cursor o Esc · ${seguir ? 'encendido' : 'apagado'}`, seguir, () => { const v = !seguir; setSeguir(v); try { localStorage.setItem(CLAVE_SEGUIR, v ? '1' : '0') } catch (_) {} })}
       {boton('iman', `Imán: pega cada punto a la apertura, máximo, mínimo o cierre de su vela · ${imanFijo ? 'encendido' : 'apagado'} (o mantén pulsado Ctrl)`, imanFijo, () => setImanFijo(v => !v))}
       {boton('deshacer', 'Deshacer · Ctrl+Z', false, deshaz, null, !hist.current.length)}
       {boton('papelera', 'Borrar todos los dibujos de este valor (se puede deshacer con Ctrl+Z)', false, () => { cambia([]); setElegido(null) }, '#ff4d6d', !dibujos.length)}
