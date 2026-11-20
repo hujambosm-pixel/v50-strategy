@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { MONO } from '../lib/utils'
 
-export default function PriceAlarmQuickForm({ price, symbol, alarms, onSave, onCancel }) {
+// condInicial (opcional, §210): la 🎯 de la barra de dibujos propone «baja hasta» si el precio está por debajo del último cierre.
+export default function PriceAlarmQuickForm({ price, symbol, alarms, onSave, onCancel, condInicial }) {
   const [px, setPx] = useState(price.toFixed(2))
-  const [cond, setCond] = useState('price_above')
+  const [cond, setCond] = useState(condInicial || 'price_above')
   const [name, setName] = useState(`${symbol} @ ${price.toFixed(2)}`)
   const [saving, setSaving] = useState(false)
   const condLabels = { price_above:'Precio sube hasta', price_below:'Precio baja hasta' }

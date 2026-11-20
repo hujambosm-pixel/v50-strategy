@@ -16,7 +16,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { escala, fechaDeIndice, indiceDeFecha, iman, PUNTOS_DE } from '../lib/dibujos/geometria'
-import { HERRAMIENTAS, ATAJOS, COLORES, formas, provisional, creaDibujo, mueve, mueveAsa, duplica, colorDe, grosorDe } from '../lib/dibujos/pantalla'
+import { HERRAMIENTAS, ATAJOS, COLORES, TAMANOS_TEXTO, formas, provisional, creaDibujo, mueve, mueveAsa, duplica, colorDe, grosorDe, tamDe, pasoFlecha, estiloRecordado } from '../lib/dibujos/pantalla'
 import Ayuda from './BuilderAyuda'
 import { leerDibujos, guardarDibujos, simboloDe } from '../lib/dibujos/guardados'
 import { hayConfigSupabase, ctxConSesion } from '../lib/supabase'
@@ -26,6 +26,13 @@ const LEIDOS = new Set()    // valores ya leídos de la base en esta visita
 const OYENTES = new Set()   // instancias montadas: (clave, dibujos, quien) → se ponen al día
 const avisa = (clave, dibujos, quien) => { for (const f of OYENTES) f(clave, dibujos, quien) }
 const ESPERA_GUARDAR = 800
+// Lo último elegido de cada tipo de dibujo (color, grosor, tamaño de letra), en el navegador (§210).
+const CLAVE_ESTILO = 'dibujos.estilo'
+const leeEstilos = () => { try { const j = JSON.parse(localStorage.getItem(CLAVE_ESTILO) || '{}'); return j && typeof j === 'object' ? j : {} } catch (_) { return {} } }
+const recuerdaEstilo = (tipo, cambios) => { try { const m = leeEstilos(); m[tipo] = { ...(m[tipo] || {}), ...cambios }; localStorage.setItem(CLAVE_ESTILO, JSON.stringify(m)) } catch (_) {} }
+const estiloDe = (tipo) => estiloRecordado(leeEstilos(), tipo)
+// La 🎯 (§210): no es un dibujo; un clic en el gráfico abre la ventana de alarma de precio con ese precio.
+const HERR_ALERTA = { id: 'alerta', nombre: 'Alerta de precio', atajo: '', ayuda: 'un clic en el precio (con Ctrl, pegado a la apertura, máximo, mínimo o cierre de la vela) y se abre la ventana de la alarma' }
 const MAX_HISTORIAL = 60
 const MONO = "'JetBrains Mono', monospace"
 
@@ -42,6 +49,7 @@ const IC = {
   iman: <><g fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M5 3 V10 A5 5 0 0 0 15 10 V3"/><path d="M5 6 H8 M12 6 H15" strokeWidth="2.4"/><path d="M8 3 V10 A2 2 0 0 0 12 10 V3"/></g></>,
   deshacer: <><g fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4 L3 7.5 L6 11"/><path d="M3 7.5 H12 A4.5 4.5 0 0 1 12 16.5 H8"/></g></>,
   papelera: <><path d="M3.5 5.5 H16.5 M8 5.5 V3.5 H12 V5.5 M5 5.5 L6 17 H14 L15 5.5 M8.5 8.5 V14 M11.5 8.5 V14" fill="none" stroke="currentColor" strokeWidth="1.5"/></>,
+  alerta: <><g fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="10" cy="10" r="7.5"/><circle cx="10" cy="10" r="4.2"/></g><circle cx="10" cy="10" r="1.6" fill="currentColor"/></>,
   duplicar: <><g fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="7" y="7" width="9" height="10" rx="1"/><path d="M4 13 V4 A1 1 0 0 1 5 3 H12"/></g></>,
 }
 const Icono = ({ n }) => <svg viewBox="0 0 20 20" width="18" height="18" style={{ display: 'block' }}>{IC[n]}</svg>
@@ -50,11 +58,16 @@ const AYUDA = 'Herramientas para dibujar encima de las velas, como en TradingVie
   + '• Elige una herramienta en esta barra (o con su atajo: Alt+T línea, Alt+A línea que se alarga, Alt+H horizontal, Alt+V vertical, Alt+C canal, Alt+F Fibonacci, Alt+R rectángulo, Alt+X texto) y haz clic en el gráfico. Las de dos puntos también se ponen arrastrando.\n'
   + '• Con el cursor: pulsa un dibujo para elegirlo, arrástralo para moverlo o tira de sus puntos. Arriba sale su barrita: color, grosor, duplicar y papelera. Supr lo borra.\n'
   + '• Imán: mientras mantienes pulsado Ctrl (o con el botón encendido), cada punto se pega a la apertura, máximo, mínimo o cierre más cercano de su vela.\n'
+  + '• Con un dibujo elegido, las flechas del teclado lo mueven: ← → una vela, ↑ ↓ un poco de precio (con Mayús, 10 veces más).\n'
+  + '• Cada tipo de dibujo recuerda el último color, grosor y tamaño de letra que elegiste.\n'
+  + '• 🎯 Alerta de precio: un clic en el gráfico abre la ventana de la alarma con ese precio (con Ctrl, pegado a la vela).\n'
   + '• Ctrl+Z deshace; Esc cancela lo que estés dibujando.\n'
   + '• Ejemplo de Fibonacci: de un mínimo en 100 a un máximo en 150, el nivel 0,618 queda en 150 − 50 × 0,618 = 119,10.\n\n'
   + 'Los dibujos se guardan solos con cada valor (un momento después de cada cambio) y valen igual en velas diarias y semanales: cada punto va por su fecha y su precio.'
 
-export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrapRef, barraRef, data, simbolo, ctx: ctxProp = undefined }) {
+export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrapRef, barraRef, data, simbolo, ctx: ctxProp = undefined, arriba = 0, onAlerta = null }) {
+  // arriba: px que tapa una barra de la página puesta encima del gráfico (la de Watchlist mide 30): la barra lateral y la barrita bajan eso.
+  // onAlerta(precio, ultimoCierre): con él sale la 🎯 en la barra lateral.
   const clave = simboloDe(simbolo)
   const ctx = useMemo(() => ctxProp !== undefined ? ctxProp : (hayConfigSupabase() ? ctxConSesion() : null), [ctxProp])
   const [aviso, setAviso] = useState(null)   // error al leer o guardar
@@ -174,7 +187,7 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
   // ── Acciones ──
   const termina = (pts) => {
     const st = S.current
-    const d = creaDibujo(st.herr, pts)
+    const d = creaDibujo(st.herr, pts, estiloDe(st.herr))
     st.fin = Date.now(); st.pend = []; st.herr = 'cursor'
     setPend([]); setCursor(null); setHerr('cursor')
     if (d) { cambia([...(st.dibujos || []), d]); setElegido(d.id) }
@@ -184,17 +197,31 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
   const borra = (id) => { cambia((S.current.dibujos || []).filter(d => d.id !== id)); setElegido(null) }
   const deshaz = () => { if (!hist.current.length) return; pon(hist.current.pop()); setElegido(null); setPend([]) }
   const editaDibujo = (id, f) => cambia((S.current.dibujos || []).map(d => d.id === id ? f(d) : d))
+  // Cambiar el estilo de un dibujo lo recuerda para los siguientes de su tipo.
+  const estilo = (d, cambios) => { recuerdaEstilo(d.tipo, cambios); editaDibujo(d.id, x => ({ ...x, ...cambios })) }
+  // Flechas: mueve el dibujo elegido (una serie de pulsaciones seguidas cuenta como un solo paso para deshacer).
+  const mueveConFlecha = (paso) => {
+    const st = S.current, d = (st.dibujos || []).find(x => x.id === st.elegido), c = conversor()
+    if (!d || !c) return
+    let dp = 0
+    if (paso.dpx) { const y0 = c.y(d.puntos[0].precio), p1 = y0 == null ? null : c.p(y0 - paso.dpx); if (p1 == null) return; dp = p1 - d.puntos[0].precio }
+    const n = mueve(d, esc, paso.dv, dp)
+    if (Date.now() - (st.ultFlecha || 0) > 800) historia()
+    st.ultFlecha = Date.now()
+    pon((st.dibujos || []).map(x => x.id === d.id ? n : x))
+  }
+  const ultimoCierre = data?.length ? data[data.length - 1].close : null
   const guardaTexto = (t) => {
     const v = (t?.valor || '').trim()
     setTexto(null)
     if (!t) return
     if (t.id) { if (v) editaDibujo(t.id, d => ({ ...d, texto: v.slice(0, 200) })); else borra(t.id); return }
     if (!v) return
-    const d = creaDibujo('texto', [{ fecha: t.fecha, precio: t.precio }], { texto: v.slice(0, 200) })
+    const d = creaDibujo('texto', [{ fecha: t.fecha, precio: t.precio }], { ...estiloDe('texto'), texto: v.slice(0, 200) })
     if (d) { cambia([...(S.current.dibujos || []), d]); setElegido(d.id) }
   }
 
-  S.current = { ...S.current, dibujos, herr, pend, elegido, imanFijo, termina, cancela, elige, borra, deshaz, punto, esc, setElegido, setCursor, setPend, setTexto, setHerr, pon, cambia, historia }
+  S.current = { ...S.current, dibujos, herr, pend, elegido, imanFijo, termina, cancela, elige, borra, deshaz, punto, esc, setElegido, setCursor, setPend, setTexto, setHerr, pon, cambia, historia, mueveConFlecha, onAlerta, ultimoCierre }
 
   // ── El ratón sobre el gráfico (fase de captura) y el teclado ──
   useEffect(() => {
@@ -208,6 +235,7 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
       e.stopPropagation(); e.preventDefault()
       const q = st.punto(e, conIman(e)); if (!q) return
       if (st.herr === 'texto') { st.setTexto({ id: null, fecha: q.fecha, precio: q.precio, valor: '' }); st.setHerr('cursor'); st.fin = Date.now(); return }
+      if (st.herr === 'alerta') { st.fin = Date.now(); st.elige('cursor'); st.onAlerta?.(Math.round(q.precio * 100) / 100, st.ultimoCierre); return }
       const nuevos = [...st.pend, { fecha: q.fecha, precio: q.precio }]
       st.abajo = { x: e.clientX, y: e.clientY, n: nuevos.length }
       if (nuevos.length >= PUNTOS_DE[st.herr]) st.termina(nuevos)
@@ -270,6 +298,8 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
         e.preventDefault(); e.stopPropagation(); return
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && st.elegido) { st.borra(st.elegido); e.preventDefault(); return }
+      const paso = st.elegido && st.herr === 'cursor' && !e.ctrlKey && !e.altKey && !e.metaKey ? pasoFlecha(e.key, e.shiftKey) : null
+      if (paso) { st.mueveConFlecha(paso); e.preventDefault(); e.stopPropagation(); return }
       if (!st.encima) return
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') { st.deshaz(); e.preventDefault(); return }
       if (e.altKey && !e.ctrlKey && ATAJOS[e.key.toLowerCase()]) { st.elige(ATAJOS[e.key.toLowerCase()]); e.preventDefault() }
@@ -365,21 +395,29 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
   const del = dibujos.find(d => d.id === elegido)
   const barrita = del && !cursorHerr ? (
     <div onMouseDown={e => e.stopPropagation()} data-barrita=""
-      style={{ position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', alignItems: 'center', gap: 4,
+      style={{ position: 'absolute', top: 6 + arriba, left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', alignItems: 'center', gap: 4,
         background: '#0d1824', border: '1px solid #1e3a52', borderRadius: 5, padding: '3px 6px', boxShadow: '0 4px 16px rgba(0,0,0,0.6)', fontFamily: MONO, fontSize: 10, color: '#9fb6cf' }}>
       {COLORES.map(col => (
-        <span key={col} title="Color" onClick={() => editaDibujo(del.id, d => ({ ...d, color: col }))}
+        <span key={col} title="Color" onClick={() => estilo(del, { color: col })}
           style={{ width: 14, height: 14, borderRadius: 3, background: col, cursor: 'pointer', outline: colorDe(del) === col ? '2px solid #e2eaf5' : 'none', outlineOffset: 1 }} />
       ))}
       <span style={{ width: 1, height: 16, background: '#1e3a52', margin: '0 3px' }} />
       {[1, 2, 3, 4].map(g => (
-        <span key={g} title={`Grosor ${g}`} onClick={() => editaDibujo(del.id, d => ({ ...d, grosor: g }))}
+        <span key={g} title={`Grosor ${g}`} onClick={() => estilo(del, { grosor: g })}
           style={{ width: 18, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', borderRadius: 3,
             background: grosorDe(del) === g ? 'rgba(76,154,255,0.22)' : 'transparent' }}>
           <span style={{ width: 12, height: g, background: '#c8dff5', borderRadius: 1 }} />
         </span>
       ))}
       <span style={{ width: 1, height: 16, background: '#1e3a52', margin: '0 3px' }} />
+      {del.tipo === 'texto' && (() => {
+        const k = TAMANOS_TEXTO.indexOf(tamDe(del)), cambiaTam = (s) => { const n = TAMANOS_TEXTO[Math.max(0, Math.min(TAMANOS_TEXTO.length - 1, (k < 0 ? 2 : k) + s))]; estilo(del, { tam: n }) }
+        return <span data-tam-texto="" style={{ display: 'flex', alignItems: 'center', gap: 3, marginRight: 3 }}>
+          <span title="Letra más pequeña" data-tam="menos" onClick={() => cambiaTam(-1)} style={{ cursor: 'pointer', padding: '0 4px', border: '1px solid #1e3a52', borderRadius: 3 }}>A−</span>
+          <span title="Tamaño de la letra" style={{ minWidth: 16, textAlign: 'center', color: '#e2eaf5' }}>{tamDe(del)}</span>
+          <span title="Letra más grande" data-tam="mas" onClick={() => cambiaTam(1)} style={{ cursor: 'pointer', padding: '0 4px', border: '1px solid #1e3a52', borderRadius: 3 }}>A+</span>
+        </span>
+      })()}
       {del.tipo === 'texto' && <span title="Cambiar el texto" onClick={() => setTexto({ id: del.id, fecha: del.puntos[0].fecha, precio: del.puntos[0].precio, valor: del.texto || '' })} style={{ cursor: 'pointer', padding: '0 3px' }}>✎</span>}
       <span title="Duplicar" onClick={() => { const n = duplica(del, esc); cambia([...dibujos, n]); setElegido(n.id) }} style={{ cursor: 'pointer', color: '#9fb6cf' }}><Icono n="duplicar" /></span>
       <span title="Borrar este dibujo (Supr)" onClick={() => borra(del.id)} style={{ cursor: 'pointer', color: '#ff4d6d' }}><Icono n="papelera" /></span>
@@ -387,7 +425,7 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
   ) : null
 
   // Línea de ayuda mientras se dibuja.
-  const h = HERRAMIENTAS.find(x => x.id === herr)
+  const h = herr === 'alerta' ? HERR_ALERTA : HERRAMIENTAS.find(x => x.id === herr)
   const pista = cursorHerr && h ? (
     <div style={{ position: 'absolute', left: (c?.offX || 0) + 8, top: (c ? c.offY + c.alto : 300) - 28, zIndex: 20, pointerEvents: 'none', fontFamily: MONO, fontSize: 11,
       color: '#c8dff5', background: 'rgba(8,12,20,0.9)', border: '1px solid #1e3a52', borderRadius: 4, padding: '2px 8px', whiteSpace: 'nowrap' }}>
@@ -407,9 +445,11 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
   )
   const sep = k => <span key={k} style={{ width: 20, height: 1, background: '#1e3a52', margin: '3px 0' }} />
   const barra = (
-    <div data-barra-dibujos="" style={{ width: 36, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 0',
+    <div data-barra-dibujos="" style={{ width: 36, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: `${6 + arriba}px 0 6px`,
       background: '#0b1420', borderRight: '1px solid #1a2d45' }}>
       {HERRAMIENTAS.map(x => boton(x.id, `${x.nombre} · ${x.atajo}`, herr === x.id, () => elige(herr === x.id && x.id !== 'cursor' ? 'cursor' : x.id)))}
+      {onAlerta && sep('s0')}
+      {onAlerta && boton('alerta', 'Alerta de precio: un clic en el gráfico abre la ventana de la alarma con ese precio (con Ctrl, pegado a la vela)', herr === 'alerta', () => elige(herr === 'alerta' ? 'cursor' : 'alerta'), herr === 'alerta' ? null : '#ffd166')}
       {sep('s1')}
       {boton('iman', `Imán: pega cada punto a la apertura, máximo, mínimo o cierre de su vela · ${imanFijo ? 'encendido' : 'apagado'} (o mantén pulsado Ctrl)`, imanFijo, () => setImanFijo(v => !v))}
       {boton('deshacer', 'Deshacer · Ctrl+Z', false, deshaz, null, !hist.current.length)}

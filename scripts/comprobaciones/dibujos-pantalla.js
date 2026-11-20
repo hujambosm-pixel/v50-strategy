@@ -5,6 +5,7 @@
 // 3) El montaje con estado sobre un gráfico de mentira: elegir herramienta, clics, arrastrar, imán, deshacer, borrar, atajos, memoria por valor.
 // 4) Guardar y leer en la base (§209), con una base de mentira: lib/dibujos/guardados.js y el componente (leer al abrir, guardar tras
 //    800 ms, al soltar un arrastre y no a cada paso, al cambiar de valor; juntar lo dibujado mientras se leía; dos instancias a la vez).
+// 5) Lo pedido por Sergi al ver la parte 3 (§210): estilo recordado por tipo, tamaño de letra, flechas, la barra bajo la cabecera y la 🎯.
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'clave-falsa-del-arnes'
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
 let fallos = 0
@@ -284,6 +285,64 @@ const VELAS = F.map((date, k) => ({ date, open: 100 + k, high: 104 + k, low: 98 
     ok(!!av && /No se pudieron guardar los dibujos/.test(av.textContent), 'si no se puede guardar, sale un aviso en rojo')
     falla = false
     m2.quita()
+  }
+
+  // ── 5 · Lo pedido al ver la parte 3 (§210) ──
+  {
+    ok(JSON.stringify(P.pasoFlecha('ArrowRight', false)) === '{"dv":1,"dpx":0}' && JSON.stringify(P.pasoFlecha('ArrowUp', true)) === '{"dv":0,"dpx":10}' && P.pasoFlecha('a', false) === null, 'flechas: → una vela, Mayús+↑ diez píxeles, otra tecla nada')
+    ok(JSON.stringify(P.estiloRecordado({ tendencia: { color: '#ef5350', grosor: 3, tam: 20 } }, 'tendencia')) === '{"color":"#ef5350","grosor":3}' && JSON.stringify(P.estiloRecordado({ texto: { tam: 20, color: 'rojo' } }, 'texto')) === '{"tam":20}', 'estilo recordado: solo lo que vale (el tamaño, solo en el texto)')
+    const tx = P.creaDibujo('texto', [pt(1, 100)], { texto: 'Hola', tam: 20 })
+    ok(tx.tam === 20 && G.limpiaDibujo({ ...tx, tam: 60 }).tam === undefined, 'el texto guarda su tamaño de letra (de 8 a 48)')
+    const ft = P.formas(tx, cv)
+    ok(ft.trazos[0].a['font-size'] === 20 && ft.golpe[0].a.height === 27 && ft.golpe[0].a.y === 100 - 22, 'texto de 20: letra de 20 y la franja del ratón a su medida (27 de alto)')
+
+    localStorage.removeItem('dibujos.estilo')
+    DG._memoriaDibujos.clear(); DG._leidosDibujos.clear()
+    const alertas = []
+    const m5 = D.monta(React.createElement(Dib, { ...props('INTC'), arriba: 30, onAlerta: (p, u) => alertas.push([p, u]) }), RDC); await D.espera(40)
+    const mem = () => DG._memoriaDibujos.get('INTC') || []
+    ok(slot.busca(n => n.hasAttribute('data-barra-dibujos')).style.padding === '36px 0 6px', 'con una barra de 30 px encima, la barra lateral empieza 30 px más abajo')
+    // Línea y color recordado.
+    D.pulsa(boton('tendencia')); await D.espera(20); lanza('mousedown', ev(0, 100)); lanza('mousedown', ev(20, 80)); await D.espera(20)
+    const barrita = () => m5.raiz.busca(n => n.hasAttribute('data-barrita'))
+    ok(parseFloat(barrita().style.top) === 36, 'la barrita del dibujo elegido, también 30 px más abajo')
+    D.pulsa(barrita().busca(n => n.getAttribute('title') === 'Color' && n.style.background === '#ef5350')); await D.espera(20)
+    D.pulsa(barrita().todos(n => n.getAttribute('title') === 'Grosor 3')[0]); await D.espera(20)
+    ok(mem()[0].color === '#ef5350' && mem()[0].grosor === 3, 'cambiar color y grosor de la línea')
+    D.pulsa(boton('tendencia')); await D.espera(20); lanza('mousedown', ev(30, 100)); lanza('mousedown', ev(50, 80)); await D.espera(20)
+    ok(mem()[1].color === '#ef5350' && mem()[1].grosor === 3, 'la siguiente línea sale con el último color y grosor elegidos')
+    D.pulsa(boton('horizontal')); await D.espera(20); lanza('mousedown', ev(30, 50)); await D.espera(20)
+    ok(mem()[2].color === undefined, '… y las de otro tipo (horizontal), con el suyo de siempre')
+    // Flechas sobre lo elegido (la horizontal): ↑ un píxel = +1 de precio (y = 200 − p); Mayús+↓ = −10; → una vela.
+    const tec = (key, extra = {}) => { for (const fk of OV.keydown || []) fk({ key, target: document.body, preventDefault() {}, stopPropagation() {}, shiftKey: false, ctrlKey: false, altKey: false, metaKey: false, ...extra }) }
+    tec('ArrowUp'); await D.espera(10); tec('ArrowUp'); await D.espera(10); tec('ArrowDown', { shiftKey: true }); await D.espera(10); tec('ArrowRight'); await D.espera(20)
+    ok(mem()[2].puntos[0].precio === 142 && mem()[2].puntos[0].fecha === F[4], `flechas: 150 + 1 + 1 − 10 = 142 y una vela a la derecha (${mem()[2].puntos[0].precio}, ${mem()[2].puntos[0].fecha})`)
+    lanza('mouseenter', {}); tec('z', { ctrlKey: true }); await D.espera(20)
+    ok(mem()[2].puntos[0].precio === 150 && mem()[2].puntos[0].fecha === F[3], 'una serie de flechas seguida se deshace de una vez (vuelve a 150)')
+    // Texto con tamaño recordado.
+    D.pulsa(boton('texto')); await D.espera(20); lanza('mousedown', ev(10, 80)); await D.espera(20)
+    D.escribe(m5.raiz.busca(n => n.nodeName === 'INPUT'), 'Nota'); await D.espera(10)
+    D.propsDe(m5.raiz.busca(n => n.nodeName === 'INPUT')).onKeyDown({ key: 'Enter', stopPropagation() {} }); await D.espera(20)
+    D.pulsa(barrita().busca(n => n.getAttribute('data-tam') === 'mas')); await D.espera(20)
+    D.pulsa(barrita().busca(n => n.getAttribute('data-tam') === 'mas')); await D.espera(20)
+    ok(mem()[3].tam === 20, 'texto: A+ dos veces, de 13 a 16 y a 20')
+    D.pulsa(boton('texto')); await D.espera(20); lanza('mousedown', ev(40, 60)); await D.espera(20)
+    D.escribe(m5.raiz.busca(n => n.nodeName === 'INPUT'), 'Otra'); await D.espera(10)
+    D.propsDe(m5.raiz.busca(n => n.nodeName === 'INPUT')).onKeyDown({ key: 'Enter', stopPropagation() {} }); await D.espera(20)
+    ok(mem()[4].tam === 20, 'el siguiente texto sale con letra de 20')
+    // 🎯: un clic abre la alarma con ese precio y el último cierre (109); con Ctrl, pegado a la vela.
+    ok(!!boton('alerta'), 'con onAlerta sale la 🎯 en la barra lateral')
+    D.pulsa(boton('alerta')); await D.espera(20)
+    const ea = lanza('mousedown', ev(30, 200 - 123.456)); await D.espera(20)
+    ok(ea.parado && alertas.length === 1 && alertas[0][0] === 123.46 && alertas[0][1] === 109, `🎯: clic en 123,456 → alarma en 123,46 con último cierre 109 (${JSON.stringify(alertas[0])})`)
+    ok(mem().length === 5 && !m5.raiz.busca(n => n.getAttribute('opacity') === '0.8'), '… sin crear ningún dibujo, y vuelve el cursor')
+    D.pulsa(boton('alerta')); await D.espera(20)
+    lanza('mousedown', ev(12, 200 - 103.6, { ctrlKey: true })); await D.espera(20)
+    ok(alertas[1][0] === 103, '🎯 con Ctrl: 103,6 se pega al cierre de su vela (103)')
+    m5.quita()
+    const m6 = D.monta(React.createElement(Dib, props('INTC')), RDC); await D.espera(30)
+    ok(!boton('alerta') && slot.busca(n => n.hasAttribute('data-barra-dibujos')).style.padding === '6px 0 6px', 'sin onAlerta no hay 🎯, y sin barra encima la barra lateral empieza arriba')
+    m6.quita()
   }
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTodo en verde')

@@ -33,7 +33,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1273'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1274'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -5651,7 +5651,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1273</title>
+        <title>Trading Simulator V9.1274</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5740,7 +5740,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1273
+            <span className="dot"/>Trading Simulator V9.1274
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7844,7 +7844,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         customMarkers={[...(result.customMarkers??[]), ...openEntryMarkers]}
                         pendingOrders={pendingOrdersForSym}
                         simbolo={simbolo}
-                        dibujar
+                        dibujar dibujarArriba={30}
+                        onAlertaPrecio={(price,ultimo)=>setPriceAlarmDlg({price,symbol:simbolo,cond:ultimo!=null&&price<ultimo?'price_below':'price_above'})}
                         trades={result.isBareChart?[]:result.trades||[]}
                         isBareChart={result.isBareChart??false}
                         chartHeight={result.isBareChart?bareChartHeight:candleH}
@@ -8017,6 +8018,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         pendingOrders={pendingOrdersForSym}
                         simbolo={simbolo}
                         dibujar
+                        onAlertaPrecio={(price,ultimo)=>setPriceAlarmDlg({price,symbol:simbolo,cond:ultimo!=null&&price<ultimo?'price_below':'price_above'})}
                           trades={result.isBareChart?[]:result.trades||[]}
                           isBareChart={result.isBareChart??false}
                           fillHeight={true}
@@ -10756,7 +10758,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
           <div style={{fontSize:13,fontWeight:700,marginBottom:14,color:'var(--accent)'}}>Nueva Alarma de Precio</div>
           <div style={{fontSize:11,color:'var(--text3)',marginBottom:6}}>{priceAlarmDlg.symbol}</div>
           <PriceAlarmQuickForm
-            price={priceAlarmDlg.price} symbol={priceAlarmDlg.symbol}
+            price={priceAlarmDlg.price} symbol={priceAlarmDlg.symbol} condInicial={priceAlarmDlg.cond}
             alarms={alarms}
             onSave={async(item)=>{
               try{
