@@ -3,6 +3,8 @@
 // 1) Lo puro con un conversor inventado: la vela i en x = 10·i y el precio p en y = 200 − p (panel de 100 × 580). Cifras a mano.
 // 2) CandleChart sin `dibujar`: el HTML, carácter a carácter el de antes (lo que había en el commit anterior, con git show).
 // 3) El montaje con estado sobre un gráfico de mentira: elegir herramienta, clics, arrastrar, imán, deshacer, borrar, atajos, memoria por valor.
+// 4) Guardar y leer en la base (§209), con una base de mentira: lib/dibujos/guardados.js y el componente (leer al abrir, guardar tras
+//    800 ms, al soltar un arrastre y no a cada paso, al cambiar de valor; juntar lo dibujado mientras se leía; dos instancias a la vez).
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'clave-falsa-del-arnes'
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
 let fallos = 0
@@ -39,6 +41,7 @@ const VELAS = F.map((date, k) => ({ date, open: 100 + k, high: 104 + k, low: 98 
     const f = P.formas(P.creaDibujo('horizontal', [pt(3, 150)]), cv), l = lin(f)[0].a
     ok(l.x1 === 0 && l.x2 === 100 && l.y1 === 50 && f.eje[0].txt === '150,00', 'horizontal en 150: de lado a lado en y = 50 px y «150,00» en el eje de precios')
     ok(P.formas(P.creaDibujo('horizontal', [pt(3, 0.8523)]), cv).eje[0].txt === '0,8523', 'por debajo de 1 €, con 4 decimales (0,8523)')
+    ok(P.formas(P.creaDibujo('horizontal', [pt(3, 1000)]), cv).eje.length === 0 && P.formas(P.creaDibujo('vertical', [pt(7, 100)]), { ...cv, ancho: 50 }).eje.length === 0, 'fuera de la vista (horizontal en 1.000, por encima del panel; vertical a la derecha), sin etiqueta en el eje')
   }
   {
     const f = P.formas(P.creaDibujo('vertical', [pt(3, 150)]), cv), l = lin(f)[0].a
@@ -115,7 +118,7 @@ const VELAS = F.map((date, k) => ({ date, open: 100 + k, high: 104 + k, low: 98 
   const wrap = document.createElement('div'), cont = document.createElement('div'), lienzo = document.createElement('canvas'), slot = document.createElement('div')
   wrap.appendChild(cont); cont.appendChild(lienzo); document.body.appendChild(wrap); document.body.appendChild(slot)
   const refs = { chartRef: { current: chart }, seriesRef: { current: serie }, containerRef: { current: cont }, wrapRef: { current: wrap }, barraRef: { current: slot } }
-  const props = (simbolo) => ({ ...refs, data: VELAS, simbolo })
+  const props = (simbolo, ctx = null) => ({ ...refs, data: VELAS, simbolo, ctx })
   const m = D.monta(React.createElement(Dib, props('AAPL')), RDC); await D.espera(40)
   const memo = () => DG._memoriaDibujos.get('AAPL') || []
   const ev = (x, y, extra = {}) => { let parado = false; return { button: 0, clientX: x, clientY: y, target: lienzo, ctrlKey: false, stopPropagation() { parado = true }, preventDefault() {}, get parado() { return parado }, ...extra } }
@@ -202,6 +205,86 @@ const VELAS = F.map((date, k) => ({ date, open: 100 + k, high: 104 + k, low: 98 
   ok(m.raiz.busca(n => n.getAttribute('data-dibujos') === '4') != null, 'al volver a AAPL, siguen sus 4 dibujos')
   ok(DG._memoriaDibujos.get('AAPL').every(d => G.limpiaDibujo(d) && JSON.stringify(G.limpiaDibujo(d)) === JSON.stringify(d)), 'todos los dibujos tienen la forma que se guardará en la base (limpiaDibujo los deja igual)')
   m.quita()
+
+  // ── 4 · Guardar y leer en la base ──
+  {
+    const GD = require(R + '/lib/dibujos/guardados.js')
+    // Base de mentira: filas por valor; apunta cada llamada.
+    const filas = new Map(), llamadas = []
+    let falla = false, lenta = 0
+    const fFalso = async (url, o = {}) => {
+      const u = new URL(url), metodo = o.method || 'GET', s = decodeURIComponent((u.searchParams.get('simbolo') || '').replace(/^eq\./, ''))
+      llamadas.push({ metodo, s, cuerpo: o.body ? JSON.parse(o.body) : null })
+      if (lenta) await new Promise(r => setTimeout(r, lenta))
+      if (falla) return { ok: false, status: 500, json: async () => ({ message: 'caída' }) }
+      if (metodo === 'GET') return { ok: true, status: 200, json: async () => (filas.has(s) ? [{ dibujos: filas.get(s) }] : []) }
+      if (metodo === 'DELETE') { filas.delete(s); return { ok: true, status: 204, json: async () => null } }
+      const b = JSON.parse(o.body); filas.set(b.simbolo, b.dibujos); return { ok: true, status: 201, json: async () => null }
+    }
+    const ctx = { url: 'http://base.falsa', headers: { apikey: 'x' }, fetch: fFalso }
+    ok(GD.simboloDe(' aapl ') === 'AAPL' && GD.simboloDe('') === '' && GD.simboloDe('X'.repeat(31)) === '', 'el valor, en mayúsculas y sin espacios (y nada si no vale)')
+    const d1 = P.creaDibujo('horizontal', [pt(3, 150)], { id: 'h1' })
+    await GD.guardarDibujos(ctx, 'msft', [d1, { id: 'malo', tipo: 'nada' }])
+    ok(JSON.stringify(filas.get('MSFT')) === JSON.stringify([d1]) && llamadas.at(-1).metodo === 'POST', 'guardar: una fila por valor (MSFT), sin lo que no vale')
+    ok(JSON.stringify(await GD.leerDibujos(ctx, 'MSFT')) === JSON.stringify([d1]), 'leer: lo mismo que se guardó')
+    await GD.guardarDibujos(ctx, 'MSFT', [])
+    ok(!filas.has('MSFT') && llamadas.at(-1).metodo === 'DELETE', 'sin dibujos, la fila se borra')
+    ok((await GD.leerDibujos(ctx, 'MSFT')).length === 0, 'leer un valor sin fila: ninguno')
+    filas.set('^GSPC', [d1, { id: 'roto' }])
+    ok((await GD.leerDibujos(ctx, '^GSPC')).length === 1 && llamadas.at(-1).s === '^GSPC', 'leer ^GSPC (con «^» en la dirección) y tirar lo que no vale')
+    falla = true
+    let err = ''; try { await GD.guardarDibujos(ctx, 'AAPL', [d1]) } catch (e) { err = e.message }
+    ok(/No se pudo guardar tus dibujos \(HTTP 500: caída\)/.test(err), `si la base falla, lo dice: «${err}»`)
+    falla = false
+
+    // El componente: abre NVDA con un dibujo guardado.
+    DG._memoriaDibujos.clear(); DG._leidosDibujos.clear(); llamadas.length = 0
+    filas.set('NVDA', [P.creaDibujo('tendencia', [pt(0, 100), pt(2, 120)], { id: 't1' })])
+    const m2 = D.monta(React.createElement(Dib, props('NVDA', ctx)), RDC); await D.espera(40)
+    const enBase = () => filas.get('NVDA') || []
+    ok(m2.raiz.busca(n => n.getAttribute('data-dibujos') === '1') != null && llamadas.filter(l => l.metodo === 'GET').length === 1, 'al abrir NVDA, sale su dibujo guardado (una lectura)')
+    D.pulsa(boton('horizontal')); await D.espera(20)
+    lanza('mousedown', ev(20, 50)); await D.espera(20)
+    ok(enBase().length === 1, 'recién dibujada, aún no se ha guardado (espera un momento)')
+    await D.espera(900)
+    ok(enBase().length === 2 && enBase()[1].tipo === 'horizontal' && enBase()[1].puntos[0].precio === 150, 'a los 800 ms se guarda (2 dibujos, la horizontal en 150)')
+    // Arrastrar: no se guarda a cada paso, sí al soltar.
+    const posts = () => llamadas.filter(l => l.metodo === 'POST').length
+    const p0 = posts()
+    const gg = m2.raiz.todos(n => n.nodeName === 'g' && n.style.cursor === 'move')[1]
+    D.propsDe(gg).onMouseDown(ev(20, 50)); await D.espera(10)
+    for (const y of [45, 40, 35, 30]) { for (const fm of OV.mousemove || []) fm(ev(20, y)); await D.espera(5) }
+    await D.espera(900)
+    ok(posts() === p0, 'mientras se arrastra, no se guarda')
+    for (const fm of OV.mouseup || []) fm(ev(20, 30))
+    await D.espera(900)
+    ok(posts() === p0 + 1 && enBase()[1].puntos[0].precio === 170, 'al soltar, se guarda una vez (la horizontal, ya en 170)')
+    // Dos instancias (normal y pantalla completa): lo de una sale en la otra.
+    const slot2 = document.createElement('div'); document.body.appendChild(slot2)
+    const m3 = D.monta(React.createElement(Dib, { ...props('NVDA', ctx), barraRef: { current: slot2 } }), RDC); await D.espera(40)
+    ok(m3.raiz.busca(n => n.getAttribute('data-dibujos') === '2') != null && llamadas.filter(l => l.metodo === 'GET').length === 1, 'la pantalla completa abre con los mismos 2 dibujos (sin volver a leer)')
+    D.pulsa(slot2.busca(n => n.getAttribute('data-herr') === 'papelera')); await D.espera(20)
+    ok(m2.raiz.busca(n => n.getAttribute('data-dibujos') === '0') != null, 'borrar todo en una instancia: la otra también se queda sin dibujos')
+    m3.quita(); await D.espera(30)
+    ok(!filas.has('NVDA'), 'al cerrar la pantalla completa se guarda ya (sin dibujos: la fila se borra)')
+    // Cambiar de valor con un cambio sin guardar: se guarda ya.
+    D.pulsa(boton('vertical')); await D.espera(20); lanza('mousedown', ev(30, 50)); await D.espera(20)
+    m2.pinta(React.createElement(Dib, props('AMD', ctx))); await D.espera(40)
+    ok(enBase().length === 1 && enBase()[0].tipo === 'vertical', 'al cambiar de valor, lo pendiente se guarda en el que se deja (NVDA)')
+    // Dibujar mientras se lee: se juntan.
+    lenta = 150; filas.set('TSLA', [P.creaDibujo('horizontal', [pt(3, 150)], { id: 'viejo' })])
+    m2.pinta(React.createElement(Dib, props('TSLA', ctx))); await D.espera(20)
+    D.pulsa(boton('horizontal')); await D.espera(20); lanza('mousedown', ev(20, 60)); await D.espera(400)
+    lenta = 0; await D.espera(900)
+    ok((filas.get('TSLA') || []).length === 2 && filas.get('TSLA')[0].id === 'viejo', 'lo dibujado mientras se leía se junta con lo guardado (2 en TSLA)')
+    // Si guardar falla, sale el aviso en rojo.
+    falla = true
+    D.pulsa(boton('horizontal')); await D.espera(20); lanza('mousedown', ev(20, 70)); await D.espera(950)
+    const av = m2.raiz.busca(n => n.hasAttribute('data-aviso-dibujos'))
+    ok(!!av && /No se pudieron guardar los dibujos/.test(av.textContent), 'si no se puede guardar, sale un aviso en rojo')
+    falla = false
+    m2.quita()
+  }
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTodo en verde')
   process.exit(fallos ? 1 : 0)

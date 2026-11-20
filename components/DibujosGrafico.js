@@ -5,7 +5,9 @@
 // Todo el estado vive aquí y no en CandleChart: mover el ratón o desplazar el gráfico redibuja SOLO esta capa (CandleChart rehace su
 // gráfico entero al cambiar sus props: no se le puede tocar el estado a cada paso).
 // Los puntos se guardan por FECHA y PRECIO (lib/dibujos/geometria.js): el mismo dibujo vale en diario y en semanal.
-// PARTE 3: en MEMORIA, por valor (al cambiar de valor y volver, siguen; al recargar la página, se pierden). La parte 4 los guarda en la base.
+// PARTE 4 (§209): se GUARDAN en la base por valor (lib/dibujos/guardados.js, tabla dibujos_grafico): se leen al abrir el valor y se
+// guardan un momento después de cada cambio (al soltar, no a cada paso de un arrastre). La MEMORIA de abajo hace de copia: el gráfico
+// normal y el de pantalla completa son dos instancias y se avisan entre sí, así que lo dibujado en una sale en la otra.
 //
 // CÓMO SE COGE EL RATÓN SIN ROMPER EL GRÁFICO. Con una herramienta elegida, un oyente en fase de CAPTURA sobre el contenedor del gráfico
 // se queda los clics (lightweight-charts no los ve: ni arrastra, ni pone la alarma del doble clic, ni la regla 📏), pero deja pasar el
@@ -16,8 +18,14 @@ import { createPortal } from 'react-dom'
 import { escala, fechaDeIndice, indiceDeFecha, iman, PUNTOS_DE } from '../lib/dibujos/geometria'
 import { HERRAMIENTAS, ATAJOS, COLORES, formas, provisional, creaDibujo, mueve, mueveAsa, duplica, colorDe, grosorDe } from '../lib/dibujos/pantalla'
 import Ayuda from './BuilderAyuda'
+import { leerDibujos, guardarDibujos, simboloDe } from '../lib/dibujos/guardados'
+import { hayConfigSupabase, ctxConSesion } from '../lib/supabase'
 
-const MEMORIA = new Map()   // valor → sus dibujos (parte 3)
+const MEMORIA = new Map()   // valor → sus dibujos (copia de lo de la base)
+const LEIDOS = new Set()    // valores ya leídos de la base en esta visita
+const OYENTES = new Set()   // instancias montadas: (clave, dibujos, quien) → se ponen al día
+const avisa = (clave, dibujos, quien) => { for (const f of OYENTES) f(clave, dibujos, quien) }
+const ESPERA_GUARDAR = 800
 const MAX_HISTORIAL = 60
 const MONO = "'JetBrains Mono', monospace"
 
@@ -44,10 +52,12 @@ const AYUDA = 'Herramientas para dibujar encima de las velas, como en TradingVie
   + '• Imán: mientras mantienes pulsado Ctrl (o con el botón encendido), cada punto se pega a la apertura, máximo, mínimo o cierre más cercano de su vela.\n'
   + '• Ctrl+Z deshace; Esc cancela lo que estés dibujando.\n'
   + '• Ejemplo de Fibonacci: de un mínimo en 100 a un máximo en 150, el nivel 0,618 queda en 150 − 50 × 0,618 = 119,10.\n\n'
-  + 'De momento los dibujos se quedan solo mientras no recargues la página (al cambiar de valor y volver, siguen). Pronto se guardarán con cada valor.'
+  + 'Los dibujos se guardan solos con cada valor (un momento después de cada cambio) y valen igual en velas diarias y semanales: cada punto va por su fecha y su precio.'
 
-export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrapRef, barraRef, data, simbolo }) {
-  const clave = String(simbolo || '')
+export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrapRef, barraRef, data, simbolo, ctx: ctxProp = undefined }) {
+  const clave = simboloDe(simbolo)
+  const ctx = useMemo(() => ctxProp !== undefined ? ctxProp : (hayConfigSupabase() ? ctxConSesion() : null), [ctxProp])
+  const [aviso, setAviso] = useState(null)   // error al leer o guardar
   const [dibujos, setDibujosSt] = useState(() => MEMORIA.get(clave) || [])
   const [herr, setHerr] = useState('cursor')
   const [imanFijo, setImanFijo] = useState(false)
@@ -60,22 +70,62 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
   const hist = useRef([])
   const claveRef = useRef(clave)
   const S = useRef({})
+  const yo = useRef({}).current
+  const guardado = useRef({ timer: null, clave: null, lista: null })
   const clip = useMemo(() => 'dib' + Math.random().toString(36).slice(2, 9), [])
   const esc = useMemo(() => escala((data || []).map(d => d.date)), [data])
 
   useEffect(() => { setSlot(barraRef?.current || null) }, [barraRef])
-  // Otro valor: sus dibujos (los de este se quedan en la memoria).
-  useEffect(() => {
-    if (claveRef.current === clave) return
-    claveRef.current = clave
-    setDibujosSt(MEMORIA.get(clave) || []); hist.current = []; setElegido(null); setPend([]); setHerr('cursor'); setTexto(null)
-  }, [clave])
-
-  const pon = (nuevos) => { MEMORIA.set(claveRef.current, nuevos); S.current.dibujos = nuevos; setDibujosSt(nuevos) }
-  const cambia = (nuevos) => {
-    hist.current.push(S.current.dibujos || []); if (hist.current.length > MAX_HISTORIAL) hist.current.shift()
-    pon(nuevos)
+  // ── Guardar en la base: un momento después del último cambio (o ya, al cambiar de valor o cerrar el gráfico) ──
+  const guardaYa = () => {
+    const g = guardado.current
+    clearTimeout(g.timer); g.timer = null
+    if (!g.clave || !ctx) { g.clave = null; return }
+    const c = g.clave, l = g.lista; g.clave = null; g.lista = null
+    guardarDibujos(ctx, c, l).then(() => { if (claveRef.current === c) setAviso(null) })
+      .catch(e => { if (claveRef.current === c) setAviso('No se pudieron guardar los dibujos: ' + (e?.message || e)) })
   }
+  const programaGuardar = (c, lista) => {
+    const g = guardado.current
+    if (g.clave && g.clave !== c) guardaYa()
+    g.clave = c; g.lista = lista
+    clearTimeout(g.timer); g.timer = setTimeout(guardaYa, ESPERA_GUARDAR)
+  }
+  // Los de otra instancia (pantalla completa ↔ normal) del mismo valor.
+  useEffect(() => {
+    const f = (c, lista, quien) => { if (quien !== yo && c === claveRef.current) { S.current.dibujos = lista; setDibujosSt(lista) } }
+    OYENTES.add(f)
+    return () => { OYENTES.delete(f); guardaYa() }
+  }, [])
+  // Al abrir un valor: sus dibujos de la base (la primera vez en esta visita; después, de la memoria).
+  useEffect(() => {
+    if (claveRef.current !== clave) {
+      guardaYa()
+      claveRef.current = clave
+      setDibujosSt(MEMORIA.get(clave) || []); hist.current = []; setElegido(null); setPend([]); setHerr('cursor'); setTexto(null); setAviso(null)
+    }
+    if (!clave || !ctx || LEIDOS.has(clave)) return
+    let vivo = true
+    leerDibujos(ctx, clave).then(lista => {
+      LEIDOS.add(clave)
+      // Si se dibujó algo mientras se leía, se juntan (lo leído primero) y se guarda la suma: no se pierde nada.
+      const ahora = MEMORIA.get(clave) || [], ids = new Set(lista.map(d => d.id))
+      const nuevos = ahora.filter(d => !ids.has(d.id))
+      const suma = nuevos.length ? [...lista, ...nuevos] : lista
+      MEMORIA.set(clave, suma); avisa(clave, suma, null)
+      if (nuevos.length) programaGuardar(clave, suma)
+    }).catch(e => { if (vivo) setAviso('No se pudieron leer tus dibujos: ' + (e?.message || e)) })
+    return () => { vivo = false }
+  }, [clave, ctx])
+
+  const pon = (nuevos, { sinGuardar = false } = {}) => {
+    const c = claveRef.current
+    MEMORIA.set(c, nuevos); S.current.dibujos = nuevos; setDibujosSt(nuevos)
+    avisa(c, nuevos, yo)
+    if (!sinGuardar && c) programaGuardar(c, nuevos)
+  }
+  const historia = () => { hist.current.push(S.current.dibujos || []); if (hist.current.length > MAX_HISTORIAL) hist.current.shift() }
+  const cambia = (nuevos) => { historia(); pon(nuevos) }
 
   // ── Píxeles ↔ velas y precios ──
   // La vela i está en x0 + i × sp (sp = separación entre velas): lineal, también a la derecha de la última y con decimales.
@@ -144,7 +194,7 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
     if (d) { cambia([...(S.current.dibujos || []), d]); setElegido(d.id) }
   }
 
-  S.current = { ...S.current, dibujos, herr, pend, elegido, imanFijo, termina, cancela, elige, borra, deshaz, punto, esc, setElegido, setCursor, setPend, setTexto, setHerr, pon, cambia }
+  S.current = { ...S.current, dibujos, herr, pend, elegido, imanFijo, termina, cancela, elige, borra, deshaz, punto, esc, setElegido, setCursor, setPend, setTexto, setHerr, pon, cambia, historia }
 
   // ── El ratón sobre el gráfico (fase de captura) y el teclado ──
   useEffect(() => {
@@ -200,10 +250,14 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
       let d
       if (ar.k >= 0) d = mueveAsa(ar.orig, ar.k, q)
       else d = mueve(ar.orig, st.esc, Math.round(q.iLibre - ar.i0), q.pLibre - ar.p0)
-      if (!ar.movido) { ar.movido = true; st.cambia(st.dibujos) }   // el historial guarda cómo estaba antes de mover
-      st.pon((S.current.dibujos || []).map(x => x.id === d.id ? d : x))
+      if (!ar.movido) { ar.movido = true; st.historia() }   // el historial guarda cómo estaba antes de mover
+      st.pon((S.current.dibujos || []).map(x => x.id === d.id ? d : x), { sinGuardar: true })
     }
-    const sueltaVentana = () => { if (S.current.arrastre) { S.current.arrastre = null; S.current.fin = Date.now() } }
+    const sueltaVentana = () => {
+      const ar = S.current.arrastre; if (!ar) return
+      S.current.arrastre = null; S.current.fin = Date.now()
+      if (ar.movido) S.current.pon(S.current.dibujos || [])
+    }
     window.addEventListener('mousemove', mueveVentana); window.addEventListener('mouseup', sueltaVentana)
     const tecla = e => {
       const st = S.current
@@ -274,6 +328,8 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
           </g>
           {lista.map(({ d, f }) => <g key={'e' + d.id}>{f.eje.map((el, k) => pinta(el, k))}</g>)}
           {prev && prev.eje.map((el, k) => pinta(el, 'pe' + k))}
+          {/* Lo que coge el ratón, también recortado al panel: un dibujo fuera de la vista no puede atrapar clics fuera del gráfico. */}
+          <g clipPath={`url(#${clip})`}>
           {!cursorHerr && lista.map(({ d, f }) => (
             <g key={'g' + d.id} style={{ cursor: 'move' }}
               onMouseDown={e => empiezaArrastre(e, d, -1)}
@@ -285,6 +341,7 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
             <circle key={'a' + d.id + h.k} cx={h.x} cy={h.y} r={4.5} fill="#0d1824" stroke={colorDe(d)} strokeWidth={1.6}
               style={{ pointerEvents: 'all', cursor: 'pointer' }} onMouseDown={e => empiezaArrastre(e, d, h.k)} />
           )))}
+          </g>
         </g>
       </svg>
     )
@@ -369,9 +426,15 @@ export default function DibujosGrafico({ chartRef, seriesRef, containerRef, wrap
       {cuadroTexto}
       {barrita}
       {pista}
+      {aviso && (
+        <div data-aviso-dibujos="" title={aviso} style={{ position: 'absolute', left: (c?.offX || 0) + 8, top: (c ? c.offY + c.alto : 300) - (pista ? 54 : 28), zIndex: 20, fontFamily: MONO, fontSize: 11,
+          color: '#ff4d6d', background: 'rgba(8,12,20,0.92)', border: '1px solid rgba(255,77,109,0.5)', borderRadius: 4, padding: '2px 8px', maxWidth: 520, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          ⚠ {aviso}
+        </div>
+      )}
     </>
   )
 }
 
-// Para las pruebas: la memoria de la parte 3 (valor → dibujos).
-export { MEMORIA as _memoriaDibujos }
+// Para las pruebas: la memoria (valor → dibujos) y los valores ya leídos.
+export { MEMORIA as _memoriaDibujos, LEIDOS as _leidosDibujos }
