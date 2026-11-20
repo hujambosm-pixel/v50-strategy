@@ -2033,7 +2033,9 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
       priceAlarmTimersRef.current.forEach(id=>clearInterval(id))
       priceAlarmTimersRef.current=[]
     }
-  },[priceAlarms,ackedAlarms,data])
+    // chartReadyTick (§214): el gráfico se rehace entero al cambiar operaciones, etiquetas o razonamiento; sin esto las líneas de alarma
+    // se perdían (como ya hacen las órdenes, las operaciones reales y Risk).
+  },[priceAlarms,ackedAlarms,data,chartReadyTick])
 
   // ── Órdenes pendientes: LÍNEAS DE PRECIO discontinuas que cruzan todo el gráfico (createPriceLine,
   //    mismo patrón que las alarmas). Entrada naranja + stop rojo. createPriceLine NO distorsiona el
