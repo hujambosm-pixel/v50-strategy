@@ -3543,3 +3543,11 @@ Primera parte de «Dibujar sobre los gráficos» (boceto bocetos/dibujar-grafico
 - Aplicada el 20/11 en Supabase LOCAL (postgres-meta). La nube no se toca.
 - scripts/comprobaciones/dibujosSeguridad.js (no va en comunes.sh): dos usuarios simulados y anon en una transacción que se deshace, más la clave anon por HTTP: 25/25.
 - Sin comunes.sh en este commit: no cambia nada que la app ejecute (como §147).
+## 207. Dibujar sobre los gráficos, parte 2: las cuentas (20/11)
+
+Las cuentas de los dibujos, puras y sin pantalla (lib/dibujos/geometria.js). La app todavía no las usa: nada cambia.
+- Fecha ↔ vela: escala(fechas) e intervaloDe (semanal si la mediana de los últimos 20 huecos es de 4 días o más); indiceDeFecha da el sitio con decimales entre dos velas (un miércoles en semanal: 2/7 tras su lunes); a la derecha de la última vela se cuenta en sesiones de lunes a viernes (diario) o en semanas (semanal), y a la izquierda de la primera igual hacia atrás; fechaDeIndice redondea a la vela (los puntos se ponen siempre en una vela, también futura). Vela → fecha → vela da la misma vela.
+- precioEnRecta (también la línea que se alarga hacia la derecha), paralela (canal: por el 3.er punto), iman (apertura, máximo, mínimo o cierre más cercano), nivelesFibonacci (como TradingView y el boceto: 0 en el segundo punto, 1 en el primero), medir (diferencia, %, velas).
+- Posición larga/corta: posicionValida, objetivoPorDefecto (2 R), accionesPorRiesgo (redondeo hacia abajo: 100 € con entrada 182,40 y stop 178,00 → 22 acciones, 4.012,80 €, 96,80 € de riesgo), cifrasPosicion (% y R:R) y resultadoPosicion (desde la vela siguiente a la de entrada; si una vela toca stop y objetivo, cuenta el stop; «abierta» / «futuro»). Como en el boceto, la entrada se da por hecha en su vela.
+- Lo que se guarda (§206): PUNTOS_DE por tipo (tendencia 2, rayo 2, horizontal 1, vertical 1, canal 3, rectangulo 2, fibonacci 2, larga/corta 3: entrada, stop —su fecha marca el final de la caja— y objetivo, texto 1; «medir» no se guarda), limpiaDibujo / limpiaDibujos (fuera lo que no vale y los ids repetidos; color #rrggbb, grosor 1–4, texto ≤ 200 letras, arriesgo ≥ 0; como mucho 300 por valor, que caben en los 200 KB).
+- Comprobación nueva scripts/comprobaciones/dibujos.js en comunes.sh (51, todas a mano).
