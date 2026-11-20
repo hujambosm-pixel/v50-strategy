@@ -3535,3 +3535,11 @@ Lo que falta del boceto bocetos/ocioso-con-regla.html (pestañas 1 y 3). Solo co
 - lib/planes/plan.js: el libro marca con regla: true las órdenes del ocioso que manda su regla (la venta del ocioso de antes en cambiaOcioso y la compra del nuevo ese mismo día); en «Historial › Todos los movimientos» dicen «· por la regla del ocioso». Las cifras no cambian.
 - «Detalle»: tarjeta «El dinero ocioso, día a día» (franjaOciosoRegla de lib/builder/detallePlan.js, FranjaOciosoRegla de components/PlanDetalle.js): por día, en el ocioso (amarillo), esperando (naranja) o sin dinero libre (gris, menos del 1 % del patrimonio en el ocioso o en liquidez), con la parte de los días de cada uno.
 - plan-ocioso-regla.js, apartado 5 (a mano con las velas de §203): «siempre dentro» 11.818,18 € frente a 8.863,64 €; en G 6 de 8 días y esperando 2; franja 1 1 1 2 2 1 1 1; las órdenes del 04 y el 08 «por la regla».
+## 206. Dibujar sobre los gráficos, parte 1: la tabla de los dibujos (20/11)
+
+Primera parte de «Dibujar sobre los gráficos» (boceto bocetos/dibujar-graficos.html; decisiones de Sergi del 20/11: barra lateral, primero el gráfico grande de un valor, dibujos guardados en la base por valor). Solo la base: la app todavía no la usa y ninguna cifra cambia.
+- sql/dibujos_grafico.sql (con REVERSIÓN): tabla public.dibujos_grafico, una fila por usuario y valor (clave user_id + simbolo) con dibujos jsonb (lista; como mucho 200 KB por valor) y updated_at del disparador. Cada punto de un dibujo irá por FECHA y PRECIO, para que valga igual en diario y en semanal.
+- RLS «dueño» como builder_pestanas: cada usuario lee, crea, cambia y borra solo lo suyo; permisos por columnas (simbolo y dibujos; el upsert de PostgREST manda los dos); anon, nada. Símbolo en mayúsculas y sin espacios.
+- Aplicada el 20/11 en Supabase LOCAL (postgres-meta). La nube no se toca.
+- scripts/comprobaciones/dibujosSeguridad.js (no va en comunes.sh): dos usuarios simulados y anon en una transacción que se deshace, más la clave anon por HTTP: 25/25.
+- Sin comunes.sh en este commit: no cambia nada que la app ejecute (como §147).
