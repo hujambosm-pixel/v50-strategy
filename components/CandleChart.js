@@ -17,6 +17,8 @@ import { calcEMA, calcSMA, calcRSI, calcMACD, calcBollinger, calcVolumeAvg } fro
 import { CATALOGO_INDICADORES, TIPOS_DISPONIBLES, rotuloIndicador, nuevoIndicador } from '../lib/indicadores'
 import { planDeclarado, planPaneles, flechasDeOperaciones, marcasRazonamiento, quitaDuplicados, campoEnVela,
          etiquetasDeNiveles, altoPanelDe, ALTO_PANEL_MIN, ALTO_PANEL_MAX, coma, lineaOperacion, COLOR_GANA } from '../lib/graficoPaneles'
+// Dibujar sobre el gráfico (docs/builder.md §208): solo con la prop `dibujar`; sin ella, nada cambia.
+import DibujosGrafico from './DibujosGrafico'
 
 // ── Detección del indicador de una estrategia ─────────────────────────
 // INALCANZABLE HOY, A PROPÓSITO. Todo este bloque cuelga de la prop `definition`, y los dos únicos
@@ -534,8 +536,10 @@ const MAX_TRAMOS = 200
 // Los textos del razonamiento los escribe el code_js de cada estrategia y acaban en innerHTML: se escapan.
 const escapaHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 
-export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true }) {
+export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
+  // Dibujar (§208): el contenedor de las velas (para los clics) y el hueco de la izquierda donde va su barra lateral.
+  const wrapRef=useRef(null), barraDibujosRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
   // Series de línea sobre el precio (EMAs y Bollinger). Son VARIAS por campo —una por tramo, ver
@@ -2236,9 +2240,16 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
   // hasMacdBars / hasRsiBars / hasVolumeBars: ELIMINADAS. Eran una segunda copia de las condiciones de
   // aparición, la del render, frente a la del efecto. Ahora las dos salen de panel.hayDatos, que es lo
   // que hace imposible que un div aparezca sin su chart o al revés.
-  return (
+  // Con `dibujar`, una fila: la barra lateral de los dibujos a la izquierda y el gráfico de siempre a la derecha. Sin ella, el gráfico tal cual.
+  const envuelve=(el)=>!dibujar?el:(
+    <div style={{display:'flex',...(fillHeight?{flex:1,minHeight:0}:{})}}>
+      <div ref={barraDibujosRef} style={{flexShrink:0,display:'flex'}}/>
+      <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column'}}>{el}</div>
+    </div>
+  )
+  return envuelve(
     <div style={{display:'flex',flexDirection:'column',...(fillHeight?{flex:1,minHeight:0}:{})}}>
-    <div style={{position:'relative',...(fillHeight?{flex:1,minHeight:0}:{})}}>
+    <div ref={wrapRef} style={{position:'relative',...(fillHeight?{flex:1,minHeight:0}:{})}}>
       <div ref={legendRef} style={{position:'absolute',top:8,left:8,zIndex:10,fontFamily:MONO,fontSize:12,color:'#7a9bc0',background:'rgba(8,12,20,0.82)',padding:'4px 10px',borderRadius:4,pointerEvents:'none',whiteSpace:'nowrap',display:externalLegendRef?'none':'block'}}/>
       {/* ── Lista de indicadores del usuario, al estilo de TradingView ──────────────
           Va DEBAJO de la leyenda de OHLC, que ocupa la esquina de arriba del todo. Solo se monta si
@@ -2340,6 +2351,7 @@ export default function CandleChart({ data, emaRPeriod, emaLPeriod, trades, labe
       )}
       <div ref={containerRef} style={{minHeight:0,...(fillHeight?{height:'100%'}:{})}}/>
       <svg ref={svgRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:5}}/>
+      {dibujar&&<DibujosGrafico chartRef={chartRef} seriesRef={candlesRef} containerRef={containerRef} wrapRef={wrapRef} barraRef={barraDibujosRef} data={data} simbolo={simbolo}/>}
       <div ref={tooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #00e5a0',borderRadius:6,padding:'8px 12px',fontFamily:MONO,fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:200,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>
       {/* ── Overlay de captura de clics en modo risk ── */}
       {riskMode&&(
