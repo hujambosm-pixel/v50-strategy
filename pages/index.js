@@ -20,6 +20,10 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
 import CandleChart from '../components/CandleChart'
 import VentanaIndicadores from '../components/VentanaIndicadores'
+import { BotonReplay, VentanaReplay, BarraReplay } from '../components/Replay'   // §226: modo Replay del gráfico grande
+import { recortaVelas, desplazaRango, vecina } from '../lib/replay/grafico'
+import { irA as replayIrA } from '../lib/replay/motor'
+const VACIO_REPLAY=[]   // siempre la MISMA lista vacía: una nueva en cada pintado rehace el gráfico entero (trades está en sus dependencias)
 import FundamentalsPanel from '../components/FundamentalsPanel'
 import EquityChart from '../components/EquityChart'
 import Tip from '../components/Tip'
@@ -34,7 +38,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1291'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1292'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1910,6 +1914,22 @@ export default function Home() {
     const symUp=(simbolo||'').toUpperCase()
     return pendingOrders.filter(o=>(o.symbol||'').toUpperCase()===symUp)
   },[pendingOrders, simbolo])
+
+  // ── §226: modo REPLAY del gráfico grande (lib/replay/, components/Replay.js) ──
+  // replay = el estado de lib/replay/motor.js: { valores:[símbolo], desde, hoy, acciones:[], retrocesos }. El gráfico recibe solo las velas
+  // hasta «hoy» (los indicadores se calculan sin ver el futuro) y sin lo que diría el futuro o es de hoy (propsReplay).
+  const [replay,setReplay]=useState(null)
+  const [ventanaReplay,setVentanaReplay]=useState(false)
+  useEffect(()=>{ if(replay&&replay.valores[0]!==simbolo){ setReplay(null); isNewResultRef.current=true } },[simbolo])   // eslint-disable-line
+  const velasReplay=useMemo(()=>replay?recortaVelas(result?.chartData||[],replay.hoy):null,[replay?.hoy,result?.chartData])   // eslint-disable-line
+  const empiezaReplay=(desde)=>{ setVentanaReplay(false); isNewResultRef.current=true; setReplay({version:1,valores:[simbolo],desde,hoy:desde,acciones:[],retrocesos:0}) }
+  const saleReplay=()=>{ setReplay(null); isNewResultRef.current=true }
+  // Avanzar o retroceder n velas: la ventana visible se mueve con ella (misma anchura).
+  const vaReplay=(n)=>{ if(!replay) return; const f=vecina(result?.chartData||[],replay.desde,replay.hoy,n); if(!f) return
+    if(savedRangeRef.current) savedRangeRef.current=desplazaRango(savedRangeRef.current,replay.hoy,f)
+    setReplay(replayIrA(replay,f)) }
+  const propsReplay=replay?{data:velasReplay,trades:VACIO_REPLAY,visuals:null,slopeChanges:VACIO_REPLAY,grafico:null,razonamiento:false,customMarkers:VACIO_REPLAY,pendingOrders:VACIO_REPLAY,
+    dibujar:false,onAlertaPrecio:null,onPriceAlarm:null,priceAlarms:VACIO_REPLAY,tlOpenTrades:VACIO_REPLAY,filterZones:VACIO_REPLAY,riskMode:null,riskLevels:null}:{}
 
   // ── Precios por lotes ──
   // Trocea por el tope del endpoint y lanza las llamadas EN SERIE: cinco peticiones a la vez contra el
@@ -5679,7 +5699,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1291</title>
+        <title>Trading Simulator V9.1292</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5768,7 +5788,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1291
+            <span className="dot"/>Trading Simulator V9.1292
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7724,6 +7744,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',lineHeight:1,flexShrink:0,height:18}}>
                           📈 Indicadores
                         </button>
+                        <BotonReplay activo={!!replay} onClick={()=>replay?saleReplay():setVentanaReplay(true)}/>
                         {/* OHLC dinámico — CandleChart escribe aquí via externalLegendRef */}
                         <span ref={chartLegendRef} style={{flex:1,minWidth:0,overflow:'hidden',
                           whiteSpace:'nowrap',textOverflow:'ellipsis'}}/>
@@ -7922,7 +7943,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           return {entry:_e,stop:_s,tp:_t,shares:_shs,tradeRiskEur:_trReur,rrRatio:_rr}
                         })()}
                         filterZones={result?.filterZones||[]}
+                        {...propsReplay}
                       />
+                      {replay&&!chartFullscreen&&<BarraReplay velas={result.chartData} estado={replay} onIr={vaReplay} onSalir={saleReplay}/>}
                     </div>
                   </div>
 
@@ -7957,6 +7980,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',lineHeight:1,flexShrink:0,height:18}}>
                           📈 Indicadores
                         </button>
+                        <BotonReplay activo={!!replay} onClick={()=>replay?saleReplay():setVentanaReplay(true)}/>
                         <span ref={chartLegendRef} style={{flex:1,minWidth:0,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}/>
                         {stratName&&(
                           <span style={{flexShrink:0,fontSize:9,color:'#7a9bc0',background:'rgba(13,21,32,0.85)',
@@ -8060,8 +8084,10 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           priceAlarms={lineasAlertasSim} estiloAlertas={estiloLineas} onAlarmaElegida={eligeAlertaGrafico} onAlarmaBorrar={borraAlertaGrafico}
                           tlOpenTrades={(tlFifo.openPositions||[]).filter(p=>(p.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                           filterZones={result?.filterZones||[]}
+                          {...propsReplay}
                         />
                       </div>
+                      {replay&&<BarraReplay velas={result.chartData} estado={replay} onIr={vaReplay} onSalir={saleReplay}/>}
                     </div>
                   )}
 
@@ -10814,6 +10840,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
           al pulsar fuera, caja #0d1824 con borde #1e3a52 y cabecera con la ✕.
           Los campos salen del catálogo (CATALOGO_INDICADORES[tipo].params), así que añadir un parámetro
           a un tipo no obliga a tocar este modal. */}
+      {ventanaReplay&&<VentanaReplay simbolo={simbolo} velas={result?.chartData||[]} onEmpezar={empiezaReplay} onCancelar={()=>setVentanaReplay(false)}/>}
       {ventanaInd&&<VentanaIndicadores enGrafico={indicadores} onCerrar={()=>setVentanaInd(false)}
         onAnadir={t=>{const n=nuevoIndicador(t,indicadores.length);if(n)ponIndicadores([...indicadores,n])}}/>}
       {indEditando&&(()=>{
