@@ -3657,3 +3657,13 @@ Pedido por Sergi al ver la parte 4 (captura con ^GSPC: arrastró la línea a 6.5
 - Colores (pedido por Sergi: el verde y el rojo se confundían con las operaciones): prop estiloAlertas { color, grosor, trazo }: por defecto AMARILLAS (#ffd166), grosor 1 y DISCONTINUAS, con ▲ / ▼ junto al precio (avisa al subir / al bajar). En la pestaña, «Líneas ▾»: 6 colores, grosor 1–3 y trazo discontinuo / continuo / de puntos; uno para todas, recordado en el navegador (alertas.estiloLineas), como los dibujos. Sin la prop, CandleChart pinta como siempre.
 - En la lista, ▲ / ▼ / % / ◆ en el color de las líneas en vez del punto verde o rojo.
 - La campanita (dicho a Sergi): las que saltan se ven en «Alertas · N sin ver» (rojo) y con la notificación de Windows; la 🔔 con número en la barra de arriba llega en la parte 5.
+
+## 220. Alertas, parte 5: la pestaña con TODAS las alertas, la 🔔 con número y borrar sin preguntar (21/11)
+
+Pedido por Sergi al probar §219 (captura con AUGO y dos alertas), metido en la parte 5 del boceto.
+- La pestaña «Alertas» enseña TODAS las alertas de la app: «En <valor> (N)» (las del gráfico, con lo que les falta al precio), «En otros valores (N)» (con el valor delante: pulsarlo abre su gráfico), «Apagadas (N)» plegadas con «Ver ▾», y «Saltaron» de todos los valores (pulsar el aviso abre su gráfico). La cuenta de la pestaña también es de todas.
+- DECIDIDO (Sergi, 21/11): la papelera de una alerta la BORRA DIRECTAMENTE, sin preguntar (excepción a la norma de avisar al borrar).
+- Sin ▲ / ▼ en la etiqueta de la línea del gráfico (tapaba las velas); se quedan en la lista.
+- 🔔 en la barra de arriba (junto a «← Atrás»): número de alertas encendidas, o «N sin ver» en rojo si saltaron y no las has visto; pulsarla abre la pestaña «Alertas» (y un gráfico si la sección no lo tiene, pasando por la guardia de cambios sin guardar). La 🔔 del menú de la izquierda (tabla alarms vieja) sigue igual.
+- Decidido por mí: NO hace falta otra pantalla con todas: la pestaña ya lo es (el boceto ponía una pantalla aparte en «Seguir › Alertas»).
+- También pedido por Sergi (21/11) y metido aquí: al CREAR una alerta queda elegida (las flechas ↑ ↓ ya la mueven sin tocarla) y se abre «Alertas» (prop alarmaElegidaId de CandleChart, controlada por la página; solo en el gráfico normal); pulsar una alerta de la lista abre el gráfico de su valor con su línea elegida; pulsar en cualquier otro punto del gráfico vuelve a «Resumen» (onAlarmaElegida(null)); con una línea elegida, Supr la BORRA sin preguntar (onAlarmaBorrar). Esc la suelta.

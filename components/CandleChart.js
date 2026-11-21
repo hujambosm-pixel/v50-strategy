@@ -554,7 +554,7 @@ export function propsDelGrafico(props,sinEstrategia,ponSin){
   if(sinEstrategia) Object.assign(p,{trades:VACIO,customMarkers:VACIO,slopeChanges:VACIO,filterZones:VACIO,razonamiento:false})
   return p
 }
-function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null, sinEstrategia=false, onSinEstrategia=null, onAlarmaElegida=null, estiloAlertas=null }) {
+function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null, sinEstrategia=false, onSinEstrategia=null, onAlarmaElegida=null, estiloAlertas=null, alarmaElegidaId, onAlarmaBorrar=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   // Dibujar (§208): el contenedor de las velas (para los clics) y el hueco de la izquierda donde va su barra lateral.
   const wrapRef=useRef(null), barraDibujosRef=useRef(null)
@@ -696,7 +696,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
   const priceAlarmLinesRef=useRef([])    // [{alarmId, priceLine, price}]
   // §219: lo último de la página, para los oyentes del gráfico (se montan una vez: sin esto usaban la primera versión de las funciones
   // y, p. ej., arrastrar una alerta no encontraba la alerta). alarmaElegidaRef: la línea elegida (flechas ↑ ↓ la mueven).
-  const alarmaCbRef=useRef({}); alarmaCbRef.current={drag:onAlarmPriceDrag,elegida:onAlarmaElegida}
+  const alarmaCbRef=useRef({}); alarmaCbRef.current={drag:onAlarmPriceDrag,elegida:onAlarmaElegida,borrar:onAlarmaBorrar}
   const alarmaElegidaRef=useRef(null), alarmaTeclaT=useRef(null)
   const anchoAlarma=(lo,elegida)=>{ if(!estiloAlertasRef.current) return; try{lo.lineSeries.applyOptions({lineWidth:(estiloAlertasRef.current.grosor||1)+(elegida?1:0)})}catch(_){} }
   const estiloAlertasRef=useRef(estiloAlertas); estiloAlertasRef.current=estiloAlertas
@@ -704,13 +704,16 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
     const antes=alarmaElegidaRef.current; if(antes===id) return
     alarmaElegidaRef.current=id
     priceAlarmLinesRef.current.forEach(lo=>{ if(lo.alarmId===antes||lo.alarmId===id) anchoAlarma(lo,lo.alarmId===id) })
-    if(id&&alarmaCbRef.current.elegida) alarmaCbRef.current.elegida(id)
   }
+  // §221: la página también la elige (al crear una alerta o al pulsarla en la lista). undefined = no la controla la página.
+  useEffect(()=>{ if(alarmaElegidaId!==undefined) eligeAlarma(alarmaElegidaId||null) },[alarmaElegidaId]) // eslint-disable-line
   useEffect(()=>{
     const tecla=e=>{
       const id=alarmaElegidaRef.current; if(!id) return
       const tg=e.target; if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'||tg.tagName==='SELECT'||tg.isContentEditable)) return
-      if(e.key==='Escape'){ eligeAlarma(null); return }
+      if(e.key==='Escape'){ eligeAlarma(null); alarmaCbRef.current.elegida?.(null); return }
+      // §221: Supr borra la alerta de la línea elegida (sin preguntar, decisión de Sergi).
+      if(e.key==='Delete'&&alarmaCbRef.current.borrar){ e.preventDefault(); e.stopPropagation(); clearTimeout(alarmaTeclaT.current); eligeAlarma(null); alarmaCbRef.current.borrar(id); return }
       if(e.key!=='ArrowUp'&&e.key!=='ArrowDown') return
       const lo=priceAlarmLinesRef.current.find(l=>l.alarmId===id); if(!lo) return
       e.preventDefault(); e.stopPropagation()
@@ -1561,7 +1564,8 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
             if(dist<DRAG_HIT&&dist<nearestDist){nearest=lineObj;nearestDist=dist}
           })
         }
-        eligeAlarma(nearest?nearest.alarmId:null)   // §219: pulsar una línea la elige; pulsar fuera, nada
+        eligeAlarma(nearest?nearest.alarmId:null)   // §219: pulsar una línea la elige
+        alarmaCbRef.current.elegida?.(nearest?nearest.alarmId:null)   // §221: y pulsar fuera de ellas también se dice (la página vuelve a «Resumen»)
         if(nearest){
           dragRef.current={lineObj:nearest}
           // Deshabilitar scroll/zoom del chart mientras dura el drag
@@ -2038,7 +2042,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
       .filter(a=>a.price_level)
       .map(alarm=>{
         const isAbove=alarm.condition_detail==='price_above'
-        const est=estiloAlertas   // §219: con estilo (alertas nuevas), su color, grosor y trazo y ▲/▼ junto al precio
+        const est=estiloAlertas   // §219: con estilo (alertas nuevas), su color, grosor y trazo (§220: sin ▲/▼ en la etiqueta: tapaba las velas)
         const actualColor=est?(est.color||'#ffd166'):isAbove?'#00e5a0':'#ff4d6d'
         const level=Number(alarm.price_level)
         const triggered=lastClose!=null&&(isAbove?lastClose>=level:lastClose<=level)
@@ -2047,7 +2051,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
         const shouldBlink=triggered&&!isAcked
         // addLineSeries: la serie forma parte de los datos → el eje siempre incluye el nivel
         const lineSeries=chart.addLineSeries(est?{
-          color:actualColor,lineWidth:(est.grosor||1)+(alarmaElegidaRef.current===alarm.id?1:0),lineStyle:est.trazo??2,title:isAbove?'▲':'▼',
+          color:actualColor,lineWidth:(est.grosor||1)+(alarmaElegidaRef.current===alarm.id?1:0),lineStyle:est.trazo??2,
           lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:undefined,
         }:{
           color:actualColor,lineWidth:2,

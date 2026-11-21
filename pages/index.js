@@ -34,7 +34,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1284'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1285'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -5100,6 +5100,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   const hayResumenDer=!!result&&!result.isBareChart&&(metricsLayout==='panel'||metricsLayout==='multi')&&!!metricsResumen
   const pesDer=hayResumenDer?pestanaDer:'alertas'
   const abreNuevaAlerta=(price,ultimo)=>setVentanaAlerta({inicial:alertaNueva(simbolo,price,ultimo??ultimoPrecio)})
+  // §221: pulsar una línea la elige y abre «Alertas»; pulsar en cualquier otro punto del gráfico vuelve a «Resumen». Supr la borra.
+  const eligeAlertaGrafico=id=>{setAlertaElegida(id||null);setPestanaDer(id?'alertas':'resumen')}
+  const borraAlertaGrafico=id=>{setAlertaElegida(null);alertasN.borrar(id).catch(()=>{})}
+  // Al crear una alerta queda elegida (las flechas ya la mueven) y se abre «Alertas».
+  const guardaAlertaVentana=a=>alertasN.guardar(a).then(f=>{if(f?.id&&!a.id){setAlertaElegida(f.id);setPestanaDer('alertas')}return f})
+  // Pulsar una alerta en la lista: el gráfico de su valor con su línea elegida.
+  const eligeAlertaLista=a=>{if(a.simbolo!==String(simbolo||'').toUpperCase())setSimbolo(a.simbolo);setAlertaElegida(a.id)}
   const arrastraAlerta=(id,nivel)=>{const a=alertasN.alertas.find(x=>x.id===id);if(a)alertasN.cambiar(id,{regla:reglaArrastrada(a,nivel,ultimoPrecio)}).catch(()=>{})}
 
   // ── Backtest float equity curve — simple curve + open-trade unrealized P&L ──
@@ -5672,7 +5679,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1284</title>
+        <title>Trading Simulator V9.1285</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5761,7 +5768,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1284
+            <span className="dot"/>Trading Simulator V9.1285
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5788,6 +5795,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:6,cursor:vuelveAtras(pilaAtras,sidePanel).destino?'pointer':'default',opacity:vuelveAtras(pilaAtras,sidePanel).destino?1:0.4,display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
               ← Atrás
             </button>
+            {/* §220: tus alertas nuevas: en rojo las que saltaron y no has visto; abre la pestaña «Alertas» junto al gráfico */}
+            {alertasN.disponible&&(()=>{const enc=(alertasN.alertas||[]).filter(a=>a.activa).length,sv=alertasN.sinVer;return(
+            <button data-campana-alertas onClick={()=>salirDeTesis(()=>{if(['optimiza','editor','builder','tesis','screener','multi','tradelog','fundamentals','risk'].includes(sidePanel))setSidePanel('watchlist');setPestanaDer('alertas')})}
+              title={`Tus alertas: ${enc} encendida${enc===1?'':'s'}${sv?` · ${sv} saltaron y no las has visto`:''}. Pulsa para verlas.`}
+              style={{background:sv?'rgba(255,77,109,0.15)':'rgba(0,212,255,0.06)',border:`1px solid ${sv?'#ff4d6d':'rgba(0,212,255,0.25)'}`,color:sv?'#ff4d6d':'#00d4ff',fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:6,cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0,fontWeight:sv?700:400}}>
+              🔔 {sv?`${sv} sin ver`:enc}
+            </button>)})()}
             <button data-tema-app onClick={alternaTema} title={(temaApp==='claro'?'Pasar a la vista oscura (estilo Finviz)':'Pasar a la vista clara (papel gris)')+'. Cambia el Screener, Estrategias y Planes (el resto de la app, más adelante).'}
               style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:6,cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
               {temaApp==='claro'?'☾ Oscuro':'☀ Claro'}
@@ -7871,13 +7885,13 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         labelMode={labelMode} rulerActive={rulerOn}
                         onChartReady={api=>{chartApiRef.current=api}}
                         onPriceAlarm={sidePanel!=='risk'?price=>abreNuevaAlerta(price):null}
-                        onAlarmPriceDrag={arrastraAlerta}
+                        onAlarmPriceDrag={arrastraAlerta} alarmaElegidaId={alertaElegida}
                         ackedAlarms={ackedAlarms}
                         savedRangeRef={savedRangeRef}
                         isNewResultRef={isNewResultRef}
                         syncRef={chartSyncRef}
                         externalLegendRef={chartLegendRef}
-                        priceAlarms={lineasAlertasSim} estiloAlertas={estiloLineas} onAlarmaElegida={id=>{setAlertaElegida(id);setPestanaDer('alertas')}}
+                        priceAlarms={lineasAlertasSim} estiloAlertas={estiloLineas} onAlarmaElegida={eligeAlertaGrafico} onAlarmaBorrar={borraAlertaGrafico}
                         tlOpenTrades={(tlFifo.openPositions||[]).filter(p=>(p.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                         riskMode={sidePanel==='risk'&&riskCaptureMode?riskCaptureMode:null}
                         onRiskPrice={sidePanel==='risk'&&riskCaptureMode?onRiskPrice:null}
@@ -8043,7 +8057,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           syncRef={chartSyncRef}
                           externalLegendRef={chartLegendRef}
                           onChartReady={api=>{chartApiFullscreenRef.current=api}}
-                          priceAlarms={lineasAlertasSim} estiloAlertas={estiloLineas} onAlarmaElegida={id=>{setAlertaElegida(id);setPestanaDer('alertas')}}
+                          priceAlarms={lineasAlertasSim} estiloAlertas={estiloLineas} onAlarmaElegida={eligeAlertaGrafico} onAlarmaBorrar={borraAlertaGrafico}
                           tlOpenTrades={(tlFifo.openPositions||[]).filter(p=>(p.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                           filterZones={result?.filterZones||[]}
                         />
@@ -8275,9 +8289,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
                     <div style={{padding:'0 8px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'stretch',gap:2}}>
                       {hayResumenDer&&<button data-pestana-der="resumen" onClick={()=>setPestanaDer('resumen')} style={{background:'transparent',border:'none',borderBottom:pesDer==='resumen'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='resumen'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer'}}>RESUMEN · {displayedSimbolo||simbolo}</button>}
-                      {(()=>{const n=(alertasN.alertas||[]).filter(a=>a.activa&&a.simbolo===String(simbolo||'').toUpperCase()).length,sv=(alertasN.saltos||[]).filter(s=>!s.visto&&s.simbolo===String(simbolo||'').toUpperCase()).length;return <button data-pestana-der="alertas" onClick={()=>setPestanaDer('alertas')} style={{background:'transparent',border:'none',borderBottom:pesDer==='alertas'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='alertas'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer'}}>ALERTAS{n?` (${n})`:''}{sv?<span style={{color:'#ff4d6d'}}> · {sv} sin ver</span>:null}</button>})()}
+                      {(()=>{const n=(alertasN.alertas||[]).filter(a=>a.activa).length,sv=alertasN.sinVer;return <button data-pestana-der="alertas" onClick={()=>setPestanaDer('alertas')} style={{background:'transparent',border:'none',borderBottom:pesDer==='alertas'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='alertas'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer'}}>ALERTAS{n?` (${n})`:''}{sv?<span style={{color:'#ff4d6d'}}> · {sv} sin ver</span>:null}</button>})()}
                     </div>
-                    {pesDer==='alertas'&&<PanelAlertas simbolo={simbolo} ahora={ultimoPrecio} estado={alertasN} onNueva={()=>abreNuevaAlerta(null)} onEditar={a=>setVentanaAlerta({inicial:a})} elegida={alertaElegida} estiloLineas={estiloLineas} onEstiloLineas={setEstiloLineas}/>}
+                    {pesDer==='alertas'&&<PanelAlertas simbolo={simbolo} ahora={ultimoPrecio} estado={alertasN} onNueva={()=>abreNuevaAlerta(null)} onEditar={a=>setVentanaAlerta({inicial:a})} elegida={alertaElegida} estiloLineas={estiloLineas} onEstiloLineas={setEstiloLineas} onIrAValor={s=>setSimbolo(s)} onElegir={eligeAlertaLista}/>}
                     {pesDer==='resumen'&&<>
                     {/* Aviso de cobertura del backtest individual (ver avisoHistoricoIndiv): mismo chip ámbar */}
                     {avisoHistoricoIndiv&&<div title={`Se pidió desde ${fmtDate(avisoHistoricoIndiv.solicitadoDesde)}, pero ${result?.meta?.simbolo||simbolo} solo tiene datos desde el ${fmtDate(avisoHistoricoIndiv.realDesde)}: el backtest cubre menos años de los pedidos.\n\nCausas posibles: el activo empezó a cotizar más tarde, o la fuente de datos no tiene más histórico de ese activo. Con los datos disponibles no se puede distinguir cuál de las dos.\nLas métricas ya se calculan sobre el periodo realmente simulado.`}
@@ -10770,7 +10784,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
     }} strategies={strategies} initialTab={settingsInitTab} wlData={wlData}/>}
 
     {/* §218: ventana «Nueva alerta» / «Cambiar alerta» (alertas nuevas) */}
-    {ventanaAlerta&&<VentanaAlerta inicial={ventanaAlerta.inicial} ahora={ultimoPrecio} onGuardar={a=>alertasN.guardar(a)} onCerrar={()=>setVentanaAlerta(null)}/>}
+    {ventanaAlerta&&<VentanaAlerta inicial={ventanaAlerta.inicial} ahora={ultimoPrecio} onGuardar={guardaAlertaVentana} onCerrar={()=>setVentanaAlerta(null)}/>}
     {/* ── Modal de alarma de precio (doble-clic en gráfico) ── */}
     {priceAlarmDlg&&(
       <div style={{position:'fixed',inset:0,zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.6)'}}

@@ -69,49 +69,56 @@ const AYUDA = 'Cómo funcionan las alertas\n\n' +
   '• «Toca el precio» mira el máximo y el mínimo del día, no solo el cierre: salta aunque solo toque el precio un momento entre dos pasadas.\n' +
   'Ejemplo: «Toca 100» con el precio a 95; a las 16:40 sube a 100,30 y a las 16:45 ya está en 99,80. La pasada de las 16:45 ve que el máximo del día es 100,30 y avisa.\n' +
   '• «Cierra por encima / por debajo» y «Condición» se miran al cierre (pasadas de después de las 22:00).\n' +
-  '• Las líneas discontinuas del gráfico son tus alertas de precio (▲ avisa al subir, ▼ al bajar; su color y grosor, en «Líneas»). Pulsa una para elegirla: se abre aquí y la puedes mover arrastrándola o con las flechas ↑ ↓ del teclado (cada pulsación, un 0,1 % del precio; con Mayúsculas, un 1 %; Esc la suelta). Doble clic en el gráfico o 🎯 crea una nueva en ese precio.'
+  '• Aquí salen TODAS tus alertas: arriba las del valor del gráfico (con lo que le falta al precio), debajo las de los demás (pulsa el valor para abrir su gráfico).\n' +
+  '• Las líneas discontinuas del gráfico son tus alertas de precio (en la lista, ▲ avisa al subir y ▼ al bajar; su color y grosor, en «Líneas»). Pulsa una (en el gráfico o en esta lista) para elegirla: la puedes mover arrastrándola o con las flechas ↑ ↓ del teclado (cada pulsación, un 0,1 % del precio; con Mayúsculas, un 1 %), Supr la borra y Esc la suelta. Al crear una alerta queda elegida. Pulsar en cualquier otro punto del gráfico vuelve a «Resumen». Doble clic en el gráfico o 🎯 crea una nueva en ese precio.'
 
-// ── La pestaña «Alertas» de un valor ──
-export function PanelAlertas({ simbolo, ahora, estado, onNueva, onEditar, elegida = null, estiloLineas = null, onEstiloLineas = null }) {
+// ── La pestaña «Alertas»: TODAS las alertas de la app (§220); las del valor del gráfico, arriba y con lo que les falta ──
+export function PanelAlertas({ simbolo, ahora, estado, onNueva, onEditar, onIrAValor = null, onElegir = null, elegida = null, estiloLineas = null, onEstiloLineas = null }) {
   const sim = String(simbolo || '').toUpperCase()
-  const [borrando, setBorrando] = useState(null)
   const [fallo, setFallo] = useState(null)
   const [verLineas, setVerLineas] = useState(false)
+  const [verApagadas, setVerApagadas] = useState(false)
   useEffect(() => { if (elegida) document.querySelector(`[data-alerta="${elegida}"]`)?.scrollIntoView({ block: 'nearest' }) }, [elegida])
-  const mias = (estado.alertas || []).filter(a => a.simbolo === sim)
-  const encendidas = mias.filter(a => a.activa), apagadas = mias.filter(a => !a.activa)
-  const saltos = (estado.saltos || []).filter(s => s.simbolo === sim)
+  const todas = estado.alertas || []
+  const deEste = todas.filter(a => a.simbolo === sim && a.activa)
+  const otras = todas.filter(a => a.simbolo !== sim && a.activa).sort((x, y) => x.simbolo.localeCompare(y.simbolo))
+  const apagadas = todas.filter(a => !a.activa)
+  const saltos = estado.saltos || []
   const sinVer = saltos.filter(s => !s.visto)
-  const prueba = (p) => p.catch(e => setFallo(e.message))
-  const fila = (a) => {
-    const d = distancia(a, ahora), desarmada = a.despues === 'cada_vez' && a.armada === false
+  const prueba = (pr) => pr.catch(e => setFallo(e.message))
+  const nombreValor = (s) => (onIrAValor && s !== sim
+    ? <button onClick={() => onIrAValor(s)} title={`Abrir el gráfico de ${s}`} style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent)', fontFamily: MONO, fontSize: 11, fontWeight: 700 }}>{s}</button>
+    : <span style={{ color: 'var(--text2)', fontSize: 11, fontWeight: 700 }}>{s}</span>)
+  const fila = (a, { conValor }) => {
+    const d = a.simbolo === sim ? distancia(a, ahora) : null, desarmada = a.despues === 'cada_vez' && a.armada === false
+    const baja = a.regla?.sentido === 'baja' || a.regla?.lado === 'debajo'
     return (
-      <div key={a.id} data-alerta={a.id} data-elegida={elegida === a.id ? '1' : undefined} style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', opacity: a.activa ? 1 : 0.55, background: elegida === a.id ? 'rgba(255,209,102,0.12)' : 'transparent', borderLeft: elegida === a.id ? '2px solid #ffd166' : '2px solid transparent' }}>
+      <div key={a.id} data-alerta={a.id} data-elegida={elegida === a.id ? '1' : undefined} onClick={onElegir ? (e) => { if (!e.target.closest('button')) onElegir(a) } : undefined} title={onElegir ? (a.simbolo === sim ? 'Elegir su línea en el gráfico (↑ ↓ la mueven, Supr la borra)' : `Abrir el gráfico de ${a.simbolo} con esta alerta`) : undefined} style={{ cursor: onElegir ? 'pointer' : 'default', padding: '5px 10px', borderBottom: '1px solid var(--border)', opacity: a.activa ? 1 : 0.55, background: elegida === a.id ? 'rgba(255,209,102,0.12)' : 'transparent', borderLeft: elegida === a.id ? '2px solid #ffd166' : '2px solid transparent' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span title={a.tipo === 'condicion' || a.tipo === 'movimiento' ? '' : (a.regla?.sentido === 'baja' || a.regla?.lado === 'debajo') ? 'Avisa al bajar' : 'Avisa al subir'} style={{ width: 12, flexShrink: 0, fontSize: 10, color: estiloLineas?.color || AMARILLO }}>{a.tipo === 'condicion' ? '◆' : a.tipo === 'movimiento' ? '%' : (a.regla?.sentido === 'baja' || a.regla?.lado === 'debajo') ? '▼' : '▲'}</span>
-          <span style={{ flex: 1, fontSize: 12, color: 'var(--text)', fontWeight: 600 }} title={asiSeLee(a)}>{resumenAlerta(a)}</span>
+          <span title={a.tipo === 'condicion' || a.tipo === 'movimiento' ? '' : baja ? 'Avisa al bajar' : 'Avisa al subir'} style={{ width: 12, flexShrink: 0, fontSize: 10, color: estiloLineas?.color || AMARILLO }}>{a.tipo === 'condicion' ? '◆' : a.tipo === 'movimiento' ? '%' : baja ? '▼' : '▲'}</span>
+          {conValor && nombreValor(a.simbolo)}
+          <span style={{ flex: 1, fontSize: 12, color: 'var(--text)', fontWeight: 600, minWidth: 0 }} title={asiSeLee(a)}>{resumenAlerta(a)}</span>
           <button onClick={() => prueba(estado.cambiar(a.id, a.activa ? { activa: false } : { activa: true, armada: true }))} title={a.activa ? 'Apagar (no avisa hasta que la enciendas)' : 'Volver a encender'} style={boton()}>{a.activa ? '⏸' : '↻'}</button>
           <button onClick={() => onEditar(a)} title="Cambiar" style={boton()} disabled={a.tipo === 'condicion' || a.tipo === 'estrategia'}>✎</button>
-          {borrando === a.id
-            ? <><button onClick={() => { setBorrando(null); prueba(estado.borrar(a.id)) }} style={boton({ color: '#fff', background: ROJO, borderColor: ROJO })}>Borrar</button><button onClick={() => setBorrando(null)} style={boton()}>No</button></>
-            : <button onClick={() => setBorrando(a.id)} title="Borrar la alerta" style={boton({ color: ROJO })}>🗑</button>}
+          <button data-borrar-alerta={a.id} onClick={() => prueba(estado.borrar(a.id))} title="Borrar la alerta (sin preguntar)" style={boton({ color: ROJO })}>🗑</button>
         </div>
-        <div style={{ fontSize: 10, color: GRIS, marginTop: 2, paddingLeft: 14 }}>
+        <div style={{ fontSize: 10, color: GRIS, marginTop: 2, paddingLeft: 18 }}>
           {[d != null ? `${textoDistancia(d)} del precio` : null, CUANDO_SE_MIRA[a.tipo], TEXTO_DESPUES[a.despues], a.caduca ? `hasta el ${fechaEs(a.caduca)}` : null].filter(Boolean).join(' · ')}
           {desarmada && <span style={{ color: AMARILLO }}> · esperando a que deje de cumplirse</span>}
-          {!a.activa && <span> · apagada{a.ultimo_salto ? ` (saltó el ${hora(a.ultimo_salto)})` : ''}</span>}
+          {!a.activa && a.ultimo_salto ? <span> · saltó el {hora(a.ultimo_salto)}</span> : null}
         </div>
-        {a.nota && <div style={{ fontSize: 10, color: 'var(--text2)', marginTop: 2, paddingLeft: 14, fontStyle: 'italic' }}>{a.nota}</div>}
+        {a.nota && <div style={{ fontSize: 10, color: 'var(--text2)', marginTop: 2, paddingLeft: 18, fontStyle: 'italic' }}>{a.nota}</div>}
       </div>
     )
   }
+  const titulo = (t, extra = null) => <div style={{ display: 'flex', alignItems: 'center', padding: '8px 10px 3px', fontSize: 10, color: GRIS, letterSpacing: '0.06em' }}><span style={{ flex: 1 }}>{t}</span>{extra}</div>
   return (
     <div data-panel-alertas style={{ fontFamily: MONO }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderBottom: '1px solid var(--border)' }}>
         <span style={{ fontSize: 11, color: 'var(--text2)', flex: 1 }}>{sim}{typeof ahora === 'number' ? <> · ahora <b style={{ color: 'var(--text)' }}>{fmt(ahora)}</b></> : null}</span>
         <Ayuda texto={AYUDA}/>
         {onEstiloLineas && <button data-ver-lineas onClick={() => setVerLineas(v => !v)} title="Color, grosor y trazo de las líneas de alerta del gráfico" style={boton()}>Líneas {verLineas ? '▴' : '▾'}</button>}
-        <button data-nueva-alerta onClick={onNueva} style={boton({ color: 'var(--accent)', borderColor: 'var(--accent)' })} disabled={!estado.disponible}>+ Nueva</button>
+        <button data-nueva-alerta onClick={onNueva} title={`Nueva alerta en ${sim}`} style={boton({ color: 'var(--accent)', borderColor: 'var(--accent)' })} disabled={!estado.disponible}>+ Nueva</button>
       </div>
       {verLineas && onEstiloLineas && estiloLineas && (
         <div data-estilo-lineas style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 10, color: GRIS }}>
@@ -126,19 +133,20 @@ export function PanelAlertas({ simbolo, ahora, estado, onNueva, onEditar, elegid
           </div>
         </div>)}
       {(estado.error || fallo) && <div style={{ padding: '4px 10px', fontSize: 10, color: ROJO }}>⚠ {fallo || estado.error}</div>}
-      {!mias.length && <div style={{ padding: '10px', fontSize: 11, color: GRIS }}>No tienes alertas en {sim}. Pulsa «+ Nueva», 🎯 o haz doble clic en el gráfico en el precio que quieras.</div>}
-      {encendidas.map(fila)}
-      {apagadas.length > 0 && <div style={{ padding: '6px 10px 2px', fontSize: 10, color: GRIS, letterSpacing: '0.06em' }}>APAGADAS ({apagadas.length})</div>}
-      {apagadas.map(fila)}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '8px 10px 2px', fontSize: 10, color: GRIS, letterSpacing: '0.06em' }}>
-        <span style={{ flex: 1 }}>SALTARON EN {sim}{sinVer.length ? <span style={{ color: ROJO }}> · {sinVer.length} sin ver</span> : ''}</span>
-        {sinVer.length > 1 && <button onClick={() => prueba(estado.vistos({ simbolo: sim }))} style={boton()}>✓ Todas vistas</button>}
-      </div>
+      {titulo(`EN ${sim} (${deEste.length})`)}
+      {!deEste.length && <div style={{ padding: '2px 10px 8px', fontSize: 11, color: GRIS }}>Ninguna encendida. Pulsa «+ Nueva», 🎯 o haz doble clic en el gráfico en el precio que quieras.</div>}
+      {deEste.map(a => fila(a, { conValor: false }))}
+      {titulo(`EN OTROS VALORES (${otras.length})`)}
+      {!otras.length && <div style={{ padding: '2px 10px 8px', fontSize: 11, color: GRIS }}>Ninguna.</div>}
+      {otras.map(a => fila(a, { conValor: true }))}
+      {apagadas.length > 0 && titulo(`APAGADAS (${apagadas.length})`, <button data-ver-apagadas onClick={() => setVerApagadas(v => !v)} style={boton()}>{verApagadas ? 'Ocultar ▴' : 'Ver ▾'}</button>)}
+      {verApagadas && apagadas.map(a => fila(a, { conValor: true }))}
+      {titulo(<>SALTARON{sinVer.length ? <span style={{ color: ROJO }}> · {sinVer.length} sin ver</span> : ''}</>, sinVer.length > 1 ? <button onClick={() => prueba(estado.vistos({ ids: sinVer.map(s => s.id) }))} style={boton()}>✓ Todas vistas</button> : null)}
       {!saltos.length && <div style={{ padding: '2px 10px 10px', fontSize: 10, color: GRIS }}>Todavía ninguna.</div>}
-      {saltos.slice(0, 20).map(s => (
+      {saltos.slice(0, 50).map(s => (
         <div key={s.id} data-salto={s.id} style={{ padding: '4px 10px', borderBottom: '1px solid var(--border)', background: s.visto ? 'transparent' : 'rgba(255,77,109,0.08)' }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <span style={{ flex: 1, fontSize: 11, color: s.visto ? 'var(--text2)' : ROJO, fontWeight: s.visto ? 400 : 700 }}>{s.detalle?.titulo || resumenAlerta(s.detalle || {})}</span>
+            <span onClick={onIrAValor ? () => onIrAValor(s.simbolo) : undefined} title={onIrAValor ? `Abrir el gráfico de ${s.simbolo}` : ''} style={{ flex: 1, fontSize: 11, color: s.visto ? 'var(--text2)' : ROJO, fontWeight: s.visto ? 400 : 700, cursor: onIrAValor ? 'pointer' : 'default' }}>{s.detalle?.titulo || s.simbolo}</span>
             {!s.visto && <button onClick={() => prueba(estado.vistos({ ids: [s.id] }))} style={boton()}>✓ Vista</button>}
           </div>
           <div style={{ fontSize: 10, color: GRIS }}>{hora(s.cuando)}{s.detalle?.texto ? ` · ${s.detalle.texto}` : ''}</div>
