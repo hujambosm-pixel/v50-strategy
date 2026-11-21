@@ -11,6 +11,7 @@ import { leerAlertas, leerSaltos, guardarAlerta, cambiarAlerta, borrarAlerta, ma
 import { validaAlerta, sentidoToca, fmt } from '../lib/alertas/motor'
 import { resumenAlerta, asiSeLee, distancia, textoDistancia, TEXTO_DESPUES, CUANDO_SE_MIRA, fechaEs } from '../lib/alertas/pantalla'
 import Ayuda from './BuilderAyuda'
+import FilasAlerta from './FilasAlerta'
 
 const RECARGA_MS = 60 * 1000
 // §219: cómo se dibujan las líneas de alerta en el gráfico (una sola forma para todas; se recuerda en el navegador, como los dibujos).
@@ -99,7 +100,7 @@ export function PanelAlertas({ simbolo, ahora, estado, onNueva, onEditar, onIrAV
           {conValor && nombreValor(a.simbolo)}
           <span style={{ flex: 1, fontSize: 12, color: 'var(--text)', fontWeight: 600, minWidth: 0 }} title={asiSeLee(a)}>{resumenAlerta(a)}</span>
           <button onClick={() => prueba(estado.cambiar(a.id, a.activa ? { activa: false } : { activa: true, armada: true }))} title={a.activa ? 'Apagar (no avisa hasta que la enciendas)' : 'Volver a encender'} style={boton()}>{a.activa ? '⏸' : '↻'}</button>
-          <button onClick={() => onEditar(a)} title="Cambiar" style={boton()} disabled={a.tipo === 'condicion' || a.tipo === 'estrategia'}>✎</button>
+          <button onClick={() => onEditar(a)} title="Cambiar" style={boton()} disabled={a.tipo === 'estrategia'}>✎</button>
           <button data-borrar-alerta={a.id} onClick={() => prueba(estado.borrar(a.id))} title="Borrar la alerta (sin preguntar)" style={boton({ color: ROJO })}>🗑</button>
         </div>
         <div style={{ fontSize: 10, color: GRIS, marginTop: 2, paddingLeft: 18 }}>
@@ -157,7 +158,7 @@ export function PanelAlertas({ simbolo, ahora, estado, onNueva, onEditar, onIrAV
 }
 
 // ── La ventana «Nueva alerta» ──
-const TIPOS_VENTANA = [['toca', 'Toca el precio'], ['cierra', 'Cierra por encima / por debajo'], ['movimiento', 'Se mueve un %'], ['condicion', 'Condición del catálogo (muy pronto)']]
+const TIPOS_VENTANA = [['toca', 'Toca el precio'], ['cierra', 'Cierra por encima / por debajo'], ['movimiento', 'Se mueve un %'], ['condicion', 'Condición del catálogo']]
 const campo = { background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text)', fontFamily: MONO, fontSize: 12, padding: '5px 8px', borderRadius: 4 }
 const etiqueta = { fontSize: 10, color: '#7a9bc0', marginBottom: 3, display: 'block' }
 const aNumero = (t) => { const s = String(t ?? '').trim(); if (!s) return NaN; const n = Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s); return Number.isFinite(n) ? n : NaN }
@@ -168,7 +169,7 @@ export function VentanaAlerta({ inicial, ahora, onGuardar, onCerrar }) {
   const [pctTxt, setPctTxt] = useState(inicial?.regla?.pct != null ? String(inicial.regla.pct).replace('.', ',') : '5')
   const [guardando, setGuardando] = useState(false)
   const [fallo, setFallo] = useState(null)
-  useEffect(() => { const k = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onCerrar() } }; window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true) }, [onCerrar])
+  useEffect(() => { const k = (e) => { if (e.key === 'Escape' && !document.querySelector('[data-catalogo-alerta]')) { e.stopPropagation(); onCerrar() } }; window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true) }, [onCerrar])
   const editando = !!inicial?.id
   // La alerta tal como quedaría con lo escrito.
   const final = useMemo(() => {
@@ -178,7 +179,8 @@ export function VentanaAlerta({ inicial, ahora, onGuardar, onCerrar }) {
     if (a.tipo === 'movimiento') return { ...a, regla: { pct, sentido: r.sentido || 'baja' } }
     return a
   }, [a, nivelTxt, pctTxt, ahora])
-  const errores = a.tipo === 'condicion' ? ['«Condición del catálogo» se podrá elegir aquí muy pronto.'] : validaAlerta(final)
+  const errores = validaAlerta(final)
+  const sinFilas = a.tipo === 'condicion' && !(a.regla?.filas || []).length
   const pon = (cambios) => setA(x => ({ ...x, ...cambios }))
   const ponRegla = (cambios) => setA(x => ({ ...x, regla: { ...(x.regla || {}), ...cambios } }))
   const guarda = async () => {
@@ -191,8 +193,8 @@ export function VentanaAlerta({ inicial, ahora, onGuardar, onCerrar }) {
       <input type="radio" checked={actual === valor} onChange={() => onSel(valor)} style={{ margin: 0, width: 'auto' }}/>{texto}
     </label>)
   return (
-    <div onMouseDown={(e) => { if (e.target === e.currentTarget) onCerrar() }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div data-ventana-alerta style={{ width: 430, maxWidth: '94vw', maxHeight: '92vh', overflowY: 'auto', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, fontFamily: MONO, boxShadow: '0 10px 40px rgba(0,0,0,0.5)' }}>
+    <div onMouseDown={(e) => { if (e.target === e.currentTarget) onCerrar() }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 990, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div data-ventana-alerta style={{ width: a.tipo === 'condicion' ? 620 : 430, maxWidth: '94vw', maxHeight: '92vh', overflowY: 'auto', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, fontFamily: MONO, boxShadow: '0 10px 40px rgba(0,0,0,0.5)' }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
           <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{editando ? 'Cambiar alerta' : 'Nueva alerta'} · {a.simbolo}</span>
           <button onClick={onCerrar} style={boton({ fontSize: 13, border: 'none' })}>✕</button>
@@ -200,7 +202,7 @@ export function VentanaAlerta({ inicial, ahora, onGuardar, onCerrar }) {
         {typeof ahora === 'number' && <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 10 }}>Valor ahora: <b style={{ color: 'var(--text)' }}>{fmt(ahora)}</b></div>}
         <label style={etiqueta}>Cuándo</label>
         <select value={a.tipo} onChange={e => { const t = e.target.value; pon({ tipo: t, regla: t === 'condicion' ? { filas: [] } : {} }) }} style={{ ...campo, width: '100%', marginBottom: 10 }}>
-          {TIPOS_VENTANA.map(([v, t]) => <option key={v} value={v} disabled={v === 'condicion'}>{t}</option>)}
+          {TIPOS_VENTANA.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
         </select>
         {(a.tipo === 'toca' || a.tipo === 'cierra') && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 10 }}>
@@ -226,6 +228,11 @@ export function VentanaAlerta({ inicial, ahora, onGuardar, onCerrar }) {
               <input data-campo="pct" value={pctTxt} onChange={e => setPctTxt(e.target.value)} inputMode="decimal" style={{ ...campo, width: '100%', fontWeight: 700 }}/></div>
             <span style={{ fontSize: 11, color: 'var(--text2)', paddingBottom: 6 }}>desde el cierre de ayer</span>
           </div>)}
+        {a.tipo === 'condicion' && (
+          <div style={{ marginBottom: 10 }}>
+            <label style={etiqueta}>Avisa al cierre del día en que se cumpla todo esto</label>
+            <FilasAlerta simbolo={a.simbolo} filas={a.regla?.filas || []} onCambia={filas => ponRegla({ filas })}/>
+          </div>)}
         <label style={etiqueta}>Después de saltar</label>
         <div style={{ marginBottom: 10 }}>
           {radio('una_vez', a.despues, 'Una vez (se apaga)', v => pon({ despues: v }))}
@@ -244,7 +251,7 @@ export function VentanaAlerta({ inicial, ahora, onGuardar, onCerrar }) {
           <div style={{ fontSize: 10, color: '#7a9bc0', marginBottom: 3 }}>Así se lee</div>
           {errores.length ? <span style={{ color: GRIS }}>…</span> : asiSeLee(final)}
         </div>
-        {errores.length > 0 && !((a.tipo === 'toca' || a.tipo === 'cierra') && !nivelTxt.trim()) && <div style={{ fontSize: 11, color: ROJO, marginBottom: 8 }}>{errores.join(' ')}</div>}
+        {errores.length > 0 && !sinFilas && !((a.tipo === 'toca' || a.tipo === 'cierra') && !nivelTxt.trim()) && <div style={{ fontSize: 11, color: ROJO, marginBottom: 8 }}>{errores.join(' ')}</div>}
         {fallo && <div style={{ fontSize: 11, color: ROJO, marginBottom: 8 }}>⚠ {fallo}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onCerrar} style={boton({ fontSize: 12, padding: '5px 12px' })}>Cancelar</button>

@@ -3668,3 +3668,10 @@ Pedido por Sergi al probar §219 (captura con AUGO y dos alertas), metido en la 
 - Decidido por mí: NO hace falta otra pantalla con todas: la pestaña ya lo es (el boceto ponía una pantalla aparte en «Seguir › Alertas»).
 - También pedido por Sergi (21/11) y metido aquí: al CREAR una alerta queda elegida (las flechas ↑ ↓ ya la mueven sin tocarla) y se abre «Alertas» (prop alarmaElegidaId de CandleChart, controlada por la página; solo en el gráfico normal); pulsar una alerta de la lista abre el gráfico de su valor con su línea elegida; pulsar en cualquier otro punto del gráfico vuelve a «Resumen» (onAlarmaElegida(null)); con una línea elegida, Supr la BORRA sin preguntar (onAlarmaBorrar). Esc la suelta.
 - OJO (21/11): el commit de esta parte se subió con 1 fallo de comunes.sh (tesis.js: «los sitios que cambian de pestaña» pasaban de 21 a 22 por la 🔔, que SÍ pasa por salirDeTesis). Arreglada la comprobación en el commit siguiente (22 y comprueba que la 🔔 pasa por la guardia); tesis.js suelta en verde.
+
+## 221. Alertas, parte 6: «Condición del catálogo» en la ventana (21/11)
+
+- components/FilasAlerta.js: las filas del creador (BuilderFila, como el ocioso con regla §204 y las reglas de «Con pesos» §199), todas con «Y», con «de quién» (el valor de la alerta primero, los índices y «Otro símbolo…» ESCRITO A MANO: el comprobador pide a Yahoo cualquier símbolo), sus números y «velas diarias / semanales»; «+ condición» abre el catálogo (catalogoRegla, sin las «solo del valor»). Se guarda en regla.filas con el símbolo de verdad (la de ALAB copiada con «valor» se sigue leyendo y se puede cambiar).
+- VentanaAlerta: «Condición del catálogo» ya se puede elegir (más ancha, 620 px); ✎ también en las de condición; la ventana va con zIndex 990 (por debajo de los «?», 1000, para que se lean encima) y Esc con el catálogo abierto cierra solo el catálogo.
+- «Señal de una estrategia» queda para más adelante (hace falta que el comprobador ejecute una estrategia entera).
+- alertas.js: 70.

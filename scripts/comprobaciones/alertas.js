@@ -142,6 +142,16 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b)
   const hv2 = RDS.renderToString(React.createElement(PA.VentanaAlerta, { inicial: { ...t235, id: 'a1' }, ahora: 228.4, onGuardar: async () => {}, onCerrar: () => {} })).split('<!-- -->').join('')
   ok(hv2.includes('Cambiar alerta') && hv2.includes('>Guardar<'), 'con una alerta guardada: «Cambiar alerta» y «Guardar»')
 
+  // ── 10 · «Condición del catálogo» en la ventana (§221) ──
+  const condAAPL = { simbolo: 'AAPL', tipo: 'condicion', despues: 'una_vez', activa: true, regla: { filas: [{ quien: 'AAPL', velas: 'diarias', si: { c: 'cruza', de: { c: 'precioVsMedia', p: { lado: 'encima', tipo: 'SMA', periodo: 200 } } } }] } }
+  ok(M.validaAlerta(condAAPL).length === 0, 'una condición con el símbolo del valor (no «valor») es válida')
+  const hc = RDS.renderToString(React.createElement(PA.VentanaAlerta, { inicial: condAAPL, ahora: 228.4, onGuardar: async () => {}, onCerrar: () => {} })).split('<!-- -->').join('')
+  ok(hc.includes('Avisa al cierre del día en que se cumpla todo esto') && hc.includes('data-fila-alerta="0"') && hc.includes('velas diarias') && hc.includes('+ condición') && hc.includes('Avisa al cierre del día en que se cumpla:') && hc.includes('Crear alerta') && !hc.includes('disabled=""><option'), 'la ventana con una condición: su fila (con «velas diarias»), «+ condición» y «Así se lee»')
+  const hv0 = RDS.renderToString(React.createElement(PA.VentanaAlerta, { inicial: { ...condAAPL, regla: { filas: [] } }, ahora: 228.4, onGuardar: async () => {}, onCerrar: () => {} })).split('<!-- -->').join('')
+  ok(hv0.includes('Pon al menos una condición.') && !hv0.includes('de 1 a 6 condiciones'), 'sin condiciones: «Pon al menos una condición» (sin el aviso rojo de la validación)')
+  const hA = RDS.renderToString(React.createElement(PA.VentanaAlerta, { inicial: { ...ALAB, id: 'x' }, ahora: 20, onGuardar: async () => {}, onCerrar: () => {} })).split('<!-- -->').join('')
+  ok(hA.includes('Cambiar alerta') && hA.includes('data-fila-alerta="0"') && hA.includes('Avisa al cierre del día en que se cumpla: pasa a cumplirse que la media exponencial de 10 velas de ALAB está por debajo de la media exponencial de 11 velas.'), 'la de ALAB (copiada con «valor») se puede abrir y cambiar')
+
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTODO BIEN')
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(1) })
