@@ -782,7 +782,11 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
       svgRef.current.querySelectorAll('.trade-label,.obl-marker').forEach(el=>el.remove())
     }
     if(typeof window==='undefined'||!containerRef.current) return
+    // §232: si el efecto se rehace antes de que llegue la librería (justo al abrir la página), esta creación ya no vale: sin esta guarda
+    // terminaba tarde y sus etiquetas (las de la estrategia) se colaban en el gráfico nuevo, también en el Replay.
+    let efectoVivo=true
     import('lightweight-charts').then(({createChart,CrosshairMode,LineStyle})=>{
+      if(!efectoVivo) return
       let disposed=false
       if(chartRef.current){chartRef.current.remove();chartRef.current=null}
       overlaySeriesRef.current=[]   // se fueron con el gráfico que acaba de destruirse
@@ -2008,7 +2012,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
 
       innerCleanupRef.current=()=>{disposed=true;chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};panelChartsRef.current.forEach(c=>{try{c.remove()}catch(_){}});panelChartsRef.current=[];overlaySeriesRef.current.forEach(s=>{try{chartRef.current?.removeSeries(s)}catch(_){}});overlaySeriesRef.current=[];if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null};candlesRef.current=null}
+    return()=>{efectoVivo=false;innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};panelChartsRef.current.forEach(c=>{try{c.remove()}catch(_){}});panelChartsRef.current=[];overlaySeriesRef.current.forEach(s=>{try{chartRef.current?.removeSeries(s)}catch(_){}});overlaySeriesRef.current=[];if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null};candlesRef.current=null}
     // firmaIndicadores: SIN ESTO el gráfico no reflejaba los cambios de configuración. El memo se
     // recalculaba, pero este efecto —el que crea las series— no dependía de él, así que las líneas
     // seguían siendo las de antes hasta que cambiaba `data`, es decir, hasta cambiar de activo.

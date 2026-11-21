@@ -44,7 +44,25 @@ function CasillaPrecio({ valor, onFija, dato, titulo }) {
     onKeyDown={e => { if (e.key === 'Enter') fija(); else if (e.key === 'Escape') setTxt(null) }} />
 }
 
-export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTerminar, form, onForm, captura = null, onMarcar, onCancelaMarca, aviso = '', onMover, arrastre = null }) {
+// §232: el nombre del Replay (✎ para cambiarlo) y si está guardado. guardado: '' (aún nada que guardar) | 'guardando' | 'guardado' | 'error…'.
+function NombreReplay({ nombre, onNombre, guardado, onMisReplays }) {
+  const [txt, setTxt] = useState(null)
+  const fija = () => { if (txt == null) return; const t = txt.trim(); setTxt(null); if (t && t !== nombre) onNombre(t) }
+  const est = !guardado ? { t: 'se guarda solo en cuanto avances u operes', c: BZ.gris } : guardado === 'guardando' ? { t: 'guardando…', c: BZ.gris }
+    : guardado === 'guardado' ? { t: '✓ guardado', c: BZ.verde } : { t: `⚠ ${guardado}`, c: BZ.rojo }
+  return (
+    <div data-nombre-replay="" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+      {txt != null
+        ? <input autoFocus data-casilla-nombre="" value={txt} maxLength={120} onChange={e => setTxt(e.target.value)} onBlur={fija}
+            onKeyDown={e => { if (e.key === 'Enter') fija(); else if (e.key === 'Escape') setTxt(null) }} style={{ ...casilla, width: 220 }} />
+        : <span style={{ fontWeight: 600, maxWidth: 230, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={nombre}>{nombre}</span>}
+      {txt == null && onNombre && <button data-cambiar-nombre="" title="Cambiar el nombre" onClick={() => setTxt(nombre)} style={{ ...btn(), padding: '0 6px' }}>✎</button>}
+      <span data-guardado-replay="" style={{ color: est.c, fontSize: 12 }}>{est.t}</span>
+      {onMisReplays && <button data-mis-replays-boton="" onClick={onMisReplays} title="Tus replays guardados: abrir o borrar" style={{ ...btn(), marginLeft: 'auto' }}>📂 Mis replays</button>}
+    </div>)
+}
+
+export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTerminar, form, onForm, captura = null, onMarcar, onCancelaMarca, aviso = '', onMover, arrastre = null, nombre = null, onNombre, guardado = '', onMisReplays }) {
   const [propio, setPropio] = useState(FORM_INICIAL)
   const f = form || propio, setF = onForm || setPropio
   const [error, setError] = useState('')
@@ -76,6 +94,7 @@ export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTermin
         <b style={{ color: '#ffd166' }}>⏪ REPLAY · {simbolo}</b>
         <span style={{ marginLeft: 'auto', color: BZ.gris, fontSize: 12 }}>{estado.comision ? `${com(estado.comision)} € por orden` : 'sin comisión'}</span>
       </div>
+      {nombre != null && <NombreReplay nombre={nombre} onNombre={onNombre} guardado={guardado} onMisReplays={onMisReplays} />}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8 }} data-cifras-replay="">
         <Cifra titulo="Tu dinero" valor={eur(cif.final)} tip={`Empezaste con ${eur(estado.capitalInicial)}`} />
         <Cifra titulo="Ganancia" valor={`${signo(cif.ganancia)}${eur(Math.abs(cif.ganancia))} · ${pc(cif.pct)}`} col={color(cif.ganancia)} />

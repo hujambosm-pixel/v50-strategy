@@ -328,7 +328,9 @@ const cuenta = (html, s) => html.split(s).length - 1
   // §124: el 21.º es «← Atrás» (barra de arriba), que pasa por salirDeTesis.
   // §220: el 22.º es la 🔔 de las alertas de la barra de arriba, que pasa por salirDeTesis.
   ok(fuenteIndex.includes("<button data-campana-alertas onClick={()=>salirDeTesis(()=>{"), "la 🔔 de las alertas pasa por la guardia de Tesis")
-  ok(llamadasPanel === 22,`los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
+  // §232: el 23.º y el 24.º son «Abrir» de «Mis replays» (el Replay va al gráfico de su valor), los dos por salirDeTesis.
+  ok(fuenteIndex.includes("salirDeTesis(()=>{ setSidePanel(p=>['watchlist','risk','fundamentals'].includes(p)?p:'watchlist'); aplicaReplayGuardado(fila) })") && fuenteIndex.includes("salirDeTesis(()=>{ setSimbolo(sym); setSidePanel('watchlist') })"), '«Abrir» de «Mis replays» pasa por la guardia de Tesis')
+  ok(llamadasPanel === 24,`los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
   ok(fuenteIndex.includes(`const atras=()=>{ const {destino,pila}=vuelveAtras(pilaAtras,sidePanel); if(!destino) return; salirDeTesis(()=>{ volviendo.current=true; setPilaAtras(pila); setSidePanel(destino) }) }`) && fuenteIndex.includes('<button data-atras onClick={atras}'), '§124: «← Atrás» también pregunta si hay cambios sin guardar')
   {
     const N = require('../../lib/navegacion')

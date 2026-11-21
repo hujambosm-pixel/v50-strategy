@@ -3,7 +3,7 @@ import Head from 'next/head'
 import { ListFilter, Briefcase, Star, Bell, X as LucideX } from 'lucide-react'
 import { calcMetrics, metricasSinOperaciones, MONO, fmt, fmtDate, f2, tvSym, pesosScoreHistorico, umbralesDe, scoreHistoricoDe, desgloseScoreHistorico, textoEs, AYUDA_CAGR, huecoBarras } from '../lib/utils'
 import { WATCHLIST_DEFAULT } from '../lib/constants'
-import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt, fetchConSesion, setOnSesionCaducada, hayConfigSupabase } from '../lib/supabase'
+import { getSupaUrl, getSupaKey, getSupaH, setCurrentJwt, getCurrentJwt, fetchConSesion, setOnSesionCaducada, hayConfigSupabase, ctxConSesion } from '../lib/supabase'
 import { loadSettings, saveSettings, saveSettingsRemote, loadSettingsRemote } from '../lib/settings'
 import { mergeFiltros, loadFiltros, guardarFiltros, hayFiltroActivo } from '../lib/filtros'
 import { cargarIndicadores, guardarIndicadores, CATALOGO_INDICADORES, validaIndicador, rotuloIndicador, nuevoIndicador } from '../lib/indicadores'
@@ -28,6 +28,8 @@ import { PanelOperar, ResultadosReplay, VentanaSinEnviar } from '../components/P
 import { FORM_INICIAL as FORM_REPLAY, hayBorrador as hayBorradorReplay, conClic as clicBorrador, dobleClic as dobleClicBorrador, empiezaMarca as empiezaMarcaReplay, enCasilla as enCasillaReplay, ladoDe as ladoBorrador, lineasDe as lineasReplayDe, accionMover as accionMoverReplay, anade as anadeAccionReplay } from '../lib/replay/borrador'   // §229: marcar en el gráfico
 import { senalesCondicion, senalesEstrategia, siguienteSenal, anteriorSenal, marcasSenal, simbolosSenal } from '../lib/replay/senales'   // §231: saltar a la señal
 import { tickersDe as tickersDeReplay } from '../lib/pruebaAzar'
+import { nombreDe as nombreReplayDe, hayQueGuardar as hayQueGuardarReplay, paraGuardar as paraGuardarReplay, deGuardado as deGuardadoReplay, leerSimulaciones, crearSimulacion, guardarSimulacion, borrarSimulacion } from '../lib/replay/guardados'   // §232: guardar y abrir
+import MisReplays from '../components/MisReplays'
 const VACIO_REPLAY=[]   // siempre la MISMA lista vacía: una nueva en cada pintado rehace el gráfico entero (trades está en sus dependencias)
 import FundamentalsPanel from '../components/FundamentalsPanel'
 import EquityChart from '../components/EquityChart'
@@ -43,7 +45,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1297'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1298'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1926,7 +1928,7 @@ export default function Home() {
   const [replay,setReplay]=useState(null)
   const [ventanaReplay,setVentanaReplay]=useState(false)
   const [replayVer,setReplayVer]=useState(120)   // velas a la vista en el Replay (0 = libre)
-  useEffect(()=>{ if(replay&&replay.valores[0]!==simbolo){ setReplay(null); isNewResultRef.current=true } },[simbolo])   // eslint-disable-line
+  useEffect(()=>{ if(replay&&replay.valores[0]!==simbolo){ guardaReplay(replay,calcReplay); setReplay(null); isNewResultRef.current=true } },[simbolo])   // eslint-disable-line
   const velasReplay=useMemo(()=>replay?recortaVelas(result?.chartData||[],replay.hoy):null,[replay?.hoy,result?.chartData])   // eslint-disable-line
   // §229: el formulario de la orden vive aquí para que el gráfico lo rellene (🎯 / doble clic) y sus líneas se arrastren (lib/replay/borrador.js).
   const [formReplay,setFormReplay]=useState(FORM_REPLAY)
@@ -1964,8 +1966,8 @@ export default function Home() {
   const terminadaReplayRef=useRef(false); terminadaReplayRef.current=!!replay?.terminada
   const limpiaMarcaReplay=()=>{ setCapturaReplay(null); setFormReplay(f=>({...f,entrada:'',stop:'',objetivo:''})) }
   const reiniciaMarcaReplay=()=>{ setFormReplay(FORM_REPLAY); setCapturaReplay(null); setSinEnviarReplay(null); setAvisoLineaReplay(''); setAvisoSenalReplay('') }
-  const empiezaReplay=(desde,aj={})=>{ reiniciaMarcaReplay(); setVentanaReplay(false); const _r=rangoVer(result?.chartData||[],desde,replayVer); if(_r){ savedRangeRef.current=_r; isNewResultRef.current=false } else isNewResultRef.current=true; setReplay({version:1,valores:[simbolo],desde,hoy:desde,capitalInicial:10000,comision:0,ejecucion:'apertura',...aj,acciones:[],retrocesos:0,terminada:false}) }
-  const saleReplay=()=>{ reiniciaMarcaReplay(); setReplay(null); isNewResultRef.current=true }
+  const empiezaReplay=(desde,aj={})=>{ reiniciaMarcaReplay(); nuevaSesionReplay(null,nombreReplayDe({valores:[simbolo],desde})); setVentanaReplay(false); const _r=rangoVer(result?.chartData||[],desde,replayVer); if(_r){ savedRangeRef.current=_r; isNewResultRef.current=false } else isNewResultRef.current=true; setReplay({version:1,valores:[simbolo],desde,hoy:desde,capitalInicial:10000,comision:0,ejecucion:'apertura',...aj,acciones:[],retrocesos:0,terminada:false}) }
+  const saleReplay=()=>{ guardaReplay(replay,calcReplay); reiniciaMarcaReplay(); setReplay(null); isNewResultRef.current=true }
   // Avanzar o retroceder n velas: la ventana visible se mueve con ella (misma anchura). Devuelve false si no se movió (▶ deja de reproducir).
   const irAFechaReplay=(est,f)=>{ if(!f||f===est.hoy) return false
     const _r=replayVer?rangoVer(result?.chartData||[],f,replayVer):null
@@ -1999,6 +2001,46 @@ export default function Home() {
   const calcReplay=useMemo(()=>replay&&velasMotorReplay?replayCalcula(replay,velasMotorReplay):null,[replay,velasMotorReplay])
   const cifReplay=useMemo(()=>calcReplay?replayCifras(replay,velasMotorReplay,calcReplay):null,[calcReplay])   // eslint-disable-line
   const marcasReplay=useMemo(()=>calcReplay?replayMarcas(calcReplay):VACIO_REPLAY,[calcReplay])
+  // §232: cada Replay se GUARDA SOLO (lib/replay/guardados.js, tabla simulaciones) 1,2 s después de cada cambio, en cuanto hay algo
+  // (se ha avanzado u operado), y también al salir. sesionReplayRef evita que un guardado que llega tarde se cuele en otro Replay.
+  const [replayGuardado,setReplayGuardado]=useState({id:null,nombre:'',estado:''})   // estado: '' | 'guardando' | 'guardado' | el error
+  const replayIdRef=useRef(null), nombreReplayRef=useRef(''), creandoReplayRef=useRef(null), ultimoGuardadoReplayRef=useRef(''), sesionReplayRef=useRef(0)
+  const ctxReplay=useMemo(()=>hayConfigSupabase()?ctxConSesion():null,[])
+  const nuevaSesionReplay=(id,nombre)=>{ sesionReplayRef.current++; replayIdRef.current=id; nombreReplayRef.current=nombre; creandoReplayRef.current=null; ultimoGuardadoReplayRef.current=''; setReplayGuardado({id,nombre,estado:id?'guardado':''}) }
+  const guardaReplay=async(est,calc)=>{ if(!est||!ctxReplay||!calc||!hayQueGuardarReplay(est)) return
+    const datos=paraGuardarReplay(est,{[est.valores[0]]:result?.chartData||[]},calc), json=JSON.stringify(datos)
+    if(json===ultimoGuardadoReplayRef.current) return
+    const tok=sesionReplayRef.current; ultimoGuardadoReplayRef.current=json
+    const pon=(x)=>{ if(tok===sesionReplayRef.current) setReplayGuardado(g=>({...g,...x})) }
+    pon({estado:'guardando'})
+    try{
+      if(creandoReplayRef.current) await creandoReplayRef.current
+      if(tok!==sesionReplayRef.current) return
+      if(!replayIdRef.current){ const p=crearSimulacion(ctxReplay,nombreReplayRef.current||nombreReplayDe(est),datos); creandoReplayRef.current=p; const id=await p
+        if(tok===sesionReplayRef.current){ creandoReplayRef.current=null; replayIdRef.current=id; pon({id}) } }
+      else await guardarSimulacion(ctxReplay,replayIdRef.current,{estado:datos})
+      pon({estado:'guardado'})
+    }catch(e){ if(tok===sesionReplayRef.current){ creandoReplayRef.current=null; ultimoGuardadoReplayRef.current='' } pon({estado:String(e?.message||'no se pudo guardar')}) } }
+  useEffect(()=>{ if(!replay||!calcReplay) return; const t=setTimeout(()=>guardaReplay(replay,calcReplay),1200); return ()=>clearTimeout(t) },[replay,calcReplay])   // eslint-disable-line
+  const nombraReplay=async(nombre)=>{ nombreReplayRef.current=nombre; setReplayGuardado(g=>({...g,nombre})); const id=replayIdRef.current; if(!id||!ctxReplay) return
+    try{ await guardarSimulacion(ctxReplay,id,{nombre}); setReplayGuardado(g=>({...g,estado:'guardado'})) }catch(e){ setReplayGuardado(g=>({...g,estado:String(e?.message||'no se pudo guardar')})) } }
+  // «Mis replays» (components/MisReplays.js): desde el panel del Replay y desde el menú Seguir › Simulaciones.
+  const [misReplays,setMisReplays]=useState(null)   // null = cerrada; { filas, cargando, error }
+  const [pendienteReplay,setPendienteReplay]=useState(null)   // el guardado que se abre cuando llegue el gráfico de su valor
+  const abreMisReplays=async()=>{ if(!ctxReplay){ setMisReplays({filas:[],cargando:false,error:'Sin conexión con la base.'}); return }
+    setMisReplays({filas:[],cargando:true,error:''})
+    try{ const f=await leerSimulaciones(ctxReplay); setMisReplays({filas:f,cargando:false,error:''}) }catch(e){ setMisReplays({filas:[],cargando:false,error:e.message}) } }
+  const borraReplayGuardado=async(id)=>{ try{ await borrarSimulacion(ctxReplay,id); setMisReplays(m=>m?{...m,filas:m.filas.filter(x=>x.id!==id)}:m) }catch(e){ setMisReplays(m=>m?{...m,error:e.message}:m) } }
+  const aplicaReplayGuardado=(fila)=>{ const e=deGuardadoReplay(fila.estado); reiniciaMarcaReplay(); nuevaSesionReplay(fila.id,fila.nombre)
+    const _r=rangoVer(result?.chartData||[],e.hoy,replayVer); if(_r){ savedRangeRef.current=_r; isNewResultRef.current=false } else isNewResultRef.current=true
+    setReplay(e) }
+  const abreReplayGuardado=(fila)=>{ const sym=(fila.estado?.valores||[])[0]; if(!sym) return; setMisReplays(null)
+    if(replay) guardaReplay(replay,calcReplay)
+    if(sym===simbolo&&sym===displayedSimbolo&&result?.chartData?.length){ salirDeTesis(()=>{ setSidePanel(p=>['watchlist','risk','fundamentals'].includes(p)?p:'watchlist'); aplicaReplayGuardado(fila) }); return }
+    setReplay(null); setPendienteReplay(fila); salirDeTesis(()=>{ setSimbolo(sym); setSidePanel('watchlist') }) }
+  useEffect(()=>{ const p=pendienteReplay; if(!p) return; const sym=p.estado.valores[0]
+    if(sym!==simbolo||displayedSimbolo!==sym||!result?.chartData?.length) return
+    setPendienteReplay(null); aplicaReplayGuardado(p) },[pendienteReplay,displayedSimbolo,result,simbolo])   // eslint-disable-line
   // §231: ▲ morado en las velas con señal que ya se ven.
   const marcasTodasReplay=useMemo(()=>{ const m=replay&&Array.isArray(fechasSenalReplay)?marcasSenal(fechasSenalReplay,replay.hoy):[]
     return m.length?[...marcasReplay,...m].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0):marcasReplay },[marcasReplay,fechasSenalReplay,replay?.hoy])   // eslint-disable-line
@@ -5793,7 +5835,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1297</title>
+        <title>Trading Simulator V9.1298</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5882,7 +5924,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1297
+            <span className="dot"/>Trading Simulator V9.1298
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6044,6 +6086,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               {grupo:'Seguir'},
               {id:'tradelog',   icon:'📒',label:'TradeLog',  accent:'#9b72ff'},
               {id:'risk',       icon:'⚖️', label:'Risk Mgmt', accent:'#378add'},
+              {id:'simulaciones',icon:'⏪', label:'Simulaciones', ventana:true},   // §232: abre «Mis replays» (no cambia la pantalla)
               {grupo:'Por trasladar'},
               {id:'multi',      icon:'📊',label:'Backtesting'},
               {id:'optimiza',   icon:'🎯',label:'Optimización'},
@@ -6051,7 +6094,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               {id:'config',     icon:'📈', label:'Backtest de un valor'},
             ].map(it=>({...it,on:it.grupo?false:it.zona?(sidePanel==='builder'&&builderZona===it.zona):sidePanel===it.id})).map(item=>item.grupo?(<div key={'g-'+item.grupo} data-menu-grupo={item.grupo} style={{padding:navExpanded?'9px 8px 2px':0,margin:navExpanded?0:'5px 7px',height:navExpanded?'auto':1,background:navExpanded?'transparent':'var(--border)',fontFamily:MONO,fontSize:9,letterSpacing:'0.12em',textTransform:'uppercase',color:'var(--text3)',opacity:0.75,whiteSpace:'nowrap',overflow:'hidden',flexShrink:0}}>{navExpanded?item.grupo:''}</div>):(
               <button key={item.id} data-menu-item={item.id}
-                onClick={()=>{ if(item.zona){ salirDeTesis(()=>{ setBuilderIr({zona:item.zona,n:Date.now()}); setSidePanel('builder') }); return } if(item.id===sidePanel) setSidePanel(item.id); else salirDeTesis(()=>setSidePanel(item.id)) }}
+                onClick={()=>{ if(item.ventana){ abreMisReplays(); return } if(item.zona){ salirDeTesis(()=>{ setBuilderIr({zona:item.zona,n:Date.now()}); setSidePanel('builder') }); return } if(item.id===sidePanel) setSidePanel(item.id); else salirDeTesis(()=>setSidePanel(item.id)) }}
                 title={!navExpanded?item.label:undefined}
                 style={{display:'flex',alignItems:'center',gap:10,padding:'9px 8px',width:'100%',
                   background:item.on?'var(--bg3)':'transparent',
@@ -8416,7 +8459,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       {replay?<span data-pestana-der="replay" style={{borderBottom:'2px solid #ffd166',color:'#ffd166',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px'}}>REPLAY</span>:(()=>{const n=(alertasN.alertas||[]).filter(a=>a.activa).length,sv=alertasN.sinVer;return <button data-pestana-der="alertas" title={`Tus alertas: ${n} encendida${n===1?'':'s'}${sv?` · ${sv} saltaron y no las has visto`:''}`} onClick={()=>setPestanaDer('alertas')} style={{background:'transparent',border:'none',borderBottom:pesDer==='alertas'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='alertas'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>ALERTAS{n?` (${n})`:''}<style>{'@keyframes campanaAlerta{0%,60%,100%{transform:rotate(0)}10%{transform:rotate(16deg)}20%{transform:rotate(-14deg)}30%{transform:rotate(10deg)}40%{transform:rotate(-8deg)}50%{transform:rotate(4deg)}}'}</style><span data-campana-pestana style={{fontSize:12,lineHeight:1,display:'inline-block',transformOrigin:'50% 0',animation:sv?'campanaAlerta 1.6s ease-in-out infinite':'none'}}>🔔</span>{sv?<span style={{color:'#ff4d6d'}}>{sv} sin ver</span>:null}</button>})()}
                     </div>
                     {pesDer==='replay'&&calcReplay&&<PanelOperar estado={replay} simbolo={replay.valores[0]} r={calcReplay} cif={cifReplay} ahora={ahoraReplay} onAccion={accionReplay} onTerminar={v=>{ if(v) limpiaMarcaReplay(); terminaReplay(v) }}
-                      form={formReplay} onForm={setFormReplay} captura={capturaReplay} onMarcar={marcaReplay} onCancelaMarca={limpiaMarcaReplay} aviso={avisoLineaReplay} onMover={moverReplay} arrastre={arrastreReplay}/>}
+                      form={formReplay} onForm={setFormReplay} captura={capturaReplay} onMarcar={marcaReplay} onCancelaMarca={limpiaMarcaReplay} aviso={avisoLineaReplay} onMover={moverReplay} arrastre={arrastreReplay}
+                      nombre={replayGuardado.nombre||nombreReplayDe(replay)} onNombre={nombraReplay} guardado={replayGuardado.estado} onMisReplays={abreMisReplays}/>}
                     {pesDer==='alertas'&&<PanelAlertas simbolo={simbolo} ahora={ultimoPrecio} estado={alertasN} onNueva={()=>abreNuevaAlerta(null)} onEditar={a=>setVentanaAlerta({inicial:a})} elegida={alertaElegida} estiloLineas={estiloLineas} onEstiloLineas={setEstiloLineas} onIrAValor={s=>setSimbolo(s)} onElegir={eligeAlertaLista}/>}
                     {pesDer==='resumen'&&<>
                     {/* Aviso de cobertura del backtest individual (ver avisoHistoricoIndiv): mismo chip ámbar */}
@@ -10946,6 +10990,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
         onCancelar={()=>setSinEnviarReplay(null)}/>}
       {replay&&ventanaSenalReplay&&<VentanaSenal simbolo={replay.valores[0]} filas={senalReplay?.tipo==='condicion'?senalReplay.filas:[]}
         onAceptar={f=>{ setSenalReplay({tipo:'condicion',filas:f}); setVentanaSenalReplay(false); setAvisoSenalReplay('') }} onCancelar={()=>setVentanaSenalReplay(false)}/>}
+      {misReplays&&<MisReplays filas={misReplays.filas} cargando={misReplays.cargando} error={misReplays.error} abiertoId={replay?replayGuardado.id:null}
+        onAbrir={abreReplayGuardado} onBorrar={borraReplayGuardado} onCerrar={()=>setMisReplays(null)}/>}
       {ventanaReplay&&<VentanaReplay simbolo={simbolo} velas={result?.chartData||[]} onEmpezar={empiezaReplay} onCancelar={()=>setVentanaReplay(false)}/>}
       {ventanaInd&&<VentanaIndicadores enGrafico={indicadores} onCerrar={()=>setVentanaInd(false)}
         onAnadir={t=>{const n=nuevoIndicador(t,indicadores.length);if(n)ponIndicadores([...indicadores,n])}}/>}
