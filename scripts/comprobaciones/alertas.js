@@ -113,6 +113,33 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b)
   ok(igual(M.fraseSalto(alerta({ simbolo: 'CRDO', regla: { nivel: 111.12, sentido: 'baja' } }), { cumple: true, precio: 111.12 }, ctx(dia(113, 114, 110.4, 112.05))), { titulo: 'CRDO tocó 111,12', texto: 'Mínimo del día 110,40 · ahora 112,05' }), 'aviso: «CRDO tocó 111,12» · «Mínimo del día 110,40 · ahora 112,05»')
   ok(M.fraseSalto(mov('baja'), M.seCumple(mov('baja'), ctx(dia(99, 100, 95, 96))), ctx(dia(99, 100, 95, 96))).titulo === 'X cae un 5 % en el día', 'aviso del movimiento: «X cae un 5 % en el día»')
 
+  // ── 8 · Lo que enseña la pantalla (lib/alertas/pantalla.js, §218) ──
+  const Pa = require(R + '/lib/alertas/pantalla.js')
+  const t235 = alerta({ simbolo: 'AAPL', regla: { nivel: 235, sentido: 'sube' } })
+  ok(Pa.resumenAlerta(t235) === 'Toca 235,00' && Pa.resumenAlerta(alerta({ tipo: 'cierra', regla: { nivel: 205, lado: 'debajo' } })) === 'Cierra por debajo de 205,00' && Pa.resumenAlerta(mov('ambos')) === 'Se mueve un 5 % en el día', 'resúmenes: «Toca 235,00» · «Cierra por debajo de 205,00» · «Se mueve un 5 % en el día»')
+  ok(Pa.asiSeLee(t235).startsWith('Avisa cuando AAPL suba hasta 235,00 (basta con que el máximo del día') && Pa.asiSeLee(t235).endsWith('Avisa una vez y se apaga.'), '«Así se lee» de «Toca 235»')
+  ok(Pa.asiSeLee(mov('baja')).includes('caiga un 5 % o más desde el cierre de ayer (ej.: ayer cerró en 100,00 → salta a 95,00)'), '«Así se lee» del movimiento con su ejemplo (100 → 95)')
+  ok(Pa.asiSeLee(alerta({ despues: 'cada_vez', caduca: '2026-12-31' })).endsWith('primero tiene que dejar de cumplirse). Caduca después del 31/12/2026.'), '«Así se lee» con «cada vez» y fecha de caducidad')
+  ok(/^Avisa al cierre del día en que se cumpla: .*ALAB/.test(Pa.asiSeLee(ALAB)), `«Así se lee» de la condición de ALAB: ${Pa.asiSeLee(ALAB).slice(0, 120)}`)
+  ok(cerca(Pa.distancia(t235, 228.4), (235 - 228.4) / 228.4 * 100) && Pa.textoDistancia(Pa.distancia(t235, 228.4)) === '+2,89 %' && Pa.distancia(mov('baja'), 100) === null, 'distancia: 235 con el precio a 228,40 → +2,89 %; el movimiento no tiene')
+  const ls = Pa.lineasDeAlertas([t235, { ...alerta({ simbolo: 'AAPL', tipo: 'cierra', regla: { nivel: 205, lado: 'debajo' } }), id: 'b' }, { ...t235, id: 'c', activa: false }, { ...mov('baja'), simbolo: 'AAPL' }, { ...t235, id: 'd', simbolo: 'MSFT' }], 'aapl')
+  ok(ls.length === 2 && ls[0].condition_detail === 'price_above' && ls[1].condition_detail === 'price_below' && ls[1].price_level === 205, 'líneas del gráfico: solo las de precio encendidas de ese valor (verde al subir, roja al bajar)')
+  ok(igual(Pa.reglaArrastrada(t235, 220, 228.4), { nivel: 220, sentido: 'baja' }) && igual(Pa.reglaArrastrada(alerta({ tipo: 'cierra', regla: { nivel: 205, lado: 'debajo' } }), 210, 228.4), { nivel: 210, lado: 'debajo' }), 'arrastrar «Toca 235» por debajo del precio (220): pasa a avisar al bajar; «cierra» solo cambia el nivel')
+  ok(igual(Pa.alertaNueva('aapl', 231.456, 228.4), { simbolo: 'AAPL', tipo: 'toca', regla: { nivel: 231.46, sentido: 'sube' }, despues: 'una_vez', activa: true, caduca: null, nota: null }) && Pa.alertaNueva('X', null, 50).regla.nivel === 50, 'alerta nueva: en el precio pulsado redondeado (231,46, al subir) o en el de ahora')
+
+  // ── 9 · Montaje (renderToString) del panel y la ventana ──
+  const React = require(R + '/node_modules/react'), RDS = require(R + '/node_modules/react-dom/server')
+  const PA = require(R + '/components/PanelAlertas.js')
+  const estado = { alertas: [{ ...t235, id: 'a1' }, { ...alerta({ simbolo: 'AAPL', tipo: 'cierra', regla: { nivel: 205, lado: 'debajo' } }), id: 'a2', activa: false, ultimo_salto: '2026-11-03T15:47:00Z' }, { ...t235, id: 'a3', simbolo: 'MSFT' }],
+    saltos: [{ id: 7, simbolo: 'AAPL', cuando: '2026-11-03T15:47:00Z', visto: false, detalle: { titulo: 'AAPL cerró por debajo de 205,00', texto: 'Cierre 204,10' } }], disponible: true, cambiar: async () => {}, borrar: async () => {}, vistos: async () => {} }
+  const hp = RDS.renderToString(React.createElement(PA.PanelAlertas, { simbolo: 'AAPL', ahora: 228.4, estado, onNueva: () => {}, onEditar: () => {} })).split('<!-- -->').join('')
+  ok(hp.includes('Toca 235,00') && hp.includes('+2,89 % del precio') && hp.includes('APAGADAS (1)') && !hp.includes('MSFT'), 'el panel: «Toca 235,00» a +2,89 %, una apagada y nada de MSFT')
+  ok(hp.includes('SALTARON EN AAPL') && hp.includes('1 sin ver') && hp.includes('AAPL cerró por debajo de 205,00') && hp.includes('✓ Vista'), '«Saltaron»: el salto sin ver, con «✓ Vista»')
+  const hv = RDS.renderToString(React.createElement(PA.VentanaAlerta, { inicial: Pa.alertaNueva('AAPL', 235, 228.4), ahora: 228.4, onGuardar: async () => {}, onCerrar: () => {} })).split('<!-- -->').join('')
+  ok(hv.includes('Nueva alerta') && hv.includes('Crear alerta') && hv.includes('Avisa cuando AAPL suba hasta 235,00') && hv.includes('avisará al SUBIR'), 'la ventana nueva: «Así se lee» y «avisará al SUBIR hasta él»')
+  const hv2 = RDS.renderToString(React.createElement(PA.VentanaAlerta, { inicial: { ...t235, id: 'a1' }, ahora: 228.4, onGuardar: async () => {}, onCerrar: () => {} })).split('<!-- -->').join('')
+  ok(hv2.includes('Cambiar alerta') && hv2.includes('>Guardar<'), 'con una alerta guardada: «Cambiar alerta» y «Guardar»')
+
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTODO BIEN')
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(1) })

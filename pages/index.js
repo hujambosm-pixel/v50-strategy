@@ -34,7 +34,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1281'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1282'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -61,6 +61,8 @@ import GanttChart from '../components/GanttChart'
 import MetricRow from '../components/MetricRow'
 import DiagnosticoPanel, { AvisoSinOperaciones } from '../components/DiagnosticoPanel'
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
+import { useAlertas, PanelAlertas, VentanaAlerta } from '../components/PanelAlertas'   // §218: las alertas nuevas
+import { lineasDeAlertas, reglaArrastrada, alertaNueva } from '../lib/alertas/pantalla'
 import StrategiesManager from '../components/StrategiesManager'
 import StrategyEditorPanel from '../components/StrategyEditorPanel'
 import EditorPanel from '../components/EditorPanel'
@@ -1078,6 +1080,14 @@ export default function Home() {
     return n
   })
   const [priceAlarmDlg,setPriceAlarmDlg]=useState(null) // {price, symbol} o null
+  // §218: las alertas NUEVAS (tablas alertas y alertas_saltos). Las líneas del gráfico, 🎯, doble clic y la pestaña «Alertas» ya usan
+  // estas; la 🔔 de siempre (tabla alarms) sigue igual hasta que lo nuevo lo tenga todo.
+  const alertasN=useAlertas()
+  const [ventanaAlerta,setVentanaAlerta]=useState(null) // { inicial } o null
+  const [pestanaDer,setPestanaDerS]=useState('resumen') // pestaña del panel derecho: 'resumen' | 'alertas' (se recuerda en el navegador)
+  useEffect(()=>{try{const v=localStorage.getItem('panelDerecho');if(v==='alertas'||v==='resumen')setPestanaDerS(v)}catch(_){}},[])
+  const setPestanaDer=v=>{setPestanaDerS(v);try{localStorage.setItem('panelDerecho',v)}catch(_){}}
+  const lineasAlertasSim=useMemo(()=>lineasDeAlertas(alertasN.alertas,simbolo),[alertasN.alertas,simbolo])
   // ── Ranking ─────────────────────────────────────────────────
   const [rankingData,setRankingData]=useState({})      // { SYMBOL: { score, rank, metrics } } — keys uppercase
   const [rankingStratId,setRankingStratId]=useState(null)    // strategy id the ranking was calculated with
@@ -5082,6 +5092,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   // (AvisoSinOperaciones). `metrics` sigue siendo null en ese caso para todo lo demás que lo consulta.
   const sinOperaciones=!!result&&!result.isBareChart&&Array.isArray(result.trades)&&result.trades.length===0
   const metricsResumen=metrics||(sinOperaciones?metricasSinOperaciones(Number(capitalIni),result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null)
+  // §218: el precio de ahora del gráfico (último cierre de sus velas), la pestaña del panel derecho y lo que hacen 🎯, doble clic y arrastrar.
+  const ultimoPrecio=(()=>{const d=result?.chartData;const v=Array.isArray(d)&&d.length?d[d.length-1]:null;return v&&Number.isFinite(v.close)?v.close:null})()
+  const hayResumenDer=!!result&&!result.isBareChart&&(metricsLayout==='panel'||metricsLayout==='multi')&&!!metricsResumen
+  const pesDer=hayResumenDer?pestanaDer:'alertas'
+  const abreNuevaAlerta=(price,ultimo)=>setVentanaAlerta({inicial:alertaNueva(simbolo,price,ultimo??ultimoPrecio)})
+  const arrastraAlerta=(id,nivel)=>{const a=alertasN.alertas.find(x=>x.id===id);if(a)alertasN.cambiar(id,{regla:reglaArrastrada(a,nivel,ultimoPrecio)}).catch(()=>{})}
 
   // ── Backtest float equity curve — simple curve + open-trade unrealized P&L ──
   const backtestFloatCurve = useMemo(()=>{
@@ -5653,7 +5669,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1281</title>
+        <title>Trading Simulator V9.1282</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5742,7 +5758,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1281
+            <span className="dot"/>Trading Simulator V9.1282
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7844,21 +7860,21 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         pendingOrders={pendingOrdersForSym}
                         simbolo={simbolo}
                         dibujar dibujarArriba={30} arriesgoDefecto={(()=>{const _a=(contributions||[]).reduce((s,c)=>s+(c.type==='aportacion'?1:c.type==='retirada'?-1:0)*Number(c.amount||0),0)+(tlFifo.closedTrades||[]).reduce((s,t)=>s+(t.pnl_eur||t._pnl_eur||0),0)+(tlFifo.openPositions||[]).reduce((s,p)=>s+(p._pnl_float_eur||0),0);const _v=riskActiveProfile?.risk_per_trade_value;if(_v==null)return null;return (riskActiveProfile?.risk_per_trade_type||'%')==='%'?_a*_v/100:Number(_v)})()}
-                        onAlertaPrecio={(price,ultimo)=>setPriceAlarmDlg({price,symbol:simbolo,cond:ultimo!=null&&price<ultimo?'price_below':'price_above'})}
+                        onAlertaPrecio={(price,ultimo)=>abreNuevaAlerta(price,ultimo)}
                         trades={result.isBareChart?[]:result.trades||[]}
                         isBareChart={result.isBareChart??false}
                         chartHeight={result.isBareChart?bareChartHeight:candleH}
                         fillHeight={!result.isBareChart}
                         labelMode={labelMode} rulerActive={rulerOn}
                         onChartReady={api=>{chartApiRef.current=api}}
-                        onPriceAlarm={sidePanel!=='watchlist'&&sidePanel!=='risk'?price=>setPriceAlarmDlg({price,symbol:simbolo}):null}
-                        onAlarmPriceDrag={onAlarmPriceDrag}
+                        onPriceAlarm={sidePanel!=='risk'?price=>abreNuevaAlerta(price):null}
+                        onAlarmPriceDrag={arrastraAlerta}
                         ackedAlarms={ackedAlarms}
                         savedRangeRef={savedRangeRef}
                         isNewResultRef={isNewResultRef}
                         syncRef={chartSyncRef}
                         externalLegendRef={chartLegendRef}
-                        priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
+                        priceAlarms={lineasAlertasSim}
                         tlOpenTrades={(tlFifo.openPositions||[]).filter(p=>(p.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                         riskMode={sidePanel==='risk'&&riskCaptureMode?riskCaptureMode:null}
                         onRiskPrice={sidePanel==='risk'&&riskCaptureMode?onRiskPrice:null}
@@ -8014,7 +8030,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         pendingOrders={pendingOrdersForSym}
                         simbolo={simbolo}
                         dibujar arriesgoDefecto={(()=>{const _a=(contributions||[]).reduce((s,c)=>s+(c.type==='aportacion'?1:c.type==='retirada'?-1:0)*Number(c.amount||0),0)+(tlFifo.closedTrades||[]).reduce((s,t)=>s+(t.pnl_eur||t._pnl_eur||0),0)+(tlFifo.openPositions||[]).reduce((s,p)=>s+(p._pnl_float_eur||0),0);const _v=riskActiveProfile?.risk_per_trade_value;if(_v==null)return null;return (riskActiveProfile?.risk_per_trade_type||'%')==='%'?_a*_v/100:Number(_v)})()}
-                        onAlertaPrecio={(price,ultimo)=>setPriceAlarmDlg({price,symbol:simbolo,cond:ultimo!=null&&price<ultimo?'price_below':'price_above'})}
+                        onAlertaPrecio={(price,ultimo)=>abreNuevaAlerta(price,ultimo)}
                           trades={result.isBareChart?[]:result.trades||[]}
                           isBareChart={result.isBareChart??false}
                           fillHeight={true}
@@ -8024,7 +8040,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           syncRef={chartSyncRef}
                           externalLegendRef={chartLegendRef}
                           onChartReady={api=>{chartApiFullscreenRef.current=api}}
-                          priceAlarms={alarms.filter(a=>a.condition==='price_level'&&(a.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
+                          priceAlarms={lineasAlertasSim}
                           tlOpenTrades={(tlFifo.openPositions||[]).filter(p=>(p.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                           filterZones={result?.filterZones||[]}
                         />
@@ -8246,17 +8262,20 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                 </div>
 
                 {/* Panel derecho de métricas */}
-                {!result.isBareChart&&sidePanel!=='multi'&&sidePanel!=='risk'&&(metricsLayout==='panel'||metricsLayout==='multi')&&metricsResumen&&(
-                  <div style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}} onContextMenu={e=>openCtx(e,'metrics')}>
+                {sidePanel!=='multi'&&sidePanel!=='risk'&&(   /* §218: también sin backtest (solo «Alertas») */
+                  <div data-panel-derecho={pesDer} style={{width:rightPanelW,flexShrink:0,borderLeft:'1px solid var(--border)',background:'var(--bg2)',overflowY:'auto',position:'relative'}} onContextMenu={pesDer==='resumen'?e=>openCtx(e,'metrics'):undefined}>
                     {/* Resize handle — left edge */}
                     <div onMouseDown={e=>{rightResizing.current=true;rightStartX.current=e.clientX;rightStartW.current=rightPanelW;document.body.style.cursor='col-resize';document.body.style.userSelect='none'}}
                       style={{position:'absolute',top:0,left:0,width:4,height:'100%',cursor:'col-resize',zIndex:20,
                         background:'transparent',transition:'background 0.15s'}}
                       onMouseOver={e=>e.currentTarget.style.background='rgba(0,212,255,0.25)'}
                       onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
-                    <div style={{padding:'6px 12px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',gap:6}}>
-                      <span style={{fontFamily:MONO,fontSize:10,color:'#b8d8f0',letterSpacing:'0.08em',fontWeight:600,flex:1}}>RESUMEN · {displayedSimbolo||simbolo}</span>
+                    <div style={{padding:'0 8px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'stretch',gap:2}}>
+                      {hayResumenDer&&<button data-pestana-der="resumen" onClick={()=>setPestanaDer('resumen')} style={{background:'transparent',border:'none',borderBottom:pesDer==='resumen'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='resumen'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer'}}>RESUMEN · {displayedSimbolo||simbolo}</button>}
+                      {(()=>{const n=(alertasN.alertas||[]).filter(a=>a.activa&&a.simbolo===String(simbolo||'').toUpperCase()).length,sv=(alertasN.saltos||[]).filter(s=>!s.visto&&s.simbolo===String(simbolo||'').toUpperCase()).length;return <button data-pestana-der="alertas" onClick={()=>setPestanaDer('alertas')} style={{background:'transparent',border:'none',borderBottom:pesDer==='alertas'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='alertas'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer'}}>ALERTAS{n?` (${n})`:''}{sv?<span style={{color:'#ff4d6d'}}> · {sv} sin ver</span>:null}</button>})()}
                     </div>
+                    {pesDer==='alertas'&&<PanelAlertas simbolo={simbolo} ahora={ultimoPrecio} estado={alertasN} onNueva={()=>abreNuevaAlerta(null)} onEditar={a=>setVentanaAlerta({inicial:a})}/>}
+                    {pesDer==='resumen'&&<>
                     {/* Aviso de cobertura del backtest individual (ver avisoHistoricoIndiv): mismo chip ámbar */}
                     {avisoHistoricoIndiv&&<div title={`Se pidió desde ${fmtDate(avisoHistoricoIndiv.solicitadoDesde)}, pero ${result?.meta?.simbolo||simbolo} solo tiene datos desde el ${fmtDate(avisoHistoricoIndiv.realDesde)}: el backtest cubre menos años de los pedidos.\n\nCausas posibles: el activo empezó a cotizar más tarde, o la fuente de datos no tiene más histórico de ese activo. Con los datos disponibles no se puede distinguir cuál de las dos.\nLas métricas ya se calculan sobre el periodo realmente simulado.`}
                       style={{fontFamily:MONO,fontSize:10,background:'rgba(255,209,102,0.12)',color:'#ffd166',padding:'3px 10px',cursor:'help',borderBottom:'1px solid var(--border)'}}>
@@ -8270,6 +8289,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     })()}
                     {/* Diagnóstico de la estrategia: plegable, calculado en el cliente con lib/diagnostico.js */}
                     <DiagnosticoPanel result={result}/>
+                    </>}
                   </div>
                 )}
               </div>
@@ -10746,6 +10766,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
       try{const t=JSON.parse(localStorage.getItem('v50_settings')||'{}')?.alarmas?.autoRefreshThreshold;if(t!=null)setAlertThreshold(Number(t))}catch(_){}
     }} strategies={strategies} initialTab={settingsInitTab} wlData={wlData}/>}
 
+    {/* §218: ventana «Nueva alerta» / «Cambiar alerta» (alertas nuevas) */}
+    {ventanaAlerta&&<VentanaAlerta inicial={ventanaAlerta.inicial} ahora={ultimoPrecio} onGuardar={a=>alertasN.guardar(a)} onCerrar={()=>setVentanaAlerta(null)}/>}
     {/* ── Modal de alarma de precio (doble-clic en gráfico) ── */}
     {priceAlarmDlg&&(
       <div style={{position:'fixed',inset:0,zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.6)'}}
