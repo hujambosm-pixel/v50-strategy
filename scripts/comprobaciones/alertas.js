@@ -46,6 +46,9 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b)
   ok(M.seCumple(nueva, ctx(dia(229, 232, 228, 230))).cumple === false, 'creada hoy con AAPL a 230: el máximo de 232 de antes no la hace saltar')
   ok(igual(M.seCumple(nueva, ctx(dia(229, 232, 228, 231.5))), { cumple: true, precio: 231.5 }), '… y salta si ahora está a 231,50 (a ese precio)')
   ok(M.seCumple(nueva, ctx(dia(229, 232, 228, 230), { fecha: '2026-11-23' })).cumple === true, 'al día siguiente ya cuenta el máximo del día')
+  ok(M.seCumple(alerta({ creada: '2026-11-21T11:00:00Z' }), ctx(dia(98, 101, 97, 99))).cumple === false, 'creada el sábado 21 con la vela del viernes 20 (máximo 101, ahora 99): no salta por el viernes')
+  ok(M.seCumple(alerta({ tipo: 'movimiento', regla: { pct: 5, sentido: 'baja' }, creada: '2026-11-20T16:00:00Z' }), ctx(dia(99, 100, 95, 96))).cumple === false, '«cae un 5 %» creada hoy con el mínimo en 95 y ahora a 96: no salta por el mínimo de antes')
+  ok(M.diaNY('2026-11-20T23:30:00Z', 'Europe/Madrid') === '2026-11-21' && M.diaNY('2026-11-20T23:30:00Z') === '2026-11-20', 'cada bolsa con su hora: las 23:30 UTC del 20 ya son el 21 en Madrid, pero el 20 en Nueva York')
   ok(M.diaNY('2026-11-21T03:00:00Z') === '2026-11-20' && M.diaNY('2026-11-20T14:30:00Z') === '2026-11-20', 'el día en Nueva York: las 03:00 UTC del 21 son las 22:00 del 20 allí')
   ok(M.seCumple(alerta(), ctx(dia(null, null, null, null))).cumple === null, 'sin precio: no se sabe')
 
@@ -104,6 +107,11 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b)
   }
   ok(igual(saltos, ['2026-11-16', '2026-11-19']), `cada vez: salta el 16 (101), no al volver a mirar ni el 17 (sigue arriba), se rearma el 18 (99) y salta el 19 (100); el 20 se rearma (${saltos.join(', ')})`)
   ok(a.armada === true && a.activa === true, '… y queda armada y encendida')
+
+  // ── 7 · El texto del aviso ──
+  ok(M.fmt(1234.5) === '1.234,50' && M.fmt(0.12345) === '0,1235' && M.fmt(-3) === '−3,00' && M.fmt(null) === '—', 'números a la española: 1.234,50 · 0,1235 · −3,00')
+  ok(igual(M.fraseSalto(alerta({ simbolo: 'CRDO', regla: { nivel: 111.12, sentido: 'baja' } }), { cumple: true, precio: 111.12 }, ctx(dia(113, 114, 110.4, 112.05))), { titulo: 'CRDO tocó 111,12', texto: 'Mínimo del día 110,40 · ahora 112,05' }), 'aviso: «CRDO tocó 111,12» · «Mínimo del día 110,40 · ahora 112,05»')
+  ok(M.fraseSalto(mov('baja'), M.seCumple(mov('baja'), ctx(dia(99, 100, 95, 96))), ctx(dia(99, 100, 95, 96))).titulo === 'X cae un 5 % en el día', 'aviso del movimiento: «X cae un 5 % en el día»')
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTODO BIEN')
   process.exit(fallos ? 1 : 0)
