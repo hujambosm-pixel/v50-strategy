@@ -3617,3 +3617,12 @@ Sergi (20/11): lo de hoy en alertas (🔔 del menú, tabla «alarms») era una i
 - Aplicada el 20/11 en Supabase LOCAL (postgres-meta). La nube no se toca.
 - scripts/comprobaciones/alertasSeguridad.js (no va en comunes.sh): dos usuarios simulados y anon en una transacción que se deshace, más la clave anon por HTTP: 38/38.
 - Sin comunes.sh en este commit: no cambia nada que la app ejecute (como §206).
+
+## 216. Alertas desde cero, parte 2: el motor (21/11)
+
+lib/alertas/motor.js, PURO (no lee la base ni Yahoo): recibe una fila de public.alertas y lo que se sabe del día ({ fecha, dia: { abre, maximo, minimo, ahora }, cerrada, cierreAyer, velasDe }) y dice si se cumple y qué cambia en la alerta. Lo usarán el comprobador de Windows (parte 3) y la pantalla. La app todavía no lo usa: ninguna cifra cambia.
+- Cuándo salta: «toca» sube = el máximo del día llega al nivel (≥), baja = el mínimo baja a él (≤); salta al nivel, o a la apertura si abrió más allá. El DÍA EN QUE SE CREA solo cuenta el precio de ahora (el máximo de antes de crearla no vale). «cierra» = cierre estrictamente al otro lado del nivel, solo con la vela cerrada (pasada de las 22:15). «movimiento» = X % desde el cierre de ayer con el máximo / mínimo del día; con «ambos» y los dos tocados, cuenta el más cerca del precio de ahora. «condicion» = filas del catálogo con serieFilas de lib/planes/pesos.js (las mismas que el ocioso con regla y las reglas de «Con pesos»; quien 'valor' = el símbolo de la alerta; todas con «Y»), solo al cierre y solo si ya está la vela de hoy. «estrategia», todavía no. Si falta un dato, «no se sabe» y la alerta no cambia.
+- Después de saltar: una_vez → activa = false; una_al_dia → como mucho una por sesión (el día de ultimo_salto en la hora de Nueva York, diaNY); cada_vez → armada = false al saltar y true en cuanto una pasada ve que ya no se cumple. caduca (incluido): después de ese día se apaga sin saltar.
+- sentidoToca(nivel, ahora): la dirección de «Toca el precio» se pone sola (nivel ≥ precio de ahora → al subir).
+- La alerta de ALAB copiada en §215 (mediaVsMedia sin «comparacion») es válida para validaFilas.
+- Comprobación nueva scripts/comprobaciones/alertas.js en comunes.sh (46, todo a mano con velas inventadas: «Cierra por encima de 250» con máximo 252 y cierre 248 no salta; cae un 5 % desde 100 con mínimo 95 salta a 95; el cierre 12 cruza su SMA 3 = 10,33; una semana de «cada vez» salta el 16 y el 19).
