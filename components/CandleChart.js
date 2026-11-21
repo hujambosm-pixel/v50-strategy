@@ -554,7 +554,7 @@ export function propsDelGrafico(props,sinEstrategia,ponSin){
   if(sinEstrategia) Object.assign(p,{trades:VACIO,customMarkers:VACIO,slopeChanges:VACIO,filterZones:VACIO,razonamiento:false})
   return p
 }
-function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null, sinEstrategia=false, onSinEstrategia=null, onAlarmaElegida=null, estiloAlertas=null, alarmaElegidaId, onAlarmaBorrar=null, lineasReplay=null, onLineaReplay=null, textoCaptura=null }) {
+function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null, sinEstrategia=false, onSinEstrategia=null, onAlarmaElegida=null, estiloAlertas=null, alarmaElegidaId, onAlarmaBorrar=null, lineasReplay=null, onLineaReplay=null, textoCaptura=null, margenDerecha=0 }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   // Dibujar (§208): el contenedor de las velas (para los clics) y el hueco de la izquierda donde va su barra lateral.
   const wrapRef=useRef(null), barraDibujosRef=useRef(null)
@@ -1731,6 +1731,19 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
             }
           }
         }catch(_){ try{chart.timeScale().fitContent()}catch(__){} }
+        ponMargen()
+      }
+      // §230 (Replay): hueco vacío a la derecha de la última vela, una fracción (margenDerecha) del ancho visible, para que las etiquetas
+      // de las líneas y la del precio no tapen las últimas velas. Se mantiene el principio de la ventana; sin margenDerecha, nada.
+      const ponMargen=()=>{
+        const m=margenDerechaRef.current
+        if(disposed||!(m>0&&m<0.9)||!data?.length) return
+        try{
+          const ts=chart.timeScale(), lr=ts.getVisibleLogicalRange(), ult=data.length-1
+          if(!lr) return
+          const visibles=Math.max(5,ult-lr.from)
+          ts.setVisibleLogicalRange({from:lr.from,to:ult+visibles*m/(1-m)})
+        }catch(_){}
       }
       // Save range whenever user zooms/scrolls — always bake in GAP_DAYS on 'to'
       chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
@@ -1907,7 +1920,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
             chart.timeScale().setVisibleRange({from:from.toISOString().split('T')[0],to:addDays(lastBar.date,GAP_DAYS)})
           }catch(_){}
         },
-        setRange:(from,to)=>{ try{ chart.timeScale().setVisibleRange({from,to}) }catch(_){} },
+        setRange:(from,to)=>{ try{ chart.timeScale().setVisibleRange({from,to}) }catch(_){}; ponMargen() },
         showEntryLine:(entryDate, entryPrice, opts={})=>{
           // opts.permanent=true → no auto-remove; opts.label → texto eje precio
           if(!entryDate||!entryPrice) return
@@ -2298,6 +2311,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
   // Prop opcional: sin lineasReplay no se crea nada. Cada línea se actualiza en su sitio por id (sin parpadeo); al rehacerse el gráfico
   // (chartReadyTick) se sueltan las referencias, como en las de riesgo. Al arrastrar: onLineaReplay(id, precio, false) en cada movimiento
   // y onLineaReplay(id, precio, true) al soltar.
+  const margenDerechaRef=useRef(margenDerecha); margenDerechaRef.current=margenDerecha
   const lineasReplayRef=useRef(new Map()), lineasReplayTick=useRef(chartReadyTick), datosLineasReplay=useRef([]), onLineaReplayRef=useRef(onLineaReplay)
   useEffect(()=>{ onLineaReplayRef.current=onLineaReplay },[onLineaReplay])
   useEffect(()=>{

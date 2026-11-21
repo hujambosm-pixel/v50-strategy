@@ -41,7 +41,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1295'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1296'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1932,6 +1932,7 @@ export default function Home() {
   const [sinEnviarReplay,setSinEnviarReplay]=useState(null)    // velas que se quería avanzar mientras se pregunta por la orden sin enviar
   const [avisoLineaReplay,setAvisoLineaReplay]=useState('')
   const [vueltaLineasReplay,setVueltaLineasReplay]=useState(0)  // rehace las líneas (devuelve a su sitio una que no se pudo mover)
+  const [arrastreReplay,setArrastreReplay]=useState(null)      // §230: { id, precio } de la línea de una orden viva o de la posición mientras se arrastra
   const ahoraReplay=(velasReplay&&velasReplay.length)?velasReplay[velasReplay.length-1].close:null
   const terminadaReplayRef=useRef(false); terminadaReplayRef.current=!!replay?.terminada
   const limpiaMarcaReplay=()=>{ setCapturaReplay(null); setFormReplay(f=>({...f,entrada:'',stop:'',objetivo:''})) }
@@ -1961,7 +1962,10 @@ export default function Home() {
   const dobleClicReplay=(p)=>{ if(terminadaReplayRef.current) return; setFormReplay(f=>dobleClicBorrador(f,p).f); setCapturaReplay('stop'); setAvisoLineaReplay('') }
   const lineaReplay=(id,p,fin)=>{ const s=String(id)
     if(s.startsWith('bor:')){ const campo=s.slice(4); setFormReplay(f=>{ const g={...f,[campo]:enCasillaReplay(p)}; return {...g,lado:ladoBorrador(g,ahoraReplay)} }); return }
-    if(!fin||!replay||!calcReplay) return
+    if(!fin){ setArrastreReplay({id:s,precio:p}); return }
+    setArrastreReplay(null); moverReplay(s,p) }
+  // §230: cambiar una orden viva o la posición (al soltar su línea o desde su casilla del panel; null = quitar el stop o el objetivo).
+  const moverReplay=(id,p)=>{ if(!replay||!calcReplay) return
     const c=accionMoverReplay(replay,calcReplay,id,p,ahoraReplay)
     if(c.error){ setAvisoLineaReplay(c.error); setVueltaLineasReplay(x=>x+1); return }
     setAvisoLineaReplay(''); accionReplay(c.accion) }
@@ -1970,7 +1974,7 @@ export default function Home() {
   const TEXTO_MARCA={entrada:'▶ Clic en el gráfico para marcar la ENTRADA · Esc cancela',stop:'▶ Clic para marcar el STOP · Esc cancela',objetivo:'▶ Clic para marcar el OBJETIVO · Esc cancela'}
   const terminaReplay=(v)=>setReplay(r=>r?{...r,terminada:v}:r)
   const propsReplay=replay?{data:velasReplay,trades:VACIO_REPLAY,visuals:null,slopeChanges:VACIO_REPLAY,grafico:null,razonamiento:false,customMarkers:marcasReplay,pendingOrders:VACIO_REPLAY,
-    dibujar:false,onAlertaPrecio:null,onPriceAlarm:dobleClicReplay,priceAlarms:VACIO_REPLAY,tlOpenTrades:VACIO_REPLAY,filterZones:VACIO_REPLAY,
+    onAlertaPrecio:null,margenDerecha:0.22,onPriceAlarm:dobleClicReplay,priceAlarms:VACIO_REPLAY,tlOpenTrades:VACIO_REPLAY,filterZones:VACIO_REPLAY,
     riskMode:capturaReplay?{entrada:'capture_entry',stop:'capture_stop',objetivo:'capture_tp'}[capturaReplay]:null,onRiskPrice:clicReplay,textoCaptura:capturaReplay?TEXTO_MARCA[capturaReplay]:null,
     riskLevels:null,onRiskLevelChange:null,riskLineActive:null,lineasReplay,onLineaReplay:lineaReplay}:{}
 
@@ -5742,7 +5746,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1295</title>
+        <title>Trading Simulator V9.1296</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5831,7 +5835,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1295
+            <span className="dot"/>Trading Simulator V9.1296
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8365,7 +8369,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       {replay?<span data-pestana-der="replay" style={{borderBottom:'2px solid #ffd166',color:'#ffd166',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px'}}>REPLAY</span>:(()=>{const n=(alertasN.alertas||[]).filter(a=>a.activa).length,sv=alertasN.sinVer;return <button data-pestana-der="alertas" title={`Tus alertas: ${n} encendida${n===1?'':'s'}${sv?` · ${sv} saltaron y no las has visto`:''}`} onClick={()=>setPestanaDer('alertas')} style={{background:'transparent',border:'none',borderBottom:pesDer==='alertas'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='alertas'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>ALERTAS{n?` (${n})`:''}<style>{'@keyframes campanaAlerta{0%,60%,100%{transform:rotate(0)}10%{transform:rotate(16deg)}20%{transform:rotate(-14deg)}30%{transform:rotate(10deg)}40%{transform:rotate(-8deg)}50%{transform:rotate(4deg)}}'}</style><span data-campana-pestana style={{fontSize:12,lineHeight:1,display:'inline-block',transformOrigin:'50% 0',animation:sv?'campanaAlerta 1.6s ease-in-out infinite':'none'}}>🔔</span>{sv?<span style={{color:'#ff4d6d'}}>{sv} sin ver</span>:null}</button>})()}
                     </div>
                     {pesDer==='replay'&&calcReplay&&<PanelOperar estado={replay} simbolo={replay.valores[0]} r={calcReplay} cif={cifReplay} ahora={ahoraReplay} onAccion={accionReplay} onTerminar={v=>{ if(v) limpiaMarcaReplay(); terminaReplay(v) }}
-                      form={formReplay} onForm={setFormReplay} captura={capturaReplay} onMarcar={marcaReplay} onCancelaMarca={limpiaMarcaReplay} aviso={avisoLineaReplay}/>}
+                      form={formReplay} onForm={setFormReplay} captura={capturaReplay} onMarcar={marcaReplay} onCancelaMarca={limpiaMarcaReplay} aviso={avisoLineaReplay} onMover={moverReplay} arrastre={arrastreReplay}/>}
                     {pesDer==='alertas'&&<PanelAlertas simbolo={simbolo} ahora={ultimoPrecio} estado={alertasN} onNueva={()=>abreNuevaAlerta(null)} onEditar={a=>setVentanaAlerta({inicial:a})} elegida={alertaElegida} estiloLineas={estiloLineas} onEstiloLineas={setEstiloLineas} onIrAValor={s=>setSimbolo(s)} onElegir={eligeAlertaLista}/>}
                     {pesDer==='resumen'&&<>
                     {/* Aviso de cobertura del backtest individual (ver avisoHistoricoIndiv): mismo chip ámbar */}

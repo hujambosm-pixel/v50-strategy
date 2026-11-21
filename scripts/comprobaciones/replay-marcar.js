@@ -59,7 +59,7 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   // ── Arrastrar la entrada de una orden viva ── compra límite a 90 el d1; el 04/01 (precio 99) se sube a 97.
   const viva = { ...base, hoy: D6[2], acciones: [{ fecha: D6[0], simbolo: 'A', tipo: 'orden', id: 7, lado: 1, entrada: 90, clase: 'limite', stop: 85, objetivo: null, tam: { modo: 'invertir', pct: 20 } }] }
   const r3 = M.calcula(viva, VELAS)
-  ok(igual(B.lineasDe(r3, 'A', B.FORM_INICIAL, 99).map(l => [l.id, l.texto]), [['viva:7:entrada', 'Compra límite ⇕'], ['viva:7:stop', 'Stop (compra límite) ⇕']]), 'orden viva: su entrada y su stop, arrastrables')
+  ok(igual(B.lineasDe(r3, 'A', B.FORM_INICIAL, 99).map(l => [l.id, l.texto]), [['viva:7:entrada', 'Compra límite ⇕'], ['viva:7:stop', 'Stop −5,6 % ⇕']]), 'orden viva: su entrada y su stop (85 frente a 90: −5,6 %), arrastrables')
   const mv2 = B.accionMover(viva, r3, 'viva:7:entrada', 97, 99)
   ok(igual(mv2.accion, { fecha: D6[2], simbolo: 'A', tipo: 'mover', id: 7, entrada: 97, clase: 'limite' }) && B.accionMover(viva, r3, 'viva:7:entrada', 100, 99).accion.clase === 'stop',
     'entrada a 97 (por debajo de 99): sigue siendo límite; a 100 pasaría a stop')
@@ -67,6 +67,26 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   // El 05/01 el mínimo (95) llega a 97 y abre a 97 → compra a 97: 2.000 € ÷ 97 = 20,6 → 20 acciones.
   const r4 = M.calcula({ ...viva, hoy: D6[3], acciones: [...viva.acciones, mv2.accion] }, VELAS)
   ok(r4.posiciones.A && r4.posiciones.A.precioMedio === 97 && r4.posiciones.A.acciones === 20 && r4.posiciones.A.fecha === D6[3], `la orden movida se cumple el 05/01 a 97 con 20 acciones (${JSON.stringify(r4.posiciones.A)})`)
+
+  ok(igual(B.accionMover(viva, r3, 'viva:7:stop', null, 99).accion, { fecha: D6[2], simbolo: 'A', tipo: 'mover', id: 7, stop: null }) && /no se puede quitar/.test(B.accionMover(viva, r3, 'viva:7:entrada', null, 99).error), 'casilla vacía: quita el stop; la entrada no se puede quitar')
+  ok(/número/.test(B.accionMover(viva, r3, 'viva:7:stop', NaN, 99).error), 'un texto que no es un número: aviso')
+
+  // ── Las casillas de la orden viva en el panel ──
+  {
+    const React = require(R + '/node_modules/react'), RDC = require(R + '/node_modules/react-dom/client'), P = require(R + '/components/PanelReplay.js')
+    const movidos = []
+    const pp = (arr) => ({ estado: viva, simbolo: 'A', r: r3, cif: M.cifras(viva, VELAS, r3), ahora: 99, onAccion() {}, onTerminar() {}, onMover: (id, p) => movidos.push([id, p]), arrastre: arr })
+    let mm = D.monta(React.createElement(P.PanelOperar, pp(null)), RDC); await D.espera(20)
+    const cas = (id) => mm.raiz.busca(n => n.getAttribute('data-casilla-viva') === id)
+    ok(cas('viva:7:entrada').value === '90' && cas('viva:7:stop').value === '85' && cas('viva:7:objetivo').value === '', 'la orden viva tiene sus casillas: entrada 90, stop 85, objetivo vacío')
+    D.escribe(cas('viva:7:objetivo'), '104,5'); await D.espera(10)
+    D.propsDe(cas('viva:7:objetivo')).onKeyDown({ key: 'Enter' }); await D.espera(10)
+    ok(igual(movidos, [['viva:7:objetivo', 104.5]]), `escribir 104,5 en el objetivo y Enter: se lo pone a la orden (${JSON.stringify(movidos)})`)
+    mm.quita()
+    mm = D.monta(React.createElement(P.PanelOperar, pp({ id: 'viva:7:stop', precio: 87.25 })), RDC); await D.espera(20)
+    ok(cas('viva:7:stop').value === '87,25', 'mientras se arrastra su línea, la casilla del stop va con ella (87,25)')
+    mm.quita()
+  }
 
   // ── Dos «mover» del mismo día se juntan ──
   const a1 = B.anade([], { fecha: D6[1], simbolo: 'A', tipo: 'mover', stop: 100 })

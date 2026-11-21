@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import Ayuda from './BuilderAyuda'
 import { compruebaOrden, nuevaAccion, textoOrden, explicaPrecio } from '../lib/replay/orden'
-import { FORM_INICIAL, hayBorrador, estima, pctFrente } from '../lib/replay/borrador'
+import { FORM_INICIAL, hayBorrador, estima, pctFrente, redondea } from '../lib/replay/borrador'
 
 const BZ = { fondo: '#22262f', panel: '#2c303b', caja: '#353945', borde: '#4c5263', texto: '#f3f3f5', gris: '#a9adb8', verde: '#3fb950', rojo: '#f85149', ambar: '#d29922', azul: '#58a6ff' }
 const LETRA = 'system-ui, "Segoe UI", sans-serif'
@@ -34,7 +34,17 @@ function Cifra({ titulo, valor, col, tip }) {
   return <div title={tip} style={{ background: BZ.caja, borderRadius: 6, padding: '5px 7px' }}><small style={{ display: 'block', color: BZ.gris, fontSize: 11 }}>{titulo}</small><b style={{ fontSize: 14, color: col || BZ.texto }}>{valor}</b></div>
 }
 
-export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTerminar, form, onForm, captura = null, onMarcar, onCancelaMarca, aviso = '' }) {
+// §230: casilla de precio de una orden ya enviada o de la posición. Muestra el precio de ahora (o el de la línea mientras se arrastra);
+// al escribir, se fija con Enter o al salir de la casilla (vacía = quitar). Esc deja el que había.
+function CasillaPrecio({ valor, onFija, dato, titulo }) {
+  const [txt, setTxt] = useState(null)
+  const muestra = txt != null ? txt : (valor == null ? '' : String(redondea(valor)).replace('.', ','))
+  const fija = () => { if (txt == null) return; const t = txt.trim(); setTxt(null); onFija(t === '' ? null : Number(t.replace(',', '.'))) }
+  return <input data-casilla-viva={dato} title={titulo} style={{ ...casilla, width: 80 }} placeholder="—" value={muestra} onChange={e => setTxt(e.target.value)} onBlur={fija}
+    onKeyDown={e => { if (e.key === 'Enter') fija(); else if (e.key === 'Escape') setTxt(null) }} />
+}
+
+export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTerminar, form, onForm, captura = null, onMarcar, onCancelaMarca, aviso = '', onMover, arrastre = null }) {
   const [propio, setPropio] = useState(FORM_INICIAL)
   const f = form || propio, setF = onForm || setPropio
   const [error, setError] = useState('')
@@ -51,6 +61,14 @@ export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTermin
   const est = estima(f, cif.final, ahora)
   const pcS = pctFrente(Number(String(f.stop).replace(',', '.')), ref), pcO = pctFrente(Number(String(f.objetivo).replace(',', '.')), ref)
   const QUE = { entrada: 'la Entrada', stop: 'el Stop', objetivo: 'el Objetivo' }
+  // El precio que se ve en la casilla de una línea: el de la línea mientras se arrastra.
+  const vivo = (id, v) => (arrastre && arrastre.id === id ? arrastre.precio : v)
+  const editable = !!onMover && !terminada
+  const filaPrecio = (etq, id, v, ref, col) => <>
+    <span>{etq}</span>
+    <span><CasillaPrecio valor={vivo(id, v)} dato={id} onFija={p => onMover(id, p)} titulo="Escribe el precio y pulsa Enter (vacía = quitarlo); o arrastra su línea en el gráfico" />
+      {vivo(id, v) != null && ref != null && <span style={{ color: col, marginLeft: 6 }}>{pc(pctFrente(vivo(id, v), ref))}</span>}</span>
+  </>
   const cuando = estado.ejecucion === 'cierre' ? 'al cierre de hoy' : 'a la apertura de la vela siguiente'
   return (
     <div data-panel-replay="" style={{ padding: '8px 10px', font: `13px/1.45 ${LETRA}`, color: BZ.texto }}>
@@ -68,7 +86,12 @@ export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTermin
       </div>
       {pos && <div style={cajaSt} data-posicion-replay="">
         <b>Abierta #{pos.num}</b> · {pos.lado > 0 ? 'Largo' : 'Corto'} {pos.acciones} a {pr(pos.precioMedio)} desde el {fmt(pos.fecha)}
-        <div style={{ color: BZ.gris }}>Stop {pr(pos.stop)} · objetivo {pr(pos.objetivo)}</div>
+        {editable
+          ? <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 8px', alignItems: 'center', margin: '4px 0' }} data-precios-posicion="">
+              {filaPrecio('Stop', `pos:${simbolo}:stop`, pos.stop, pos.precioMedio, BZ.rojo)}
+              {filaPrecio('Objetivo', `pos:${simbolo}:objetivo`, pos.objetivo, pos.precioMedio, BZ.verde)}
+            </div>
+          : <div style={{ color: BZ.gris }}>Stop {pr(pos.stop)} · objetivo {pr(pos.objetivo)}</div>}
         <div>Ahora: <b style={{ color: color(pos.ganancia) }}>{signo(pos.ganancia)}{eur(Math.abs(pos.ganancia))}</b></div>
         {!terminada && <button style={{ ...btn(), marginTop: 6 }} data-cerrar-replay="" onClick={() => onAccion({ fecha: estado.hoy, simbolo, tipo: 'cerrar' })}
           title={`Vende (o recompra el corto) ${cuando}`}>Cerrar a mercado</button>}
@@ -117,9 +140,16 @@ export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTermin
       </div>}
       {r.ordenesVivas.length > 0 && <div style={cajaSt} data-ordenes-vivas="">
         <b>Órdenes vivas</b>
-        {r.ordenesVivas.map(o => <div key={o.id} style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
-          <span style={{ flex: 1 }}>{textoOrden(o)}</span>
-          {!terminada && <button title="Cancelar la orden" data-cancelar={o.id} onClick={() => onAccion({ fecha: estado.hoy, tipo: 'cancelar', id: o.id })} style={{ ...btn(), padding: '0 7px', color: BZ.rojo }}>✕</button>}
+        {r.ordenesVivas.map(o => <div key={o.id} style={{ marginTop: 4 }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span style={{ flex: 1 }}>{textoOrden(o)}</span>
+            {!terminada && <button title="Cancelar la orden" data-cancelar={o.id} onClick={() => onAccion({ fecha: estado.hoy, tipo: 'cancelar', id: o.id })} style={{ ...btn(), padding: '0 7px', color: BZ.rojo }}>✕</button>}
+          </div>
+          {editable && <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 8px', alignItems: 'center', margin: '4px 0 2px' }} data-precios-viva={o.id}>
+            {o.entrada != null && filaPrecio('Entrada', `viva:${o.id}:entrada`, o.entrada, null, BZ.azul)}
+            {filaPrecio('Stop', `viva:${o.id}:stop`, o.stop, o.entrada == null ? ahora : vivo(`viva:${o.id}:entrada`, o.entrada), BZ.rojo)}
+            {filaPrecio('Objetivo', `viva:${o.id}:objetivo`, o.objetivo, o.entrada == null ? ahora : vivo(`viva:${o.id}:entrada`, o.entrada), BZ.verde)}
+          </div>}
         </div>)}
       </div>}
       {aviso && <div data-aviso-linea="" style={{ color: BZ.ambar, fontSize: 12, margin: '6px 0' }}>⚠ {aviso}</div>}
