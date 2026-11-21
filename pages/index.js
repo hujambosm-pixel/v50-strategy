@@ -21,7 +21,7 @@ import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/co
 import CandleChart from '../components/CandleChart'
 import VentanaIndicadores from '../components/VentanaIndicadores'
 import { BotonReplay, VentanaReplay, BarraReplay } from '../components/Replay'   // §226: modo Replay del gráfico grande
-import { recortaVelas, desplazaRango, vecina } from '../lib/replay/grafico'
+import { recortaVelas, desplazaRango, vecina, rangoVer } from '../lib/replay/grafico'
 import { irA as replayIrA } from '../lib/replay/motor'
 const VACIO_REPLAY=[]   // siempre la MISMA lista vacía: una nueva en cada pintado rehace el gráfico entero (trades está en sus dependencias)
 import FundamentalsPanel from '../components/FundamentalsPanel'
@@ -38,7 +38,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1292'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1293'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1920,14 +1920,18 @@ export default function Home() {
   // hasta «hoy» (los indicadores se calculan sin ver el futuro) y sin lo que diría el futuro o es de hoy (propsReplay).
   const [replay,setReplay]=useState(null)
   const [ventanaReplay,setVentanaReplay]=useState(false)
+  const [replayVer,setReplayVer]=useState(120)   // velas a la vista en el Replay (0 = libre)
   useEffect(()=>{ if(replay&&replay.valores[0]!==simbolo){ setReplay(null); isNewResultRef.current=true } },[simbolo])   // eslint-disable-line
   const velasReplay=useMemo(()=>replay?recortaVelas(result?.chartData||[],replay.hoy):null,[replay?.hoy,result?.chartData])   // eslint-disable-line
-  const empiezaReplay=(desde)=>{ setVentanaReplay(false); isNewResultRef.current=true; setReplay({version:1,valores:[simbolo],desde,hoy:desde,acciones:[],retrocesos:0}) }
+  const empiezaReplay=(desde)=>{ setVentanaReplay(false); const _r=rangoVer(result?.chartData||[],desde,replayVer); if(_r){ savedRangeRef.current=_r; isNewResultRef.current=false } else isNewResultRef.current=true; setReplay({version:1,valores:[simbolo],desde,hoy:desde,acciones:[],retrocesos:0}) }
   const saleReplay=()=>{ setReplay(null); isNewResultRef.current=true }
   // Avanzar o retroceder n velas: la ventana visible se mueve con ella (misma anchura).
   const vaReplay=(n)=>{ if(!replay) return; const f=vecina(result?.chartData||[],replay.desde,replay.hoy,n); if(!f) return
-    if(savedRangeRef.current) savedRangeRef.current=desplazaRango(savedRangeRef.current,replay.hoy,f)
+    const _r=replayVer?rangoVer(result?.chartData||[],f,replayVer):null
+    if(_r) savedRangeRef.current=_r; else if(savedRangeRef.current) savedRangeRef.current=desplazaRango(savedRangeRef.current,replay.hoy,f)
     setReplay(replayIrA(replay,f)) }
+  const cambiaVerReplay=(v)=>{ setReplayVer(v); const _r=replay&&v?rangoVer(result?.chartData||[],replay.hoy,v):null; if(!_r) return
+    savedRangeRef.current=_r; chartApiRef.current?.setRange?.(_r.from,_r.to); chartApiFullscreenRef.current?.setRange?.(_r.from,_r.to) }
   const propsReplay=replay?{data:velasReplay,trades:VACIO_REPLAY,visuals:null,slopeChanges:VACIO_REPLAY,grafico:null,razonamiento:false,customMarkers:VACIO_REPLAY,pendingOrders:VACIO_REPLAY,
     dibujar:false,onAlertaPrecio:null,onPriceAlarm:null,priceAlarms:VACIO_REPLAY,tlOpenTrades:VACIO_REPLAY,filterZones:VACIO_REPLAY,riskMode:null,riskLevels:null}:{}
 
@@ -5117,8 +5121,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   // §218: el precio de ahora del gráfico (último cierre de sus velas), la pestaña del panel derecho y lo que hacen 🎯, doble clic y arrastrar.
   // Solo si el gráfico ya es el del valor elegido (mientras carga otro, displayedSimbolo es aún el anterior).
   const ultimoPrecio=(()=>{if((displayedSimbolo||simbolo)!==simbolo)return null;const d=result?.chartData;const v=Array.isArray(d)&&d.length?d[d.length-1]:null;return v&&Number.isFinite(v.close)?v.close:null})()
-  const hayResumenDer=!!result&&!result.isBareChart&&(metricsLayout==='panel'||metricsLayout==='multi')&&!!metricsResumen
-  const pesDer=hayResumenDer?pestanaDer:'alertas'
+  const hayResumenDer=!replay&&!!result&&!result.isBareChart&&(metricsLayout==='panel'||metricsLayout==='multi')&&!!metricsResumen
+  const pesDer=replay?'replay':hayResumenDer?pestanaDer:'alertas'
   const abreNuevaAlerta=(price,ultimo)=>setVentanaAlerta({inicial:alertaNueva(simbolo,price,ultimo??ultimoPrecio)})
   // §221: pulsar una línea la elige y abre «Alertas»; pulsar en cualquier otro punto del gráfico vuelve a «Resumen». Supr la borra.
   const eligeAlertaGrafico=id=>{setAlertaElegida(id||null);setPestanaDer(id?'alertas':'resumen')}
@@ -5699,7 +5703,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1292</title>
+        <title>Trading Simulator V9.1293</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5788,7 +5792,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1292
+            <span className="dot"/>Trading Simulator V9.1293
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7945,7 +7949,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                         filterZones={result?.filterZones||[]}
                         {...propsReplay}
                       />
-                      {replay&&!chartFullscreen&&<BarraReplay velas={result.chartData} estado={replay} onIr={vaReplay} onSalir={saleReplay}/>}
+                      {replay&&!chartFullscreen&&<BarraReplay velas={result.chartData} estado={replay} onIr={vaReplay} onSalir={saleReplay} onIndicadores={()=>setVentanaInd(true)} ver={replayVer} onVer={cambiaVerReplay}/>}
                     </div>
                   </div>
 
@@ -8087,12 +8091,12 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           {...propsReplay}
                         />
                       </div>
-                      {replay&&<BarraReplay velas={result.chartData} estado={replay} onIr={vaReplay} onSalir={saleReplay}/>}
+                      {replay&&<BarraReplay velas={result.chartData} estado={replay} onIr={vaReplay} onSalir={saleReplay} onIndicadores={()=>setVentanaInd(true)} ver={replayVer} onVer={cambiaVerReplay}/>}
                     </div>
                   )}
 
                   {/* Métricas en cuadrícula (si layout=grid) — oculto en Risk y bare chart */}
-                  {!result.isBareChart&&sidePanel!=='risk'&&metricsLayout==='grid'&&metricsResumen&&(
+                  {!result.isBareChart&&sidePanel!=='risk'&&!replay&&metricsLayout==='grid'&&metricsResumen&&(
                     <div style={{border:'1px solid var(--border)',borderRadius:4,margin:'8px 0',overflow:'hidden'}}>
                       <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 10px 0'}}>
                         <button onClick={()=>setMetricsView(v=>v==='multi'?'single':'multi')}
@@ -8114,8 +8118,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </div>
                   )}
 
-                  {/* Equity + Barras + Historial — ocultos en Risk Management y bare chart */}
-                  {!result.isBareChart&&sidePanel!=='risk'&&<>
+                  {/* Equity + Barras + Historial — ocultos en Risk Management, bare chart y Replay (§226: dirían el futuro) */}
+                  {!result.isBareChart&&sidePanel!=='risk'&&!replay&&<>
                   <div className="equity-section" onContextMenu={e=>openCtx(e,'equity')}>
                     <div className="section-title" style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:6,fontSize:14}}>
                       <span>Equity</span>
@@ -8315,8 +8319,9 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
                     <div style={{padding:'0 8px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'stretch',gap:2}}>
                       {hayResumenDer&&<button data-pestana-der="resumen" onClick={()=>setPestanaDer('resumen')} style={{background:'transparent',border:'none',borderBottom:pesDer==='resumen'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='resumen'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer'}}>RESUMEN · {displayedSimbolo||simbolo}</button>}
-                      {(()=>{const n=(alertasN.alertas||[]).filter(a=>a.activa).length,sv=alertasN.sinVer;return <button data-pestana-der="alertas" title={`Tus alertas: ${n} encendida${n===1?'':'s'}${sv?` · ${sv} saltaron y no las has visto`:''}`} onClick={()=>setPestanaDer('alertas')} style={{background:'transparent',border:'none',borderBottom:pesDer==='alertas'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='alertas'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>ALERTAS{n?` (${n})`:''}<style>{'@keyframes campanaAlerta{0%,60%,100%{transform:rotate(0)}10%{transform:rotate(16deg)}20%{transform:rotate(-14deg)}30%{transform:rotate(10deg)}40%{transform:rotate(-8deg)}50%{transform:rotate(4deg)}}'}</style><span data-campana-pestana style={{fontSize:12,lineHeight:1,display:'inline-block',transformOrigin:'50% 0',animation:sv?'campanaAlerta 1.6s ease-in-out infinite':'none'}}>🔔</span>{sv?<span style={{color:'#ff4d6d'}}>{sv} sin ver</span>:null}</button>})()}
+                      {replay?<span data-pestana-der="replay" style={{borderBottom:'2px solid #ffd166',color:'#ffd166',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px'}}>REPLAY</span>:(()=>{const n=(alertasN.alertas||[]).filter(a=>a.activa).length,sv=alertasN.sinVer;return <button data-pestana-der="alertas" title={`Tus alertas: ${n} encendida${n===1?'':'s'}${sv?` · ${sv} saltaron y no las has visto`:''}`} onClick={()=>setPestanaDer('alertas')} style={{background:'transparent',border:'none',borderBottom:pesDer==='alertas'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='alertas'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>ALERTAS{n?` (${n})`:''}<style>{'@keyframes campanaAlerta{0%,60%,100%{transform:rotate(0)}10%{transform:rotate(16deg)}20%{transform:rotate(-14deg)}30%{transform:rotate(10deg)}40%{transform:rotate(-8deg)}50%{transform:rotate(4deg)}}'}</style><span data-campana-pestana style={{fontSize:12,lineHeight:1,display:'inline-block',transformOrigin:'50% 0',animation:sv?'campanaAlerta 1.6s ease-in-out infinite':'none'}}>🔔</span>{sv?<span style={{color:'#ff4d6d'}}>{sv} sin ver</span>:null}</button>})()}
                     </div>
+                    {pesDer==='replay'&&<div data-panel-replay="" style={{padding:'12px 10px',fontFamily:MONO,fontSize:11,color:'var(--text2)',lineHeight:1.5}}><div style={{color:'#ffd166',fontWeight:700,marginBottom:6}}>⏪ REPLAY · {simbolo}</div>Mientras dura el Replay se ocultan el resumen y la equity del backtest y tus alertas: dirían el futuro.<br/><br/>Aquí irá el panel para operar (siguiente paso).</div>}
                     {pesDer==='alertas'&&<PanelAlertas simbolo={simbolo} ahora={ultimoPrecio} estado={alertasN} onNueva={()=>abreNuevaAlerta(null)} onEditar={a=>setVentanaAlerta({inicial:a})} elegida={alertaElegida} estiloLineas={estiloLineas} onEstiloLineas={setEstiloLineas} onIrAValor={s=>setSimbolo(s)} onElegir={eligeAlertaLista}/>}
                     {pesDer==='resumen'&&<>
                     {/* Aviso de cobertura del backtest individual (ver avisoHistoricoIndiv): mismo chip ámbar */}

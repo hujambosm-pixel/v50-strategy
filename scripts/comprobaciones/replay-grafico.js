@@ -30,6 +30,7 @@ const VELAS = F.map((date, i) => ({ date, open: 10 + i, high: 11 + i, low: 9 + i
   ok(G.vecina(VELAS, F[2], F[4], -1) === F[3] && G.vecina(VELAS, F[2], F[3], -5) === F[2] && G.vecina(VELAS, F[2], F[2], -1) === null, 'atrás: una; cinco desde el 05/01 se para en el inicio (04/01); en el inicio no retrocede')
   ok(igual(G.desplazaRango({ from: '2022-10-06', to: '2023-01-18' }, F[4], F[5]), { from: '2022-10-09', to: '2023-01-21' }), 'del vie 06/01 al lun 09/01 la ventana se mueve 3 días (misma anchura)')
   ok(igual(G.posicion(VELAS, F[2], F[4]), { vela: 3, total: 8, quedan: 5 }), 'empezando el 04/01 y hoy el 06/01: vela 3 de 8, quedan 5')
+  ok(igual(G.rangoVer(VELAS, F[5], 3), { from: F[3], to: '2023-01-21' }) && igual(G.rangoVer(VELAS, F[1], 120), { from: F[0], to: '2023-01-15' }) && G.rangoVer(VELAS, F[5], 0) === null, '«Ver 3» con hoy el lun 09/01: del jue 05/01 al 21/01 (12 días de margen); «Ver 120» con pocas velas: desde la primera; «Libre»: no toca la ventana')
   // Retroceder con el motor: suma un retroceso.
   const e0 = { version: 1, valores: ['X'], desde: F[2], hoy: F[2], acciones: [], retrocesos: 0 }
   const e1 = M.irA(e0, G.vecina(VELAS, F[2], F[2], 1)), e2 = M.irA(e1, G.vecina(VELAS, F[2], e1.hoy, -1))
@@ -42,11 +43,19 @@ const VELAS = F.map((date, i) => ({ date, open: 10 + i, high: 11 + i, low: 9 + i
   const barra = (estado) => React.createElement(RP.BarraReplay, { velas: VELAS, estado, onIr: n => pasos.push(n), onSalir: () => { salidas++ } })
   let m = D.monta(barra({ ...e0, hoy: F[4], retrocesos: 2 }), RDC); await D.espera(20)
   const texto = () => m.raiz.busca(n => n.hasAttribute('data-barra-replay')).textContent
-  ok(/Hoy: vie 06\/01\/2023/.test(texto()) && /vela 3 de 8/.test(texto()) && /2 retrocesos/.test(texto()), `la barra dice «Hoy: vie 06/01/2023 · vela 3 de 8 · 2 retrocesos» (${texto().slice(0, 120)})`)
-  const boton = (t) => m.raiz.busca(n => n.nodeName === 'BUTTON' && n.textContent === t)
-  D.pulsa(boton('▶|')); D.pulsa(boton('▶▶')); D.pulsa(boton('◀')); await D.espera(10)
-  ok(igual(pasos, [1, 5, -1]), '▶| una vela, ▶▶ cinco, ◀ una atrás')
+  ok(/Hoy en el replay: vie 06\/01\/2023/.test(texto()) && /vela 3 de 8/.test(texto()) && /2 retrocesos/.test(texto()), `la barra dice «Hoy en el replay: vie 06/01/2023 · vela 3 de 8 · 2 retrocesos» (${texto().slice(0, 120)})`)
   const tecla = (key, extra = {}) => { let parado = false; for (const f of OV.keydown || []) f({ key, target: { tagName: 'DIV' }, preventDefault() {}, stopPropagation() { parado = true }, ...extra }); return parado }
+  const boton = (t) => m.raiz.busca(n => n.nodeName === 'BUTTON' && n.textContent === t)
+  const varias = () => m.raiz.busca(n => n.hasAttribute('data-varias'))
+  D.pulsa(boton('▶|')); D.pulsa(varias()); D.pulsa(boton('◀')); await D.espera(10)
+  ok(igual(pasos, [1, 5, -1]) && varias().textContent === '▶▶ 5', '▶| una vela, ▶▶ cinco (las de la casilla, 5 de entrada), ◀ una atrás')
+  pasos.length = 0
+  D.escribe(m.raiz.busca(n => n.hasAttribute('data-n-velas')), '3'); await D.espera(10)
+  D.pulsa(varias()); tecla('ArrowRight', { shiftKey: true }); tecla('ArrowLeft', { shiftKey: true }); await D.espera(10)
+  ok(igual(pasos, [3, 3, -3]) && varias().textContent === '▶▶ 3', `casilla a 3: ▶▶, Mayús + → y Mayús + ← mueven 3 (${JSON.stringify(pasos)})`)
+  D.escribe(m.raiz.busca(n => n.hasAttribute('data-n-velas')), '1'); await D.espera(10)
+  ok(varias().textContent === '▶▶ 2', 'la casilla no baja de 2 (para una vela está ▶|)')
+  D.escribe(m.raiz.busca(n => n.hasAttribute('data-n-velas')), '5'); await D.espera(10)
   pasos.length = 0
   const p1 = tecla('ArrowRight'); tecla('ArrowRight', { shiftKey: true }); tecla('ArrowLeft'); await D.espera(10)
   ok(igual(pasos, [1, 5, -1]) && p1, 'teclas → (una), Mayús + → (cinco), ← (atrás); no siguen hacia otras teclas de la app')

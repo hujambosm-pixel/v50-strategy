@@ -3716,3 +3716,12 @@ Botón «⏪ Replay» junto a «📈 Indicadores» en las dos barras del gráfic
 - lib/replay/grafico.js (puro): recortaVelas, velaDeInicio, inicioHace, inicioAlAzar, vecina, desplazaRango, posicion. Retroceder usa irA del motor (suma un retroceso).
 - Límites dichos a Sergi: las velas son las que ya carga el gráfico (con una estrategia de periodo corto, el Replay empieza dentro de ese periodo); el panel «Resumen» del backtest sigue a la derecha con las cifras del periodo entero (lo sustituye el panel de operar, parte 4).
 - Comprobación scripts/comprobaciones/replay-grafico.js (27, en comunes.sh). COMPROBADO POR MÍ EN LA APP (^GSPC, sesión de Sergi): empezar «hace 1 año» (jue 20/11/2025, vela 1 de 252), → ×3, Mayús+→, ← → vela 8 y 1 retroceso, espacio reproduce y para sin abrir el buscador, «✕ Salir» vuelve al gráfico de siempre; consola sin errores.
+
+## 227. Replay: la barra con el aspecto del boceto, ▶▶ con casilla, «Ver» y fuera el resumen del backtest (21/11)
+
+Pedido por Sergi al ver §226 (con captura del boceto): le gustaban más los controles del boceto y ▶▶ avanzaba siempre 5 (no había casilla para elegirlo; ▶| sí iba de una en una, comprobado en la app). Tachó también el «Resumen» del panel derecho.
+- BarraReplay con los colores y la letra del boceto (fondo #2c303b, botones #353945, borde #4c5263, letra del sistema 13 px, recuadro redondeado): ◀ · ▶/⏸ · velocidad (1 vela/s, 2/s, 5/s, 10/s) · ▶| · «▶▶ N» con su casilla (2–200, 5 de entrada; Mayús + → y Mayús + ← usan la misma N) · 📈 Indicadores (la ventana de siempre) · «Ver» 60 / 120 / 250 / 500 / Libre · «?» · «Hoy en el replay: …» en ámbar, vela N de M, retrocesos, ✕ Salir.
+- «Ver N» (120 de entrada): la ventana enseña las N últimas velas hasta hoy y, al avanzar, sigue a la última (rangoVer en lib/replay/grafico.js; al cambiarlo, setRange del gráfico). «Libre»: la anchura que dejes con la rueda (desplazaRango, como en §226).
+- Mientras dura el Replay se ocultan el resumen del backtest (panel derecho), las métricas en cuadrícula y la sección Equity + barras + historial de debajo del gráfico, y las alertas (dirían el futuro o son de hoy). El panel derecho dice «REPLAY · <valor>» y que allí irá el panel para operar.
+- Señal ⏮ / ⏭, el selector de señal y «a ciegas» del boceto llegan en sus partes (5 y después).
+- replay-grafico.js: 29 (casilla de ▶▶ con 3 y su mínimo de 2, Mayús + ←, rangoVer). COMPROBADO POR MÍ EN LA APP (^GSPC): barra como el boceto, casilla 3 → ▶▶ 3 → vela 4, «Ver 60» enseña 60 velas; panel derecho «REPLAY»; consola sin errores.

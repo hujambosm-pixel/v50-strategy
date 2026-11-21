@@ -14,7 +14,8 @@ const boton = (activo = true) => ({ pointerEvents: 'all', background: 'rgba(0,21
 
 export const AYUDA_REPLAY = 'El Replay te pone en un día del pasado: el gráfico llega solo hasta ese día y lo vas descubriendo vela a vela, como si fuera hoy. ' +
   'Las medias, el RSI y los demás indicadores se calculan solo con las velas que ves, y se ocultan las operaciones de la estrategia y tus órdenes reales (dirían el futuro).\n\n' +
-  'Teclas: → una vela · Mayús + → cinco · ← una atrás · espacio reproduce o para.\n\n' +
+  'Teclas: → una vela · Mayús + → las de la casilla de ▶▶ (5 si no la cambias) · ← una atrás (Mayús + ←, las de la casilla) · espacio reproduce o para. ' +
+  '«Ver» dice cuántas velas se ven a la vez y la ventana sigue a la última; con «Libre», la anchura que dejes con la rueda.\n\n' +
   'Ejemplo: empiezas el 02/01/2020 con una media de 20 velas. El 02/01 la media es la de las 20 velas hasta el 02/01; al avanzar al 03/01 entra la vela del 03/01 y la media cambia con ella, nunca antes.\n\n' +
   'Volver atrás cuenta como «retroceso» (cuando puedas operar, deshará lo que hiciste en las velas que vuelven a ocultarse).'
 
@@ -63,12 +64,20 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar }) {
     </div>)
 }
 
-export function BarraReplay({ velas, estado, onIr, onSalir }) {
+// Colores y letra del boceto (bocetos/replay-simulacion.html), elegidos por Sergi el 21/11 frente a los de la barra del gráfico.
+const BZ = { fondo: '#2c303b', caja: '#353945', borde: '#4c5263', texto: '#f3f3f5', gris: '#a9adb8', ambar: '#d29922', azul: '#58a6ff' }
+const LETRA = 'system-ui, "Segoe UI", sans-serif'
+const bz = (activo = true) => ({ background: BZ.caja, color: BZ.texto, border: `1px solid ${BZ.borde}`, borderRadius: 5, padding: '4px 9px', font: `13px/1.3 ${LETRA}`,
+  cursor: activo ? 'pointer' : 'default', opacity: activo ? 1 : 0.4, flexShrink: 0 })
+export const VER = [60, 120, 250, 500, 0]   // velas a la vista (0 = libre: la anchura que dejes con la rueda)
+
+export function BarraReplay({ velas, estado, onIr, onSalir, onIndicadores, ver = 120, onVer }) {
   const [jugando, setJugando] = useState(false)
   const [vel, setVel] = useState(2)   // velas por segundo
+  const [n, setN] = useState(5)       // cuántas avanza ▶▶ (y retrocede Mayús + ←)
   const p = posicion(velas, estado.desde, estado.hoy)
   const fin = p.quedan <= 0
-  const cb = useRef({}); cb.current = { onIr, fin }
+  const cb = useRef({}); cb.current = { onIr, fin, n }
   useEffect(() => { if (fin) setJugando(false) }, [fin])
   useEffect(() => {
     if (!jugando) return
@@ -79,31 +88,39 @@ export function BarraReplay({ velas, estado, onIr, onSalir }) {
     const tecla = (e) => {
       const t = e.target, tag = t?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable || e.ctrlKey || e.metaKey || e.altKey) return
-      if (e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); setJugando(false); if (!cb.current.fin) cb.current.onIr(e.shiftKey ? 5 : 1) }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); setJugando(false); cb.current.onIr(-1) }
+      if (e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); setJugando(false); if (!cb.current.fin) cb.current.onIr(e.shiftKey ? cb.current.n : 1) }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); setJugando(false); cb.current.onIr(e.shiftKey ? -cb.current.n : -1) }
       else if (e.key === ' ') { e.preventDefault(); e.stopPropagation(); if (!cb.current.fin) setJugando(j => !j) }
     }
     window.addEventListener('keydown', tecla, true)
     return () => window.removeEventListener('keydown', tecla, true)
   }, [])
-  const b = (txt, titulo, f, activo = true, extra = {}) => (
-    <button onClick={() => { if (activo) f() }} title={titulo} disabled={!activo} style={{ ...boton(activo), ...extra }}>{txt}</button>)
+  const b = (txt, titulo, f, activo = true, extra = {}, dato = {}) => (
+    <button onClick={() => { if (activo) f() }} title={titulo} disabled={!activo} style={{ ...bz(activo), ...extra }} {...dato}>{txt}</button>)
+  const sep = <div style={{ width: 1, height: 20, background: BZ.borde, margin: '0 3px' }} />
+  const caja = { background: BZ.caja, color: BZ.texto, border: `1px solid ${BZ.borde}`, borderRadius: 5, padding: '4px 6px', font: `13px ${LETRA}`, width: 'auto' }
   return (
-    <div data-barra-replay="" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: 'rgba(40,32,8,0.95)',
-      borderTop: '1px solid rgba(255,209,102,0.45)', fontFamily: MONO, fontSize: 12, color: '#c9d6e3', flexWrap: 'wrap' }}>
-      <b style={{ color: '#ffd166' }}>⏪ REPLAY</b>
-      <Ayuda texto={AYUDA_REPLAY} etiqueta="Qué es el Replay" />
-      {b('◀', 'Una vela atrás (←)', () => { setJugando(false); onIr(-1) }, p.vela > 1)}
-      {b(jugando ? '⏸' : '▶', jugando ? 'Parar (espacio)' : 'Reproducir (espacio)', () => setJugando(j => !j), !fin, { minWidth: 30 })}
-      {b('▶|', 'Una vela (→)', () => { setJugando(false); onIr(1) }, !fin)}
-      {b('▶▶', 'Cinco velas (Mayús + →)', () => { setJugando(false); onIr(5) }, !fin)}
-      <select value={vel} onChange={e => setVel(Number(e.target.value))} title="Velocidad al reproducir"
-        style={{ width: 'auto', fontFamily: MONO, fontSize: 11, background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3, padding: '2px 4px' }}>
-        {[1, 2, 5, 10].map(v => <option key={v} value={v}>{v} {v === 1 ? 'vela' : 'velas'}/s</option>)}
+    <div data-barra-replay="" style={{ flexShrink: 0, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center', background: BZ.fondo, border: `1px solid ${BZ.borde}`,
+      borderRadius: 6, padding: '6px 8px', margin: '4px 6px', font: `13px/1.45 ${LETRA}`, color: BZ.texto }}>
+      {b('◀', `Una vela atrás (←; Mayús + ←: ${n})`, () => { setJugando(false); onIr(-1) }, p.vela > 1)}
+      {b(jugando ? '⏸' : '▶', jugando ? 'Pausa (espacio)' : 'Reproducir (espacio)', () => setJugando(j => !j), !fin, { minWidth: 40 })}
+      <select value={vel} onChange={e => setVel(Number(e.target.value))} title="Velocidad al reproducir" style={caja}>
+        {[1, 2, 5, 10].map(v => <option key={v} value={v}>{v === 1 ? '1 vela/s' : `${v}/s`}</option>)}
       </select>
-      <span data-hoy-replay="" style={{ marginLeft: 6 }}>Hoy: <b style={{ color: '#e2eaf5' }}>{diaSemana(estado.hoy)} {fmt(estado.hoy)}</b></span>
-      <span style={{ color: '#7a9bc0' }} title={`Empezaste el ${fmt(estado.desde)}`}>· vela {p.vela} de {p.total}{fin ? ' · última vela' : ''}</span>
-      {estado.retrocesos > 0 && <span style={{ color: '#f2cc60' }} title="Veces que has vuelto atrás">· {estado.retrocesos} {estado.retrocesos === 1 ? 'retroceso' : 'retrocesos'}</span>}
-      <button onClick={onSalir} data-salir-replay="" title="Salir del Replay (vuelve el gráfico de siempre)" style={{ ...boton(), marginLeft: 'auto' }}>✕ Salir</button>
+      {b('▶|', 'Una vela (→)', () => { setJugando(false); onIr(1) }, !fin)}
+      {b(<>▶▶ {n}</>, `${n} velas (Mayús + →)`, () => { setJugando(false); onIr(n) }, !fin, {}, { 'data-varias': '' })}
+      <input type="number" value={n} min={2} max={200} title="Cuántas velas avanza ▶▶" data-n-velas=""
+        onChange={e => { const v = Math.round(Number(e.target.value)); if (Number.isFinite(v)) setN(Math.min(200, Math.max(2, v))) }} style={{ ...caja, width: 56 }} />
+      {sep}
+      {onIndicadores && b('📈 Indicadores', 'Añadir indicadores: se calculan solo con las velas que ves', onIndicadores)}
+      <span style={{ color: BZ.gris }}>Ver</span>
+      <select value={ver} onChange={e => onVer && onVer(Number(e.target.value))} title="Cuántas velas se ven a la vez (al avanzar, la ventana sigue a la última)" data-ver-replay="" style={caja}>
+        {VER.map(v => <option key={v} value={v}>{v || 'Libre'}</option>)}
+      </select>
+      <Ayuda texto={AYUDA_REPLAY} etiqueta="Qué es el Replay" />
+      <span data-hoy-replay="" style={{ marginLeft: 'auto', color: BZ.ambar }}>Hoy en el replay: {diaSemana(estado.hoy)} {fmt(estado.hoy)}</span>
+      <span style={{ color: BZ.gris }} title={`Empezaste el ${fmt(estado.desde)}`}>· vela {p.vela} de {p.total}{fin ? ' · última vela' : ''}</span>
+      {estado.retrocesos > 0 && <span style={{ color: BZ.ambar }} title="Veces que has vuelto atrás">· {estado.retrocesos} {estado.retrocesos === 1 ? 'retroceso' : 'retrocesos'}</span>}
+      {b('✕ Salir', 'Salir del Replay (vuelve el gráfico de siempre)', onSalir, true, {}, { 'data-salir-replay': '' })}
     </div>)
 }
