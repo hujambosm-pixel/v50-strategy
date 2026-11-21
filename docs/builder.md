@@ -3690,3 +3690,11 @@ Con el OK de Sergi (21/11, norma del mapa: lo nuevo ya tiene todo lo del panel v
 - Fuera la entrada «🔔 Alertas» del menú de la izquierda. La tabla alarms se queda en la base (sin borrar) y el código del panel viejo sigue en pages/index.js sin forma de llegar a él (retirarlo del todo, más adelante). La campanita del filtro de condiciones de la Watchlist (círculos) NO se toca.
 - Las que saltaron y no has visto van ARRIBA de todo en la pestaña («SALTARON · N SIN VER»), parpadeando entre rojo y amarillo como el panel viejo (@keyframes alertaParpadeo), con «✓ Vista» en verde; su alerta, si sigue en la lista, parpadea también. Abajo, «Saltaron antes (ya vistas)».
 - Fuera de la pestaña (pedido por Sergi con captura): el valor y el precio de la cabecera y el texto «Ninguna encendida. Pulsa…».
+
+## 224. Replay, parte 1: la tabla de las simulaciones (21/11)
+
+Primer commit del Replay (boceto bocetos/replay-simulacion.html v2, aceptado por Sergi el 21/11: «sí, a todo», con el nombre «Paper trading»). Solo la base: la app todavía no la usa y ninguna cifra cambia. El TradeLog y la operativa real no se tocan (las simulaciones van aparte, a propósito).
+- sql/simulaciones.sql (con REVERSIÓN): public.simulaciones (id, tipo replay / paper que no cambia, nombre 1–120 letras, estado jsonb objeto ≤ 1 MB con todo lo de dentro —valores, velas, desde, hoy, capital, comisión, ajustes, órdenes, operaciones, retrocesos—, creada y actualizada del disparador). El formato del estado lo decide la app (lib/replay/, parte 2). RLS «dueño» con permisos por columnas: al crear tipo, nombre y estado; al cambiar, solo nombre y estado. anon, nada.
+- Aplicada el 21/11 en Supabase LOCAL (postgres-meta). La nube no se toca.
+- scripts/comprobaciones/simulacionesSeguridad.js (no va en comunes.sh): dos usuarios simulados y anon en una transacción que se deshace, más la clave anon por HTTP: 31/31.
+- Sin comunes.sh en este commit: no cambia nada que la app ejecute (como §206 y §215).
