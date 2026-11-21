@@ -3683,3 +3683,10 @@ Pedido por Sergi al ver la parte 6 (captura con AUGO y las dos 🔔).
 - La 🔔 va en la pestaña «Alertas (N) 🔔» (con «N sin ver» en rojo). En la barra de arriba solo sale cuando alguna saltó y no la has visto (para enterarte desde cualquier sección; decidido por mí, dicho a Sergi).
 - También (Sergi, 21/11): el resumen de cada alerta va en UNA línea con «…» (la frase entera, «Así se lee», al pasar el ratón); y la 🔔 (en la pestaña y arriba) se BALANCEA mientras haya alguna que saltó y no has visto (@keyframes campanaAlerta).
 - comunes.sh: 1 fallo INTERMITENTE en screener.js (1 de 268, dentro de la batería; repetido suelto, 268/268). Nada de esta parte toca el screener.
+
+## 223. Alertas: retirada la 🔔 vieja del menú; las que saltaron, arriba y parpadeando (21/11)
+
+Con el OK de Sergi (21/11, norma del mapa: lo nuevo ya tiene todo lo del panel viejo).
+- Fuera la entrada «🔔 Alertas» del menú de la izquierda. La tabla alarms se queda en la base (sin borrar) y el código del panel viejo sigue en pages/index.js sin forma de llegar a él (retirarlo del todo, más adelante). La campanita del filtro de condiciones de la Watchlist (círculos) NO se toca.
+- Las que saltaron y no has visto van ARRIBA de todo en la pestaña («SALTARON · N SIN VER»), parpadeando entre rojo y amarillo como el panel viejo (@keyframes alertaParpadeo), con «✓ Vista» en verde; su alerta, si sigue en la lista, parpadea también. Abajo, «Saltaron antes (ya vistas)».
+- Fuera de la pestaña (pedido por Sergi con captura): el valor y el precio de la cabecera y el texto «Ninguna encendida. Pulsa…».
