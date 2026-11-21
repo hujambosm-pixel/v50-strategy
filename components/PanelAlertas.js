@@ -71,7 +71,8 @@ const AYUDA = 'Cómo funcionan las alertas\n\n' +
   'Ejemplo: «Toca 100» con el precio a 95; a las 16:40 sube a 100,30 y a las 16:45 ya está en 99,80. La pasada de las 16:45 ve que el máximo del día es 100,30 y avisa.\n' +
   '• «Cierra por encima / por debajo» y «Condición» se miran al cierre (pasadas de después de las 22:00).\n' +
   '• Aquí salen TODAS tus alertas: arriba las del valor del gráfico (con lo que le falta al precio), debajo las de los demás (pulsa el valor para abrir su gráfico).\n' +
-  '• Las líneas discontinuas del gráfico son tus alertas de precio (en la lista, ▲ avisa al subir y ▼ al bajar; su color y grosor, en «Líneas»). Pulsa una (en el gráfico o en esta lista) para elegirla: la puedes mover arrastrándola o con las flechas ↑ ↓ del teclado (cada pulsación, un 0,1 % del precio; con Mayúsculas, un 1 %), Supr la borra y Esc la suelta. Al crear una alerta queda elegida. Pulsar en cualquier otro punto del gráfico vuelve a «Resumen». Doble clic en el gráfico o 🎯 crea una nueva en ese precio.'
+  '• 🎯 = alerta de precio (toca, cierra, se mueve un %); ⚡ = alerta técnica (condición del catálogo).\n' +
+  '• Las líneas discontinuas del gráfico son tus alertas de precio (su color y grosor, en «Líneas»). Pulsa una (en el gráfico o en esta lista) para elegirla: la puedes mover arrastrándola o con las flechas ↑ ↓ del teclado (cada pulsación, un 0,1 % del precio; con Mayúsculas, un 1 %), Supr la borra y Esc la suelta. Al crear una alerta queda elegida. Pulsar en cualquier otro punto del gráfico vuelve a «Resumen». Doble clic en el gráfico o 🎯 crea una nueva en ese precio.'
 
 // ── La pestaña «Alertas»: TODAS las alertas de la app (§220); las del valor del gráfico, arriba y con lo que les falta ──
 export function PanelAlertas({ simbolo, ahora, estado, onNueva, onEditar, onIrAValor = null, onElegir = null, elegida = null, estiloLineas = null, onEstiloLineas = null }) {
@@ -96,9 +97,10 @@ export function PanelAlertas({ simbolo, ahora, estado, onNueva, onEditar, onIrAV
     return (
       <div key={a.id} data-alerta={a.id} data-elegida={elegida === a.id ? '1' : undefined} onClick={onElegir ? (e) => { if (!e.target.closest('button')) onElegir(a) } : undefined} title={onElegir ? (a.simbolo === sim ? 'Elegir su línea en el gráfico (↑ ↓ la mueven, Supr la borra)' : `Abrir el gráfico de ${a.simbolo} con esta alerta`) : undefined} style={{ cursor: onElegir ? 'pointer' : 'default', padding: '5px 10px', borderBottom: '1px solid var(--border)', opacity: a.activa ? 1 : 0.55, background: elegida === a.id ? 'rgba(255,209,102,0.12)' : 'transparent', borderLeft: elegida === a.id ? '2px solid #ffd166' : '2px solid transparent' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span title={a.tipo === 'condicion' || a.tipo === 'movimiento' ? '' : baja ? 'Avisa al bajar' : 'Avisa al subir'} style={{ width: 12, flexShrink: 0, fontSize: 10, color: estiloLineas?.color || AMARILLO }}>{a.tipo === 'condicion' ? '◆' : a.tipo === 'movimiento' ? '%' : baja ? '▼' : '▲'}</span>
+          {/* §222: los iconos de la 🔔 de siempre: 🎯 alerta de precio (toca, cierra, se mueve un %), ⚡ alerta técnica (condición) */}
+          <span title={a.tipo === 'condicion' || a.tipo === 'estrategia' ? 'Alerta técnica' : `Alerta de precio${a.tipo === 'movimiento' ? '' : baja ? ' · avisa al bajar' : ' · avisa al subir'}`} style={{ width: 18, flexShrink: 0, fontSize: 14, lineHeight: 1 }}>{a.tipo === 'condicion' || a.tipo === 'estrategia' ? '⚡' : '🎯'}</span>
           {conValor && nombreValor(a.simbolo)}
-          <span style={{ flex: 1, fontSize: 12, color: 'var(--text)', fontWeight: 600, minWidth: 0 }} title={asiSeLee(a)}>{resumenAlerta(a)}</span>
+          <span data-resumen-alerta style={{ flex: 1, fontSize: 12, color: 'var(--text)', fontWeight: 600, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={asiSeLee(a)}>{resumenAlerta(a)}</span>
           <button onClick={() => prueba(estado.cambiar(a.id, a.activa ? { activa: false } : { activa: true, armada: true }))} title={a.activa ? 'Apagar (no avisa hasta que la enciendas)' : 'Volver a encender'} style={boton()}>{a.activa ? '⏸' : '↻'}</button>
           <button onClick={() => onEditar(a)} title="Cambiar" style={boton()} disabled={a.tipo === 'estrategia'}>✎</button>
           <button data-borrar-alerta={a.id} onClick={() => prueba(estado.borrar(a.id))} title="Borrar la alerta (sin preguntar)" style={boton({ color: ROJO })}>🗑</button>

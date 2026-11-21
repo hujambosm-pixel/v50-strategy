@@ -3675,3 +3675,11 @@ Pedido por Sergi al probar §219 (captura con AUGO y dos alertas), metido en la 
 - VentanaAlerta: «Condición del catálogo» ya se puede elegir (más ancha, 620 px); ✎ también en las de condición; la ventana va con zIndex 990 (por debajo de los «?», 1000, para que se lean encima) y Esc con el catálogo abierto cierra solo el catálogo.
 - «Señal de una estrategia» queda para más adelante (hace falta que el comprobador ejecute una estrategia entera).
 - alertas.js: 70.
+
+## 222. Alertas: iconos 🎯 / ⚡ y la 🔔 junto a la pestaña (21/11)
+
+Pedido por Sergi al ver la parte 6 (captura con AUGO y las dos 🔔).
+- En la lista de la pestaña, los iconos de la 🔔 de siempre, algo más grandes (14 px): 🎯 alerta de precio (toca, cierra, se mueve un %) y ⚡ alerta técnica (condición; y «señal de una estrategia» cuando llegue). Si avisa al subir o al bajar, en el tooltip del icono.
+- La 🔔 va en la pestaña «Alertas (N) 🔔» (con «N sin ver» en rojo). En la barra de arriba solo sale cuando alguna saltó y no la has visto (para enterarte desde cualquier sección; decidido por mí, dicho a Sergi).
+- También (Sergi, 21/11): el resumen de cada alerta va en UNA línea con «…» (la frase entera, «Así se lee», al pasar el ratón); y la 🔔 (en la pestaña y arriba) se BALANCEA mientras haya alguna que saltó y no has visto (@keyframes campanaAlerta).
+- comunes.sh: 1 fallo INTERMITENTE en screener.js (1 de 268, dentro de la batería; repetido suelto, 268/268). Nada de esta parte toca el screener.

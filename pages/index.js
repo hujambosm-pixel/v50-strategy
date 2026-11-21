@@ -34,7 +34,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1287'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1288'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -5679,7 +5679,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1287</title>
+        <title>Trading Simulator V9.1288</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5768,7 +5768,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1287
+            <span className="dot"/>Trading Simulator V9.1288
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -5796,11 +5796,12 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               ← Atrás
             </button>
             {/* §220: tus alertas nuevas: en rojo las que saltaron y no has visto; abre la pestaña «Alertas» junto al gráfico */}
-            {alertasN.disponible&&(()=>{const enc=(alertasN.alertas||[]).filter(a=>a.activa).length,sv=alertasN.sinVer;return(
+            {/* §222: arriba SOLO cuando alguna saltó y no la has visto (para enterarte desde cualquier sección); si no, la 🔔 va junto a la pestaña «Alertas» */}
+            {alertasN.disponible&&alertasN.sinVer>0&&(()=>{const enc=(alertasN.alertas||[]).filter(a=>a.activa).length,sv=alertasN.sinVer;return(
             <button data-campana-alertas onClick={()=>salirDeTesis(()=>{if(['optimiza','editor','builder','tesis','screener','multi','tradelog','fundamentals','risk'].includes(sidePanel))setSidePanel('watchlist');setPestanaDer('alertas')})}
               title={`Tus alertas: ${enc} encendida${enc===1?'':'s'}${sv?` · ${sv} saltaron y no las has visto`:''}. Pulsa para verlas.`}
               style={{background:sv?'rgba(255,77,109,0.15)':'rgba(0,212,255,0.06)',border:`1px solid ${sv?'#ff4d6d':'rgba(0,212,255,0.25)'}`,color:sv?'#ff4d6d':'#00d4ff',fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:6,cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0,fontWeight:sv?700:400}}>
-              🔔 {sv?`${sv} sin ver`:enc}
+              <span style={{display:'inline-block',transformOrigin:'50% 0',animation:sv?'campanaAlerta 1.6s ease-in-out infinite':'none'}}>🔔</span> {sv?`${sv} sin ver`:enc}
             </button>)})()}
             <button data-tema-app onClick={alternaTema} title={(temaApp==='claro'?'Pasar a la vista oscura (estilo Finviz)':'Pasar a la vista clara (papel gris)')+'. Cambia el Screener, Estrategias y Planes (el resto de la app, más adelante).'}
               style={{background:'rgba(0,212,255,0.06)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',fontFamily:MONO,fontSize:11,padding:'4px 10px',borderRadius:6,cursor:'pointer',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
@@ -8289,7 +8290,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       onMouseOut={e=>e.currentTarget.style.background='transparent'}/>
                     <div style={{padding:'0 8px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'stretch',gap:2}}>
                       {hayResumenDer&&<button data-pestana-der="resumen" onClick={()=>setPestanaDer('resumen')} style={{background:'transparent',border:'none',borderBottom:pesDer==='resumen'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='resumen'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer'}}>RESUMEN · {displayedSimbolo||simbolo}</button>}
-                      {(()=>{const n=(alertasN.alertas||[]).filter(a=>a.activa).length,sv=alertasN.sinVer;return <button data-pestana-der="alertas" onClick={()=>setPestanaDer('alertas')} style={{background:'transparent',border:'none',borderBottom:pesDer==='alertas'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='alertas'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer'}}>ALERTAS{n?` (${n})`:''}{sv?<span style={{color:'#ff4d6d'}}> · {sv} sin ver</span>:null}</button>})()}
+                      {(()=>{const n=(alertasN.alertas||[]).filter(a=>a.activa).length,sv=alertasN.sinVer;return <button data-pestana-der="alertas" title={`Tus alertas: ${n} encendida${n===1?'':'s'}${sv?` · ${sv} saltaron y no las has visto`:''}`} onClick={()=>setPestanaDer('alertas')} style={{background:'transparent',border:'none',borderBottom:pesDer==='alertas'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='alertas'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>ALERTAS{n?` (${n})`:''}<style>{'@keyframes campanaAlerta{0%,60%,100%{transform:rotate(0)}10%{transform:rotate(16deg)}20%{transform:rotate(-14deg)}30%{transform:rotate(10deg)}40%{transform:rotate(-8deg)}50%{transform:rotate(4deg)}}'}</style><span data-campana-pestana style={{fontSize:12,lineHeight:1,display:'inline-block',transformOrigin:'50% 0',animation:sv?'campanaAlerta 1.6s ease-in-out infinite':'none'}}>🔔</span>{sv?<span style={{color:'#ff4d6d'}}>{sv} sin ver</span>:null}</button>})()}
                     </div>
                     {pesDer==='alertas'&&<PanelAlertas simbolo={simbolo} ahora={ultimoPrecio} estado={alertasN} onNueva={()=>abreNuevaAlerta(null)} onEditar={a=>setVentanaAlerta({inicial:a})} elegida={alertaElegida} estiloLineas={estiloLineas} onEstiloLineas={setEstiloLineas} onIrAValor={s=>setSimbolo(s)} onElegir={eligeAlertaLista}/>}
                     {pesDer==='resumen'&&<>
