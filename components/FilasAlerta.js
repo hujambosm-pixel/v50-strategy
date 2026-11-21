@@ -16,7 +16,7 @@ import { OTRO_REGLA, MAX_FILAS_REGLA, filaDePantallaRegla, filasGuardadasRegla, 
 const conY = (fs) => fs.map((f, k) => { const { union, ...r } = f; return k ? { ...r, union: 'Y' } : r })
 const SIMBOLO = /^[A-Z0-9.^=-]{1,30}$/
 
-export default function FilasAlerta({ simbolo, filas, onCambia, inicial = null }) {
+export default function FilasAlerta({ simbolo, filas, onCambia, inicial = null, para = 'alerta' }) {   // para: lo que sale en el título del catálogo (§231: 'señal' en el Replay)
   const sim = String(simbolo || '').toUpperCase()
   const [catalogo, setCatalogo] = useState(!!inicial?.catalogo)
   const [buscar, setBuscar] = useState(inicial?.buscar || '')
@@ -76,7 +76,7 @@ export default function FilasAlerta({ simbolo, filas, onCambia, inicial = null }
       {catalogo && (
         <div data-catalogo-alerta role="dialog" aria-modal="true" aria-label="Añadir condición" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 995, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onMouseDown={e => { if (e.target === e.currentTarget) cierra() }}>
           <div style={{ ...S.tarjeta, padding: 20, maxWidth: 680, width: '100%', maxHeight: '86vh', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ color: B.titulo, fontWeight: 700, fontSize: 16 }}>Añadir condición · alerta de {sim}</div>
+            <div style={{ color: B.titulo, fontWeight: 700, fontSize: 16 }}>Añadir condición · {para} de {sim}</div>
             <div style={{ ...S.secundario, fontSize: 13, margin: '4px 0 10px' }}>El mismo catálogo que al crear una estrategia. Después eliges de qué símbolo es, sus números y con qué velas se mira.</div>
             <ConLimpiar valor={buscar} onLimpia={() => setBuscar('')} bloque><input aria-label="Buscar condiciones" placeholder="Buscar: media, caída, RSI…" value={buscar} onChange={e => setBuscar(e.target.value)} data-buscar="catalogo-alerta" style={{ ...entrada, width: '100%', boxSizing: 'border-box' }}/></ConLimpiar>
             <div style={{ overflowY: 'auto', marginTop: 10, minHeight: 0 }}>

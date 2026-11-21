@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react'
 import { MONO } from '../lib/utils'
 import Ayuda from './BuilderAyuda'
 import { inicioHace, inicioAlAzar, velaDeInicio, posicion } from '../lib/replay/grafico'
+import FilasAlerta from './FilasAlerta'
 
 const fmt = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}` : '—')
 const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
@@ -94,7 +95,37 @@ const bz = (activo = true) => ({ background: BZ.caja, color: BZ.texto, border: `
   cursor: activo ? 'pointer' : 'default', opacity: activo ? 1 : 0.4, flexShrink: 0 })
 export const VER = [60, 120, 250, 500, 0]   // velas a la vista (0 = libre: la anchura que dejes con la rueda)
 
-export function BarraReplay({ velas, estado, onIr, onSalir, onIndicadores, ver = 120, onVer }) {
+// §231: «Saltar a la señal». senal = { opciones: [{ valor, texto }], elegida, onElige(valor), onSiguiente, onAnterior, estado: 'sin' | 'cargando' |
+// 'lista' | 'error', n (cuántas señales hay en todos los datos), aviso }.
+export const AYUDA_SENAL = 'SEÑAL ⏭ salta hasta la próxima vela con la señal elegida y se para: esa vela es la última que ves (la señal se conoce al cierre). ' +
+  '⏮ SEÑAL vuelve a la anterior (cuenta como retroceso). Las velas con señal que ya ves llevan un ▲ morado.\n\n' +
+  'Con una CONDICIÓN DEL CATÁLOGO, la señal es la vela en que pasa a cumplirse (la anterior no se cumplía): con «el cierre está por encima de la EMA 200», ' +
+  'una señal cada vez que el precio cruza la media hacia arriba, no una en cada vela por encima.\n' +
+  'Con una ESTRATEGIA de tarjetas, la vela en que da señal de compra (como «Da señal de compra con…» del screener).\n\n' +
+  'Ejemplo: hoy en el Replay es el 03/02 y la EMA 10 cruza por encima de la EMA 30 el 17/02: «Señal ⏭» te deja en el cierre del 17/02, listo para decidir.'
+
+export function VentanaSenal({ simbolo, filas: inicial, onAceptar, onCancelar }) {
+  const [filas, setFilas] = useState(inicial || [])
+  useEffect(() => { const t = (e) => { if (e.key === 'Escape') onCancelar() }; window.addEventListener('keydown', t); return () => window.removeEventListener('keydown', t) }, [onCancelar])
+  return (
+    <div data-ventana-senal="" role="dialog" aria-modal="true" onMouseDown={e => { if (e.target === e.currentTarget) onCancelar() }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10050, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: BZ.fondo, border: `1px solid ${BZ.borde}`, borderRadius: 8, padding: 16, width: 560, maxWidth: '100%', maxHeight: '90vh', overflow: 'auto', font: `13px/1.5 ${LETRA}`, color: BZ.texto }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <b style={{ fontSize: 14 }}>Señal: una condición del catálogo</b>
+          <Ayuda texto={AYUDA_SENAL} etiqueta="Saltar a la señal" zIndice={10100} />
+          <span style={{ marginLeft: 'auto', cursor: 'pointer', color: BZ.gris }} onClick={onCancelar} title="Cerrar">✕</span>
+        </div>
+        <FilasAlerta simbolo={simbolo} filas={filas} onCambia={setFilas} para="señal" />
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+          <button onClick={onCancelar} style={bz()}>Cancelar</button>
+          <button data-aceptar-senal="" onClick={() => filas.length && onAceptar(filas)} disabled={!filas.length} style={{ ...bz(!!filas.length), borderColor: BZ.azul }}>Usar esta señal</button>
+        </div>
+      </div>
+    </div>)
+}
+
+export function BarraReplay({ velas, estado, onIr, onSalir, onIndicadores, ver = 120, onVer, senal = null }) {
   const [jugando, setJugando] = useState(false)
   const [vel, setVel] = useState(2)   // velas por segundo
   const [n, setN] = useState(5)       // cuántas avanza ▶▶ (y retrocede Mayús + ←)
@@ -134,6 +165,19 @@ export function BarraReplay({ velas, estado, onIr, onSalir, onIndicadores, ver =
       {b(<>▶▶ {n}</>, `${n} velas (Mayús + →)`, () => { setJugando(false); onIr(n) }, !fin, {}, { 'data-varias': '' })}
       <input type="number" value={n} min={2} max={200} title="Cuántas velas avanza ▶▶" data-n-velas=""
         onChange={e => { const v = Math.round(Number(e.target.value)); if (Number.isFinite(v)) setN(Math.min(200, Math.max(2, v))) }} style={{ ...caja, width: 56 }} />
+      {senal && <>
+        {sep}
+        {b('⏮ Señal', 'Volver a la señal anterior (cuenta como retroceso)', () => { setJugando(false); senal.onAnterior() }, senal.estado === 'lista', {}, { 'data-senal-anterior': '' })}
+        {b('Señal ⏭', 'Avanzar hasta la próxima vela con la señal elegida', () => { setJugando(false); senal.onSiguiente() }, senal.estado === 'lista' && !fin, {}, { 'data-senal-siguiente': '' })}
+        <select value={senal.elegida || ''} onChange={e => senal.onElige(e.target.value)} data-elige-senal="" title="Qué señal buscan «Señal ⏭» y «⏮ Señal»" style={{ ...caja, maxWidth: 230 }}>
+          <option value="">Señal: elige…</option>
+          {senal.opciones.map(o => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
+        </select>
+        {senal.estado === 'cargando' && <span style={{ color: BZ.gris }}>buscando señales…</span>}
+        {senal.estado === 'lista' && <span style={{ color: BZ.gris }} data-n-senales="">{senal.n} {senal.n === 1 ? 'señal' : 'señales'} en total</span>}
+        {senal.aviso && <span style={{ color: BZ.ambar }} data-aviso-senal="">{senal.aviso}</span>}
+        <Ayuda texto={AYUDA_SENAL} etiqueta="Saltar a la señal" />
+      </>}
       {sep}
       {onIndicadores && b('📈 Indicadores', 'Añadir indicadores: se calculan solo con las velas que ves', onIndicadores)}
       <span style={{ color: BZ.gris }}>Ver</span>
