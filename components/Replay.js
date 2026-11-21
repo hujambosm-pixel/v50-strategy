@@ -30,6 +30,12 @@ export function BotonReplay({ activo, onClick }) {
 
 export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar }) {
   const [fecha, setFecha] = useState(() => inicioHace(velas, 1))
+  // Dinero, comisión y cuándo van las órdenes a mercado (se recuerdan en el navegador para la próxima vez).
+  const [aj, setAj] = useState(() => { try { return { capital: '10.000', comision: '0,185', ejecucion: 'apertura', ...JSON.parse(localStorage.getItem('replay.ajustes') || '{}') } } catch (_) { return { capital: '10.000', comision: '0,185', ejecucion: 'apertura' } } })
+  const numero = (s) => Number(String(s).replace(/\./g, '').replace(',', '.'))
+  const capital = numero(aj.capital), comision = Number(String(aj.comision).replace(',', '.'))
+  const ajustesBien = capital > 0 && comision >= 0
+  const empieza = () => { if (!elegida || !ajustesBien) return; const a = { capitalInicial: capital, comision, ejecucion: aj.ejecucion }; try { localStorage.setItem('replay.ajustes', JSON.stringify({ capital: aj.capital, comision: aj.comision, ejecucion: aj.ejecucion })) } catch (_) {} onEmpezar(elegida, a) }
   const vs = Array.isArray(velas) ? velas : []
   const min = vs.length > 2 ? vs[1].date : '', max = vs.length > 2 ? vs[vs.length - 2].date : ''
   const elegida = fecha ? velaDeInicio(vs, fecha) : null
@@ -54,10 +60,17 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar }) {
           <div style={{ color: '#7a9bc0', marginBottom: 14 }}>
             {elegida ? <>Verás hasta el <b style={{ color: '#e2eaf5' }}>{diaSemana(elegida)} {fmt(elegida)}</b>; quedan {posicion(vs, elegida, elegida).quedan} velas por descubrir.</> : 'Elige un día.'}
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 10px', alignItems: 'center', marginBottom: 14 }}>
+            <span>Dinero inicial</span><span><input data-capital-replay="" value={aj.capital} onChange={e => setAj(x => ({ ...x, capital: e.target.value }))} style={{ fontFamily: MONO, fontSize: 13, padding: '3px 6px', width: 110, background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }} /> €</span>
+            <span>Comisión por orden</span><span><input data-comision-replay="" value={aj.comision} onChange={e => setAj(x => ({ ...x, comision: e.target.value }))} style={{ fontFamily: MONO, fontSize: 13, padding: '3px 6px', width: 70, background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }} /> € (cada compra y cada venta)</span>
+            <span>A mercado</span><select value={aj.ejecucion} onChange={e => setAj(x => ({ ...x, ejecucion: e.target.value }))} data-ejecucion-replay="" style={{ fontFamily: MONO, fontSize: 12, padding: '3px 4px', width: 'auto', background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }}>
+              <option value="apertura">a la apertura de la vela siguiente</option><option value="cierre">al cierre de la vela que ves</option></select>
+          </div>
+          {!ajustesBien && <div style={{ color: '#f85149', marginBottom: 10 }}>El dinero tiene que ser mayor que 0 y la comisión no puede ser negativa.</div>}
         </>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancelar} style={boton()}>Cancelar</button>
-          <button onClick={() => elegida && onEmpezar(elegida)} disabled={!elegida} data-empezar-replay=""
+          <button onClick={empieza} disabled={!elegida || !ajustesBien} data-empezar-replay=""
             style={{ ...boton(!!elegida), background: elegida ? 'rgba(255,209,102,0.18)' : 'transparent', borderColor: 'rgba(255,209,102,0.6)', color: elegida ? '#ffd166' : '#4a6380' }}>Empezar</button>
         </div>
       </div>

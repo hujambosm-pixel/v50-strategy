@@ -22,7 +22,9 @@ import CandleChart from '../components/CandleChart'
 import VentanaIndicadores from '../components/VentanaIndicadores'
 import { BotonReplay, VentanaReplay, BarraReplay } from '../components/Replay'   // §226: modo Replay del gráfico grande
 import { recortaVelas, desplazaRango, vecina, rangoVer } from '../lib/replay/grafico'
-import { irA as replayIrA } from '../lib/replay/motor'
+import { irA as replayIrA, calcula as replayCalcula, cifras as replayCifras } from '../lib/replay/motor'
+import { marcasDe as replayMarcas } from '../lib/replay/orden'
+import { PanelOperar, ResultadosReplay } from '../components/PanelReplay'   // §228: operar en el Replay
 const VACIO_REPLAY=[]   // siempre la MISMA lista vacía: una nueva en cada pintado rehace el gráfico entero (trades está en sus dependencias)
 import FundamentalsPanel from '../components/FundamentalsPanel'
 import EquityChart from '../components/EquityChart'
@@ -38,7 +40,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1293'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1294'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1923,16 +1925,23 @@ export default function Home() {
   const [replayVer,setReplayVer]=useState(120)   // velas a la vista en el Replay (0 = libre)
   useEffect(()=>{ if(replay&&replay.valores[0]!==simbolo){ setReplay(null); isNewResultRef.current=true } },[simbolo])   // eslint-disable-line
   const velasReplay=useMemo(()=>replay?recortaVelas(result?.chartData||[],replay.hoy):null,[replay?.hoy,result?.chartData])   // eslint-disable-line
-  const empiezaReplay=(desde)=>{ setVentanaReplay(false); const _r=rangoVer(result?.chartData||[],desde,replayVer); if(_r){ savedRangeRef.current=_r; isNewResultRef.current=false } else isNewResultRef.current=true; setReplay({version:1,valores:[simbolo],desde,hoy:desde,acciones:[],retrocesos:0}) }
+  const empiezaReplay=(desde,aj={})=>{ setVentanaReplay(false); const _r=rangoVer(result?.chartData||[],desde,replayVer); if(_r){ savedRangeRef.current=_r; isNewResultRef.current=false } else isNewResultRef.current=true; setReplay({version:1,valores:[simbolo],desde,hoy:desde,capitalInicial:10000,comision:0,ejecucion:'apertura',...aj,acciones:[],retrocesos:0,terminada:false}) }
   const saleReplay=()=>{ setReplay(null); isNewResultRef.current=true }
   // Avanzar o retroceder n velas: la ventana visible se mueve con ella (misma anchura).
-  const vaReplay=(n)=>{ if(!replay) return; const f=vecina(result?.chartData||[],replay.desde,replay.hoy,n); if(!f) return
+  const vaReplay=(n)=>{ if(!replay||replay.terminada) return; const f=vecina(result?.chartData||[],replay.desde,replay.hoy,n); if(!f) return
     const _r=replayVer?rangoVer(result?.chartData||[],f,replayVer):null
     if(_r) savedRangeRef.current=_r; else if(savedRangeRef.current) savedRangeRef.current=desplazaRango(savedRangeRef.current,replay.hoy,f)
     setReplay(replayIrA(replay,f)) }
   const cambiaVerReplay=(v)=>{ setReplayVer(v); const _r=replay&&v?rangoVer(result?.chartData||[],replay.hoy,v):null; if(!_r) return
     savedRangeRef.current=_r; chartApiRef.current?.setRange?.(_r.from,_r.to); chartApiFullscreenRef.current?.setRange?.(_r.from,_r.to) }
-  const propsReplay=replay?{data:velasReplay,trades:VACIO_REPLAY,visuals:null,slopeChanges:VACIO_REPLAY,grafico:null,razonamiento:false,customMarkers:VACIO_REPLAY,pendingOrders:VACIO_REPLAY,
+  // §228: el motor recalcula la simulación desde el principio en cada cambio (acciones o vela de hoy).
+  const velasMotorReplay=useMemo(()=>replay?{[replay.valores[0]]:result?.chartData||[]}:null,[replay?.valores?.[0],result?.chartData])   // eslint-disable-line
+  const calcReplay=useMemo(()=>replay&&velasMotorReplay?replayCalcula(replay,velasMotorReplay):null,[replay,velasMotorReplay])
+  const cifReplay=useMemo(()=>calcReplay?replayCifras(replay,velasMotorReplay,calcReplay):null,[calcReplay])   // eslint-disable-line
+  const marcasReplay=useMemo(()=>calcReplay?replayMarcas(calcReplay):VACIO_REPLAY,[calcReplay])
+  const accionReplay=(a)=>setReplay(r=>r?{...r,acciones:[...(r.acciones||[]),a]}:r)
+  const terminaReplay=(v)=>setReplay(r=>r?{...r,terminada:v}:r)
+  const propsReplay=replay?{data:velasReplay,trades:VACIO_REPLAY,visuals:null,slopeChanges:VACIO_REPLAY,grafico:null,razonamiento:false,customMarkers:marcasReplay,pendingOrders:VACIO_REPLAY,
     dibujar:false,onAlertaPrecio:null,onPriceAlarm:null,priceAlarms:VACIO_REPLAY,tlOpenTrades:VACIO_REPLAY,filterZones:VACIO_REPLAY,riskMode:null,riskLevels:null}:{}
 
   // ── Precios por lotes ──
@@ -5703,7 +5712,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1293</title>
+        <title>Trading Simulator V9.1294</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5792,7 +5801,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1293
+            <span className="dot"/>Trading Simulator V9.1294
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8118,6 +8127,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                     </div>
                   )}
 
+                  {/* §228: en el Replay, sus operaciones y su curva del capital */}
+                  {replay&&calcReplay&&<ResultadosReplay estado={replay} r={calcReplay} cif={cifReplay} velas={result?.chartData||[]} simbolo={replay.valores[0]}/>}
                   {/* Equity + Barras + Historial — ocultos en Risk Management, bare chart y Replay (§226: dirían el futuro) */}
                   {!result.isBareChart&&sidePanel!=='risk'&&!replay&&<>
                   <div className="equity-section" onContextMenu={e=>openCtx(e,'equity')}>
@@ -8321,7 +8332,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       {hayResumenDer&&<button data-pestana-der="resumen" onClick={()=>setPestanaDer('resumen')} style={{background:'transparent',border:'none',borderBottom:pesDer==='resumen'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='resumen'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer'}}>RESUMEN · {displayedSimbolo||simbolo}</button>}
                       {replay?<span data-pestana-der="replay" style={{borderBottom:'2px solid #ffd166',color:'#ffd166',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px'}}>REPLAY</span>:(()=>{const n=(alertasN.alertas||[]).filter(a=>a.activa).length,sv=alertasN.sinVer;return <button data-pestana-der="alertas" title={`Tus alertas: ${n} encendida${n===1?'':'s'}${sv?` · ${sv} saltaron y no las has visto`:''}`} onClick={()=>setPestanaDer('alertas')} style={{background:'transparent',border:'none',borderBottom:pesDer==='alertas'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='alertas'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>ALERTAS{n?` (${n})`:''}<style>{'@keyframes campanaAlerta{0%,60%,100%{transform:rotate(0)}10%{transform:rotate(16deg)}20%{transform:rotate(-14deg)}30%{transform:rotate(10deg)}40%{transform:rotate(-8deg)}50%{transform:rotate(4deg)}}'}</style><span data-campana-pestana style={{fontSize:12,lineHeight:1,display:'inline-block',transformOrigin:'50% 0',animation:sv?'campanaAlerta 1.6s ease-in-out infinite':'none'}}>🔔</span>{sv?<span style={{color:'#ff4d6d'}}>{sv} sin ver</span>:null}</button>})()}
                     </div>
-                    {pesDer==='replay'&&<div data-panel-replay="" style={{padding:'12px 10px',fontFamily:MONO,fontSize:11,color:'var(--text2)',lineHeight:1.5}}><div style={{color:'#ffd166',fontWeight:700,marginBottom:6}}>⏪ REPLAY · {simbolo}</div>Mientras dura el Replay se ocultan el resumen y la equity del backtest y tus alertas: dirían el futuro.<br/><br/>Aquí irá el panel para operar (siguiente paso).</div>}
+                    {pesDer==='replay'&&calcReplay&&<PanelOperar estado={replay} simbolo={replay.valores[0]} r={calcReplay} cif={cifReplay} ahora={(velasReplay&&velasReplay.length)?velasReplay[velasReplay.length-1].close:null} onAccion={accionReplay} onTerminar={terminaReplay}/>}
                     {pesDer==='alertas'&&<PanelAlertas simbolo={simbolo} ahora={ultimoPrecio} estado={alertasN} onNueva={()=>abreNuevaAlerta(null)} onEditar={a=>setVentanaAlerta({inicial:a})} elegida={alertaElegida} estiloLineas={estiloLineas} onEstiloLineas={setEstiloLineas} onIrAValor={s=>setSimbolo(s)} onElegir={eligeAlertaLista}/>}
                     {pesDer==='resumen'&&<>
                     {/* Aviso de cobertura del backtest individual (ver avisoHistoricoIndiv): mismo chip ámbar */}
