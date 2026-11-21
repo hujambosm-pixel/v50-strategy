@@ -3648,3 +3648,12 @@ Lo primero de las alertas nuevas que se ve en la app (boceto bocetos/alertas-des
 - La alerta de CRDO (copiada de la vieja) se apagó a petición de Sergi (21/11: era una prueba).
 - Visto por mí en la app (sesión de Sergi, nada guardado): pestaña «Alertas» de CNL con «Toca 19,16 · +98,34 % del precio» y la línea verde en el gráfico; ventana «Nueva alerta» abierta y cancelada. Arreglado ahí mismo: sin sesión no se piden las alertas (un 401 antes de entrar podía sacar «Tu sesión ha caducado»: useAlertas({ activo })); las casillas de «Después de saltar» salían en columna (label global de styles/globals.css: flexDirection row); «+ Nueva» deja el precio vacío (antes proponía el de ahora: «−0,0000 %»); distancias siempre con 2 decimales; mientras carga otro valor, el precio de ahora no se toma del gráfico anterior.
 - Comprobación alertas.js: 65 (también la pantalla: frases, distancias, líneas, arrastre y montaje renderToString del panel y la ventana).
+
+## 219. Alertas: líneas amarillas discontinuas, elegir la línea y moverla con las flechas (21/11)
+
+Pedido por Sergi al ver la parte 4 (captura con ^GSPC: arrastró la línea a 6.547,03 y la pestaña seguía en 7.007,97).
+- FALLO arreglado: arrastrar una línea no guardaba nada. Los oyentes del gráfico (components/CandleChart.js) se montan una vez y usaban la primera onAlarmPriceDrag, con la lista de alertas aún vacía. Ahora leen la de ahora por alarmaCbRef.
+- Pulsar una línea la ELIGE (más gruesa): la página abre la pestaña «Alertas» con esa alerta resaltada (prop onAlarmaElegida). Con una elegida, ↑ ↓ la mueven un 0,1 % del precio por pulsación (Mayúsculas: 1 %; como poco 0,01) y se guarda 0,5 s después de la última; Esc la suelta; en un cuadro de texto, las flechas no.
+- Colores (pedido por Sergi: el verde y el rojo se confundían con las operaciones): prop estiloAlertas { color, grosor, trazo }: por defecto AMARILLAS (#ffd166), grosor 1 y DISCONTINUAS, con ▲ / ▼ junto al precio (avisa al subir / al bajar). En la pestaña, «Líneas ▾»: 6 colores, grosor 1–3 y trazo discontinuo / continuo / de puntos; uno para todas, recordado en el navegador (alertas.estiloLineas), como los dibujos. Sin la prop, CandleChart pinta como siempre.
+- En la lista, ▲ / ▼ / % / ◆ en el color de las líneas en vez del punto verde o rojo.
+- La campanita (dicho a Sergi): las que saltan se ven en «Alertas · N sin ver» (rojo) y con la notificación de Windows; la 🔔 con número en la barra de arriba llega en la parte 5.

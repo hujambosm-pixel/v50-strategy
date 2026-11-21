@@ -34,7 +34,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1283'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1284'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -61,7 +61,7 @@ import GanttChart from '../components/GanttChart'
 import MetricRow from '../components/MetricRow'
 import DiagnosticoPanel, { AvisoSinOperaciones } from '../components/DiagnosticoPanel'
 import PriceAlarmQuickForm from '../components/PriceAlarmQuickForm'
-import { useAlertas, PanelAlertas, VentanaAlerta } from '../components/PanelAlertas'   // §218: las alertas nuevas
+import { useAlertas, PanelAlertas, VentanaAlerta, useEstiloLineas } from '../components/PanelAlertas'   // §218: las alertas nuevas
 import { lineasDeAlertas, reglaArrastrada, alertaNueva } from '../lib/alertas/pantalla'
 import StrategiesManager from '../components/StrategiesManager'
 import StrategyEditorPanel from '../components/StrategyEditorPanel'
@@ -1131,6 +1131,8 @@ export default function Home() {
   // estas; la 🔔 de siempre (tabla alarms) sigue igual hasta que lo nuevo lo tenga todo.
   const alertasN=useAlertas({activo:!!session?.access_token})   // sin sesión no se pide nada (si no, un 401 daría «Tu sesión ha caducado»)
   const [ventanaAlerta,setVentanaAlerta]=useState(null) // { inicial } o null
+  const [estiloLineas,setEstiloLineas]=useEstiloLineas()   // §219: color, grosor y trazo de las líneas de alerta
+  const [alertaElegida,setAlertaElegida]=useState(null)    // §219: la línea pulsada en el gráfico (se resalta en la pestaña)
   const [pestanaDer,setPestanaDerS]=useState('resumen') // pestaña del panel derecho: 'resumen' | 'alertas' (se recuerda en el navegador)
   useEffect(()=>{try{const v=localStorage.getItem('panelDerecho');if(v==='alertas'||v==='resumen')setPestanaDerS(v)}catch(_){}},[])
   const setPestanaDer=v=>{setPestanaDerS(v);try{localStorage.setItem('panelDerecho',v)}catch(_){}}
@@ -5670,7 +5672,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1283</title>
+        <title>Trading Simulator V9.1284</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5759,7 +5761,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1283
+            <span className="dot"/>Trading Simulator V9.1284
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7875,7 +7877,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                         isNewResultRef={isNewResultRef}
                         syncRef={chartSyncRef}
                         externalLegendRef={chartLegendRef}
-                        priceAlarms={lineasAlertasSim}
+                        priceAlarms={lineasAlertasSim} estiloAlertas={estiloLineas} onAlarmaElegida={id=>{setAlertaElegida(id);setPestanaDer('alertas')}}
                         tlOpenTrades={(tlFifo.openPositions||[]).filter(p=>(p.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                         riskMode={sidePanel==='risk'&&riskCaptureMode?riskCaptureMode:null}
                         onRiskPrice={sidePanel==='risk'&&riskCaptureMode?onRiskPrice:null}
@@ -8041,7 +8043,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                           syncRef={chartSyncRef}
                           externalLegendRef={chartLegendRef}
                           onChartReady={api=>{chartApiFullscreenRef.current=api}}
-                          priceAlarms={lineasAlertasSim}
+                          priceAlarms={lineasAlertasSim} estiloAlertas={estiloLineas} onAlarmaElegida={id=>{setAlertaElegida(id);setPestanaDer('alertas')}}
                           tlOpenTrades={(tlFifo.openPositions||[]).filter(p=>(p.symbol||'').toUpperCase()===(simbolo||'').toUpperCase())}
                           filterZones={result?.filterZones||[]}
                         />
@@ -8275,7 +8277,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       {hayResumenDer&&<button data-pestana-der="resumen" onClick={()=>setPestanaDer('resumen')} style={{background:'transparent',border:'none',borderBottom:pesDer==='resumen'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='resumen'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer'}}>RESUMEN · {displayedSimbolo||simbolo}</button>}
                       {(()=>{const n=(alertasN.alertas||[]).filter(a=>a.activa&&a.simbolo===String(simbolo||'').toUpperCase()).length,sv=(alertasN.saltos||[]).filter(s=>!s.visto&&s.simbolo===String(simbolo||'').toUpperCase()).length;return <button data-pestana-der="alertas" onClick={()=>setPestanaDer('alertas')} style={{background:'transparent',border:'none',borderBottom:pesDer==='alertas'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='alertas'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer'}}>ALERTAS{n?` (${n})`:''}{sv?<span style={{color:'#ff4d6d'}}> · {sv} sin ver</span>:null}</button>})()}
                     </div>
-                    {pesDer==='alertas'&&<PanelAlertas simbolo={simbolo} ahora={ultimoPrecio} estado={alertasN} onNueva={()=>abreNuevaAlerta(null)} onEditar={a=>setVentanaAlerta({inicial:a})}/>}
+                    {pesDer==='alertas'&&<PanelAlertas simbolo={simbolo} ahora={ultimoPrecio} estado={alertasN} onNueva={()=>abreNuevaAlerta(null)} onEditar={a=>setVentanaAlerta({inicial:a})} elegida={alertaElegida} estiloLineas={estiloLineas} onEstiloLineas={setEstiloLineas}/>}
                     {pesDer==='resumen'&&<>
                     {/* Aviso de cobertura del backtest individual (ver avisoHistoricoIndiv): mismo chip ámbar */}
                     {avisoHistoricoIndiv&&<div title={`Se pidió desde ${fmtDate(avisoHistoricoIndiv.solicitadoDesde)}, pero ${result?.meta?.simbolo||simbolo} solo tiene datos desde el ${fmtDate(avisoHistoricoIndiv.realDesde)}: el backtest cubre menos años de los pedidos.\n\nCausas posibles: el activo empezó a cotizar más tarde, o la fuente de datos no tiene más histórico de ese activo. Con los datos disponibles no se puede distinguir cuál de las dos.\nLas métricas ya se calculan sobre el periodo realmente simulado.`}

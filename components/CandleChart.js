@@ -554,7 +554,7 @@ export function propsDelGrafico(props,sinEstrategia,ponSin){
   if(sinEstrategia) Object.assign(p,{trades:VACIO,customMarkers:VACIO,slopeChanges:VACIO,filterZones:VACIO,razonamiento:false})
   return p
 }
-function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null, sinEstrategia=false, onSinEstrategia=null }) {
+function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null, sinEstrategia=false, onSinEstrategia=null, onAlarmaElegida=null, estiloAlertas=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   // Dibujar (§208): el contenedor de las velas (para los clics) y el hueco de la izquierda donde va su barra lateral.
   const wrapRef=useRef(null), barraDibujosRef=useRef(null)
@@ -694,6 +694,35 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
   const innerCleanupRef=useRef(null)
   const rulerStart=useRef(null), rulerActiveR=useRef(rulerActive)
   const priceAlarmLinesRef=useRef([])    // [{alarmId, priceLine, price}]
+  // §219: lo último de la página, para los oyentes del gráfico (se montan una vez: sin esto usaban la primera versión de las funciones
+  // y, p. ej., arrastrar una alerta no encontraba la alerta). alarmaElegidaRef: la línea elegida (flechas ↑ ↓ la mueven).
+  const alarmaCbRef=useRef({}); alarmaCbRef.current={drag:onAlarmPriceDrag,elegida:onAlarmaElegida}
+  const alarmaElegidaRef=useRef(null), alarmaTeclaT=useRef(null)
+  const anchoAlarma=(lo,elegida)=>{ if(!estiloAlertasRef.current) return; try{lo.lineSeries.applyOptions({lineWidth:(estiloAlertasRef.current.grosor||1)+(elegida?1:0)})}catch(_){} }
+  const estiloAlertasRef=useRef(estiloAlertas); estiloAlertasRef.current=estiloAlertas
+  const eligeAlarma=(id)=>{
+    const antes=alarmaElegidaRef.current; if(antes===id) return
+    alarmaElegidaRef.current=id
+    priceAlarmLinesRef.current.forEach(lo=>{ if(lo.alarmId===antes||lo.alarmId===id) anchoAlarma(lo,lo.alarmId===id) })
+    if(id&&alarmaCbRef.current.elegida) alarmaCbRef.current.elegida(id)
+  }
+  useEffect(()=>{
+    const tecla=e=>{
+      const id=alarmaElegidaRef.current; if(!id) return
+      const tg=e.target; if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'||tg.tagName==='SELECT'||tg.isContentEditable)) return
+      if(e.key==='Escape'){ eligeAlarma(null); return }
+      if(e.key!=='ArrowUp'&&e.key!=='ArrowDown') return
+      const lo=priceAlarmLinesRef.current.find(l=>l.alarmId===id); if(!lo) return
+      e.preventDefault(); e.stopPropagation()
+      // Cada pulsación, un 0,1 % del precio (con Mayúsculas, un 1 %); como poco 0,01.
+      const paso=Math.max(0.01,Math.round(lo.price*(e.shiftKey?0.01:0.001)*100)/100)
+      const np=Math.round((lo.price+(e.key==='ArrowUp'?paso:-paso))*100)/100; if(!(np>0)) return
+      lo.price=np; try{lo.lineSeries.setData([{time:lo.firstDate,value:np},{time:lo.lastDate,value:np}])}catch(_){}
+      clearTimeout(alarmaTeclaT.current); alarmaTeclaT.current=setTimeout(()=>{ const f=alarmaCbRef.current.drag; if(f) f(id,np) },500)
+    }
+    window.addEventListener('keydown',tecla,true)
+    return()=>{ window.removeEventListener('keydown',tecla,true); clearTimeout(alarmaTeclaT.current) }
+  },[]) // eslint-disable-line
   const pendingPriceLinesRef=useRef([])  // price lines de órdenes pendientes (hasta 3 por orden: entrada+stop+TP)
   const openTradeLinesRef=useRef([])     // price lines SÓLIDAS de entrada de posiciones abiertas (tlOpenTrades)
   // Lista de indicadores sobre el gráfico: fila con el cursor encima, y menú de añadir abierto.
@@ -1532,6 +1561,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
             if(dist<DRAG_HIT&&dist<nearestDist){nearest=lineObj;nearestDist=dist}
           })
         }
+        eligeAlarma(nearest?nearest.alarmId:null)   // §219: pulsar una línea la elige; pulsar fuera, nada
         if(nearest){
           dragRef.current={lineObj:nearest}
           // Deshabilitar scroll/zoom del chart mientras dura el drag
@@ -1544,7 +1574,8 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
         try{chart.applyOptions({handleScroll:true,handleScale:true})}catch(_){}
         if(dragRef.current){
           const{lineObj}=dragRef.current
-          if(onAlarmPriceDrag) onAlarmPriceDrag(lineObj.alarmId,Math.round(lineObj.price*100)/100)
+          const _arrastra=alarmaCbRef.current.drag   // §219: la de ahora, no la del montaje
+          if(_arrastra) _arrastra(lineObj.alarmId,Math.round(lineObj.price*100)/100)
           dragRef.current=null
           if(containerRef.current) containerRef.current.style.cursor=''
         }
@@ -2007,14 +2038,18 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
       .filter(a=>a.price_level)
       .map(alarm=>{
         const isAbove=alarm.condition_detail==='price_above'
-        const actualColor=isAbove?'#00e5a0':'#ff4d6d'
+        const est=estiloAlertas   // §219: con estilo (alertas nuevas), su color, grosor y trazo y ▲/▼ junto al precio
+        const actualColor=est?(est.color||'#ffd166'):isAbove?'#00e5a0':'#ff4d6d'
         const level=Number(alarm.price_level)
         const triggered=lastClose!=null&&(isAbove?lastClose>=level:lastClose<=level)
         const ackKey=`${alarm.symbol}::${alarm.id}`
         const isAcked=ackedAlarms instanceof Set&&ackedAlarms.has(ackKey)
         const shouldBlink=triggered&&!isAcked
         // addLineSeries: la serie forma parte de los datos → el eje siempre incluye el nivel
-        const lineSeries=chart.addLineSeries({
+        const lineSeries=chart.addLineSeries(est?{
+          color:actualColor,lineWidth:(est.grosor||1)+(alarmaElegidaRef.current===alarm.id?1:0),lineStyle:est.trazo??2,title:isAbove?'▲':'▼',
+          lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false,autoscaleInfoProvider:undefined,
+        }:{
           color:actualColor,lineWidth:2,
           lastValueVisible:true,priceLineVisible:false,crosshairMarkerVisible:false,
         })
@@ -2035,7 +2070,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
     }
     // chartReadyTick (§214): el gráfico se rehace entero al cambiar operaciones, etiquetas o razonamiento; sin esto las líneas de alarma
     // se perdían (como ya hacen las órdenes, las operaciones reales y Risk).
-  },[priceAlarms,ackedAlarms,data,chartReadyTick])
+  },[priceAlarms,ackedAlarms,data,chartReadyTick,estiloAlertas])
 
   // ── Órdenes pendientes: LÍNEAS DE PRECIO discontinuas que cruzan todo el gráfico (createPriceLine,
   //    mismo patrón que las alarmas). Entrada naranja + stop rojo. createPriceLine NO distorsiona el

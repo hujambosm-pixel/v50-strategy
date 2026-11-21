@@ -13,6 +13,18 @@ import { resumenAlerta, asiSeLee, distancia, textoDistancia, TEXTO_DESPUES, CUAN
 import Ayuda from './BuilderAyuda'
 
 const RECARGA_MS = 60 * 1000
+// §219: cómo se dibujan las líneas de alerta en el gráfico (una sola forma para todas; se recuerda en el navegador, como los dibujos).
+// trazo: el estilo de línea de lightweight-charts (0 continua, 2 discontinua, 1 puntos). Por defecto amarillas y discontinuas, para no
+// confundirlas con las operaciones (verdes y rojas); ▲ / ▼ junto al precio dice si avisa al subir o al bajar.
+export const ESTILO_LINEAS_DEFECTO = Object.freeze({ color: '#ffd166', grosor: 1, trazo: 2 })
+export const COLORES_LINEAS = Object.freeze(['#ffd166', '#ff9f43', '#e6edf3', '#00d4ff', '#b388ff', '#ff6ec7'])
+export const TRAZOS_LINEAS = Object.freeze([[2, 'discontinua', '- - -'], [0, 'continua', '———'], [1, 'de puntos', '· · ·']])
+export function useEstiloLineas() {
+  const [e, setE] = useState(ESTILO_LINEAS_DEFECTO)
+  useEffect(() => { try { const v = JSON.parse(localStorage.getItem('alertas.estiloLineas') || 'null'); if (v && typeof v.color === 'string') setE({ ...ESTILO_LINEAS_DEFECTO, ...v }) } catch (_) {} }, [])
+  const pon = useCallback((c) => setE(x => { const n = { ...x, ...c }; try { localStorage.setItem('alertas.estiloLineas', JSON.stringify(n)) } catch (_) {} return n }), [])
+  return [e, pon]
+}
 const VERDE = '#00e5a0', ROJO = '#ff4d6d', AMARILLO = '#ffd166', GRIS = 'var(--text3)'
 
 // activo: false mientras no hay sesión iniciada (no se pide nada: un 401 haría saltar «Tu sesión ha caducado»).
@@ -57,13 +69,15 @@ const AYUDA = 'Cómo funcionan las alertas\n\n' +
   '• «Toca el precio» mira el máximo y el mínimo del día, no solo el cierre: salta aunque solo toque el precio un momento entre dos pasadas.\n' +
   'Ejemplo: «Toca 100» con el precio a 95; a las 16:40 sube a 100,30 y a las 16:45 ya está en 99,80. La pasada de las 16:45 ve que el máximo del día es 100,30 y avisa.\n' +
   '• «Cierra por encima / por debajo» y «Condición» se miran al cierre (pasadas de después de las 22:00).\n' +
-  '• Las líneas verdes (avisa al subir) y rojas (al bajar) del gráfico son tus alertas de precio: arrástralas para cambiar el nivel. Doble clic en el gráfico o 🎯 crea una nueva en ese precio.'
+  '• Las líneas discontinuas del gráfico son tus alertas de precio (▲ avisa al subir, ▼ al bajar; su color y grosor, en «Líneas»). Pulsa una para elegirla: se abre aquí y la puedes mover arrastrándola o con las flechas ↑ ↓ del teclado (cada pulsación, un 0,1 % del precio; con Mayúsculas, un 1 %; Esc la suelta). Doble clic en el gráfico o 🎯 crea una nueva en ese precio.'
 
 // ── La pestaña «Alertas» de un valor ──
-export function PanelAlertas({ simbolo, ahora, estado, onNueva, onEditar }) {
+export function PanelAlertas({ simbolo, ahora, estado, onNueva, onEditar, elegida = null, estiloLineas = null, onEstiloLineas = null }) {
   const sim = String(simbolo || '').toUpperCase()
   const [borrando, setBorrando] = useState(null)
   const [fallo, setFallo] = useState(null)
+  const [verLineas, setVerLineas] = useState(false)
+  useEffect(() => { if (elegida) document.querySelector(`[data-alerta="${elegida}"]`)?.scrollIntoView({ block: 'nearest' }) }, [elegida])
   const mias = (estado.alertas || []).filter(a => a.simbolo === sim)
   const encendidas = mias.filter(a => a.activa), apagadas = mias.filter(a => !a.activa)
   const saltos = (estado.saltos || []).filter(s => s.simbolo === sim)
@@ -72,9 +86,9 @@ export function PanelAlertas({ simbolo, ahora, estado, onNueva, onEditar }) {
   const fila = (a) => {
     const d = distancia(a, ahora), desarmada = a.despues === 'cada_vez' && a.armada === false
     return (
-      <div key={a.id} data-alerta={a.id} style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', opacity: a.activa ? 1 : 0.55 }}>
+      <div key={a.id} data-alerta={a.id} data-elegida={elegida === a.id ? '1' : undefined} style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', opacity: a.activa ? 1 : 0.55, background: elegida === a.id ? 'rgba(255,209,102,0.12)' : 'transparent', borderLeft: elegida === a.id ? '2px solid #ffd166' : '2px solid transparent' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 4, flexShrink: 0, background: a.tipo === 'condicion' ? AMARILLO : (a.regla?.sentido === 'baja' || a.regla?.lado === 'debajo') ? ROJO : VERDE }}/>
+          <span title={a.tipo === 'condicion' || a.tipo === 'movimiento' ? '' : (a.regla?.sentido === 'baja' || a.regla?.lado === 'debajo') ? 'Avisa al bajar' : 'Avisa al subir'} style={{ width: 12, flexShrink: 0, fontSize: 10, color: estiloLineas?.color || AMARILLO }}>{a.tipo === 'condicion' ? '◆' : a.tipo === 'movimiento' ? '%' : (a.regla?.sentido === 'baja' || a.regla?.lado === 'debajo') ? '▼' : '▲'}</span>
           <span style={{ flex: 1, fontSize: 12, color: 'var(--text)', fontWeight: 600 }} title={asiSeLee(a)}>{resumenAlerta(a)}</span>
           <button onClick={() => prueba(estado.cambiar(a.id, a.activa ? { activa: false } : { activa: true, armada: true }))} title={a.activa ? 'Apagar (no avisa hasta que la enciendas)' : 'Volver a encender'} style={boton()}>{a.activa ? '⏸' : '↻'}</button>
           <button onClick={() => onEditar(a)} title="Cambiar" style={boton()} disabled={a.tipo === 'condicion' || a.tipo === 'estrategia'}>✎</button>
@@ -96,8 +110,21 @@ export function PanelAlertas({ simbolo, ahora, estado, onNueva, onEditar }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderBottom: '1px solid var(--border)' }}>
         <span style={{ fontSize: 11, color: 'var(--text2)', flex: 1 }}>{sim}{typeof ahora === 'number' ? <> · ahora <b style={{ color: 'var(--text)' }}>{fmt(ahora)}</b></> : null}</span>
         <Ayuda texto={AYUDA}/>
+        {onEstiloLineas && <button data-ver-lineas onClick={() => setVerLineas(v => !v)} title="Color, grosor y trazo de las líneas de alerta del gráfico" style={boton()}>Líneas {verLineas ? '▴' : '▾'}</button>}
         <button data-nueva-alerta onClick={onNueva} style={boton({ color: 'var(--accent)', borderColor: 'var(--accent)' })} disabled={!estado.disponible}>+ Nueva</button>
       </div>
+      {verLineas && onEstiloLineas && estiloLineas && (
+        <div data-estilo-lineas style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 10, color: GRIS }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>Color
+            {COLORES_LINEAS.map(c => <button key={c} onClick={() => onEstiloLineas({ color: c })} title={c} style={{ width: 16, height: 16, borderRadius: 3, background: c, cursor: 'pointer', border: estiloLineas.color === c ? '2px solid var(--text)' : '1px solid var(--border)', padding: 0 }}/>)}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>Grosor
+            {[1, 2, 3].map(g => <button key={g} onClick={() => onEstiloLineas({ grosor: g })} style={boton({ color: estiloLineas.grosor === g ? 'var(--accent)' : 'var(--text2)', borderColor: estiloLineas.grosor === g ? 'var(--accent)' : 'var(--border)' })}>{g}</button>)}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>Trazo
+            {TRAZOS_LINEAS.map(([v, n, d]) => <button key={v} onClick={() => onEstiloLineas({ trazo: v })} title={n} style={boton({ color: estiloLineas.trazo === v ? 'var(--accent)' : 'var(--text2)', borderColor: estiloLineas.trazo === v ? 'var(--accent)' : 'var(--border)' })}>{d}</button>)}
+          </div>
+        </div>)}
       {(estado.error || fallo) && <div style={{ padding: '4px 10px', fontSize: 10, color: ROJO }}>⚠ {fallo || estado.error}</div>}
       {!mias.length && <div style={{ padding: '10px', fontSize: 11, color: GRIS }}>No tienes alertas en {sim}. Pulsa «+ Nueva», 🎯 o haz doble clic en el gráfico en el precio que quieras.</div>}
       {encendidas.map(fila)}
