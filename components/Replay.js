@@ -39,8 +39,11 @@ export function BotonDiana({ activo, onClick }) {
     </button>)
 }
 
-export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar }) {
+// §233: onValorAzar (opcional): «🎲 Valor al azar» cambia a otro valor de tu Watchlist; la ventana sigue abierta y se rehace con sus velas
+// (cargando = aún no han llegado).
+export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAzar = null, cargando = false }) {
   const [fecha, setFecha] = useState(() => inicioHace(velas, 1))
+  useEffect(() => { if (!fecha && Array.isArray(velas) && velas.length > 2) setFecha(inicioHace(velas, 1)) }, [velas])   // §233: las velas llegan después (valor al azar)
   // Dinero, comisión y cuándo van las órdenes a mercado (se recuerdan en el navegador para la próxima vez).
   const [aj, setAj] = useState(() => { try { return { capital: '10.000', comision: '0,185', ejecucion: 'apertura', ...JSON.parse(localStorage.getItem('replay.ajustes') || '{}') } } catch (_) { return { capital: '10.000', comision: '0,185', ejecucion: 'apertura' } } })
   const numero = (s) => Number(String(s).replace(/\./g, '').replace(',', '.'))
@@ -59,9 +62,11 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
           <b style={{ color: '#e2eaf5', fontSize: 14 }}>⏪ Replay de {simbolo}</b>
           <Ayuda texto={AYUDA_REPLAY} etiqueta="Qué es el Replay" zIndice={10100} />
+          {onValorAzar && <button onClick={onValorAzar} data-valor-azar="" title="Cambiar a un valor al azar de tu Watchlist" style={{ ...boton(), marginLeft: 8 }}>🎲 Valor al azar</button>}
           <span style={{ marginLeft: 'auto', cursor: 'pointer', color: '#7a9bc0' }} onClick={onCancelar} title="Cerrar">✕</span>
         </div>
-        {vs.length < 3 ? <div style={{ color: '#f85149' }}>Este gráfico tiene muy pocas velas para un Replay.</div> : <>
+        {cargando ? <div style={{ color: '#7a9bc0', marginBottom: 14 }} data-cargando-replay="">Cargando las velas de {simbolo}…</div>
+          : vs.length < 3 ? <div style={{ color: '#f85149' }}>Este gráfico tiene muy pocas velas para un Replay.</div> : <>
           <div style={{ marginBottom: 6 }}>Empiezas el día:</div>
           <input type="date" value={fecha || ''} min={min} max={max} onChange={e => setFecha(e.target.value)} data-fecha-replay=""
             style={{ fontFamily: MONO, fontSize: 13, padding: '4px 6px', background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3, colorScheme: 'dark' }} />
@@ -188,6 +193,7 @@ export function BarraReplay({ velas, estado, onIr, onSalir, onIndicadores, ver =
       <span data-hoy-replay="" style={{ marginLeft: 'auto', color: BZ.ambar }}>Hoy en el replay: {diaSemana(estado.hoy)} {fmt(estado.hoy)}</span>
       <span style={{ color: BZ.gris }} title={`Empezaste el ${fmt(estado.desde)}`}>· vela {p.vela} de {p.total}{fin ? ' · última vela' : ''}</span>
       {estado.retrocesos > 0 && <span style={{ color: BZ.ambar }} title="Veces que has vuelto atrás">· {estado.retrocesos} {estado.retrocesos === 1 ? 'retroceso' : 'retrocesos'}</span>}
+      {estado.borradas > 0 && <span style={{ color: BZ.ambar }} title="Operaciones que has quitado del historial" data-borradas-replay="">· {estado.borradas} {estado.borradas === 1 ? 'operación quitada' : 'operaciones quitadas'}</span>}
       {b('✕ Salir', 'Salir del Replay (vuelve el gráfico de siempre)', onSalir, true, {}, { 'data-salir-replay': '' })}
     </div>)
 }

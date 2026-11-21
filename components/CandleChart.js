@@ -1738,15 +1738,15 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
         ponMargen()
       }
       // §230 (Replay): hueco vacío a la derecha de la última vela, una fracción (margenDerecha) del ancho visible, para que las etiquetas
-      // de las líneas y la del precio no tapen las últimas velas. Se mantiene el principio de la ventana; sin margenDerecha, nada.
+      // de las líneas y la del precio no tapen las últimas velas. margenDerecha ≥ 1: ese número de velas vacías; menor que 1: fracción del ancho. Se mantiene el principio de la ventana; sin margenDerecha, nada.
       const ponMargen=()=>{
         const m=margenDerechaRef.current
-        if(disposed||!(m>0&&m<0.9)||!data?.length) return
+        if(disposed||!(m>0)||(m<1&&m>=0.9)||!data?.length) return
         try{
           const ts=chart.timeScale(), lr=ts.getVisibleLogicalRange(), ult=data.length-1
           if(!lr) return
           const visibles=Math.max(5,ult-lr.from)
-          ts.setVisibleLogicalRange({from:lr.from,to:ult+visibles*m/(1-m)})
+          ts.setVisibleLogicalRange({from:lr.from,to:m>=1?ult+m:ult+visibles*m/(1-m)})   // §233: m ≥ 1 = ese número de velas (el Replay deja 10)
         }catch(_){}
       }
       // Save range whenever user zooms/scrolls — always bake in GAP_DAYS on 'to'

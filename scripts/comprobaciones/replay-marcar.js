@@ -103,31 +103,50 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   const props = (o = {}) => ({ estado: est0, simbolo: 'A', r: r0, cif: c0, ahora: 100, onAccion() {}, onTerminar() {}, form, onForm: g => { form = typeof g === 'function' ? g(form) : g }, onMarcar: () => marcar++, onCancelaMarca: () => cancela++, ...o })
   let m = D.monta(React.createElement(P.PanelOperar, props()), RDC); await D.espera(20)
   const txt = (sel) => m.raiz.busca(n => n.hasAttribute(sel))?.textContent || ''
-  ok(/SIN ENVIAR/.test(txt('data-sin-enviar')) && m.raiz.busca(n => n.hasAttribute('data-entrada')).value === '100', 'con borrador: «SIN ENVIAR» y la entrada marcada en su casilla')
-  ok(/20 acciones/.test(txt('data-estima-replay')) && /arriesgas 60 €/.test(txt('data-estima-replay')) && /R:R 1 : 2,0/.test(txt('data-estima-replay')), `≈ 20 acciones · arriesgas 60 € · R:R 1 : 2,0 (${txt('data-estima-replay')})`)
+  ok(/20 acciones/.test(txt('data-estima-replay')) && /arriesgas 60 €/.test(txt('data-estima-replay')) && /R:R 1 : 2,0/.test(txt('data-estima-replay')), `a mercado (precio 100, stop 97, objetivo 106): ≈ 20 acciones · arriesgas 60 € · R:R 1 : 2,0 (${txt('data-estima-replay')})`)
   ok(/−3,0 %/.test(txt('data-nueva-orden')) && /6,0 %/.test(txt('data-nueva-orden')), 'el % del stop y del objetivo junto a sus casillas')
+  ok(!m.raiz.busca(n => n.hasAttribute('data-entrada')) && /Comprar a mercado/.test(txt('data-enviar-orden')), '§233: sin casilla de entrada ni «Enviar orden»: el botón es «Comprar a mercado»')
   D.pulsa(m.raiz.busca(n => n.hasAttribute('data-marcar-replay'))); await D.espera(10)
   ok(marcar === 1, '«🎯 Marcar en el gráfico» avisa a la página')
-  D.pulsa(m.raiz.busca(n => n.hasAttribute('data-descartar-orden'))); await D.espera(10)
-  ok(form.entrada === '' && form.stop === '' && form.objetivo === '' && cancela === 1, '«Descartar» borra los precios y el marcado')
   m.quita()
-  m = D.monta(React.createElement(P.PanelOperar, props({ captura: 'stop' })), RDC); await D.espera(20)
-  ok(/marcar el Stop/.test(txt('data-guia-marca')) && !m.raiz.busca(n => n.hasAttribute('data-marcar-replay')), 'marcando: «▶ Clic en el gráfico para marcar el Stop» en lugar del botón')
+  form = { ...B.FORM_INICIAL, mercado: false, entrada: '100', stop: '97' }
+  m = D.monta(React.createElement(P.PanelOperar, props({ captura: 'objetivo' })), RDC); await D.espera(20)
+  ok(/marcar el Objetivo/.test(txt('data-guia-marca')) && /Entrada 100 · Stop 97 \(−3,0 %\)/.test(txt('data-guia-marca')) && /Enter: ponerla sin objetivo/.test(txt('data-guia-marca')) && /MARCANDO/.test(txt('data-marcando')),
+    `marcando: guía con lo marcado (Entrada 100 · Stop 97) y «Enter: ponerla sin objetivo» (${txt('data-guia-marca')})`)
+  ok(!m.raiz.busca(n => n.hasAttribute('data-enviar-orden')) && !m.raiz.busca(n => n.hasAttribute('data-marcar-replay')), 'marcando: sin el botón de mercado ni el de 🎯')
   m.quita()
 
-  // ── Al avanzar con la orden sin enviar ──
-  let enviada = null, sin = 0
-  const pv = (f) => ({ estado: est0, simbolo: 'A', form: f, ahora: 100, onEnviar: a => { enviada = a }, onSinEnviar: () => sin++, onCancelar() {} })
-  m = D.monta(React.createElement(P.VentanaSinEnviar, pv({ ...B.FORM_INICIAL, mercado: false, entrada: '', stop: '97' })), RDC); await D.espera(20)
-  D.pulsa(m.raiz.busca(n => n.hasAttribute('data-enviar-avanzar'))); await D.espera(10)
-  ok(enviada === null && /entrada/.test(txt('data-error-sin-enviar')), 'sin entrada: «Enviarla y avanzar» no envía y dice qué falta')
-  D.pulsa(m.raiz.busca(n => n.hasAttribute('data-avanzar-sin'))); await D.espera(10)
-  ok(sin === 1, '«Avanzar sin enviarla»')
-  m.quita()
-  m = D.monta(React.createElement(P.VentanaSinEnviar, pv(F)), RDC); await D.espera(20)
-  D.pulsa(m.raiz.busca(n => n.hasAttribute('data-enviar-avanzar'))); await D.espera(10)
-  ok(igual(enviada, { fecha: D6[0], simbolo: 'A', tipo: 'orden', id: 1, lado: 1, entrada: 100, clase: 'stop', stop: 97, objetivo: 106, tam: { modo: 'invertir', pct: 20 } }),
-    `completa: «Enviarla y avanzar» manda la orden (${JSON.stringify(enviada)})`)
+  // ── §233: lo marcado ES la orden ──
+  const cl = B.conClic({ ...B.FORM_INICIAL, mercado: false, entrada: '100', stop: '97' }, 'objetivo', 106, 100)
+  ok(cl.listo === true && cl.captura === null, 'el clic del objetivo deja la orden lista para ponerse')
+  ok(igual(B.ordenDeMarca(cl.f, 100).orden, { lado: 1, entrada: 100, clase: 'stop', stop: 97, objetivo: 106, tam: { modo: 'invertir', pct: 20 } }), 'la orden marcada: compra stop a 100, stop 97, objetivo 106')
+  const sinObj = B.ordenDeMarca({ ...cl.f, objetivo: '95' }, 100)
+  ok(sinObj.orden && sinObj.orden.objetivo === null && /sin objetivo/.test(sinObj.aviso), 'objetivo al otro lado: se pone sin objetivo y lo avisa')
+  ok(B.ordenDeMarca({ ...B.FORM_INICIAL, entrada: '95', stop: '', objetivo: '' }, 100).orden.clase === 'limite', 'solo la entrada (Enter tras marcarla): compra límite a 95 sin stop ni objetivo')
+  ok(B.lineasDe(vacio, 'A', { ...F }, 100, false, true)[0].texto === 'MARCANDO · Entrada ⇕', 'mientras se marca, la primera línea dice «MARCANDO»')
+
+  // ── §233: quitar una operación ── op 1 (orden 1, compra el 03/01 a 101, stop movido) y la orden 2 a mercado el 05/01 (entra el 08/01 a 96).
+  const conDos = { ...base, hoy: D6[5], acciones: [
+    { fecha: D6[0], simbolo: 'A', tipo: 'orden', id: 1, lado: 1, entrada: null, stop: 98, objetivo: null, tam: { modo: 'invertir', pct: 50 } },
+    { fecha: D6[1], simbolo: 'A', tipo: 'mover', stop: 97.5 },
+    { fecha: D6[3], simbolo: 'A', tipo: 'orden', id: 2, lado: 1, entrada: null, stop: null, objetivo: null, tam: { modo: 'invertir', pct: 20 } }] }
+  const rd = M.calcula(conDos, VELAS)
+  ok(rd.operaciones.length === 1 && igual(rd.operaciones[0].ids, [1]) && igual(rd.posiciones.A.ids, [2]), 'cada operación sabe qué órdenes la abrieron (ids)')
+  const sin1 = B.quitaOperacion(conDos, rd.operaciones[0])
+  const rs = M.calcula(sin1, VELAS)
+  ok(igual(sin1.acciones.map(a => a.id ?? a.tipo), [2]) && sin1.borradas === 1, 'quitar la 1: se van su orden y su «mover»; queda la orden 2; «borradas» 1')
+  // Sin la 1, el 08/01 hay 10.000 €: 2.000 € ÷ 96 = 20,8 → 20 acciones a 96.
+  ok(rs.operaciones.length === 0 && rs.posiciones.A.acciones === 20 && rs.posiciones.A.precioMedio === 96, `recalculado: sin la operación 1, la 2 compra 20 a 96 (${JSON.stringify(rs.posiciones.A)})`)
+  ok(B.quitaOperacion(conDos, { ids: [9], simbolo: 'A' }) === null, 'una operación sin su orden: no se toca nada')
+
+  // ── La papelera del historial ──
+  const quitadas = []
+  m = D.monta(React.createElement(P.ResultadosReplay, { estado: conDos, r: rd, cif: M.cifras(conDos, VELAS, rd), velas: VELAS.A, simbolo: 'A', onQuitar: op => quitadas.push(op.ids) }), RDC); await D.espera(20)
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-quitar-op') === '1')); await D.espera(10)
+  ok(!quitadas.length && /¿Quitarla\?/.test(m.raiz.busca(n => n.hasAttribute('data-resultados-replay')).textContent), 'la papelera pregunta en la fila')
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-si-quitar') === '1')); await D.espera(10)
+  ok(igual(quitadas, [[1]]), '«Sí» quita la operación 1')
+  ok(!!m.raiz.busca(n => n.getAttribute('data-quitar-op') === '2'), 'la abierta también tiene papelera')
   m.quita()
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTodo en verde')
