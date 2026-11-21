@@ -15,20 +15,21 @@ import Ayuda from './BuilderAyuda'
 const RECARGA_MS = 60 * 1000
 const VERDE = '#00e5a0', ROJO = '#ff4d6d', AMARILLO = '#ffd166', GRIS = 'var(--text3)'
 
-export function useAlertas({ ctx: ctxProp } = {}) {
+// activo: false mientras no hay sesión iniciada (no se pide nada: un 401 haría saltar «Tu sesión ha caducado»).
+export function useAlertas({ ctx: ctxProp, activo = true } = {}) {
   const ctx = useMemo(() => (ctxProp !== undefined ? ctxProp : hayConfigSupabase() ? ctxConSesion() : null), [ctxProp])
   const [alertas, setAlertas] = useState([])
   const [saltos, setSaltos] = useState([])
   const [error, setError] = useState(null)
   const vivo = useRef(true)
   const recarga = useCallback(async () => {
-    if (!ctx) return
+    if (!ctx || !activo) return
     try {
       const [a, s] = await Promise.all([leerAlertas(ctx), leerSaltos(ctx, null, 200)])
       if (!vivo.current) return
       setAlertas(Array.isArray(a) ? a : []); setSaltos(Array.isArray(s) ? s : []); setError(null)
     } catch (e) { if (vivo.current) setError(e.message) }
-  }, [ctx])
+  }, [ctx, activo])
   useEffect(() => {
     vivo.current = true
     recarga()
@@ -43,7 +44,8 @@ export function useAlertas({ ctx: ctxProp } = {}) {
   const borrar = useCallback(async (id) => { setAlertas(xs => xs.filter(x => x.id !== id)); try { await borrarAlerta(ctx, id) } finally { recarga() } }, [ctx, recarga])
   const vistos = useCallback(async (q) => { setSaltos(xs => xs.map(x => ((q.ids ? q.ids.includes(x.id) : x.simbolo === q.simbolo) ? { ...x, visto: true } : x))); try { await marcarVistos(ctx, q) } finally { recarga() } }, [ctx, recarga])
   const sinVer = saltos.filter(s => !s.visto).length
-  return { alertas, saltos, error, sinVer, recarga, guardar, cambiar, borrar, vistos, disponible: !!ctx }
+  useEffect(() => { if (!activo) { setAlertas([]); setSaltos([]); setError(null) } }, [activo])
+  return { alertas, saltos, error, sinVer, recarga, guardar, cambiar, borrar, vistos, disponible: !!ctx && activo }
 }
 
 const boton = (extra = {}) => ({ background: 'transparent', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', fontFamily: MONO, fontSize: 10, padding: '2px 6px', cursor: 'pointer', ...extra })
@@ -94,7 +96,7 @@ export function PanelAlertas({ simbolo, ahora, estado, onNueva, onEditar }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderBottom: '1px solid var(--border)' }}>
         <span style={{ fontSize: 11, color: 'var(--text2)', flex: 1 }}>{sim}{typeof ahora === 'number' ? <> · ahora <b style={{ color: 'var(--text)' }}>{fmt(ahora)}</b></> : null}</span>
         <Ayuda texto={AYUDA}/>
-        <button onClick={onNueva} style={boton({ color: 'var(--accent)', borderColor: 'var(--accent)' })} disabled={!estado.disponible}>+ Nueva</button>
+        <button data-nueva-alerta onClick={onNueva} style={boton({ color: 'var(--accent)', borderColor: 'var(--accent)' })} disabled={!estado.disponible}>+ Nueva</button>
       </div>
       {(estado.error || fallo) && <div style={{ padding: '4px 10px', fontSize: 10, color: ROJO }}>⚠ {fallo || estado.error}</div>}
       {!mias.length && <div style={{ padding: '10px', fontSize: 11, color: GRIS }}>No tienes alertas en {sim}. Pulsa «+ Nueva», 🎯 o haz doble clic en el gráfico en el precio que quieras.</div>}
@@ -150,7 +152,7 @@ export function VentanaAlerta({ inicial, ahora, onGuardar, onCerrar }) {
     try { await onGuardar(final); onCerrar() } catch (e) { setFallo(e.message); setGuardando(false) }
   }
   const radio = (valor, actual, texto, onSel) => (
-    <label key={valor} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text)', cursor: 'pointer', marginBottom: 3 }}>
+    <label key={valor} style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text)', cursor: 'pointer', marginBottom: 3 }}>
       <input type="radio" checked={actual === valor} onChange={() => onSel(valor)} style={{ margin: 0, width: 'auto' }}/>{texto}
     </label>)
   return (
@@ -207,7 +209,7 @@ export function VentanaAlerta({ inicial, ahora, onGuardar, onCerrar }) {
           <div style={{ fontSize: 10, color: '#7a9bc0', marginBottom: 3 }}>Así se lee</div>
           {errores.length ? <span style={{ color: GRIS }}>…</span> : asiSeLee(final)}
         </div>
-        {errores.length > 0 && <div style={{ fontSize: 11, color: ROJO, marginBottom: 8 }}>{errores.join(' ')}</div>}
+        {errores.length > 0 && !((a.tipo === 'toca' || a.tipo === 'cierra') && !nivelTxt.trim()) && <div style={{ fontSize: 11, color: ROJO, marginBottom: 8 }}>{errores.join(' ')}</div>}
         {fallo && <div style={{ fontSize: 11, color: ROJO, marginBottom: 8 }}>⚠ {fallo}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onCerrar} style={boton({ fontSize: 12, padding: '5px 12px' })}>Cancelar</button>

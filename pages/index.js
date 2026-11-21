@@ -34,7 +34,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1282'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1283'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1080,14 +1080,6 @@ export default function Home() {
     return n
   })
   const [priceAlarmDlg,setPriceAlarmDlg]=useState(null) // {price, symbol} o null
-  // §218: las alertas NUEVAS (tablas alertas y alertas_saltos). Las líneas del gráfico, 🎯, doble clic y la pestaña «Alertas» ya usan
-  // estas; la 🔔 de siempre (tabla alarms) sigue igual hasta que lo nuevo lo tenga todo.
-  const alertasN=useAlertas()
-  const [ventanaAlerta,setVentanaAlerta]=useState(null) // { inicial } o null
-  const [pestanaDer,setPestanaDerS]=useState('resumen') // pestaña del panel derecho: 'resumen' | 'alertas' (se recuerda en el navegador)
-  useEffect(()=>{try{const v=localStorage.getItem('panelDerecho');if(v==='alertas'||v==='resumen')setPestanaDerS(v)}catch(_){}},[])
-  const setPestanaDer=v=>{setPestanaDerS(v);try{localStorage.setItem('panelDerecho',v)}catch(_){}}
-  const lineasAlertasSim=useMemo(()=>lineasDeAlertas(alertasN.alertas,simbolo),[alertasN.alertas,simbolo])
   // ── Ranking ─────────────────────────────────────────────────
   const [rankingData,setRankingData]=useState({})      // { SYMBOL: { score, rank, metrics } } — keys uppercase
   const [rankingStratId,setRankingStratId]=useState(null)    // strategy id the ranking was calculated with
@@ -1135,6 +1127,14 @@ export default function Home() {
   }
   // ── Auth ───────────────────────────────────────────────────
   const [session,setSession]=useState(undefined)  // undefined=loading, null=no sesión, obj=autenticado
+  // §218: las alertas NUEVAS (tablas alertas y alertas_saltos). Las líneas del gráfico, 🎯, doble clic y la pestaña «Alertas» ya usan
+  // estas; la 🔔 de siempre (tabla alarms) sigue igual hasta que lo nuevo lo tenga todo.
+  const alertasN=useAlertas({activo:!!session?.access_token})   // sin sesión no se pide nada (si no, un 401 daría «Tu sesión ha caducado»)
+  const [ventanaAlerta,setVentanaAlerta]=useState(null) // { inicial } o null
+  const [pestanaDer,setPestanaDerS]=useState('resumen') // pestaña del panel derecho: 'resumen' | 'alertas' (se recuerda en el navegador)
+  useEffect(()=>{try{const v=localStorage.getItem('panelDerecho');if(v==='alertas'||v==='resumen')setPestanaDerS(v)}catch(_){}},[])
+  const setPestanaDer=v=>{setPestanaDerS(v);try{localStorage.setItem('panelDerecho',v)}catch(_){}}
+  const lineasAlertasSim=useMemo(()=>lineasDeAlertas(alertasN.alertas,simbolo),[alertasN.alertas,simbolo])
   const [loginEmail,setLoginEmail]=useState('')
   const [loginPassword,setLoginPassword]=useState('')
   const [loginError,setLoginError]=useState('')
@@ -5093,7 +5093,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   const sinOperaciones=!!result&&!result.isBareChart&&Array.isArray(result.trades)&&result.trades.length===0
   const metricsResumen=metrics||(sinOperaciones?metricasSinOperaciones(Number(capitalIni),result.ganBH||0,result.startDate,result.meta?.ultimaFecha,Number(years)):null)
   // §218: el precio de ahora del gráfico (último cierre de sus velas), la pestaña del panel derecho y lo que hacen 🎯, doble clic y arrastrar.
-  const ultimoPrecio=(()=>{const d=result?.chartData;const v=Array.isArray(d)&&d.length?d[d.length-1]:null;return v&&Number.isFinite(v.close)?v.close:null})()
+  // Solo si el gráfico ya es el del valor elegido (mientras carga otro, displayedSimbolo es aún el anterior).
+  const ultimoPrecio=(()=>{if((displayedSimbolo||simbolo)!==simbolo)return null;const d=result?.chartData;const v=Array.isArray(d)&&d.length?d[d.length-1]:null;return v&&Number.isFinite(v.close)?v.close:null})()
   const hayResumenDer=!!result&&!result.isBareChart&&(metricsLayout==='panel'||metricsLayout==='multi')&&!!metricsResumen
   const pesDer=hayResumenDer?pestanaDer:'alertas'
   const abreNuevaAlerta=(price,ultimo)=>setVentanaAlerta({inicial:alertaNueva(simbolo,price,ultimo??ultimoPrecio)})
@@ -5669,7 +5670,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1282</title>
+        <title>Trading Simulator V9.1283</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5758,7 +5759,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1282
+            <span className="dot"/>Trading Simulator V9.1283
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
