@@ -326,7 +326,9 @@ const cuenta = (html, s) => html.split(s).length - 1
   // «Abrir» de un plan, la tesis pregunta antes con su propia guardia (conGuardia de TesisPanel).
   ok(fuenteIndex.includes(`const abrirVistaEnScreener=(id)=>{ setScreenerAbrir({id:Number(id),n:Date.now()}); setSidePanel('screener') }`) && leer('components', 'TesisPanel.js').includes('onClick={() => conGuardia(() => onAbrirVista(f.id))}'), 'abrir una vista desde una tesis pasa por la guardia de la tesis')
   // §124: el 21.º es «← Atrás» (barra de arriba), que pasa por salirDeTesis.
-  ok(llamadasPanel === 21,`los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
+  // §220: el 22.º es la 🔔 de las alertas de la barra de arriba, que pasa por salirDeTesis.
+  ok(fuenteIndex.includes("<button data-campana-alertas onClick={()=>salirDeTesis(()=>{"), "la 🔔 de las alertas pasa por la guardia de Tesis")
+  ok(llamadasPanel === 22,`los sitios que cambian de pestaña siguen siendo los revisados (${llamadasPanel}; si cambia, mirar si el nuevo saca de Tesis sin preguntar: docs/tesis.md)`)
   ok(fuenteIndex.includes(`const atras=()=>{ const {destino,pila}=vuelveAtras(pilaAtras,sidePanel); if(!destino) return; salirDeTesis(()=>{ volviendo.current=true; setPilaAtras(pila); setSidePanel(destino) }) }`) && fuenteIndex.includes('<button data-atras onClick={atras}'), '§124: «← Atrás» también pregunta si hay cambios sin guardar')
   {
     const N = require('../../lib/navegacion')
