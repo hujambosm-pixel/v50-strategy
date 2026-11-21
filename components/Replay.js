@@ -28,6 +28,16 @@ export function BotonReplay({ activo, onClick }) {
     </button>)
 }
 
+// §229: 🎯 junto a «⏪ Replay»: marcar Entrada, Stop y Objetivo con tres clics en el gráfico (pulsado otra vez, cancela).
+export function BotonDiana({ activo, onClick }) {
+  return (
+    <button onClick={onClick} data-diana-replay="" title={activo ? 'Cancelar el marcado (Esc)' : 'Marcar una orden en el gráfico: tres clics, Entrada, Stop y Objetivo (o doble clic en el gráfico)'}
+      style={{ pointerEvents: 'all', background: activo ? 'rgba(88,166,255,0.25)' : 'rgba(0,212,255,0.08)', border: `1px solid ${activo ? '#58a6ff' : '#2f5b85'}`,
+        color: '#e2eaf5', fontSize: 11, padding: '1px 6px', borderRadius: 3, cursor: 'pointer', lineHeight: 1, flexShrink: 0, height: 18 }}>
+      🎯
+    </button>)
+}
+
 export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar }) {
   const [fecha, setFecha] = useState(() => inicioHace(velas, 1))
   // Dinero, comisión y cuándo van las órdenes a mercado (se recuerdan en el navegador para la próxima vez).
@@ -94,7 +104,7 @@ export function BarraReplay({ velas, estado, onIr, onSalir, onIndicadores, ver =
   useEffect(() => { if (fin) setJugando(false) }, [fin])
   useEffect(() => {
     if (!jugando) return
-    const t = setInterval(() => { if (cb.current.fin) setJugando(false); else cb.current.onIr(1) }, 1000 / vel)
+    const t = setInterval(() => { if (cb.current.fin || cb.current.onIr(1) === false) setJugando(false) }, 1000 / vel)
     return () => clearInterval(t)
   }, [jugando, vel])
   useEffect(() => {

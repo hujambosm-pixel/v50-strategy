@@ -2,9 +2,12 @@
 // PanelOperar: el panel de la derecha (cifras, posición abierta, nueva orden, órdenes vivas, avisos, Terminar).
 // ResultadosReplay: debajo del gráfico, pestañas «Operaciones · N» y «Curva del capital».
 // Todo sale de lib/replay/motor.js (calcula y cifras); esto solo pinta y avisa (onAccion, onTerminar).
+// §229: el formulario puede venir de fuera (form + onForm, lo lleva pages/index.js para que el gráfico lo rellene con 🎯 / doble clic y
+// arrastrando las líneas); sin ellos, el panel guarda el suyo. VentanaSinEnviar: la pregunta al avanzar con una orden marcada sin enviar.
 import { useState } from 'react'
 import Ayuda from './BuilderAyuda'
 import { compruebaOrden, nuevaAccion, textoOrden, explicaPrecio } from '../lib/replay/orden'
+import { FORM_INICIAL, hayBorrador, estima, pctFrente } from '../lib/replay/borrador'
 
 const BZ = { fondo: '#22262f', panel: '#2c303b', caja: '#353945', borde: '#4c5263', texto: '#f3f3f5', gris: '#a9adb8', verde: '#3fb950', rojo: '#f85149', ambar: '#d29922', azul: '#58a6ff' }
 const LETRA = 'system-ui, "Segoe UI", sans-serif'
@@ -31,8 +34,9 @@ function Cifra({ titulo, valor, col, tip }) {
   return <div title={tip} style={{ background: BZ.caja, borderRadius: 6, padding: '5px 7px' }}><small style={{ display: 'block', color: BZ.gris, fontSize: 11 }}>{titulo}</small><b style={{ fontSize: 14, color: col || BZ.texto }}>{valor}</b></div>
 }
 
-export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTerminar }) {
-  const [f, setF] = useState({ lado: 1, mercado: true, entrada: '', stop: '', objetivo: '', modo: 'invertir', pct: 20 })
+export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTerminar, form, onForm, captura = null, onMarcar, onCancelaMarca, aviso = '' }) {
+  const [propio, setPropio] = useState(FORM_INICIAL)
+  const f = form || propio, setF = onForm || setPropio
   const [error, setError] = useState('')
   const pon = (k, v) => { setError(''); setF(x => ({ ...x, [k]: v })) }
   const pos = r.posiciones[simbolo]
@@ -40,8 +44,13 @@ export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTermin
   const envia = () => {
     const c = compruebaOrden(f, ahora)
     if (c.error) { setError(c.error); return }
-    onAccion(nuevaAccion(estado, simbolo, c.orden)); setF(x => ({ ...x, entrada: '', stop: '', objetivo: '' }))
+    onAccion(nuevaAccion(estado, simbolo, c.orden)); setF(x => ({ ...x, entrada: '', stop: '', objetivo: '' })); onCancelaMarca && onCancelaMarca()
   }
+  const borrador = hayBorrador(f)
+  const ref = f.mercado ? ahora : Number(String(f.entrada).replace(',', '.'))
+  const est = estima(f, cif.final, ahora)
+  const pcS = pctFrente(Number(String(f.stop).replace(',', '.')), ref), pcO = pctFrente(Number(String(f.objetivo).replace(',', '.')), ref)
+  const QUE = { entrada: 'la Entrada', stop: 'el Stop', objetivo: 'el Objetivo' }
   const cuando = estado.ejecucion === 'cierre' ? 'al cierre de hoy' : 'a la apertura de la vela siguiente'
   return (
     <div data-panel-replay="" style={{ padding: '8px 10px', font: `13px/1.45 ${LETRA}`, color: BZ.texto }}>
@@ -67,7 +76,17 @@ export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTermin
       {!terminada && <div style={cajaSt} data-nueva-orden="">
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
           <b>Nueva orden</b><Ayuda texto={AYUDA_ORDEN} etiqueta="Cómo funcionan las órdenes" />
+          {borrador && <span data-sin-enviar="" title="La orden está marcada pero aún no existe: pulsa «Enviar orden»" style={{ color: BZ.ambar, fontWeight: 700, fontSize: 12 }}>SIN ENVIAR</span>}
         </div>
+        {onMarcar && (captura
+          ? <div data-guia-marca="" style={{ background: 'rgba(88,166,255,0.12)', border: `1px solid ${BZ.azul}`, borderRadius: 5, padding: '4px 8px', marginBottom: 6 }}>
+              ▶ Clic en el gráfico para marcar <b>{QUE[captura]}</b>. <span style={{ color: BZ.gris }}>Esc cancela.</span>
+              {onCancelaMarca && <button onClick={onCancelaMarca} style={{ ...btn(), padding: '0 7px', marginLeft: 6 }}>Cancelar</button>}
+            </div>
+          : <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <button data-marcar-replay="" style={{ ...btn(), borderColor: BZ.azul }} onClick={onMarcar} title="Tres clics en el gráfico: Entrada, Stop y Objetivo">🎯 Marcar en el gráfico</button>
+              <span style={{ color: BZ.gris, fontSize: 12 }}>o doble clic en el gráfico</span>
+            </div>)}
         <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
           <button style={btn(true, f.lado > 0)} onClick={() => pon('lado', 1)} data-lado="1">Comprar</button>
           <button style={btn(true, f.lado < 0)} onClick={() => pon('lado', -1)} data-lado="-1">Vender en corto</button>
@@ -79,18 +98,22 @@ export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTermin
         </div>
         {!f.mercado && explicaPrecio(f.lado, f.entrada, ahora) && <div style={{ color: BZ.gris, fontSize: 12, marginBottom: 6 }} data-clase-orden="">{explicaPrecio(f.lado, f.entrada, ahora)}</div>}
         <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 8px', alignItems: 'center' }}>
-          <span>Stop</span><input data-stop="" style={casilla} placeholder="opcional" value={f.stop} onChange={e => pon('stop', e.target.value)} />
-          <span>Objetivo</span><input data-objetivo="" style={casilla} placeholder="opcional" value={f.objetivo} onChange={e => pon('objetivo', e.target.value)} />
+          <span>Stop</span><span><input data-stop="" style={casilla} placeholder="opcional" value={f.stop} onChange={e => pon('stop', e.target.value)} />{pcS != null && <span style={{ color: BZ.rojo, marginLeft: 6 }}>{pc(pcS)}</span>}</span>
+          <span>Objetivo</span><span><input data-objetivo="" style={casilla} placeholder="opcional" value={f.objetivo} onChange={e => pon('objetivo', e.target.value)} />{pcO != null && <span style={{ color: BZ.verde, marginLeft: 6 }}>{pc(pcO)}</span>}</span>
           <select value={f.modo} onChange={e => pon('modo', e.target.value)} style={{ ...casilla, width: 'auto' }} data-modo="">
             <option value="invertir">Invertir</option><option value="arriesgar">Arriesgar</option>
           </select>
           <span><input data-pct="" style={{ ...casilla, width: 60 }} value={f.pct} onChange={e => pon('pct', e.target.value)} /> % del dinero</span>
         </div>
+        {est && <div data-estima-replay="" style={{ color: BZ.gris, fontSize: 12, marginTop: 6 }} title="Con tu dinero de ahora; al ejecutarse se calcula con el de ese momento">
+          ≈ <b style={{ color: BZ.texto }}>{est.acciones} acciones</b> ({eur(est.coste)}){est.arriesgas != null ? ` · arriesgas ${eur(est.arriesgas)}` : ''}{est.rr != null ? ` · R:R 1 : ${loc(est.rr, 1)}` : ''}</div>}
         {error && <div data-error-orden="" style={{ color: BZ.rojo, marginTop: 6 }}>⚠ {error}</div>}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
           <button data-enviar-orden="" style={{ ...btn(), background: f.lado > 0 ? 'rgba(63,185,80,0.25)' : 'rgba(248,81,73,0.25)', borderColor: f.lado > 0 ? BZ.verde : BZ.rojo }} onClick={envia}>Enviar orden</button>
+          {borrador && <button data-descartar-orden="" style={btn()} onClick={() => { setError(''); setF(x => ({ ...x, entrada: '', stop: '', objetivo: '' })); onCancelaMarca && onCancelaMarca() }}>Descartar</button>}
           <span style={{ color: BZ.gris, fontSize: 12 }}>{f.mercado ? `Se ejecuta ${cuando}.` : 'Vive hasta que se cumpla o la canceles.'}</span>
         </div>
+        {borrador && onMarcar && <div style={{ color: BZ.gris, fontSize: 11, marginTop: 4 }}>Arrastra las líneas del gráfico para ajustar.</div>}
       </div>}
       {r.ordenesVivas.length > 0 && <div style={cajaSt} data-ordenes-vivas="">
         <b>Órdenes vivas</b>
@@ -99,6 +122,7 @@ export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTermin
           {!terminada && <button title="Cancelar la orden" data-cancelar={o.id} onClick={() => onAccion({ fecha: estado.hoy, tipo: 'cancelar', id: o.id })} style={{ ...btn(), padding: '0 7px', color: BZ.rojo }}>✕</button>}
         </div>)}
       </div>}
+      {aviso && <div data-aviso-linea="" style={{ color: BZ.ambar, fontSize: 12, margin: '6px 0' }}>⚠ {aviso}</div>}
       {r.avisos.length > 0 && <div style={{ ...cajaSt, borderColor: BZ.ambar }} data-avisos-replay="">
         {r.avisos.slice(-4).map((a, i) => <div key={i} style={{ color: BZ.ambar, fontSize: 12 }}>{fmt(a.fecha)}: {a.texto}</div>)}
       </div>}
@@ -106,6 +130,26 @@ export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTermin
         <button data-terminar="" style={btn()} onClick={() => onTerminar(!terminada)}
           title={terminada ? 'Volver a operar (deshace el cierre final)' : 'Cerrar todo al cierre de hoy y ver el resultado final (norma de la app: cierre al final)'}>{terminada ? 'Reabrir' : 'Terminar'}</button>
         {terminada && <span style={{ color: BZ.ambar }}>Terminada: todo vendido al cierre de hoy.</span>}
+      </div>
+    </div>)
+}
+
+// Al avanzar con una orden marcada sin enviar (boceto: no se pierde en silencio).
+export function VentanaSinEnviar({ estado, simbolo, form, ahora, onEnviar, onSinEnviar, onCancelar }) {
+  const [error, setError] = useState('')
+  const enviar = () => { const c = compruebaOrden(form, ahora); if (c.error) { setError(c.error); return } onEnviar(nuevaAccion(estado, simbolo, c.orden)) }
+  return (
+    <div data-ventana-sin-enviar="" role="dialog" aria-modal="true" onMouseDown={e => { if (e.target === e.currentTarget) onCancelar() }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10050, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: BZ.panel, border: `1px solid ${BZ.borde}`, borderRadius: 8, padding: 16, width: 420, maxWidth: '100%', font: `13px/1.5 ${LETRA}`, color: BZ.texto }}>
+        <b style={{ fontSize: 14 }}>Tienes una orden marcada sin enviar</b>
+        <p style={{ margin: '8px 0', color: BZ.gris }}>Las líneas de la Entrada, el Stop y el Objetivo están en el gráfico, pero la orden aún no existe. ¿Qué hago?</p>
+        {error && <div data-error-sin-enviar="" style={{ color: BZ.rojo, marginBottom: 8 }}>⚠ {error}</div>}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button data-enviar-avanzar="" style={{ ...btn(), borderColor: BZ.azul, background: 'rgba(88,166,255,0.22)' }} onClick={enviar}>Enviarla y avanzar</button>
+          <button data-avanzar-sin="" style={btn()} onClick={onSinEnviar}>Avanzar sin enviarla</button>
+          <button data-cancelar-avance="" style={btn()} onClick={onCancelar}>Cancelar</button>
+        </div>
       </div>
     </div>)
 }

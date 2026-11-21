@@ -554,7 +554,7 @@ export function propsDelGrafico(props,sinEstrategia,ponSin){
   if(sinEstrategia) Object.assign(p,{trades:VACIO,customMarkers:VACIO,slopeChanges:VACIO,filterZones:VACIO,razonamiento:false})
   return p
 }
-function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null, sinEstrategia=false, onSinEstrategia=null, onAlarmaElegida=null, estiloAlertas=null, alarmaElegidaId, onAlarmaBorrar=null }) {
+function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null, sinEstrategia=false, onSinEstrategia=null, onAlarmaElegida=null, estiloAlertas=null, alarmaElegidaId, onAlarmaBorrar=null, lineasReplay=null, onLineaReplay=null, textoCaptura=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   // Dibujar (§208): el contenedor de las velas (para los clics) y el hueco de la izquierda donde va su barra lateral.
   const wrapRef=useRef(null), barraDibujosRef=useRef(null)
@@ -2294,6 +2294,55 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
   // eslint-disable-next-line
   }, [data])
 
+  // ── §229: líneas del Replay (lib/replay/borrador.js lineasDe): borrador, órdenes vivas y posición; se arrastran ──
+  // Prop opcional: sin lineasReplay no se crea nada. Cada línea se actualiza en su sitio por id (sin parpadeo); al rehacerse el gráfico
+  // (chartReadyTick) se sueltan las referencias, como en las de riesgo. Al arrastrar: onLineaReplay(id, precio, false) en cada movimiento
+  // y onLineaReplay(id, precio, true) al soltar.
+  const lineasReplayRef=useRef(new Map()), lineasReplayTick=useRef(chartReadyTick), datosLineasReplay=useRef([]), onLineaReplayRef=useRef(onLineaReplay)
+  useEffect(()=>{ onLineaReplayRef.current=onLineaReplay },[onLineaReplay])
+  useEffect(()=>{
+    const candles=candlesRef.current
+    if(!candles) return
+    if(lineasReplayTick.current!==chartReadyTick){ lineasReplayTick.current=chartReadyTick; lineasReplayRef.current=new Map() }
+    const m=lineasReplayRef.current, lista=Array.isArray(lineasReplay)?lineasReplay:[]
+    datosLineasReplay.current=lista
+    const vistos=new Set()
+    for(const l of lista){
+      vistos.add(l.id)
+      const op={price:l.precio,color:l.color,lineWidth:l.grosor||1,lineStyle:l.estilo||0,axisLabelVisible:true,title:l.texto||''}
+      const pl=m.get(l.id)
+      if(pl){ try{ pl.applyOptions(op); continue }catch(_){ m.delete(l.id) } }
+      try{ m.set(l.id,candles.createPriceLine(op)) }catch(_){}
+    }
+    for(const [id,pl] of [...m]) if(!vistos.has(id)){ try{candles.removePriceLine(pl)}catch(_){}; m.delete(id) }
+  },[lineasReplay,data,chartReadyTick])
+  useEffect(()=>{
+    const container=containerRef.current
+    if(!container) return
+    let arr=null
+    const cerca=(e)=>{
+      const candles=candlesRef.current; if(!candles) return null
+      const y=e.clientY-container.getBoundingClientRect().top
+      let mejor=null, d0=8
+      for(const l of datosLineasReplay.current){ if(!l.arrastrable) continue; const ly=candles.priceToCoordinate(l.precio); if(ly!=null&&Math.abs(ly-y)<=d0){ d0=Math.abs(ly-y); mejor=l } }
+      return mejor
+    }
+    const precioDe=(e)=>{ const candles=candlesRef.current; if(!candles) return null; const p=candles.coordinateToPrice(e.clientY-container.getBoundingClientRect().top); return p==null?null:(Math.abs(p)<1?Math.round(p*1e4)/1e4:Math.round(p*100)/100) }
+    const onDown=(e)=>{ if(e.button!==0) return; const l=cerca(e); if(!l) return; arr={id:l.id,precio:l.precio}; e.preventDefault(); e.stopPropagation(); container.style.cursor='ns-resize' }
+    const onMove=(e)=>{
+      if(!arr){ if(datosLineasReplay.current.length&&!e.buttons) container.style.cursor=cerca(e)?'ns-resize':''; return }
+      const p=precioDe(e); if(p==null||!(p>0)) return
+      arr.precio=p
+      const pl=lineasReplayRef.current.get(arr.id); if(pl) try{ pl.applyOptions({price:p}) }catch(_){}
+      onLineaReplayRef.current?.(arr.id,p,false)
+    }
+    const onUp=()=>{ if(!arr) return; const a=arr; arr=null; container.style.cursor=''; onLineaReplayRef.current?.(a.id,a.precio,true) }
+    container.addEventListener('mousedown',onDown,true)
+    window.addEventListener('mousemove',onMove)
+    window.addEventListener('mouseup',onUp)
+    return ()=>{ container.removeEventListener('mousedown',onDown,true); window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp) }
+  },[data])   // con data, como el arrastre de las de riesgo: al montar puede no haber contenedor todavía
+
   const activeIndType = definition ? getActiveIndicator(definition) : null
   // hasMacdBars / hasRsiBars / hasVolumeBars: ELIMINADAS. Eran una segunda copia de las condiciones de
   // aparición, la del render, frente a la del efecto. Ahora las dos salen de panel.hayDatos, que es lo
@@ -2417,7 +2466,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
             background:'rgba(8,12,20,0.88)',border:'1px solid rgba(0,212,255,0.5)',
             borderRadius:4,padding:'3px 12px',pointerEvents:'none',
             boxShadow:'0 2px 8px rgba(0,0,0,0.5)'}}>
-            {riskMode==='capture_entry'?'▶ Clic en el gráfico para definir la Entrada':riskMode==='capture_stop'?'▶ Clic en el gráfico para definir el Stop':'▶ Clic en el gráfico para definir el TP'}
+            {textoCaptura||(riskMode==='capture_entry'?'▶ Clic en el gráfico para definir la Entrada':riskMode==='capture_stop'?'▶ Clic en el gráfico para definir el Stop':'▶ Clic en el gráfico para definir el TP')}
           </div>
         </div>
       )}
