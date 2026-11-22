@@ -46,7 +46,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1304'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1305'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1928,6 +1928,7 @@ export default function Home() {
   // hasta «hoy» (los indicadores se calculan sin ver el futuro) y sin lo que diría el futuro o es de hoy (propsReplay).
   const [replay,setReplay]=useState(null)
   const [ventanaReplay,setVentanaReplay]=useState(false)
+  const [guardadosReplay,setGuardadosReplay]=useState(null)   // §239: los replays guardados, para «Seguir con uno guardado» en la ventana de empezar
   const [replayVer,setReplayVer]=useState(120)   // velas a la vista en el Replay (0 = libre)
   // §235: cuántas velas se ven en el Replay (las de «Ver» o las que dejes con la rueda); el gráfico lo respeta al rehacerse en cada vela.
   const anchoReplayRef=useRef(120)
@@ -2044,6 +2045,7 @@ export default function Home() {
   const abreMisReplays=async()=>{ if(!ctxReplay){ setMisReplays({filas:[],cargando:false,error:'Sin conexión con la base.'}); return }
     setMisReplays({filas:[],cargando:true,error:''})
     try{ const f=await leerSimulaciones(ctxReplay); setMisReplays({filas:f,cargando:false,error:''}) }catch(e){ setMisReplays({filas:[],cargando:false,error:e.message}) } }
+  const abreVentanaReplay=()=>{ setVentanaReplay(true); setGuardadosReplay(null); if(ctxReplay) leerSimulaciones(ctxReplay).then(f=>setGuardadosReplay(f)).catch(()=>setGuardadosReplay([])) }
   const borraReplayGuardado=async(id)=>{ try{ await borrarSimulacion(ctxReplay,id); setMisReplays(m=>m?{...m,filas:m.filas.filter(x=>x.id!==id)}:m) }catch(e){ setMisReplays(m=>m?{...m,error:e.message}:m) } }
   const aplicaReplayGuardado=(fila)=>{ const e=deGuardadoReplay(fila.estado); reiniciaMarcaReplay(); nuevaSesionReplay(fila.id,fila.nombre)
     const _r=rangoVer(result?.chartData||[],e.hoy,replayVer); if(_r){ savedRangeRef.current=_r; isNewResultRef.current=false } else isNewResultRef.current=true
@@ -5880,7 +5882,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1304</title>
+        <title>Trading Simulator V9.1305</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5969,7 +5971,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1304
+            <span className="dot"/>Trading Simulator V9.1305
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7926,7 +7928,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',lineHeight:1,flexShrink:0,height:18}}>
                           📈 Indicadores
                         </button>
-                        <BotonReplay activo={!!replay} onClick={()=>replay?saleReplay():setVentanaReplay(true)}/>
+                        <BotonReplay activo={!!replay} onClick={()=>replay?saleReplay():abreVentanaReplay()}/>
                         {replay&&!replay.terminada&&<BotonDiana activo={!!capturaReplay} onClick={()=>capturaReplay?limpiaMarcaReplay():marcaReplay()}/>}
                         {/* OHLC dinámico — CandleChart escribe aquí via externalLegendRef */}
                         <span ref={chartLegendRef} style={{flex:1,minWidth:0,overflow:'hidden',
@@ -8163,7 +8165,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',lineHeight:1,flexShrink:0,height:18}}>
                           📈 Indicadores
                         </button>
-                        <BotonReplay activo={!!replay} onClick={()=>replay?saleReplay():setVentanaReplay(true)}/>
+                        <BotonReplay activo={!!replay} onClick={()=>replay?saleReplay():abreVentanaReplay()}/>
                         {replay&&!replay.terminada&&<BotonDiana activo={!!capturaReplay} onClick={()=>capturaReplay?limpiaMarcaReplay():marcaReplay()}/>}
                         <span ref={chartLegendRef} style={{flex:1,minWidth:0,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}/>
                         {stratName&&(
@@ -11034,7 +11036,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
       {misReplays&&<MisReplays filas={misReplays.filas} cargando={misReplays.cargando} error={misReplays.error} abiertoId={replay?replayGuardado.id:null}
         onAbrir={abreReplayGuardado} onBorrar={borraReplayGuardado} onCerrar={()=>setMisReplays(null)}/>}
       {ventanaReplay&&<VentanaReplay key={simbolo} simbolo={simbolo} velas={displayedSimbolo===simbolo?(result?.chartData||[]):[]} cargando={displayedSimbolo!==simbolo||!result?.chartData}
-        onValorAzar={()=>{ const l=[...new Set((watchlist||[]).map(w=>w?.symbol).filter(x=>x&&x!==simbolo))]; if(l.length) setSimbolo(l[Math.floor(Math.random()*l.length)]) }} onEmpezar={empiezaReplay} onCancelar={()=>setVentanaReplay(false)}/>}
+        onValorAzar={()=>{ const l=[...new Set((watchlist||[]).map(w=>w?.symbol).filter(x=>x&&x!==simbolo))]; if(l.length) setSimbolo(l[Math.floor(Math.random()*l.length)]) }} onEmpezar={empiezaReplay} onCancelar={()=>setVentanaReplay(false)}
+        guardados={ctxReplay?guardadosReplay:[]} onAbrir={ctxReplay?(f=>{ setVentanaReplay(false); abreReplayGuardado(f) }):null}/>}
       {ventanaInd&&<VentanaIndicadores enGrafico={indicadores} onCerrar={()=>setVentanaInd(false)}
         onAnadir={t=>{const n=nuevoIndicador(t,indicadores.length);if(n)ponIndicadores([...indicadores,n])}}/>}
       {indEditando&&(()=>{

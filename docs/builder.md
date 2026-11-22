@@ -3814,3 +3814,10 @@ Pedido por Sergi el 22/11 (captura de AAPL).
 Pedido por Sergi el 22/11 (tras ver que la caja de su orden 7 de AAPL, bajada el 20/01, se dibujaba desde el 18/01 con los niveles nuevos y parecía que el precio la había tocado).
 - lib/replay/motor.js: un «mover» de una orden viva apunta su fecha en la orden (cambiada). lib/replay/borrador.js cajasDe: la caja de la orden viva empieza en cambiada (si no hay, en el día en que se puso). La de la posición abierta sigue empezando en su entrada.
 - Prueba a mano en replay-marcar.js: límite a 90 puesta el 02/01 y bajada a 89 el 04/01 → caja desde el 04/01 con entrada 89; sin cambios, desde el 02/01.
+## 239. Replay: seguir con uno guardado, barra más corta y sin destellos al reproducir (22/11)
+Pedido por Sergi el 22/11 (capturas de INTC).
+- Al pulsar «⏪ Replay», la ventana de empezar enseña arriba «Seguir con uno guardado» (los de este valor; «Ver todos (N)» para los demás) con «Seguir», y debajo «Empezar uno nuevo» como siempre (components/Replay.js SeguirGuardado; pages/index.js abreVentanaReplay lee tus replays y abre el elegido con abreReplayGuardado).
+- Barra: «▶» primero, con las velas por segundo DENTRO del mismo botón (desplegable tras una rayita); luego «|◀» y «▶|»; «▶▶» con su número dentro (se escribe ahí, sin las flechitas del navegador).
+- Destellos al reproducir: en cada vela el gráfico se rehace y quedaba un instante en blanco. Con margenDerecha (solo el Replay), antes de borrarlo se pone encima una FOTO suya (takeScreenshot, canvas absoluto) que se quita en cuanto el nuevo está colocado (applyInitialRange + 40 ms; como mucho 1,5 s).
+- Respondido a Sergi (sin cambio): dos filas «Cierre > EMA 20» y «Cierre < EMA 20» unidas con «y además» no se cumplen nunca a la vez → 0 señales; para el cruce hacia arriba basta una fila (la señal es la vela en que pasa a cumplirse).
+- COMPROBADO POR MÍ EN LA APP (^GSPC): la ventana lista los 10 replays guardados de Sergi con «Ver todos»; ▶ a 2/s durante 3 s avanza 7 velas y la foto sale y se va (no queda ninguna); barra «▶ 2/s · |◀ · ▶| · ▶▶ 5». Borrado mi replay de prueba.

@@ -41,7 +41,33 @@ export function BotonDiana({ activo, onClick }) {
 
 // §233: onValorAzar (opcional): «🎲 Valor al azar» cambia a otro valor de tu Watchlist; la ventana sigue abierta y se rehace con sus velas
 // (cargando = aún no han llegado).
-export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAzar = null, cargando = false }) {
+// §239: guardados (opcional) = tus replays guardados (null = cargando) y onAbrir(fila): arriba, «Seguir con uno guardado» con los de este
+// valor (y «Ver todos» para los demás); debajo, «Empezar uno nuevo» como siempre.
+function SeguirGuardado({ simbolo, guardados, onAbrir }) {
+  const [todos, setTodos] = useState(false)
+  if (!onAbrir) return null
+  if (guardados == null) return <div style={{ color: '#7a9bc0', marginBottom: 12 }}>Buscando tus replays guardados…</div>
+  const deEste = guardados.filter(g => (g.estado?.valores || [])[0] === simbolo), lista = todos ? guardados : deEste
+  if (!guardados.length) return null
+  const pc = (x) => (x == null ? '' : `${x >= 0 ? '+' : '−'}${Math.abs(x).toLocaleString('es-ES', { maximumFractionDigits: 1 })} %`)
+  return (
+    <div data-seguir-replay="" style={{ marginBottom: 14, paddingBottom: 12, borderBottom: '1px solid #2f5b85' }}>
+      <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <b style={{ color: '#e2eaf5' }}>Seguir con uno guardado</b>
+        {deEste.length < guardados.length && <span style={{ marginLeft: 'auto', color: '#58a6ff', cursor: 'pointer' }} onClick={() => setTodos(t => !t)} data-ver-todos-replay="">{todos ? `Solo ${simbolo}` : `Ver todos (${guardados.length})`}</span>}
+      </div>
+      {!lista.length && <div style={{ color: '#7a9bc0' }}>Ninguno de {simbolo}.</div>}
+      <div style={{ maxHeight: 160, overflowY: 'auto' }}>
+        {lista.map(g => <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}>
+          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={g.nombre}>{g.nombre}</span>
+          <span style={{ color: '#7a9bc0', whiteSpace: 'nowrap' }}>hoy {fmt(g.estado?.hoy)}{g.estado?.resumen ? ` · ${pc(g.estado.resumen.pct)} · ${g.estado.resumen.operaciones} op.` : ''}</span>
+          <button onClick={() => onAbrir(g)} data-abrir-guardado={g.id} style={boton()}>Seguir</button>
+        </div>)}
+      </div>
+    </div>)
+}
+
+export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAzar = null, cargando = false, guardados = undefined, onAbrir = null }) {
   const [fecha, setFecha] = useState(() => inicioHace(velas, 1))
   useEffect(() => { if (!fecha && Array.isArray(velas) && velas.length > 2) setFecha(inicioHace(velas, 1)) }, [velas])   // §233: las velas llegan después (valor al azar)
   // Dinero, comisión y cuándo van las órdenes a mercado (se recuerdan en el navegador para la próxima vez).
@@ -65,8 +91,10 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
           {onValorAzar && <button onClick={onValorAzar} data-valor-azar="" title="Cambiar a un valor al azar de tu Watchlist" style={{ ...boton(), marginLeft: 8 }}>🎲 Valor al azar</button>}
           <span style={{ marginLeft: 'auto', cursor: 'pointer', color: '#7a9bc0' }} onClick={onCancelar} title="Cerrar">✕</span>
         </div>
+        <SeguirGuardado simbolo={simbolo} guardados={guardados} onAbrir={onAbrir} />
         {cargando ? <div style={{ color: '#7a9bc0', marginBottom: 14 }} data-cargando-replay="">Cargando las velas de {simbolo}…</div>
           : vs.length < 3 ? <div style={{ color: '#f85149' }}>Este gráfico tiene muy pocas velas para un Replay.</div> : <>
+          {onAbrir && guardados?.length > 0 && <div style={{ marginBottom: 6 }}><b style={{ color: '#e2eaf5' }}>Empezar uno nuevo</b></div>}
           <div style={{ marginBottom: 6 }}>Empiezas el día:</div>
           <input type="date" value={fecha || ''} min={min} max={max} onChange={e => setFecha(e.target.value)} data-fecha-replay=""
             style={{ fontFamily: MONO, fontSize: 13, padding: '4px 6px', background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3, colorScheme: 'dark' }} />
@@ -157,21 +185,29 @@ export function BarraReplay({ velas, estado, onIr, onSalir, onIndicadores, ver =
   const b = (txt, titulo, f, activo = true, extra = {}, dato = {}) => (
     <button onClick={() => { if (activo) f() }} title={titulo} disabled={!activo} style={{ ...bz(activo), ...extra }} {...dato}>{txt}</button>)
   const sep = <div style={{ width: 1, height: 20, background: BZ.borde, margin: '0 3px' }} />
+  // §239: un botón con su cifra dentro (▶ 2/s, ▶▶ 5): el marco es uno; la cifra, a la derecha tras una rayita, se cambia tocándola.
+  const doble = (activo) => ({ display: 'inline-flex', alignItems: 'stretch', background: BZ.caja, border: `1px solid ${BZ.borde}`, borderRadius: 5, opacity: activo ? 1 : 0.4, flexShrink: 0 })
+  const interior = { border: 'none', background: 'transparent', opacity: 1, borderRadius: '5px 0 0 5px' }
+  const parte = { background: 'transparent', color: BZ.texto, border: 'none', borderLeft: `1px solid ${BZ.borde}`, font: `13px ${LETRA}`, padding: '0 4px', width: 'auto', outline: 'none', cursor: 'pointer' }
   const caja = { background: BZ.caja, color: BZ.texto, border: `1px solid ${BZ.borde}`, borderRadius: 5, padding: '4px 6px', font: `13px ${LETRA}`, width: 'auto' }
   return (
     <div data-barra-replay="" style={{ flexShrink: 0, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center', background: BZ.fondo, border: `1px solid ${BZ.borde}`,
       borderRadius: 6, padding: '6px 8px', margin: '4px 6px', font: `13px/1.45 ${LETRA}`, color: BZ.texto }}>
-      {/* §234: |◀ y ▶| juntos (una vela atrás / adelante); reproducir, aparte. */}
+      <style>{'[data-n-velas]::-webkit-inner-spin-button,[data-n-velas]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}'}</style>
+      {/* §239: ▶ primero, con las velas por segundo dentro del mismo botón; |◀ y ▶| juntos; ▶▶ con su número dentro (se cambia tocándolo). */}
+      <span style={doble(!fin)}>
+        {b(jugando ? '⏸' : '▶', jugando ? 'Pausa (espacio)' : 'Reproducir (espacio)', () => setJugando(j => !j), !fin, { ...interior, minWidth: 30 }, { 'data-reproducir': '' })}
+        <select value={vel} onChange={e => setVel(Number(e.target.value))} title="Velocidad al reproducir: velas por segundo" data-velocidad="" style={parte}>
+          {[1, 2, 5, 10].map(v => <option key={v} value={v}>{v}/s</option>)}
+        </select>
+      </span>
       {b('|◀', `Una vela atrás (←; Mayús + ←: ${n})`, () => { setJugando(false); onIr(-1) }, p.vela > 1, {}, { 'data-atras': '' })}
       {b('▶|', 'Una vela adelante (→)', () => { setJugando(false); onIr(1) }, !fin, {}, { 'data-adelante': '' })}
-      {b(<>▶▶ {n}</>, `${n} velas (Mayús + →)`, () => { setJugando(false); onIr(n) }, !fin, {}, { 'data-varias': '' })}
-      <input type="number" value={n} min={2} max={200} title="Cuántas velas avanza ▶▶" data-n-velas=""
-        onChange={e => { const v = Math.round(Number(e.target.value)); if (Number.isFinite(v)) setN(Math.min(200, Math.max(2, v))) }} style={{ ...caja, width: 56 }} />
-      {sep}
-      {b(jugando ? '⏸' : '▶', jugando ? 'Pausa (espacio)' : 'Reproducir (espacio)', () => setJugando(j => !j), !fin, { minWidth: 40 }, { 'data-reproducir': '' })}
-      <select value={vel} onChange={e => setVel(Number(e.target.value))} title="Velocidad al reproducir" style={caja}>
-        {[1, 2, 5, 10].map(v => <option key={v} value={v}>{v === 1 ? '1 vela/s' : `${v}/s`}</option>)}
-      </select>
+      <span style={doble(!fin)}>
+        {b('▶▶', `Avanzar ${n} velas (Mayús + →)`, () => { setJugando(false); onIr(n) }, !fin, interior, { 'data-varias': '' })}
+        <input type="number" value={n} min={2} max={200} title="Cuántas velas avanza ▶▶ (escríbelo aquí)" data-n-velas=""
+          onChange={e => { const v = Math.round(Number(e.target.value)); if (Number.isFinite(v)) setN(Math.min(200, Math.max(2, v))) }} style={{ ...parte, width: 34, MozAppearance: 'textfield' }} />
+      </span>
       {senal && <>
         {sep}
         {b('⏮ Señal', 'Volver a la señal anterior (cuenta como retroceso)', () => { setJugando(false); senal.onAnterior() }, senal.estado === 'lista', {}, { 'data-senal-anterior': '' })}

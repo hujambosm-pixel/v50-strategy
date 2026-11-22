@@ -561,6 +561,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
   const wrapRef=useRef(null), barraDibujosRef=useRef(null)
   const activeLegendRef = externalLegendRef || legendRef
   const chartRef=useRef(null), candlesRef=useRef(null)
+  const fotoRef=useRef(null)   // §239 (Replay): foto del gráfico anterior mientras se crea el nuevo (sin destellos al avanzar)
   // Series de línea sobre el precio (EMAs y Bollinger). Son VARIAS por campo —una por tramo, ver
   // tramosDe—, así que se registran en un array en vez de en refs sueltas.
   const overlaySeriesRef=useRef([])
@@ -1752,6 +1753,8 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
           }
         }catch(_){ try{chart.timeScale().fitContent()}catch(__){} }
         ponMargen()
+        // §239: el gráfico nuevo ya está colocado: fuera la foto del anterior (tras pintarse, ~2 fotogramas).
+        if(fotoRef.current){ const f=fotoRef.current; setTimeout(()=>{ f.remove(); if(fotoRef.current===f) fotoRef.current=null },40) }
         // §235 (Replay): el zoom se recuerda en VELAS (anchoReplayRef: cuántas se ven): al avanzar, el gráfico se rehace y vuelve a
         // enseñar las mismas velas, pegadas a la última, sin alejarse. Después, cada zoom o desplazamiento tuyo cambia ese número.
         const ar=anchoReplayRef
@@ -2040,7 +2043,16 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
 
       innerCleanupRef.current=()=>{disposed=true;chartAliveRef.current=false;try{unsubLabels()}catch(_){};cnt.removeEventListener('mousemove',onMove);cnt.removeEventListener('mousedown',onMouseDown);window.removeEventListener('mouseup',onMouseUp);window.removeEventListener('keydown',onKeyDown);window.removeEventListener('keyup',onKeyUp);ro.disconnect()}
     })
-    return()=>{efectoVivo=false;innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};panelChartsRef.current.forEach(c=>{try{c.remove()}catch(_){}});panelChartsRef.current=[];overlaySeriesRef.current.forEach(s=>{try{chartRef.current?.removeSeries(s)}catch(_){}});overlaySeriesRef.current=[];if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null};candlesRef.current=null}
+    return()=>{
+      // §239 (Replay): en cada vela el gráfico se rehace; antes de borrarlo se deja encima una FOTO suya (takeScreenshot) que se quita en
+      // cuanto el nuevo está colocado (applyInitialRange). Así no queda un instante en blanco (los destellos al reproducir).
+      if(margenDerechaRef.current>0&&chartRef.current&&containerRef.current?.parentElement){ try{
+        fotoRef.current?.remove()
+        const c=chartRef.current.takeScreenshot(), dpr=window.devicePixelRatio||1, ct=containerRef.current
+        Object.assign(c.style,{position:'absolute',left:ct.offsetLeft+'px',top:ct.offsetTop+'px',width:(c.width/dpr)+'px',height:(c.height/dpr)+'px',pointerEvents:'none',zIndex:3})
+        ct.parentElement.appendChild(c); fotoRef.current=c; setTimeout(()=>{ if(fotoRef.current===c){ c.remove(); fotoRef.current=null } },1500)
+      }catch(_){} }
+      efectoVivo=false;innerCleanupRef.current?.();innerCleanupRef.current=null;chartAliveRef.current=false;if(rsiChartRef.current){if(rsiChartRef.current._isOverlay){try{const c=chartRef.current;if(c){for(const s of rsiChartRef.current._series){c.removeSeries(s)};c.priceScale('rsi').applyOptions({visible:false});c.priceScale('right').applyOptions({scaleMargins:{top:0.02,bottom:0.02}})}}catch(_){}}else{try{rsiChartRef.current.remove()}catch(_){}};rsiChartRef.current=null};if(macdChartRef.current){try{macdChartRef.current.remove()}catch(_){};macdChartRef.current=null};panelChartsRef.current.forEach(c=>{try{c.remove()}catch(_){}});panelChartsRef.current=[];overlaySeriesRef.current.forEach(s=>{try{chartRef.current?.removeSeries(s)}catch(_){}});overlaySeriesRef.current=[];if(chartRef.current){try{chartRef.current.__syncCleanup?.()}catch(_){};chartRef.current.remove();chartRef.current=null};candlesRef.current=null}
     // firmaIndicadores: SIN ESTO el gráfico no reflejaba los cambios de configuración. El memo se
     // recalculaba, pero este efecto —el que crea las series— no dependía de él, así que las líneas
     // seguían siendo las de antes hasta que cambiaba `data`, es decir, hasta cambiar de activo.
