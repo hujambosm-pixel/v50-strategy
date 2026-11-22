@@ -2441,7 +2441,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
         if(cerrada) continue
         const texto=(yy,t,col,id,abajo)=>{ if(yy==null||!t) return; const sel=(datos.get(id)?.grosor||1)>=3
           const n=el('text',{x:x2-4,y:abajo?yy+12:yy-4,'text-anchor':'end','font-size':11,'font-family':'system-ui, "Segoe UI", sans-serif',fill:col,'font-weight':sel?700:500})
-          n.textContent=(sel?'▸ ':'')+t+(id?' ⇕':'')+(sel?' · ↑↓':'') }
+          n.textContent=(sel?'▸ ':'')+t }   // §237: sin flechas (ocupaban sitio); la elegida, con «▸» y más gruesa
         const arribaO=yo!=null&&yo<ye
         texto(ye,c.textos.entrada,c.tipo==='posicion'?'#f3f3f5':'#58a6ff',c.lineas.entrada,arribaO)
         texto(ys,c.textos.stop,'#f85149',c.lineas.stop,ys!=null&&ys>ye)

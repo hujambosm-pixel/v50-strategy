@@ -10,7 +10,7 @@ import { B } from '../lib/builder/estilo'
 const ANCHOS = [300, 420, 560], MARGEN = 12, HUECO = 6
 const useLayout = typeof window === 'undefined' ? useEffect : useLayoutEffect
 
-export default function Ayuda({ texto, etiqueta = 'Ayuda', abiertoInicial = false, zIndice = 1000, contenido = null, estiloBoton = null, soloClic = false }) {   // zIndice: para un «?» dentro de una pantalla que ya va por encima de 1000
+export default function Ayuda({ texto, etiqueta = 'Ayuda', abiertoInicial = false, zIndice = 1000, contenido = null, estiloBoton = null, soloClic = true }) {   // §237: por defecto se abre SOLO con clic (pedido por Sergi, 22/11); soloClic={false} = también al pasar el ratón   // zIndice: para un «?» dentro de una pantalla que ya va por encima de 1000
   // contenido / estiloBoton (screener, docs/screener.md §15): en vez del «?», el nombre del filtro hace de botón; soloClic: no se abre
   // al pasar el ratón (en una rejilla de nombres saldría una ventana a cada paso). Sin ellos, el «?» de siempre.
   const [encima, setEncima] = useState(false)   // el ratón está encima
