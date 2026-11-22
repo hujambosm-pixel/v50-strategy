@@ -33,7 +33,11 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   // ── Marcas en el gráfico ── compra el d1 (stop 98) → entra el d2 a 101, sale el d3 a 98: −2,97 %.
   const conOrden = { ...est, hoy: D6[5], acciones: [{ fecha: D6[0], simbolo: 'A', tipo: 'orden', id: 1, lado: 1, entrada: null, stop: 98, objetivo: null, tam: { modo: 'invertir', pct: 50 } }] }
   const r = M.calcula(conOrden, VELAS)
-  ok(igual(O.marcasDe(r).map(m => [m.date, m.shape, m.text]), [[D6[1], 'arrowUp', '#1'], [D6[2], 'circle', '#1 −3 %']]), `marcas: ▲ «#1» el 03/01 y «#1 −3 %» el 04/01 (${JSON.stringify(O.marcasDe(r).map(m => m.text))})`)
+  ok(igual(O.marcasDe(r).map(m => [m.date, m.shape, m.text]), [[D6[1], 'arrowUp', '#1'], [D6[2], 'circle', '']]), `marcas: ▲ «#1» el 03/01 y un punto (sin texto) el 04/01 (${JSON.stringify(O.marcasDe(r).map(m => m.text))})`)
+  // §234: la operación cerrada, para la línea y la caja «#1 −3 %» del gráfico: de 101 (03/01) a 98 (04/01), −2,97 %.
+  const tr = O.tradesDe(r, 'A')
+  ok(tr.length === 1 && tr[0].num === 1 && tr[0].entryDate === D6[1] && tr[0].exitDate === D6[2] && tr[0].entryPrice === 101 && tr[0].exitPrice === 98 && Math.abs(tr[0].pnlPct - (98 / 101 - 1) * 100) < 1e-9, `operación para el gráfico: #1 de 101 a 98, ${tr[0] && tr[0].pnlPct.toFixed(2)} %`)
+  ok(O.tradesDe(r, 'B').length === 0, 'las de otro valor no salen')
 
   // ── El panel de la derecha ──
   const React = require(R + '/node_modules/react'), RDC = require(R + '/node_modules/react-dom/client')
@@ -49,13 +53,13 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   ok(igual(acciones[0], { fecha: D6[1], simbolo: 'A', tipo: 'cerrar' }), '«Cerrar a mercado» manda «cerrar» con la fecha de hoy')
   const boton = (sel, val) => m.raiz.busca(n => n.getAttribute(sel) === val)
   // §233: el panel ya solo pone órdenes A MERCADO (las de un precio se marcan en el gráfico). Corto a mercado con el precio a 104.
-  D.pulsa(boton('data-lado', '-1')); await D.espera(10)
-  ok(/Vender en corto a mercado/.test(txt('data-enviar-orden')), 'en corto, el botón dice «Vender en corto a mercado»')
+  // §234: dos botones a mercado: verde «Compra a mercado» y rojo «Venta a mercado».
+  ok(/Compra a mercado/.test(boton('data-enviar-orden', '1')?.textContent || '') && /Venta a mercado/.test(boton('data-enviar-orden', '-1')?.textContent || ''), 'a mercado: botón verde «Compra a mercado» y rojo «Venta a mercado»')
   D.escribe(m.raiz.busca(n => n.hasAttribute('data-stop')), '100'); await D.espera(10)
-  D.pulsa(m.raiz.busca(n => n.hasAttribute('data-enviar-orden'))); await D.espera(10)
+  D.pulsa(boton('data-enviar-orden', '-1')); await D.espera(10)
   ok(acciones.length === 1 && /por encima/.test(txt('data-error-orden')), 'stop 100 en un corto con el precio a 104: no se pone, aviso rojo')
   D.escribe(m.raiz.busca(n => n.hasAttribute('data-stop')), '110'); await D.espera(10)
-  D.pulsa(m.raiz.busca(n => n.hasAttribute('data-enviar-orden'))); await D.espera(10)
+  D.pulsa(boton('data-enviar-orden', '-1')); await D.espera(10)
   ok(acciones.length === 2 && igual({ ...acciones[1] }, { fecha: D6[1], simbolo: 'A', tipo: 'orden', id: 2, lado: -1, entrada: null, clase: null, stop: 110, objetivo: null, tam: { modo: 'invertir', pct: 20 } }), `con stop 110: se pone la orden a mercado (${JSON.stringify(acciones[1])})`)
   ok(m.raiz.busca(n => n.hasAttribute('data-stop')).value === '' && txt('data-error-orden') === '', 'después, las casillas de precio quedan vacías')
   D.pulsa(m.raiz.busca(n => n.hasAttribute('data-terminar'))); await D.espera(10)

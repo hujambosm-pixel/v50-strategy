@@ -161,20 +161,22 @@ export function BarraReplay({ velas, estado, onIr, onSalir, onIndicadores, ver =
   return (
     <div data-barra-replay="" style={{ flexShrink: 0, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center', background: BZ.fondo, border: `1px solid ${BZ.borde}`,
       borderRadius: 6, padding: '6px 8px', margin: '4px 6px', font: `13px/1.45 ${LETRA}`, color: BZ.texto }}>
-      {b('◀', `Una vela atrás (←; Mayús + ←: ${n})`, () => { setJugando(false); onIr(-1) }, p.vela > 1)}
-      {b(jugando ? '⏸' : '▶', jugando ? 'Pausa (espacio)' : 'Reproducir (espacio)', () => setJugando(j => !j), !fin, { minWidth: 40 })}
-      <select value={vel} onChange={e => setVel(Number(e.target.value))} title="Velocidad al reproducir" style={caja}>
-        {[1, 2, 5, 10].map(v => <option key={v} value={v}>{v === 1 ? '1 vela/s' : `${v}/s`}</option>)}
-      </select>
-      {b('▶|', 'Una vela (→)', () => { setJugando(false); onIr(1) }, !fin)}
+      {/* §234: |◀ y ▶| juntos (una vela atrás / adelante); reproducir, aparte. */}
+      {b('|◀', `Una vela atrás (←; Mayús + ←: ${n})`, () => { setJugando(false); onIr(-1) }, p.vela > 1, {}, { 'data-atras': '' })}
+      {b('▶|', 'Una vela adelante (→)', () => { setJugando(false); onIr(1) }, !fin, {}, { 'data-adelante': '' })}
       {b(<>▶▶ {n}</>, `${n} velas (Mayús + →)`, () => { setJugando(false); onIr(n) }, !fin, {}, { 'data-varias': '' })}
       <input type="number" value={n} min={2} max={200} title="Cuántas velas avanza ▶▶" data-n-velas=""
         onChange={e => { const v = Math.round(Number(e.target.value)); if (Number.isFinite(v)) setN(Math.min(200, Math.max(2, v))) }} style={{ ...caja, width: 56 }} />
+      {sep}
+      {b(jugando ? '⏸' : '▶', jugando ? 'Pausa (espacio)' : 'Reproducir (espacio)', () => setJugando(j => !j), !fin, { minWidth: 40 }, { 'data-reproducir': '' })}
+      <select value={vel} onChange={e => setVel(Number(e.target.value))} title="Velocidad al reproducir" style={caja}>
+        {[1, 2, 5, 10].map(v => <option key={v} value={v}>{v === 1 ? '1 vela/s' : `${v}/s`}</option>)}
+      </select>
       {senal && <>
         {sep}
         {b('⏮ Señal', 'Volver a la señal anterior (cuenta como retroceso)', () => { setJugando(false); senal.onAnterior() }, senal.estado === 'lista', {}, { 'data-senal-anterior': '' })}
         {b('Señal ⏭', 'Avanzar hasta la próxima vela con la señal elegida', () => { setJugando(false); senal.onSiguiente() }, senal.estado === 'lista' && !fin, {}, { 'data-senal-siguiente': '' })}
-        <select value={senal.elegida || ''} onChange={e => senal.onElige(e.target.value)} data-elige-senal="" title="Qué señal buscan «Señal ⏭» y «⏮ Señal»" style={{ ...caja, maxWidth: 230 }}>
+        <select value={senal.elegida || ''} onChange={e => senal.onElige(e.target.value)} data-elige-senal="" title={(senal.opciones.find(o => o.valor === senal.elegida)?.texto || 'Qué señal buscan «Señal ⏭» y «⏮ Señal»')} style={{ ...caja, maxWidth: 300 }}>
           <option value="">Señal: elige…</option>
           {senal.opciones.map(o => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
         </select>

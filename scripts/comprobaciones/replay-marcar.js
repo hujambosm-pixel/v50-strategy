@@ -100,18 +100,19 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   const P = require(R + '/components/PanelReplay.js')
   const est0 = { ...base, acciones: [], hoy: D6[0] }, r0 = M.calcula(est0, VELAS), c0 = M.cifras(est0, VELAS, r0)
   let marcar = 0, cancela = 0, form = F
-  const props = (o = {}) => ({ estado: est0, simbolo: 'A', r: r0, cif: c0, ahora: 100, onAccion() {}, onTerminar() {}, form, onForm: g => { form = typeof g === 'function' ? g(form) : g }, onMarcar: () => marcar++, onCancelaMarca: () => cancela++, ...o })
+  const props = (o = {}) => ({ estado: est0, simbolo: 'A', r: r0, cif: c0, ahora: 100, onAccion() {}, onTerminar() {}, form, onForm: g => { form = typeof g === 'function' ? g(form) : g }, onMarcar: (lado) => { marcar = lado }, onCancelaMarca: () => cancela++, ...o })
   let m = D.monta(React.createElement(P.PanelOperar, props()), RDC); await D.espera(20)
   const txt = (sel) => m.raiz.busca(n => n.hasAttribute(sel))?.textContent || ''
   ok(/20 acciones/.test(txt('data-estima-replay')) && /arriesgas 60 €/.test(txt('data-estima-replay')) && /R:R 1 : 2,0/.test(txt('data-estima-replay')), `a mercado (precio 100, stop 97, objetivo 106): ≈ 20 acciones · arriesgas 60 € · R:R 1 : 2,0 (${txt('data-estima-replay')})`)
   ok(/−3,0 %/.test(txt('data-nueva-orden')) && /6,0 %/.test(txt('data-nueva-orden')), 'el % del stop y del objetivo junto a sus casillas')
-  ok(!m.raiz.busca(n => n.hasAttribute('data-entrada')) && /Comprar a mercado/.test(txt('data-enviar-orden')), '§233: sin casilla de entrada ni «Enviar orden»: el botón es «Comprar a mercado»')
-  D.pulsa(m.raiz.busca(n => n.hasAttribute('data-marcar-replay'))); await D.espera(10)
-  ok(marcar === 1, '«🎯 Marcar en el gráfico» avisa a la página')
+  ok(!m.raiz.busca(n => n.hasAttribute('data-entrada')) && /Compra a mercado/.test(txt('data-enviar-orden')), '§233: sin casilla de entrada ni «Enviar orden»: a mercado, «Compra a mercado»')
+  ok(!/doble clic en el gráfico|Orden en un precio/.test(txt('data-nueva-orden')), '§234: sin textos fijos («o doble clic…», «Orden en un precio…»)')
+  D.pulsa(m.raiz.busca(n => n.getAttribute('data-marcar-replay') === '-1')); await D.espera(10)
+  ok(marcar === -1, '§234: «🎯 Venta» avisa a la página con el lado −1')
   m.quita()
   form = { ...B.FORM_INICIAL, mercado: false, entrada: '100', stop: '97' }
   m = D.monta(React.createElement(P.PanelOperar, props({ captura: 'objetivo' })), RDC); await D.espera(20)
-  ok(/marcar el Objetivo/.test(txt('data-guia-marca')) && /Entrada 100 · Stop 97 \(−3,0 %\)/.test(txt('data-guia-marca')) && /Enter: ponerla sin objetivo/.test(txt('data-guia-marca')) && /MARCANDO/.test(txt('data-marcando')),
+  ok(/marca el Objetivo/.test(txt('data-guia-marca')) && /Entrada 100 · Stop 97 \(−3,0 %\)/.test(txt('data-guia-marca')) && /Enter: ponerla sin objetivo/.test(txt('data-guia-marca')) && /MARCANDO/.test(txt('data-marcando')),
     `marcando: guía con lo marcado (Entrada 100 · Stop 97) y «Enter: ponerla sin objetivo» (${txt('data-guia-marca')})`)
   ok(!m.raiz.busca(n => n.hasAttribute('data-enviar-orden')) && !m.raiz.busca(n => n.hasAttribute('data-marcar-replay')), 'marcando: sin el botón de mercado ni el de 🎯')
   m.quita()
@@ -124,6 +125,33 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   ok(sinObj.orden && sinObj.orden.objetivo === null && /sin objetivo/.test(sinObj.aviso), 'objetivo al otro lado: se pone sin objetivo y lo avisa')
   ok(B.ordenDeMarca({ ...B.FORM_INICIAL, entrada: '95', stop: '', objetivo: '' }, 100).orden.clase === 'limite', 'solo la entrada (Enter tras marcarla): compra límite a 95 sin stop ni objetivo')
   ok(B.lineasDe(vacio, 'A', { ...F }, 100, false, true)[0].texto === 'MARCANDO · Entrada ⇕', 'mientras se marca, la primera línea dice «MARCANDO»')
+
+  // ── §234: botones con lado, «Stop a X %» y R:R ──
+  let c4 = B.empiezaMarca({ ...B.FORM_INICIAL, stopPct: '10', rr: '2' }, 1)
+  ok(c4.f.lado === 1 && c4.f.ladoFijo === true && c4.captura === 'entrada', '«🎯 Compra»: lado fijo de compra, marca la entrada')
+  c4 = B.conClic(c4.f, c4.captura, 100, 104)
+  ok(c4.listo === true && c4.f.stop === '90' && c4.f.objetivo === '120', `Stop a 10 % y R:R 1 : 2, entrada 100 → stop 90 y objetivo 120, en un clic (${c4.f.stop} / ${c4.f.objetivo})`)
+  const v4 = B.conClic(B.empiezaMarca({ ...B.FORM_INICIAL, stopPct: '10', rr: '2' }, -1).f, 'entrada', 100, 96)
+  ok(v4.listo && v4.f.lado === -1 && v4.f.stop === '110' && v4.f.objetivo === '80', 'en corto: entrada 100 → stop 110 y objetivo 80')
+  let rq4 = B.conClic(B.empiezaMarca({ ...B.FORM_INICIAL, rr: '2' }, 1).f, 'entrada', 100, 104)
+  ok(rq4.captura === 'stop' && rq4.f.stop === '', 'solo R:R: tras la entrada, se marca el stop')
+  rq4 = B.conClic(rq4.f, rq4.captura, 95, 104)
+  ok(rq4.listo && rq4.f.objetivo === '110', 'solo R:R 1 : 2: entrada 100 y stop 95 → objetivo 110')
+  const s4 = B.conClic(B.empiezaMarca({ ...B.FORM_INICIAL, stopPct: '5' }, 1).f, 'entrada', 100, 104)
+  ok(s4.captura === 'objetivo' && s4.f.stop === '95', 'solo Stop a 5 %: entrada 100 → stop 95 y se marca el objetivo')
+  const l4 = B.conClic(B.empiezaMarca({ ...B.FORM_INICIAL }, 1).f, 'entrada', 100, 104)
+  const l5 = B.conClic(l4.f, l4.captura, 103, 104)
+  ok(l5.f.lado === 1 && l5.captura === 'objetivo', 'con «🎯 Compra», un stop por encima no lo convierte en corto (el lado lo dio el botón)')
+  ok(B.ordenDeMarca({ ...l5.f, objetivo: '110' }, 104).error, '…y la orden no se pone: el stop de una compra va por debajo de la entrada')
+  const m4 = B.mueveBorrador({ ...B.FORM_INICIAL, mercado: false, lado: 1, ladoFijo: true, entrada: '100', stop: '90', objetivo: '120', stopPct: '10', rr: '2' }, 'entrada', 110, 104)
+  ok(m4.stop === '99' && m4.objetivo === '132', 'arrastrar la entrada a 110 con 10 % y 1 : 2: stop 99, objetivo 132')
+  const m5 = B.mueveBorrador({ ...B.FORM_INICIAL, mercado: false, lado: 1, ladoFijo: true, entrada: '100', stop: '90', objetivo: '120', rr: '2' }, 'stop', 95, 104)
+  ok(m5.objetivo === '110', 'arrastrar el stop a 95 con 1 : 2: objetivo 110')
+  const d4 = B.deMercado({ ...B.FORM_INICIAL, stopPct: '10', rr: '1' }, -1, 50)
+  ok(d4.lado === -1 && d4.mercado && d4.stop === '55' && d4.objetivo === '45', 'venta a mercado con el precio a 50, 10 % y 1 : 1: stop 55, objetivo 45')
+  ok(B.deMercado({ ...B.FORM_INICIAL, stop: '48', stopPct: '10', rr: '2' }, 1, 50).stop === '48' && B.deMercado({ ...B.FORM_INICIAL, stop: '48', stopPct: '10', rr: '2' }, 1, 50).objetivo === '54', 'a mercado, un stop escrito a mano manda (48) y el objetivo sale de él (50 + 2 × 2 = 54)')
+  const dd = B.dobleClic({ ...B.FORM_INICIAL, lado: -1, stopPct: '10', rr: '2' }, 100, 96)
+  ok(dd.listo && dd.f.lado === -1 && dd.f.stop === '110', 'doble clic con 10 % y 1 : 2: la orden entera con el lado del último botón (corto)')
 
   // ── §233: quitar una operación ── op 1 (orden 1, compra el 03/01 a 101, stop movido) y la orden 2 a mercado el 05/01 (entra el 08/01 a 96).
   const conDos = { ...base, hoy: D6[5], acciones: [

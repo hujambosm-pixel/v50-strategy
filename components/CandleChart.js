@@ -551,7 +551,8 @@ const VACIO=[]
 export function propsDelGrafico(props,sinEstrategia,ponSin){
   if(!props.dibujar) return props
   const p={...props,sinEstrategia,onSinEstrategia:ponSin}
-  if(sinEstrategia) Object.assign(p,{trades:VACIO,customMarkers:VACIO,slopeChanges:VACIO,filterZones:VACIO,razonamiento:false})
+  // §234: en el Replay (lineasReplay), las operaciones y marcas son las tuyas, no las de la estrategia: el 👁 no las oculta.
+  if(sinEstrategia&&!props.lineasReplay) Object.assign(p,{trades:VACIO,customMarkers:VACIO,slopeChanges:VACIO,filterZones:VACIO,razonamiento:false})
   return p
 }
 function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null, sinEstrategia=false, onSinEstrategia=null, onAlarmaElegida=null, estiloAlertas=null, alarmaElegidaId, onAlarmaBorrar=null, lineasReplay=null, onLineaReplay=null, textoCaptura=null, margenDerecha=0 }) {
@@ -1062,6 +1063,17 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
       // usuario a través del catálogo. Una sola definición, un solo criterio de color.
       const _histColor=colorHistograma
       const _syncPanels=(panelChart,panelSeries)=>{
+        // §234 (Replay, margenDerecha): con hueco a la derecha de la última vela, el rango de FECHAS no sirve (el panel no tiene fechas
+        // más allá de su último dato y se queda corto: los paneles salían desplazados frente a las velas). Se sincroniza por POSICIÓN
+        // (rango lógico), con una serie vacía en el panel que tiene una posición por cada vela del gráfico. Sin margenDerecha, como siempre.
+        if(margenDerechaRef.current>0){
+          try{ const ancla=panelChart.addLineSeries({lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false}); ancla.setData(data.map(d=>({time:d.date}))) }catch(_){}
+          let _mov=false
+          const pasa=(de,a)=>r=>{ if(!r||_mov) return; _mov=true; try{a.timeScale().setVisibleLogicalRange(r)}catch(_){} _mov=false }
+          chart.timeScale().subscribeVisibleLogicalRangeChange(pasa(chart,panelChart))
+          panelChart.timeScale().subscribeVisibleLogicalRangeChange(pasa(panelChart,chart))
+          try{ const r=chart.timeScale().getVisibleLogicalRange(); if(r) panelChart.timeScale().setVisibleLogicalRange(r) }catch(_){}
+        } else {
         // Sync visible range (zoom / scroll)
         chart.timeScale().subscribeVisibleTimeRangeChange(range=>{
           if(range)try{panelChart.timeScale().setVisibleRange(range)}catch(_){}
@@ -1069,6 +1081,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
         panelChart.timeScale().subscribeVisibleTimeRangeChange(range=>{
           if(range)try{chart.timeScale().setVisibleRange(range)}catch(_){}
         })
+        }
         // Sync crosshair vertical line (optional — only when panelSeries provided)
         if(panelSeries){
           let _syncing=false
@@ -1442,7 +1455,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
 
             } else if(labelMode===1){
               // ── Modo solo %: caja simple compacta ──
-              const lbl=`#${idx+1} ${coma(t.pnlPct,1)}%`
+              const lbl=`#${t.num??idx+1} ${coma(t.pnlPct,1)}%`   // §234: t.num = el número de la operación en el Replay
               const W=lbl.length*6.2+16, BOX_H=18
               const boxY=BAND_TOP+(idx%5)*(BAND_H/5)
               g.appendChild(mkRect(midX-W/2,boxY,W,BOX_H,fillC,strokeC))
@@ -2346,7 +2359,8 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
       return mejor
     }
     const precioDe=(e)=>{ const candles=candlesRef.current; if(!candles) return null; const p=candles.coordinateToPrice(e.clientY-container.getBoundingClientRect().top); return p==null?null:(Math.abs(p)<1?Math.round(p*1e4)/1e4:Math.round(p*100)/100) }
-    const onDown=(e)=>{ if(e.button!==0) return; const l=cerca(e); if(!l) return; arr={id:l.id,precio:l.precio}; e.preventDefault(); e.stopPropagation(); container.style.cursor='ns-resize' }
+    // §234: un clic fuera de las líneas avisa con id null (la línea elegida deja de estarlo).
+    const onDown=(e)=>{ if(e.button!==0) return; const l=cerca(e); if(!l){ if(datosLineasReplay.current.length) onLineaReplayRef.current?.(null,null,true); return } arr={id:l.id,precio:l.precio}; e.preventDefault(); e.stopPropagation(); container.style.cursor='ns-resize' }
     const onMove=(e)=>{
       if(!arr){ if(datosLineasReplay.current.length&&!e.buttons) container.style.cursor=cerca(e)?'ns-resize':''; return }
       const p=precioDe(e); if(p==null||!(p>0)) return

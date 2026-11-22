@@ -49,6 +49,17 @@ const F = (k) => VELAS[PRE + k].date
   // Con una SMA 1 el cierre nunca está por encima de sí mismo → ninguna.
   ok(S.senalesCondicion(fila({ c: 'precioVsMedia', p: { lado: 'encima', tipo: 'SMA', periodo: 1 } }), velasDe, fechas).length === 0, 'una condición que nunca se cumple: sin señales')
 
+  // ── §234: los indicadores de la señal, para el gráfico ──
+  // Condición «cierre sobre la SMA 3» de A: una serie SMA 3 con un valor por vela. Vela 10: (100 + 100 + 105) / 3 = 101,67.
+  const g1 = S.graficoSenal({ tipo: 'condicion', filas: fila({ c: 'precioVsMedia', p: { lado: 'encima', tipo: 'SMA', periodo: 3 } }) }, VELAS, 'A')
+  ok(g1 && g1.series.length === 1 && g1.series[0].nombre === 'SMA 3' && g1.series[0].valores.length === VELAS.length && Math.abs(g1.series[0].valores[PRE + 10] - 305 / 3) < 1e-9 && igual(g1.eventos, []) && igual(g1.ordenes, []),
+    `condición: la SMA 3 de A, una por vela (vela 10 = 101,67), sin eventos ni órdenes (${g1 && g1.series.map(s => s.nombre)})`)
+  const g2 = S.graficoSenal({ tipo: 'condicion', filas: [{ quien: 'A', velas: 'diarias', si: { c: 'mediaVsMedia', p: { tipoRapida: 'EMA', periodoRapida: 10, tipoLenta: 'EMA', periodoLenta: 20, relacion: 'cruzaArriba' } } }, { quien: 'QQQ', velas: 'diarias', si: { c: 'precioVsMedia', p: { lado: 'encima', tipo: 'SMA', periodo: 200 } } }] }, VELAS, 'A')
+  ok(g2 && igual(g2.series.map(s => s.nombre), ['EMA 10', 'EMA 20']), `cruce de medias: las dos EMA (10 y 20); la fila de QQQ no se dibuja en A (${g2 && g2.series.map(s => s.nombre)})`)
+  const g3 = S.graficoSenal({ tipo: 'estrategia', def: { ...def, entrada: { ...def.entrada, senal: { c: 'precioVsMedia', p: { lado: 'encima', tipo: 'EMA', periodo: 5 } } } } }, VELAS.slice(0, PRE + 21), 'A')
+  ok(g3 && g3.series.some(s => s.nombre === 'EMA5' && s.valores.length === PRE + 21), `estrategia: sus series sobre el precio (la EMA 5), solo con las velas que se ven (${g3 && g3.series.map(s => s.nombre)})`)
+  ok(S.graficoSenal({ tipo: 'condicion', filas: fila({ c: 'nuevoMaximo', p: { n: 2 } }) }, VELAS, 'A') === null && S.graficoSenal(null, VELAS, 'A') === null, 'sin medias que dibujar (o sin señal): nada')
+
   // ── Siguiente / anterior / marcas ──
   const L = [F(10), F(12), F(30)]
   ok(S.siguienteSenal(L, F(10)) === F(12) && S.siguienteSenal(L, F(5)) === F(10) && S.siguienteSenal(L, F(30)) === null, 'la siguiente: estrictamente después de hoy; después de la última, ninguna')

@@ -47,8 +47,10 @@ const VELAS = F.map((date, i) => ({ date, open: 10 + i, high: 11 + i, low: 9 + i
   const tecla = (key, extra = {}) => { let parado = false; for (const f of OV.keydown || []) f({ key, target: { tagName: 'DIV' }, preventDefault() {}, stopPropagation() { parado = true }, ...extra }); return parado }
   const boton = (t) => m.raiz.busca(n => n.nodeName === 'BUTTON' && n.textContent === t)
   const varias = () => m.raiz.busca(n => n.hasAttribute('data-varias'))
-  D.pulsa(boton('▶|')); D.pulsa(varias()); D.pulsa(boton('◀')); await D.espera(10)
-  ok(igual(pasos, [1, 5, -1]) && varias().textContent === '▶▶ 5', '▶| una vela, ▶▶ cinco (las de la casilla, 5 de entrada), ◀ una atrás')
+  D.pulsa(boton('▶|')); D.pulsa(varias()); D.pulsa(boton('|◀')); await D.espera(10)
+  ok(igual(pasos, [1, 5, -1]) && varias().textContent === '▶▶ 5', '▶| una vela, ▶▶ cinco (las de la casilla, 5 de entrada), |◀ una atrás')
+  const orden = m.raiz.busca(n => n.hasAttribute('data-barra-replay')).textContent
+  ok(orden.indexOf('|◀') < orden.indexOf('▶|') && orden.indexOf('▶|') < orden.indexOf('▶▶') && orden.indexOf('▶▶') < orden.lastIndexOf('▶'), '§234: |◀ y ▶| juntos, luego ▶▶ y, aparte, ▶ reproducir')
   pasos.length = 0
   D.escribe(m.raiz.busca(n => n.hasAttribute('data-n-velas')), '3'); await D.espera(10)
   D.pulsa(varias()); tecla('ArrowRight', { shiftKey: true }); tecla('ArrowLeft', { shiftKey: true }); await D.espera(10)
