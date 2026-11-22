@@ -165,6 +165,12 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   ok(cj[2].textos.entrada === 'Compra stop · sin ejecutar' && cj[2].textos.stop === 'Stop −5,0 %' && cj[2].textos.objetivo === 'Objetivo +10,0 %', 'orden viva (compra stop a 120, stop 114, objetivo 132): «sin ejecutar», −5 % y +10 %')
   ok(cj[3].entrada === 100 && cj[3].stop === 105 && cj[3].objetivo === null && /MARCANDO/.test(cj[3].textos.entrada), 'la que se marca: corto a 100 con stop 105, sin objetivo todavía, «MARCANDO»')
   ok(B.cajasDe(rc, 'A', B.FORM_INICIAL, 104, D6[5], true).length === 3, 'terminada: sin la del borrador')
+  // §238: una orden límite a 90 puesta el 02/01 y bajada a 89 el 04/01 (nunca se cumple): su caja empieza el 04/01, el día del cambio.
+  const rm = M.calcula({ ...base, hoy: D6[5], acciones: [{ fecha: D6[0], simbolo: 'A', tipo: 'orden', id: 1, lado: 1, entrada: 90, clase: 'limite', stop: null, objetivo: null, tam: { modo: 'invertir', pct: 20 } }, { fecha: D6[2], simbolo: 'A', tipo: 'mover', id: 1, entrada: 89 }] }, VELAS)
+  const cm = B.cajasDe(rm, 'A', B.FORM_INICIAL, 104, D6[5]).find(c => c.tipo === 'viva')
+  ok(cm && cm.desde === D6[2] && cm.entrada === 89, `orden viva cambiada: su caja empieza el día del último cambio (${cm && cm.desde}), con la entrada de ahora (89)`)
+  const rsc = M.calcula({ ...base, hoy: D6[5], acciones: [{ fecha: D6[0], simbolo: 'A', tipo: 'orden', id: 1, lado: 1, entrada: 90, clase: 'limite', stop: null, objetivo: null, tam: { modo: 'invertir', pct: 20 } }] }, VELAS)
+  ok(B.cajasDe(rsc, 'A', B.FORM_INICIAL, 104, D6[5]).find(c => c.tipo === 'viva').desde === D6[0], 'sin cambios, desde el día en que se puso')
   const rr9 = M.calcula({ ...base, hoy: D6[5], acciones: [{ fecha: D6[0], simbolo: 'A', tipo: 'orden', id: 1, lado: 1, entrada: null, stop: 98, objetivo: 120, tam: { modo: 'invertir', pct: 50 } }] }, VELAS)
   ok(rr9.operaciones[0] && rr9.operaciones[0].stop === 98 && rr9.operaciones[0].objetivo === 120, 'el motor guarda en cada operación cerrada su stop y su objetivo')
 

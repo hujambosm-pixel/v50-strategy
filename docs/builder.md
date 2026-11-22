@@ -3810,3 +3810,7 @@ Pedido por Sergi el 22/11 (captura de AAPL).
 - components/BuilderAyuda.js: soloClic pasa a ser true por defecto: TODOS los «?» de la app se abren con un clic (y se cierran tocando fuera o con Esc), no al pasar el ratón. Ninguna pantalla pasaba soloClic={false}.
 - Cajas del Replay (§236): fuera «⇕» y «· ↑↓» de los textos; la línea elegida sigue con «▸» y más gruesa.
 - Respondido a Sergi (sin cambio): su orden 7 de AAPL era una compra STOP a 139,10 (18/01/2023); el 20/01 bajó la entrada a 136,48, por debajo del precio (cierre 137,87), y pasó a ser LÍMITE («Compra límite · sin ejecutar»): compra solo si el precio BAJA hasta 136,48. Desde el 23/01 el mínimo no bajó de 137,90 → no entró, como en un bróker. La caja se dibuja con los niveles de AHORA desde la vela en que se puso la orden.
+## 238. Replay: la caja de una orden sin ejecutar empieza en su último cambio (22/11)
+Pedido por Sergi el 22/11 (tras ver que la caja de su orden 7 de AAPL, bajada el 20/01, se dibujaba desde el 18/01 con los niveles nuevos y parecía que el precio la había tocado).
+- lib/replay/motor.js: un «mover» de una orden viva apunta su fecha en la orden (cambiada). lib/replay/borrador.js cajasDe: la caja de la orden viva empieza en cambiada (si no hay, en el día en que se puso). La de la posición abierta sigue empezando en su entrada.
+- Prueba a mano en replay-marcar.js: límite a 90 puesta el 02/01 y bajada a 89 el 04/01 → caja desde el 04/01 con entrada 89; sin cambios, desde el 02/01.
