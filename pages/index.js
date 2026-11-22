@@ -25,7 +25,7 @@ import { recortaVelas, desplazaRango, vecina, rangoVer } from '../lib/replay/gra
 import { irA as replayIrA, calcula as replayCalcula, cifras as replayCifras } from '../lib/replay/motor'
 import { marcasDe as replayMarcas, nuevaAccion as nuevaAccionReplay, tradesDe as tradesReplayDe } from '../lib/replay/orden'
 import { PanelOperar, ResultadosReplay } from '../components/PanelReplay'   // §228: operar en el Replay
-import { FORM_INICIAL as FORM_REPLAY, hayBorrador as hayBorradorReplay, conClic as clicBorrador, dobleClic as dobleClicBorrador, empiezaMarca as empiezaMarcaReplay, enCasilla as enCasillaReplay, ladoDe as ladoBorrador, mueveBorrador as mueveBorradorReplay, deMercado as deMercadoReplay, redondea as redondeaReplay, lineasDe as lineasReplayDe, accionMover as accionMoverReplay, anade as anadeAccionReplay, ordenDeMarca as ordenDeMarcaReplay, quitaOperacion as quitaOperacionReplay } from '../lib/replay/borrador'   // §229: marcar en el gráfico
+import { FORM_INICIAL as FORM_REPLAY, hayBorrador as hayBorradorReplay, conClic as clicBorrador, dobleClic as dobleClicBorrador, empiezaMarca as empiezaMarcaReplay, enCasilla as enCasillaReplay, ladoDe as ladoBorrador, mueveBorrador as mueveBorradorReplay, deMercado as deMercadoReplay, redondea as redondeaReplay, lineasDe as lineasReplayDe, cajasDe as cajasReplayDe, accionMover as accionMoverReplay, anade as anadeAccionReplay, ordenDeMarca as ordenDeMarcaReplay, quitaOperacion as quitaOperacionReplay } from '../lib/replay/borrador'   // §229: marcar en el gráfico
 import { senalesCondicion, senalesEstrategia, siguienteSenal, anteriorSenal, marcasSenal, simbolosSenal, graficoSenal } from '../lib/replay/senales'   // §231: saltar a la señal
 import { fraseFilasRegla as fraseFilasReplay } from '../lib/builder/reglasPesos'   // §234: el selector de señal dice qué condición es
 import { tickersDe as tickersDeReplay } from '../lib/pruebaAzar'
@@ -46,7 +46,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1301'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1302'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -2086,7 +2086,10 @@ export default function Home() {
     setAvisoLineaReplay(''); accionReplay(c.accion) }
   const lineasReplay=useMemo(()=>{ if(!replay||!calcReplay) return VACIO_REPLAY
     const L=lineasReplayDe(calcReplay,replay.valores[0],formReplay,ahoraReplay,!!replay.terminada,!!capturaReplay)
-    return lineaElegidaReplay?L.map(l=>l.id===lineaElegidaReplay?{...l,grosor:(l.grosor||1)+2,texto:`▸ ${l.texto} · ↑↓`}:l):L },[calcReplay,formReplay,ahoraReplay,replay?.terminada,capturaReplay,vueltaLineasReplay,lineaElegidaReplay])   // eslint-disable-line
+    // §236: las líneas solo dejan su precio en el eje (soloEje): la línea, la zona y el texto los dibuja su caja (cajasReplay).
+    return L.map(l=>l.id===lineaElegidaReplay?{...l,grosor:(l.grosor||1)+2,soloEje:true}:{...l,grosor:1,soloEje:true}) },[calcReplay,formReplay,ahoraReplay,replay?.terminada,capturaReplay,vueltaLineasReplay,lineaElegidaReplay])   // eslint-disable-line
+  // §236: las cajas como «Posición larga / corta»: cerradas (tenues), posición, órdenes sin ejecutar y la que se marca.
+  const cajasReplay=useMemo(()=>replay&&calcReplay?cajasReplayDe(calcReplay,replay.valores[0],formReplay,ahoraReplay,replay.hoy,!!replay.terminada,!!capturaReplay):null,[calcReplay,formReplay,ahoraReplay,replay?.hoy,replay?.terminada,capturaReplay])   // eslint-disable-line
   // §234: con una línea elegida, ↑ ↓ la mueven un 0,1 % (con Mayús, un 1 %), como las alertas; Esc deja de elegirla.
   useEffect(()=>{ if(!lineaElegidaReplay) return
     const l=(lineasReplay||[]).find(x=>x.id===lineaElegidaReplay)
@@ -2107,7 +2110,7 @@ export default function Home() {
     onAlertaPrecio:null,margenDerecha:10,onPriceAlarm:dobleClicReplay,priceAlarms:VACIO_REPLAY,anchoReplayRef,onAnchoReplay:anchoReplayCambia,syncRef:null,   // §235: sin enlazar con otros gráficos (le devolvían su zoom)
     tlOpenTrades:VACIO_REPLAY,filterZones:VACIO_REPLAY,
     riskMode:capturaReplay?({entrada:'capture_entry',stop:'capture_stop',objetivo:'capture_tp'}[capturaReplay]||null):null,onRiskPrice:clicReplay,textoCaptura:capturaReplay?(TEXTO_MARCA[capturaReplay]||null):null,
-    riskLevels:null,onRiskLevelChange:null,riskLineActive:null,lineasReplay,onLineaReplay:lineaReplay}:{}
+    riskLevels:null,onRiskLevelChange:null,riskLineActive:null,lineasReplay,onLineaReplay:lineaReplay,cajasReplay}:{}
 
   // ── Precios por lotes ──
   // Trocea por el tope del endpoint y lanza las llamadas EN SERIE: cinco peticiones a la vez contra el
@@ -5877,7 +5880,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1301</title>
+        <title>Trading Simulator V9.1302</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5966,7 +5969,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1301
+            <span className="dot"/>Trading Simulator V9.1302
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

@@ -555,7 +555,7 @@ export function propsDelGrafico(props,sinEstrategia,ponSin){
   if(sinEstrategia&&!props.lineasReplay) Object.assign(p,{trades:VACIO,customMarkers:VACIO,slopeChanges:VACIO,filterZones:VACIO,razonamiento:false})
   return p
 }
-function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null, sinEstrategia=false, onSinEstrategia=null, onAlarmaElegida=null, estiloAlertas=null, alarmaElegidaId, onAlarmaBorrar=null, lineasReplay=null, onLineaReplay=null, textoCaptura=null, margenDerecha=0, anchoReplayRef=null, onAnchoReplay=null }) {
+function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null, sinEstrategia=false, onSinEstrategia=null, onAlarmaElegida=null, estiloAlertas=null, alarmaElegidaId, onAlarmaBorrar=null, lineasReplay=null, onLineaReplay=null, textoCaptura=null, margenDerecha=0, anchoReplayRef=null, onAnchoReplay=null, cajasReplay=null }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   // Dibujar (§208): el contenedor de las velas (para los clics) y el hueco de la izquierda donde va su barra lateral.
   const wrapRef=useRef(null), barraDibujosRef=useRef(null)
@@ -2356,7 +2356,8 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
     const vistos=new Set()
     for(const l of lista){
       vistos.add(l.id)
-      const op={price:l.precio,color:l.color,lineWidth:l.grosor||1,lineStyle:l.estilo||0,axisLabelVisible:true,title:l.texto||''}
+      // §236: con las cajas del Replay, la línea solo deja su precio en el eje (la línea, la zona y el texto los dibuja la caja).
+      const op={price:l.precio,color:l.color,lineWidth:l.grosor||1,lineStyle:l.estilo||0,axisLabelVisible:true,title:l.soloEje?'':(l.texto||''),lineVisible:!l.soloEje}
       const pl=m.get(l.id)
       if(pl){ try{ pl.applyOptions(op); continue }catch(_){ m.delete(l.id) } }
       try{ m.set(l.id,candles.createPriceLine(op)) }catch(_){}
@@ -2390,6 +2391,66 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
     window.addEventListener('mouseup',onUp)
     return ()=>{ container.removeEventListener('mousedown',onDown,true); window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp) }
   },[data])   // con data, como el arrastre de las de riesgo: al montar puede no haber contenedor todavía
+
+  // ── §236: CAJAS del Replay (lib/replay/borrador.js cajasDe), como «Posición larga / corta» de los dibujos ──
+  // Se redibujan en cada fotograma solo si cambia algo (zoom, desplazamiento, precio de una línea que se arrastra). Prop opcional: sin
+  // cajasReplay no hay capa ni bucle.
+  const cajasSvgRef=useRef(null), cajasReplayRef=useRef(cajasReplay); cajasReplayRef.current=cajasReplay
+  useEffect(()=>{
+    if(!cajasReplay) return
+    let vivo=true, firma='', raf=0, reloj=0
+    const NS='http://www.w3.org/2000/svg'
+    // Cada fotograma (mientras se ve la página) y, por si el navegador no da fotogramas (pestaña en segundo plano), cada 250 ms.
+    const paso=()=>{ if(!vivo) return; raf=requestAnimationFrame(paso); dibuja() }
+    const dibuja=()=>{ if(!vivo) return
+      const svg=cajasSvgRef.current, chart=chartRef.current, cs=candlesRef.current, cajas=cajasReplayRef.current||[]
+      if(!svg||!chart||!cs||!data?.length) return
+      const ts=chart.timeScale(), m=margenDerechaRef.current>=1?margenDerechaRef.current:0
+      const lineas=lineasReplayRef.current, datos=new Map((datosLineasReplay.current||[]).map(l=>[l.id,l]))
+      const precio=(id,def)=>{ const pl=id&&lineas.get(id); if(pl){ try{ return pl.options().price }catch(_){} } return def }
+      // El hueco de la derecha no tiene velas: su final se calcula con el ancho de una vela (la última y la anterior).
+      const ult=data.length-1, xu=ts.logicalToCoordinate(ult), xa=ult>0?ts.logicalToCoordinate(ult-1):null
+      const xFin=xu==null?null:xu+(xa==null?6:xu-xa)*(m+0.5)
+      // La vela de cada fecha por su POSICIÓN (la última vela con esa fecha o antes): no depende de cómo guarde las fechas el gráfico.
+      const ix=(f)=>{ let lo=0,hi=data.length-1,r=-1; while(lo<=hi){ const k=(lo+hi)>>1; if(data[k].date<=f){ r=k; lo=k+1 } else hi=k-1 } return r }
+      const items=[]
+      for(const c of cajas){
+        const i1=ix(c.desde), i2=c.hasta?ix(c.hasta):null
+        if(i1<0) continue
+        const x1=ts.logicalToCoordinate(i1), x2=c.hasta?ts.logicalToCoordinate(i2):xFin
+        if(x1==null||x2==null) continue
+        const e=precio(c.lineas.entrada,c.entrada), s=precio(c.lineas.stop,c.stop), o=precio(c.lineas.objetivo,c.objetivo)
+        const y=p=>p==null?null:cs.priceToCoordinate(p)
+        items.push({c,x1:Math.min(x1,x2),x2:Math.max(x1,x2)+(c.hasta?0:0),ye:y(e),ys:y(s),yo:y(o)})
+      }
+      const f=items.map(i=>[i.c.id,i.c.tipo,Math.round(i.x1),Math.round(i.x2),Math.round(i.ye),Math.round(i.ys??-1),Math.round(i.yo??-1),i.c.textos.entrada,i.c.textos.stop,i.c.textos.objetivo,datos.get(i.c.lineas.entrada)?.grosor,datos.get(i.c.lineas.stop)?.grosor,datos.get(i.c.lineas.objetivo)?.grosor].join(',')).join('|')
+      if(f===firma) return
+      firma=f
+      while(svg.firstChild) svg.removeChild(svg.firstChild)
+      const el=(tag,at)=>{ const n=document.createElementNS(NS,tag); for(const k in at) n.setAttribute(k,at[k]); svg.appendChild(n); return n }
+      for(const {c,x1,x2,ye,ys,yo} of items){
+        if(ye==null) continue
+        const cerrada=c.tipo==='cerrada', a=cerrada?0.07:c.tipo==='viva'?0.10:0.16, w=Math.max(1,x2-x1)
+        if(ys!=null) el('rect',{x:x1,y:Math.min(ye,ys),width:w,height:Math.abs(ys-ye),fill:`rgba(248,81,73,${a})`})
+        if(yo!=null) el('rect',{x:x1,y:Math.min(ye,yo),width:w,height:Math.abs(yo-ye),fill:`rgba(63,185,80,${a})`})
+        const linea=(yy,col,id,op)=>{ if(yy==null) return; const g=datos.get(id)?.grosor||1; el('line',{x1,x2,y1:yy,y2:yy,stroke:col,'stroke-width':g,opacity:op}) }
+        const oc=cerrada?0.35:1
+        if(!cerrada) linea(ye,c.tipo==='posicion'?'#f3f3f5':'#58a6ff',c.lineas.entrada,oc)
+        linea(ys,'#f85149',c.lineas.stop,oc)
+        linea(yo,'#3fb950',c.lineas.objetivo,oc)
+        if(cerrada) continue
+        const texto=(yy,t,col,id,abajo)=>{ if(yy==null||!t) return; const sel=(datos.get(id)?.grosor||1)>=3
+          const n=el('text',{x:x2-4,y:abajo?yy+12:yy-4,'text-anchor':'end','font-size':11,'font-family':'system-ui, "Segoe UI", sans-serif',fill:col,'font-weight':sel?700:500})
+          n.textContent=(sel?'▸ ':'')+t+(id?' ⇕':'')+(sel?' · ↑↓':'') }
+        const arribaO=yo!=null&&yo<ye
+        texto(ye,c.textos.entrada,c.tipo==='posicion'?'#f3f3f5':'#58a6ff',c.lineas.entrada,arribaO)
+        texto(ys,c.textos.stop,'#f85149',c.lineas.stop,ys!=null&&ys>ye)
+        texto(yo,c.textos.objetivo,'#3fb950',c.lineas.objetivo,yo!=null&&yo>ye)
+      }
+    }
+    raf=requestAnimationFrame(paso); reloj=setInterval(dibuja,250); dibuja()
+    return ()=>{ vivo=false; cancelAnimationFrame(raf); clearInterval(reloj); const svg=cajasSvgRef.current; if(svg) while(svg.firstChild) svg.removeChild(svg.firstChild) }
+  },[!!cajasReplay,data,chartReadyTick])   // eslint-disable-line
 
   const activeIndType = definition ? getActiveIndicator(definition) : null
   // hasMacdBars / hasRsiBars / hasVolumeBars: ELIMINADAS. Eran una segunda copia de las condiciones de
@@ -2484,6 +2545,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
         </div>
       )}
       <div ref={containerRef} style={{minHeight:0,...(fillHeight?{height:'100%'}:{})}}/>
+      {cajasReplay&&<svg ref={cajasSvgRef} data-cajas-replay="" style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:4}}/>}
       <svg ref={svgRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',pointerEvents:'none',zIndex:5}}/>
       {dibujar&&<DibujosGrafico chartRef={chartRef} seriesRef={candlesRef} containerRef={containerRef} wrapRef={wrapRef} barraRef={barraDibujosRef} data={data} simbolo={simbolo} arriba={dibujarArriba} onAlerta={onAlertaPrecio} arriesgoDefecto={arriesgoDefecto} sinEstrategia={sinEstrategia} onSinEstrategia={onSinEstrategia}/>}
       <div ref={tooltipRef} style={{position:'absolute',display:'none',pointerEvents:'none',background:'rgba(8,12,20,0.96)',border:'1px solid #00e5a0',borderRadius:6,padding:'8px 12px',fontFamily:MONO,fontSize:12,color:'#e2eaf5',zIndex:15,minWidth:200,boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}/>

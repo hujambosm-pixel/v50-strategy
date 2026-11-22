@@ -153,6 +153,21 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   const dd = B.dobleClic({ ...B.FORM_INICIAL, lado: -1, stopPct: '10', rr: '2' }, 100, 96)
   ok(dd.listo && dd.f.lado === -1 && dd.f.stop === '110', 'doble clic con 10 % y 1 : 2: la orden entera con el lado del último botón (corto)')
 
+  // ── §236: las cajas del gráfico ──
+  const rc = { operaciones: [{ num: 1, simbolo: 'A', lado: 1, fechaEntrada: D6[1], fechaSalida: D6[2], precioEntrada: 101, precioSalida: 98, stop: 98, objetivo: 110 }, { num: 2, simbolo: 'B', fechaEntrada: D6[1], fechaSalida: D6[2] }],
+    posiciones: { A: { num: 3, lado: 1, acciones: 20, precioMedio: 100, fecha: D6[3], stop: 95, objetivo: 110 } },
+    ordenesVivas: [{ id: 7, simbolo: 'A', fecha: D6[4], lado: 1, entrada: 120, clase: 'stop', stop: 114, objetivo: 132 }] }
+  const cj = B.cajasDe(rc, 'A', { ...B.FORM_INICIAL, mercado: false, lado: -1, entrada: '100', stop: '105', objetivo: '' }, 104, D6[5], false, true)
+  ok(igual(cj.map(c => [c.tipo, c.desde, c.hasta]), [['cerrada', D6[1], D6[2]], ['posicion', D6[3], null], ['viva', D6[4], null], ['borrador', D6[5], null]]),
+    `cajas: la cerrada (de su entrada a su salida, solo de A), la posición y la orden viva hasta el hueco, y la que se marca desde hoy (${JSON.stringify(cj.map(c => c.tipo))})`)
+  ok(cj[0].stop === 98 && cj[0].objetivo === 110 && igual(cj[0].textos, {}), 'la cerrada lleva su stop y su objetivo, sin textos')
+  ok(cj[1].textos.stop === 'Stop −5,0 %' && cj[1].textos.objetivo === 'Objetivo +10,0 %' && cj[1].lineas.stop === 'pos:A:stop', 'posición a 100, stop 95 y objetivo 110: «Stop −5,0 %», «Objetivo +10,0 %», y sigue a su línea')
+  ok(cj[2].textos.entrada === 'Compra stop · sin ejecutar' && cj[2].textos.stop === 'Stop −5,0 %' && cj[2].textos.objetivo === 'Objetivo +10,0 %', 'orden viva (compra stop a 120, stop 114, objetivo 132): «sin ejecutar», −5 % y +10 %')
+  ok(cj[3].entrada === 100 && cj[3].stop === 105 && cj[3].objetivo === null && /MARCANDO/.test(cj[3].textos.entrada), 'la que se marca: corto a 100 con stop 105, sin objetivo todavía, «MARCANDO»')
+  ok(B.cajasDe(rc, 'A', B.FORM_INICIAL, 104, D6[5], true).length === 3, 'terminada: sin la del borrador')
+  const rr9 = M.calcula({ ...base, hoy: D6[5], acciones: [{ fecha: D6[0], simbolo: 'A', tipo: 'orden', id: 1, lado: 1, entrada: null, stop: 98, objetivo: 120, tam: { modo: 'invertir', pct: 50 } }] }, VELAS)
+  ok(rr9.operaciones[0] && rr9.operaciones[0].stop === 98 && rr9.operaciones[0].objetivo === 120, 'el motor guarda en cada operación cerrada su stop y su objetivo')
+
   // ── §233: quitar una operación ── op 1 (orden 1, compra el 03/01 a 101, stop movido) y la orden 2 a mercado el 05/01 (entra el 08/01 a 96).
   const conDos = { ...base, hoy: D6[5], acciones: [
     { fecha: D6[0], simbolo: 'A', tipo: 'orden', id: 1, lado: 1, entrada: null, stop: 98, objetivo: null, tam: { modo: 'invertir', pct: 50 } },
