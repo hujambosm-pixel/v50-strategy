@@ -33,7 +33,7 @@ export default function EditorConPasos({ simbolo, def, onCambia }) {
         <FilasAlerta simbolo={sim} filas={def[k].filas} para="señal" conO movimientos={referenciasPara(k, def)}
           onCambia={fs => pon({ [k]: { ...def[k], filas: fs } })}/>
         {k === 'paso1' && def.paso2 && (
-          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 6, marginTop: 6, color: K.gris, width: 'auto' }}>
+          <label style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 6, fontFamily: 'inherit', marginTop: 6, color: K.gris, width: 'auto' }}>
             <input type="checkbox" data-da-senal="" style={{ width: 'auto', margin: 0 }} checked={!!def.paso1.daSenal} onChange={e => pon({ paso1: { ...def.paso1, daSenal: e.target.checked } })}/> este paso también da señal
           </label>)}
       </div>)

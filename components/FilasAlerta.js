@@ -89,7 +89,7 @@ export default function FilasAlerta({ simbolo, filas, onCambia, inicial = null, 
               {(f.desde === 'maxN' || f.desde === 'minN') && <><input data-n-mov={j} type="number" min="2" max="5000" step="1" aria-label="Cuántas velas" value={Number.isFinite(f.n) ? f.n : ''}
                 onChange={e => cambiaFila(j, { n: e.target.value === '' ? null : Number(e.target.value) })}
                 style={{ ...mini, width: 66, borderColor: Number.isInteger(f.n) && f.n >= 2 && f.n <= 5000 ? undefined : C.rojo }}/><span style={S.secundario}>velas</span></>}
-              <label style={{ ...S.secundario, display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} title="Con el mismo punto de referencia: −10 %, −20 %, −30 %…">
+              <label style={{ ...S.secundario, display: 'inline-flex', flexDirection: 'row', alignItems: 'center', gap: 4, cursor: 'pointer', fontFamily: 'inherit' }} title="Con el mismo punto de referencia: −10 %, −20 %, −30 %…">
                 <input data-escalones-mov={j} type="checkbox" checked={!!f.escalones} onChange={e => cambiaFila(j, { escalones: e.target.checked })} style={{ width: 'auto', margin: 0 }}/>
                 y luego cada {Number.isFinite(f.pct) ? String(f.pct).replace('.', ',') : '…'} % más</label>
               <Ayuda texto={AYUDA_PASOS.movimiento} etiqueta="Cae / sube un % desde…" zIndice={10100}/>
