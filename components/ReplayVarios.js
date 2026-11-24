@@ -1,16 +1,21 @@
-// components/ReplayVarios.js — el Replay con VARIOS valores (docs/builder.md §254; boceto bocetos/replay-operar-multiactivo.html, pestaña 2,
-// aceptado por Sergi el 24/11). Pantalla propia, encima de la app: una rejilla de gráficos (Grandes · 4 / Pequeños · 6) en la misma fecha
-// y UNA cuenta. Reutiliza el motor (lib/replay/motor.js), el panel de operar de cada gráfico (PanelGrafico, compacto en la rejilla y
-// entero al ampliar con doble clic), las cifras y la tarjeta ⚙ (PanelOperar) y la tabla (ResultadosReplay). Se guarda solo, como el de
-// un valor (tabla simulaciones). Velas diarias.
+// components/ReplayVarios.js — el Replay con VARIOS valores (docs/builder.md §254–255; boceto bocetos/replay-operar-multiactivo.html,
+// pestaña 2, aceptado por Sergi el 24/11). Pantalla propia, encima de la app: TODOS los valores en una rejilla (4 o 6 por fila, como
+// «Charts» del screener), en la misma fecha y con UNA cuenta. §255 (pedido por Sergi el 25/11: «una copia de lo que hay en un valor»):
+// cada gráfico es el MISMO del Replay de un valor (CandleChart con sus líneas arrastrables, cajas, indicadores, 🎯 y doble clic) con el
+// MISMO panel de operar (PanelGrafico entero, con ⚙ junto a Compra / Venta); abajo, la MISMA barra (BarraReplay); a la derecha, siempre,
+// las cifras o la tarjeta ⚙ (PanelOperar). Ampliar (⤢ o doble clic en el nombre) solo agranda un gráfico dentro de la zona de la rejilla.
+// Se guarda solo, como el de un valor (tabla simulaciones). Velas diarias.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Ayuda from './BuilderAyuda'
+import CandleChart from './CandleChart'
+import { BarraReplay } from './Replay'
 import { PanelOperar, PanelGrafico, ResultadosReplay } from './PanelReplay'
-import { calcula, cifras, irA, siguiente, VERSION } from '../lib/replay/motor'
-import { compruebaOrden, nuevaAccion, configAuto } from '../lib/replay/orden'
-import { FORM_INICIAL, conClic, empiezaMarca, deMercado, redondea, accionMover, anade, ordenDeMarca, quitaOperacion } from '../lib/replay/borrador'
-import { POR_PAGINA, ordenRejilla, pagina, conSenalHoy, siguienteSenalVarios } from '../lib/replay/varios'
-import { entradasYSalidasEstrategia } from '../lib/replay/senales'
+import { calcula, cifras, irA, VERSION } from '../lib/replay/motor'
+import { nuevaAccion, configAuto, marcasDe, tradesDe } from '../lib/replay/orden'
+import { FORM_INICIAL, conClic, dobleClic, empiezaMarca, deMercado, redondea, accionMover, anade, ordenDeMarca, quitaOperacion, mueveBorrador, lineasDe, cajasDe } from '../lib/replay/borrador'
+import { ordenRejilla, conSenalHoy, siguienteSenalVarios, anteriorSenalVarios } from '../lib/replay/varios'
+import { entradasYSalidasEstrategia, graficoSenal, marcasSenal, marcasSalida } from '../lib/replay/senales'
+import { recortaVelas, vecina } from '../lib/replay/grafico'
 import { paraGuardar, hayQueGuardar, nombreDe, crearSimulacion, guardarSimulacion } from '../lib/replay/guardados'
 import { atr as atrDe } from '../lib/condiciones/indicadores'
 
@@ -22,11 +27,14 @@ const fmt = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}` : 
 const n2 = (x) => (x == null ? '' : x.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 const AJUSTES = ['modo', 'pct', 'stopPct', 'rr', 'tipo', 'stopModo', 'tpModo', 'stopAtr', 'sigueTipo', 'sigueN', 'sigueK', 'sale']
 const INDICE = '^GSPC'
+const VACIO = []
 export const MAX_VALORES = 30
+// Gráficos por fila (como «Charts» del screener) y su alto.
+export const REJILLA = Object.freeze({ g4: { porFila: 4, alto: 330, escala: 0.85 }, g6: { porFila: 6, alto: 250, escala: 0.72 } })
 
 export const AYUDA_VARIOS = 'REPLAY CON VARIOS VALORES: todos los gráficos van en la MISMA fecha y operas con UNA sola cuenta (el mismo dinero para todos). ' +
-  '«Señal ⏭» salta a la próxima vela en que CUALQUIER valor da la señal elegida (los que la dan llevan el borde morado). ' +
-  'En cada gráfico, «🎯 Compra» / «🎯 Venta» y un clic en el gráfico ponen la orden (con los valores de ⚙); con doble clic el gráfico se amplía con su panel entero (Esc vuelve). ' +
+  'Cada gráfico funciona igual que el Replay de un valor: «🎯 Compra» / «🎯 Venta» y un clic (o doble clic) en el gráfico ponen la orden con los valores de ⚙; sus líneas se arrastran; las casillas, 🎯 y ✕ como siempre. ' +
+  '«Señal ⏭» salta a la próxima vela en que CUALQUIER valor da la señal elegida (los que la dan llevan el borde morado). ⤢ amplía un gráfico (Esc vuelve a la rejilla). ' +
   'Con «Ejecutar solo» (en ⚙), las señales de todos los valores compran solas; si no llega el dinero para todas, entran por orden alfabético y las demás se cuentan en «Señales sin dinero».\n\n' +
   'Se compara con el Buy&Hold de la lista (el mismo dinero a partes iguales el primer día; un valor que aún no cotiza entra el día que empieza) y con el S&P 500.'
 
@@ -87,64 +95,57 @@ export function VentanaVarios({ listas = [], onEmpezar, onCancelar }) {
     </div>)
 }
 
-// ── Un gráfico de la rejilla (SVG): velas hasta hoy, ▲ de las señales, operaciones, posición y órdenes con sus líneas ──
-export function GraficoVarios({ simbolo, velas, hoy, r, entradas = [], nVelas = 90, alto = 240, marcando = false, onPrecio, conSenal = false }) {
-  const ref = useRef(null)
-  const [ancho, setAncho] = useState(600)
-  useEffect(() => { const el = ref.current; if (!el || typeof ResizeObserver === 'undefined') return; const o = new ResizeObserver(e => setAncho(Math.max(200, e[0].contentRect.width))); o.observe(el); return () => o.disconnect() }, [])
-  const hasta = (velas || []).filter(v => v.date <= hoy)
-  const vs = hasta.slice(-nVelas)
-  const W = ancho, H = alto, der = 56, arr = 22, abj = 16, hueco = 6
-  const pos = r?.posiciones?.[simbolo], vivas = (r?.ordenesVivas || []).filter(o => o.simbolo === simbolo)
-  let lo = Infinity, hi = -Infinity
-  for (const v of vs) { lo = Math.min(lo, v.low); hi = Math.max(hi, v.high) }
-  for (const x of [pos?.stop, pos?.objetivo, ...vivas.flatMap(o => [o.entrada, o.stop, o.objetivo])]) if (x != null && Number.isFinite(x)) { lo = Math.min(lo, x); hi = Math.max(hi, x) }
-  if (!vs.length || !Number.isFinite(lo)) return <div ref={ref} style={{ height: H, color: BZ.gris, padding: 10 }}>{simbolo}: aún no cotiza el {fmt(hoy)}.</div>
-  const m = (hi - lo) * 0.06 || 1; lo -= m; hi += m
-  const bw = (W - der - 4) / (vs.length + hueco)
-  const X = (i) => 4 + (i + 0.5) * bw, Y = (p) => arr + (hi - p) / (hi - lo) * (H - arr - abj)
-  const iDe = new Map(vs.map((v, i) => [v.date, i]))
-  const xFecha = (d) => { if (iDe.has(d)) return X(iDe.get(d)); return d < vs[0].date ? X(0) : X(vs.length - 1) }
-  const precioDe = (e) => { const b = e.currentTarget.getBoundingClientRect(); const y = (e.clientY - b.top) * (H / b.height); return redondea(hi - (y - arr) / (H - arr - abj) * (hi - lo)) }
-  const linea = (p, col, disc, desde, txt) => p == null ? null : <g key={`${col}${p}${txt}`}><line x1={desde ?? 0} x2={W - der} y1={Y(p)} y2={Y(p)} stroke={col} strokeWidth="1.2" strokeDasharray={disc ? '5 4' : ''} />
-    <rect x={W - der} y={Y(p) - 7} width={der} height={14} fill={col} /><text x={W - der + 3} y={Y(p) + 4} fontSize="10" fill="#111">{n2(p)}</text>
-    {txt && <text x={W - der - 4} y={Y(p) - 3} fontSize="10" fill={col} textAnchor="end">{txt}</text>}</g>
-  const marcas = (entradas || []).filter(d => iDe.has(d))
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <svg data-grafico-varios={simbolo} viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H, display: 'block', cursor: marcando ? 'crosshair' : 'default' }}
-        onClick={e => { if (marcando && onPrecio) onPrecio(precioDe(e)) }}>
-        {[0, 1, 2, 3].map(k => { const p = lo + (hi - lo) * (k + 0.5) / 4; return <g key={k}><line x1={0} x2={W - der} y1={Y(p)} y2={Y(p)} stroke="#2f3440" /><text x={W - der + 3} y={Y(p) + 4} fontSize="10" fill={BZ.gris}>{n2(p)}</text></g> })}
-        {pos && <rect x={xFecha(pos.fecha) - bw / 2} y={0} width={W - der - xFecha(pos.fecha) + bw / 2} height={H} fill="rgba(88,166,255,0.06)" />}
-        {vs.map((v, i) => { const up = v.close >= v.open, c = up ? BZ.verde : BZ.rojo, w = Math.max(1, bw * 0.7)
-          return <g key={v.date}><line x1={X(i)} x2={X(i)} y1={Y(v.high)} y2={Y(v.low)} stroke={c} /><rect x={X(i) - w / 2} y={Math.min(Y(v.open), Y(v.close))} width={w} height={Math.max(1, Math.abs(Y(v.open) - Y(v.close)))} fill={c} /></g> })}
-        {marcas.map(d => { const i = iDe.get(d), x = X(i), y = Y(vs[i].low) + 10; return <path key={d} d={`M${x},${y - 6} L${x - 4},${y + 1} L${x + 4},${y + 1} Z`} fill={BZ.morado} /> })}
-        {(r?.operaciones || []).filter(o => o.simbolo === simbolo && o.fechaSalida >= vs[0].date).map(o => { const xa = xFecha(o.fechaEntrada), xb = xFecha(o.fechaSalida), c = o.resultado > 0 ? BZ.verde : BZ.rojo
-          return <g key={o.num}><line x1={xa} x2={xb} y1={Y(o.precioEntrada)} y2={Y(o.precioSalida)} stroke={c} strokeWidth="2" /><text x={xb} y={Y(Math.max(o.precioEntrada, o.precioSalida)) - 6} fontSize="10" fill={c} textAnchor="middle">#{o.num} {o.pct >= 0 ? '+' : '−'}{Math.abs(o.pct).toFixed(1).replace('.', ',')} %</text></g> })}
-        {pos && <>{linea(pos.precioMedio, BZ.azul, false, xFecha(pos.fecha), `#${pos.num} ${pos.lado > 0 ? 'Largo' : 'Corto'} ${pos.acciones}`)}{linea(pos.stop, BZ.rojo, false, xFecha(pos.fecha), 'Stop')}{linea(pos.objetivo, BZ.verde, false, xFecha(pos.fecha), 'Objetivo')}</>}
-        {vivas.map(o => <g key={o.id}>{linea(o.entrada, BZ.azul, true, xFecha(o.cambiada || o.fecha), `${o.lado > 0 ? 'Compra' : 'Venta'} ${o.clase === 'limite' ? 'límite' : 'stop'}`)}{linea(o.stop, BZ.rojo, true, xFecha(o.cambiada || o.fecha))}{linea(o.objetivo, BZ.verde, true, xFecha(o.cambiada || o.fecha))}</g>)}
-        {linea(vs[vs.length - 1].close, BZ.gris, true, X(vs.length - 1))}
-      </svg>
-      {conSenal && <span title="Hoy da la señal elegida" style={{ position: 'absolute', left: 8, bottom: 2, color: BZ.morado, fontSize: 11, fontWeight: 700 }}>▲ señal hoy</span>}
-    </div>)
+
+// ── Un gráfico: el mismo del Replay de un valor (CandleChart con las props del Replay) ──
+const CAPTURA = { entrada: 'capture_entry', stop: 'capture_stop', objetivo: 'capture_tp' }
+const TEXTO_MARCA = { entrada: '▶ Clic en el gráfico para marcar la ENTRADA · Esc cancela', stop: '▶ Clic para marcar el STOP · Enter: sin stop ni objetivo · Esc cancela', objetivo: '▶ Clic para marcar el OBJETIVO (la orden se pone sola) · Enter: sin objetivo · Esc cancela' }
+const VACIA = { ...FORM_INICIAL }
+export function GraficoValor({ Grafico = CandleChart, simbolo: s, velas, estado, r, form, captura = null, campoLinea = null, ahora, senalDef = null, referencias = {}, senalS = null, indicadores = VACIO, onIndicadores = null,
+  alto = 330, ver = 120, elegida = null, onClicPrecio, onDobleClic, onLinea }) {
+  const hoy = estado.hoy, terminada = !!estado.terminada
+  const data = useMemo(() => recortaVelas(velas || [], hoy), [velas, hoy])
+  const savedRangeRef = useRef(null), isNewResultRef = useRef(true), anchoRef = useRef(ver > 0 ? ver : 120), apiRef = useRef(null)
+  useEffect(() => { if (ver > 0) { anchoRef.current = ver; apiRef.current?.verVelas?.(ver) } }, [ver])
+  const firmaT = JSON.stringify(tradesDe(r, s))
+  const trades = useMemo(() => (firmaT === '[]' ? VACIO : JSON.parse(firmaT)), [firmaT])
+  const pos = r?.posiciones?.[s]
+  const marcas = useMemo(() => {
+    const m = [...marcasDe({ operaciones: (r?.operaciones || []).filter(o => o.simbolo === s), posiciones: pos ? { [s]: pos } : {} }), ...marcasSenal(senalS?.entradas, hoy), ...marcasSalida(senalS?.salidas, hoy)]
+    return m.length ? m.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)) : VACIO }, [r, s, senalS, hoy])   // eslint-disable-line
+  const grafico = useMemo(() => (senalDef ? graficoSenal(senalDef, data, s, referencias) : null), [senalDef, data, s, referencias])
+  const f = captura ? form : VACIA
+  const marcando = !!captura
+  const lineas = useMemo(() => lineasDe(r, s, f, ahora, terminada, marcando).map(l => ({ ...l, grosor: l.id === elegida ? (l.grosor || 1) + 2 : 1, soloEje: true })), [r, s, f, ahora, terminada, marcando, elegida])
+  const cajas = useMemo(() => cajasDe(r, s, f, ahora, hoy, terminada, marcando), [r, s, f, ahora, hoy, terminada, marcando])
+  const modo = captura || campoLinea
+  if (!data.length) return <div style={{ height: alto, color: BZ.gris, padding: 10 }}>{s}: aún no cotiza el {fmt(hoy)}.</div>
+  return <Grafico data={data} emaRPeriod={null} emaLPeriod={null} definition={null} trades={trades} labelMode={1} visuals={null} slopeChanges={VACIO} grafico={grafico} razonamiento={false}
+    customMarkers={marcas} pendingOrders={VACIO} simbolo={s} chartHeight={alto} fillHeight={false} indicadoresUsuario={indicadores} onIndicadores={onIndicadores}
+    savedRangeRef={savedRangeRef} isNewResultRef={isNewResultRef} onChartReady={api => { apiRef.current = api }} syncRef={null} priceAlarms={VACIO} tlOpenTrades={VACIO} filterZones={VACIO}
+    margenDerecha={10} anchoReplayRef={anchoRef} onAnchoReplay={null} onPriceAlarm={terminada ? null : onDobleClic} onAlertaPrecio={null}
+    riskMode={modo ? CAPTURA[modo] || null : null} onRiskPrice={onClicPrecio} textoCaptura={captura ? TEXTO_MARCA[captura] : campoLinea ? '▶ Clic en el gráfico: precio nuevo · Esc cancela' : null}
+    riskLevels={null} onRiskLevelChange={null} riskLineActive={null} lineasReplay={lineas} onLineaReplay={onLinea} cajasReplay={cajas} />
 }
 
 // ── La pantalla ──
-// inicial: { estado } (uno guardado: { id, nombre, estado }) o { nuevo: { valores, fecha, capitalInicial, comision, ejecucion } }.
+// inicial: { nuevo: { valores, fecha, capitalInicial, comision, ejecucion } } o uno guardado: { id, nombre, estado }.
 // cargaVelas(simbolo) → Promise<velas diarias>; estrategias: las de tarjetas [{ id, name, definition, params }]; ctx: para guardar.
-export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], tickersDe = () => [], ctx = null, onSalir }) {
-  const [velas, setVelas] = useState(null)        // { SIM: [velas] } (más el índice)
+// indicadores / onIndicadores: los indicadores del gráfico de siempre (los mismos en todos los gráficos). Grafico: para las pruebas.
+export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], tickersDe = () => [], ctx = null, onSalir, indicadores = VACIO, onIndicadores = null, Grafico = CandleChart }) {
+  const [velas, setVelas] = useState(null)
   const [estado, setEstado] = useState(inicial?.estado || null)
   const [aviso, setAviso] = useState('')
   const [form, setForm] = useState(() => { try { const g = JSON.parse(localStorage.getItem('replay.orden') || '{}'); return { ...FORM_INICIAL, ...(g.stopPct === undefined ? { stopPct: '5' } : {}), ...(g.rr === undefined ? { rr: '2' } : {}), ...AJUSTES.reduce((o, k) => g[k] != null ? { ...o, [k]: g[k] } : o, {}) } } catch (_) { return FORM_INICIAL } })
   useEffect(() => { try { localStorage.setItem('replay.orden', JSON.stringify(AJUSTES.reduce((o, k) => form[k] !== undefined ? { ...o, [k]: form[k] } : o, {}))) } catch (_) {} }, AJUSTES.map(k => form[k]))   // eslint-disable-line
-  const [captura, setCaptura] = useState(null)       // { s, campo } mientras se marca una orden nueva
+  const [captura, setCaptura] = useState(null)             // { s, campo } mientras se marca una orden nueva
   const [capturaLinea, setCapturaLinea] = useState(null)   // id de la línea que mueve el próximo clic
+  const [elegida, setElegida] = useState(null)             // línea elegida (↑ ↓ la mueven)
+  const [arrastre, setArrastre] = useState(null)
   const [cfg, setCfg] = useState(false)
-  const [tam, setTam] = useState('g4'), [pag, setPag] = useState(0), [orden, setOrden] = useState('importante')
+  const [tam, setTam] = useState('g4'), [orden, setOrden] = useState('importante')
+  const [ver, setVer] = useState(120)
   const [ampliado, setAmpliado] = useState(null)
-  const [senal, setSenal] = useState(null)           // id de la estrategia elegida
-  const [juega, setJuega] = useState(false)
+  const [senal, setSenal] = useState(null)                 // id de la estrategia elegida
   const [guardado, setGuardado] = useState({ id: inicial?.id || null, nombre: inicial?.nombre || '', estado: inicial?.id ? 'guardado' : '' })
 
   // Las velas de todos (y del S&P 500), de 4 en 4.
@@ -169,15 +170,18 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
     return () => { vivo = false } }, [])   // eslint-disable-line
 
   const motorVelas = useMemo(() => velas && estado ? Object.fromEntries(estado.valores.map(s => [s, velas[s] || []])) : null, [velas, estado?.valores])   // eslint-disable-line
-  // Las señales de la estrategia elegida, valor a valor (con las velas de sus referencias, si lleva filtros de otros símbolos).
+  // El calendario común (todas las velas de todos), para la barra: «vela N de M» y avanzar / retroceder.
+  const calendario = useMemo(() => motorVelas ? [...new Set(Object.values(motorVelas).flatMap(v => v.map(x => x.date)))].sort().map(date => ({ date })) : VACIO, [motorVelas])
+  // Las señales de la estrategia elegida, valor a valor (con las velas de sus referencias).
   const est = estrategias.find(x => String(x.id) === String(senal))
+  const senalDef = useMemo(() => (est ? { tipo: 'estrategia', id: est.id, def: est.definition, params: est.params || {} } : null), [est])
   const [refs, setRefs] = useState({})
   useEffect(() => { if (!est) return; const faltan = tickersDe(est.definition).filter(t => !refs[t] && !(velas || {})[t]); if (!faltan.length) return
     Promise.all(faltan.map(t => cargaVelas(t).then(v => [t, v || []]).catch(() => [t, []]))).then(l => setRefs(x => ({ ...x, ...Object.fromEntries(l) }))) }, [senal, velas])   // eslint-disable-line
+  const referencias = useMemo(() => (est ? Object.fromEntries(tickersDe(est.definition).map(t => [t, refs[t] || (velas || {})[t] || []])) : {}), [est, refs, velas])   // eslint-disable-line
   const senales = useMemo(() => { if (!est || !motorVelas) return null; const out = {}
-    const R = Object.fromEntries(tickersDe(est.definition).map(t => [t, refs[t] || (velas || {})[t] || []]))
-    for (const s of estado.valores) { try { out[s] = entradasYSalidasEstrategia({ def: est.definition, params: est.params || {}, velas: motorVelas[s], referencias: R }) } catch (_) { out[s] = { entradas: [], salidas: [] } } }
-    return out }, [est, motorVelas, refs])   // eslint-disable-line
+    for (const s of estado.valores) { try { out[s] = entradasYSalidasEstrategia({ def: est.definition, params: est.params || {}, velas: motorVelas[s], referencias }) } catch (_) { out[s] = { entradas: [], salidas: [] } } }
+    return out }, [est, motorVelas, referencias])   // eslint-disable-line
   const r = useMemo(() => estado && motorVelas ? calcula(estado, motorVelas, senales ? { senales } : {}) : null, [estado, motorVelas, senales])
   const cif = useMemo(() => r ? cifras(estado, motorVelas, r) : null, [r])   // eslint-disable-line
   const ahoraDe = (s) => { const v = (motorVelas?.[s] || []).filter(x => x.date <= estado.hoy); return v.length ? v[v.length - 1].close : null }
@@ -204,31 +208,43 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
   useEffect(() => { if (!autoActivo) return; setEstado(e => { const ab = (e.auto || []).find(x => x.hasta == null), nu = tramo(e, form); if (ab && JSON.stringify([ab.orden, ab.sale]) === JSON.stringify([nu.orden, nu.sale])) return e; return { ...e, auto: [...cierraTramos(e), nu] } }) }, [firmaCfg])   // eslint-disable-line
   useEffect(() => { if (autoActivo && !est) ponAuto(false) }, [senal])   // eslint-disable-line
 
-  // Avanzar y saltar (se deja de marcar).
+  // Operar (como en el de un valor): marcar con 🎯 o doble clic, lo marcado ES la orden; mover líneas y casillas.
   const limpia = () => { setCaptura(null); setCapturaLinea(null); setForm(f => ({ ...f, mercado: true, entrada: '', stop: '', objetivo: '' })) }
-  const avanza = (n) => { if (!estado || estado.terminada) return false; const d = siguiente(estado, motorVelas, n); if (!d) { setJuega(false); return false } limpia(); setEstado(e => irA(e, d)); return true }
-  const saltaSenal = () => { const d = siguienteSenalVarios(senales, estado.hoy); if (!d) { setAviso('No hay más señales desde aquí.'); return } setAviso(''); limpia(); setEstado(e => irA(e, d)) }
-  useEffect(() => { if (!juega) return; const t = setInterval(() => { if (!avanza(1)) setJuega(false) }, 500); return () => clearInterval(t) }, [juega, estado?.hoy])   // eslint-disable-line
-  useEffect(() => { const t = (e) => { if (e.key !== 'Escape') return; if (captura || capturaLinea) { limpia(); return } if (ampliado) setAmpliado(null) }; window.addEventListener('keydown', t); return () => window.removeEventListener('keydown', t) }, [captura, capturaLinea, ampliado])   // eslint-disable-line
-
-  // Operar en un gráfico.
   const accion = (a) => setEstado(e => ({ ...e, acciones: anade(e.acciones, a) }))
-  const marca = (s, lado) => { setCapturaLinea(null); const c = empiezaMarca({ ...form, atrHoy: atrHoyDe(s) }, lado); setForm(c.f); setCaptura({ s, campo: c.captura }) }
+  const pone = (s, f) => { const o = ordenDeMarca(f, ahoraDe(s)); limpia(); if (o.error) { setAviso(o.error); return } setAviso(o.aviso || ''); accion(nuevaAccion(estado, s, o.orden)) }
+  const marca = (s, lado) => { if (estado.terminada) return; setCapturaLinea(null); const c = empiezaMarca({ ...form, atrHoy: atrHoyDe(s) }, lado); setForm(c.f); setCaptura({ s, campo: c.captura }) }
   const clic = (s, p) => {
-    if (capturaLinea) { const id = capturaLinea; setCapturaLinea(null); mover(id, p); return }
+    if (capturaLinea) { const id = capturaLinea; setCapturaLinea(null); mover(id, redondea(p)); return }
     if (!captura || captura.s !== s) return
     const c = conClic(form, captura.campo, p, ahoraDe(s))
-    if (!c.listo) { setForm(c.f); setCaptura({ s, campo: c.captura }); return }
-    const o = ordenDeMarca(c.f, ahoraDe(s)); limpia()
-    if (o.error) { setAviso(o.error); return } setAviso(o.aviso || '')
-    accion(nuevaAccion(estado, s, o.orden))
+    if (c.listo) { pone(s, c.f); return }
+    setForm(c.f); setCaptura({ s, campo: c.captura })
   }
+  const doble = (s, p) => { if (estado.terminada) return; setCapturaLinea(null); const c = dobleClic({ ...form, atrHoy: atrHoyDe(s) }, p, ahoraDe(s)); if (c.listo) { pone(s, c.f); return } setForm(c.f); setCaptura({ s, campo: c.captura }) }
   const mover = (id, p) => { const [que, a] = String(id).split(':'); const s = que === 'pos' ? a : (r.ordenesVivas.find(o => String(o.id) === a) || {}).simbolo
     const c = accionMover(estado, r, id, p, ahoraDe(s)); if (c.error) { setAviso(c.error); return } setAviso(''); accion(c.accion) }
-  const panel = (s, compacto, style) => <PanelGrafico estado={estado} simbolo={s} r={r} ahora={ahoraDe(s)} total={cif?.final} form={form} compacto={compacto}
-    captura={captura && captura.s === s ? captura.campo : null} capturaLinea={capturaLinea} onMarcar={lado => marca(s, lado)} onMarcarLinea={id => { limpia(); setCapturaLinea(id) }}
-    onCancelaMarca={limpia} onAccion={accion} formMercado={lado => deMercado({ ...form, atrHoy: atrHoyDe(s) }, lado, ahoraDe(s))} onMover={mover}
-    onCfg={compacto ? null : v => setCfg(v)} cfgAbierta={cfg} autoActivo={autoActivo} style={style} />
+  const linea = (s) => (id, p, fin) => { if (id == null) { setElegida(null); return } const k = String(id)
+    if (fin) setElegida(k)
+    if (k.startsWith('bor:')) { if (captura && captura.s === s) setForm(f => mueveBorrador(f, k.slice(4), p, ahoraDe(s))); return }
+    if (!fin) { setArrastre({ id: k, precio: p }); return }
+    setArrastre(null); mover(k, p) }
+  // Teclas: Esc deja de marcar (o cierra el gráfico ampliado); Enter pone lo marcado; ↑ ↓ mueven la línea elegida (0,1 %; Mayús 1 %).
+  const teclas = useRef({}); teclas.current = { captura, capturaLinea, ampliado, form, elegida, r, estado, pone, limpia, mover }
+  useEffect(() => { const t = (e) => { const k = teclas.current, tag = e.target?.tagName; if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (e.key === 'Escape') { if (k.captura || k.capturaLinea) { e.preventDefault(); k.limpia(); return } if (k.elegida) { setElegida(null); return } if (k.ampliado) setAmpliado(null); return }
+      if (e.key === 'Enter' && k.captura && k.form.entrada) { e.preventDefault(); k.pone(k.captura.s, k.form); return }
+      if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && k.elegida && !k.elegida.startsWith('bor:')) { e.preventDefault(); e.stopPropagation()
+        const [que, a, campo] = k.elegida.split(':'); const x = que === 'pos' ? k.r.posiciones[a] : k.r.ordenesVivas.find(o => String(o.id) === a); const v = x && x[campo === 'medio' ? 'precioMedio' : campo]
+        if (v > 0) k.mover(k.elegida, redondea(v * (1 + (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 0.01 : 0.001)))) } }
+    window.addEventListener('keydown', t, true); return () => window.removeEventListener('keydown', t, true) }, [])   // eslint-disable-line
+
+  // La barra de abajo (la misma del de un valor): avanzar / retroceder por el calendario común y saltar a la señal de cualquier valor.
+  const ir = (n) => { if (!estado || estado.terminada) return false; const d = vecina(calendario, estado.desde, estado.hoy, n); if (!d) return false; limpia(); setEstado(e => irA(e, d)); return true }
+  const saltaSenal = (dir) => { const d = dir > 0 ? siguienteSenalVarios(senales, estado.hoy) : anteriorSenalVarios(senales, estado.hoy, estado.desde)
+    if (!d) { setAviso(dir > 0 ? 'No hay más señales desde aquí hasta el final de los datos.' : 'Desde que empezó el Replay no se dio esa señal.'); return } setAviso(''); limpia(); setEstado(e => irA(e, d)) }
+  const nSen = senales ? Object.values(senales).reduce((a, x) => a + (x.entradas || []).length, 0) : 0
+  const barraSenal = { elegida: senal ? `e:${senal}` : '', onElige: (v) => setSenal(v && v.startsWith('e:') ? v.slice(2) : null), onSiguiente: () => saltaSenal(1), onAnterior: () => saltaSenal(-1),
+    opciones: estrategias.map(x => ({ valor: `e:${x.id}`, texto: `Estrategia «${x.name}»` })), estado: !senal ? 'sin' : senales ? 'lista' : 'cargando', n: nSen, textoN: `${nSen} entradas en ${estado?.valores?.length || 0} valores`, aviso: '' }
 
   if (!estado || !velas) return (
     <div data-replay-varios="" style={{ position: 'fixed', inset: 0, zIndex: 9000, background: BZ.fondo, color: BZ.texto, font: `14px ${LETRA}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
@@ -236,60 +252,49 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
     </div>)
   const hoySen = conSenalHoy(senales, estado.hoy)
   const lista = ordenRejilla(estado.valores, r, hoySen, orden)
-  const pg = pagina(lista, POR_PAGINA[tam], pag)
+  const R = REJILLA[tam]
   const indiceBH = (velas[INDICE] || []).length ? (() => { const vs = velas[INDICE].filter(v => v.date >= estado.desde && v.date <= estado.hoy); if (!vs.length) return null; const q = Math.floor((estado.capitalInicial - (estado.comision || 0)) / vs[0].close); return q > 0 ? estado.capitalInicial - q * vs[0].close - 2 * (estado.comision || 0) + q * vs[vs.length - 1].close : null })() : null
-  const quedan = (() => { const s = new Set(); for (const v of estado.valores) for (const x of motorVelas[v] || []) if (x.date > estado.hoy) s.add(x.date); return s.size })()
-  return (
-    <div data-replay-varios="" style={{ position: 'fixed', inset: 0, zIndex: 9000, background: BZ.fondo, color: BZ.texto, font: `13px/1.45 ${LETRA}`, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: `1px solid ${BZ.borde}`, flexWrap: 'wrap' }}>
-        <b style={{ color: '#ffd166' }}>⏪ REPLAY · {estado.valores.length} valores</b><Ayuda texto={AYUDA_VARIOS} etiqueta="Replay con varios valores" />
-        <span style={{ color: BZ.gris }}>Señal:</span>
-        <select data-senal-varios="" value={senal || ''} onChange={e => setSenal(e.target.value || null)} style={{ ...casilla, maxWidth: 260 }}>
-          <option value="">— ninguna —</option>{estrategias.map(x => <option key={x.id} value={x.id}>Estrategia «{x.name}»</option>)}</select>
-        {senales && <span style={{ color: BZ.morado, fontSize: 12 }}>{hoySen.size ? `▲ hoy en ${hoySen.size}` : 'hoy, ninguna señal'}</span>}
-        <span style={{ marginLeft: 12 }} />
-        <button data-tam-varios="g4" onClick={() => { setTam('g4'); setPag(0) }} style={btn(tam === 'g4')}>Grandes · 4</button>
-        <button data-tam-varios="g6" onClick={() => { setTam('g6'); setPag(0) }} style={btn(tam === 'g6')}>Pequeños · 6</button>
-        <select value={orden} onChange={e => setOrden(e.target.value)} style={casilla}><option value="importante">Primero con señal, posición u orden</option><option value="alfa">Alfabético</option></select>
-        <button onClick={() => setPag(p => p - 1)} disabled={pg.pagina === 0} style={btn(false, pg.pagina > 0)}>◀</button><span>{pg.pagina + 1} / {pg.paginas}</span>
-        <button onClick={() => setPag(p => p + 1)} disabled={pg.pagina >= pg.paginas - 1} style={btn(false, pg.pagina < pg.paginas - 1)}>▶</button>
-        <button data-salir-varios="" onClick={onSalir} style={{ ...btn(), marginLeft: 'auto' }}>✕ Salir</button>
+  const celda = (s, grande) => {
+    const sp = grande ? 1 : R.escala
+    return <div key={s} data-celda-varios={s} style={{ position: 'relative', background: '#1b1e25', border: `${hoySen.has(s) ? 2 : 1}px solid ${hoySen.has(s) ? BZ.morado : BZ.borde}`, borderRadius: 6, minWidth: 0 }}>
+      <div onDoubleClick={() => setAmpliado(a => (a === s ? null : s))} title="Doble clic: ampliar / volver a la rejilla" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 6px', fontSize: 12, borderBottom: `1px solid ${BZ.borde}`, cursor: 'default' }}>
+        <b>{s}</b><span style={{ color: BZ.gris }}>{n2(ahoraDe(s))}</span>{hoySen.has(s) && <span style={{ color: BZ.morado, fontWeight: 700 }}>▲ señal hoy</span>}
+        <button data-ampliar-varios={s} onClick={() => setAmpliado(a => (a === s ? null : s))} title={grande ? 'Volver a la rejilla (Esc)' : 'Ampliar este gráfico'} style={{ ...btn(), padding: '0 6px', marginLeft: 'auto', fontSize: 12 }}>{grande ? '← Rejilla' : '⤢'}</button>
       </div>
-      {aviso && <div data-aviso-varios="" style={{ color: BZ.ambar, padding: '4px 10px' }}>⚠ {aviso}</div>}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: 8 }}>
-          <div data-rejilla-varios="" style={{ display: 'grid', gridTemplateColumns: tam === 'g4' ? '1fr 1fr' : '1fr 1fr 1fr', gap: 6 }}>
-            {pg.valores.map(s => <div key={s} data-celda-varios={s} onDoubleClick={() => { if (!captura && !capturaLinea) setAmpliado(s) }}
-              style={{ position: 'relative', background: '#1b1e25', border: `${hoySen.has(s) ? 2 : 1}px solid ${hoySen.has(s) ? BZ.morado : BZ.borde}`, borderRadius: 6 }}>
-              <div style={{ position: 'absolute', left: 8, top: 4, fontWeight: 600, fontSize: 12, pointerEvents: 'none' }}>{s} <span style={{ color: BZ.gris, fontWeight: 400 }}>{n2(ahoraDe(s))}</span></div>
-              <GraficoVarios simbolo={s} velas={motorVelas[s]} hoy={estado.hoy} r={r} entradas={senales?.[s]?.entradas} nVelas={tam === 'g4' ? 90 : 60} alto={tam === 'g4' ? 250 : 180}
-                marcando={(captura && captura.s === s) || !!capturaLinea} onPrecio={p => clic(s, p)} conSenal={hoySen.has(s)} />
-              {panel(s, true, { position: 'absolute', top: 22, right: 60, zIndex: 2 })}
-            </div>)}
-          </div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: BZ.panel, border: `1px solid ${BZ.borde}`, borderRadius: 6, padding: '6px 8px', marginTop: 6, flexWrap: 'wrap' }}>
-            <button data-uno-varios="" onClick={() => avanza(1)} style={btn()} title="Una vela">▶|</button>
-            <button onClick={() => setJuega(j => !j)} style={btn(juega)}>{juega ? '⏸' : '▶ 2/s'}</button>
-            <button data-cinco-varios="" onClick={() => avanza(5)} style={btn()}>▶▶ 5</button>
-            <button data-senal-sig-varios="" onClick={saltaSenal} disabled={!senales} style={btn(false, !!senales)} title="A la próxima vela en que CUALQUIER valor da la señal">Señal ⏭</button>
-            <button data-cfg-varios="" onClick={() => setCfg(c => !c)} style={btn(cfg)} title="Valores por defecto: tipo de orden, stop, objetivo, tamaño y «Ejecutar solo»">⚙ Valores por defecto</button>
-            <span>Hoy en el Replay: <b data-hoy-varios="">{fmt(estado.hoy)}</b></span><span style={{ color: BZ.gris }}>· quedan {quedan.toLocaleString('es-ES')} velas</span>
-          </div>
+      <div style={{ position: 'relative' }}>
+        <GraficoValor Grafico={Grafico} simbolo={s} velas={motorVelas[s]} estado={estado} r={r} form={form} captura={captura && captura.s === s ? captura.campo : null} campoLinea={capturaLinea ? String(capturaLinea).split(':')[2] : null}
+          ahora={ahoraDe(s)} senalDef={senalDef} referencias={referencias} senalS={senales?.[s]} indicadores={indicadores} onIndicadores={onIndicadores} alto={grande ? 600 : R.alto} ver={ver} elegida={elegida}
+          onClicPrecio={p => clic(s, p)} onDobleClic={p => doble(s, p)} onLinea={linea(s)} />
+        <PanelGrafico estado={estado} simbolo={s} r={r} ahora={ahoraDe(s)} total={cif?.final} form={form} captura={captura && captura.s === s ? captura.campo : null} capturaLinea={capturaLinea}
+          onMarcar={lado => marca(s, lado)} onMarcarLinea={id => { limpia(); setCapturaLinea(id) }} onCancelaMarca={limpia} onAccion={accion} formMercado={lado => deMercado({ ...form, atrHoy: atrHoyDe(s) }, lado, ahoraDe(s))}
+          onMover={mover} arrastre={arrastre} onCfg={v => setCfg(v)} cfgAbierta={cfg} autoActivo={autoActivo}
+          style={{ position: 'absolute', top: 6, right: grande ? 72 : 62, zIndex: 12, transform: `scale(${sp})`, transformOrigin: 'top right' }} />
+      </div>
+    </div>
+  }
+  return (
+    <div data-replay-varios="" style={{ position: 'fixed', inset: 0, zIndex: 9000, background: BZ.fondo, color: BZ.texto, font: `13px/1.45 ${LETRA}`, display: 'flex' }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: `1px solid ${BZ.borde}`, flexWrap: 'wrap' }}>
+          <b style={{ color: '#ffd166' }}>⏪ REPLAY · {estado.valores.length} valores</b><Ayuda texto={AYUDA_VARIOS} etiqueta="Replay con varios valores" />
+          {senales && <span style={{ color: BZ.morado, fontSize: 12 }}>{hoySen.size ? `▲ señal hoy en ${hoySen.size}` : 'hoy, ninguna señal'}</span>}
+          <span style={{ marginLeft: 12 }} />
+          <button data-tam-varios="g4" onClick={() => setTam('g4')} style={btn(tam === 'g4')}>Grandes · 4</button>
+          <button data-tam-varios="g6" onClick={() => setTam('g6')} style={btn(tam === 'g6')}>Pequeños · 6</button>
+          <select value={orden} onChange={e => setOrden(e.target.value)} style={casilla}><option value="importante">Primero con señal, posición u orden</option><option value="alfa">Alfabético</option></select>
+        </div>
+        {aviso && <div data-aviso-varios="" style={{ color: BZ.ambar, padding: '4px 10px' }}>⚠ {aviso}</div>}
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 6 }}>
+          {ampliado ? celda(ampliado, true)
+            : <div data-rejilla-varios={tam} style={{ display: 'grid', gridTemplateColumns: `repeat(${R.porFila}, minmax(0, 1fr))`, gap: 6 }}>{lista.map(s => celda(s, false))}</div>}
           <ResultadosReplay estado={estado} r={r} cif={cif} velas={null} simbolo={null} varios onQuitar={op => { const n = quitaOperacion(estado, op); if (n) setEstado(n) }} indice={indiceBH} />
         </div>
-        <div style={{ width: 330, flexShrink: 0, borderLeft: `1px solid ${BZ.borde}`, background: BZ.panel, overflowY: 'auto' }}>
-          <PanelOperar estado={estado} simbolo={`${estado.valores.length} valores`} r={r} cif={cif} onTerminar={v => { limpia(); setEstado(e => ({ ...e, terminada: v })) }}
-            nombre={guardado.nombre || nombreDe(estado)} onNombre={nombra} guardado={guardado.estado} form={form} onForm={setForm} cfg={cfg} onCfg={setCfg} indice={indiceBH}
-            auto={{ activo: autoActivo, puede: !!est, esEstrategia: !!est, onCambia: ponAuto, senal: est ? `estrategia «${est.name}» en cualquier valor` : '' }} />
-        </div>
+        <BarraReplay velas={calendario} estado={estado} onIr={ir} onSalir={onSalir} onIndicadores={onIndicadores} ver={ver} onVer={setVer} senal={barraSenal} />
       </div>
-      {ampliado && <div data-ampliado-varios={ampliado} style={{ position: 'fixed', inset: 0, zIndex: 9100, background: 'rgba(10,12,16,0.94)', padding: 14, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}><b>{ampliado} · {fmt(estado.hoy)}</b><span style={{ color: BZ.gris }}>Esc o</span><button onClick={() => setAmpliado(null)} style={btn()}>✕ Cerrar</button></div>
-        <div style={{ position: 'relative', background: '#1b1e25', border: `1px solid ${BZ.borde}`, borderRadius: 6 }}>
-          <GraficoVarios simbolo={ampliado} velas={motorVelas[ampliado]} hoy={estado.hoy} r={r} entradas={senales?.[ampliado]?.entradas} nVelas={160} alto={560}
-            marcando={(captura && captura.s === ampliado) || !!capturaLinea} onPrecio={p => clic(ampliado, p)} conSenal={hoySen.has(ampliado)} />
-          {panel(ampliado, false, { position: 'absolute', top: 8, right: 64, zIndex: 2 })}
-        </div>
-      </div>}
+      <div data-panel-derecho-varios="" style={{ width: 330, flexShrink: 0, borderLeft: `1px solid ${BZ.borde}`, background: BZ.panel, overflowY: 'auto' }}>
+        <PanelOperar estado={estado} simbolo={`${estado.valores.length} valores`} r={r} cif={cif} onTerminar={v => { limpia(); setEstado(e => ({ ...e, terminada: v })) }}
+          nombre={guardado.nombre || nombreDe(estado)} onNombre={nombra} guardado={guardado.estado} form={form} onForm={setForm} cfg={cfg} onCfg={setCfg} indice={indiceBH} aviso={aviso}
+          auto={{ activo: autoActivo, puede: !!est, esEstrategia: !!est, onCambia: ponAuto, senal: est ? `estrategia «${est.name}» en cualquier valor` : '' }} />
+      </div>
     </div>)
 }

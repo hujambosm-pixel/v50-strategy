@@ -10,7 +10,7 @@ import { MONO } from '../lib/utils'
 const CLAVE_FAV = 'indicadores.favoritos'
 const leeFav = () => { try { const j = JSON.parse(localStorage.getItem(CLAVE_FAV) || '[]'); return Array.isArray(j) ? j : [] } catch (_) { return [] } }
 
-export default function VentanaIndicadores({ enGrafico = [], onAnadir, onCerrar }) {
+export default function VentanaIndicadores({ enGrafico = [], onAnadir, onCerrar, zIndice = 1200 }) {   // §255: zIndice (encima del Replay con varios valores)
   const [grupo, setGrupo] = useState('todos')
   const [busca, setBusca] = useState('')
   const [fav, setFav] = useState([])
@@ -25,7 +25,7 @@ export default function VentanaIndicadores({ enGrafico = [], onAnadir, onCerrar 
   const puestos = enGrafico.filter(i => i && CATALOGO_INDICADORES[i.tipo])
   return (
     <div data-ventana-indicadores="" onClick={e => { if (e.target === e.currentTarget) onCerrar?.() }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: zIndice, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ width: 640, maxWidth: '94vw', height: 420, maxHeight: '86vh', background: '#0d1824', border: '1px solid #1e3a52', borderRadius: 8,
         boxShadow: '0 10px 40px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', fontFamily: MONO, fontSize: 12, color: '#c8dff5' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid #1e3a52' }}>

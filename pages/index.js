@@ -50,7 +50,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1320'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1321'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -5949,7 +5949,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1320</title>
+        <title>Trading Simulator V9.1321</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6038,7 +6038,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1320
+            <span className="dot"/>Trading Simulator V9.1321
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -11107,11 +11107,11 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
       {misReplays&&<MisReplays filas={misReplays.filas} cargando={misReplays.cargando} error={misReplays.error} abiertoId={replay?replayGuardado.id:null}
         onAbrir={abreReplayGuardado} onBorrar={borraReplayGuardado} onCerrar={()=>setMisReplays(null)} onVarios={abreVarios}/>}
       {ventanaVarios&&<VentanaVarios listas={listasVarios} onEmpezar={n=>{ setVentanaVarios(false); setReplayVarios({nuevo:n}) }} onCancelar={()=>setVentanaVarios(false)}/>}
-      {replayVarios&&<ReplayVarios key={replayVarios.id||'nuevo'} inicial={replayVarios} cargaVelas={cargaVelasVarios} estrategias={estrategiasSenalReplay} tickersDe={tickersDeReplay} ctx={ctxReplay} onSalir={()=>setReplayVarios(null)}/>}
+      {replayVarios&&<ReplayVarios key={replayVarios.id||'nuevo'} inicial={replayVarios} cargaVelas={cargaVelasVarios} estrategias={estrategiasSenalReplay} tickersDe={tickersDeReplay} ctx={ctxReplay} onSalir={()=>setReplayVarios(null)} indicadores={indicadores} onIndicadores={()=>setVentanaInd(true)}/>}
       {ventanaReplay&&<VentanaReplay key={simbolo} onVarios={abreVarios} simbolo={simbolo} velas={historiaRepLista&&(historiaRep.velas.length>2||displayedSimbolo===simbolo)?baseReplay:[]} cargando={!historiaRepLista||(historiaRep.velas.length<=2&&(displayedSimbolo!==simbolo||!result?.chartData))}
         onValorAzar={()=>{ const l=[...new Set((watchlist||[]).map(w=>w?.symbol).filter(x=>x&&x!==simbolo))]; if(l.length) setSimbolo(l[Math.floor(Math.random()*l.length)]) }} onEmpezar={empiezaReplay} onCancelar={()=>setVentanaReplay(false)}
         guardados={ctxReplay?guardadosReplay:[]} onAbrir={ctxReplay?(f=>{ setVentanaReplay(false); abreReplayGuardado(f) }):null}/>}
-      {ventanaInd&&<VentanaIndicadores enGrafico={indicadores} onCerrar={()=>setVentanaInd(false)}
+      {ventanaInd&&<VentanaIndicadores zIndice={replayVarios?9500:1200} enGrafico={indicadores} onCerrar={()=>setVentanaInd(false)}
         onAnadir={t=>{const n=nuevoIndicador(t,indicadores.length);if(n)ponIndicadores([...indicadores,n])}}/>}
       {indEditando&&(()=>{
         const cat=CATALOGO_INDICADORES[indEditando.tipo]

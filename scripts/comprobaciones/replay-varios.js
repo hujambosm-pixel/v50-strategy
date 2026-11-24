@@ -65,19 +65,29 @@ const VELAS = {
     const RV = require(R + '/components/ReplayVarios.js'), P = require(R + '/components/PanelReplay.js')
     ok(RV.primerDia(VELAS, ['B', 'C'], '2024-01-04') === D[3] && RV.primerDia(VELAS, ['C'], '2024-01-01') === D[3], 'el primer día con vela desde la fecha elegida: el 05/01 (B no cotiza el 04/01; C empieza el 05/01)')
     const VR = { A: VELAS.A.map(x => ({ ...x, open: x.close })), B: VELAS.B.map(x => ({ ...x, open: x.close })), C: VELAS.C.map(x => ({ ...x, open: x.close })), '^GSPC': VELAS.A }
-    let m = DF.monta(React.createElement(RV.default, { inicial: { nuevo: { valores: ['A', 'B', 'C'], fecha: D[0], capitalInicial: 10000, comision: 1, ejecucion: 'apertura' } }, cargaVelas: async (s) => VR[s] || [], onSalir() {} }), RDC)
+    // §255: el gráfico de cada valor es el del Replay de un valor (CandleChart); en la prueba, uno de mentira que dice qué recibe.
+    const recibe = {}
+    const Falso = (p) => { recibe[p.simbolo] = p; return React.createElement('div', { 'data-grafico-falso': p.simbolo, 'data-n': p.data.length }) }
+    let m = DF.monta(React.createElement(RV.default, { inicial: { nuevo: { valores: ['A', 'B', 'C'], fecha: D[0], capitalInicial: 10000, comision: 1, ejecucion: 'apertura' } }, cargaVelas: async (s) => VR[s] || [], onSalir() {}, Grafico: Falso }), RDC)
     await DF.espera(80)
-    const celdas = () => m.raiz.buscaTodos ? m.raiz.buscaTodos(n => n.hasAttribute('data-celda-varios')).map(n => n.getAttribute('data-celda-varios')) : []
     const txt = (sel) => m.raiz.busca(n => n.hasAttribute(sel))?.textContent || ''
-    ok(/02\/01\/2024/.test(txt('data-hoy-varios')) && /3 valores/.test(m.raiz.textContent), `empieza el 02/01/2024 con los 3 valores (${txt('data-hoy-varios')})`)
-    ok(!!m.raiz.busca(n => n.getAttribute('data-celda-varios') === 'A') && !!m.raiz.busca(n => n.getAttribute('data-celda-varios') === 'C'), 'la rejilla tiene un gráfico por valor (A, B, C)')
-    ok(/aún no cotiza/.test((m.raiz.busca(n => n.getAttribute('data-celda-varios') === 'C') || {}).textContent || ''), 'C aún no cotiza el primer día: lo dice en su gráfico')
+    ok(/02\/01\/2024/.test(txt('data-hoy-replay')) && /3 valores/.test(m.raiz.textContent), `empieza el 02/01/2024 con los 3 valores, con la barra de siempre (${txt('data-hoy-replay')})`)
+    ok(!!m.raiz.busca(n => n.getAttribute('data-grafico-falso') === 'A') && !!m.raiz.busca(n => n.getAttribute('data-grafico-falso') === 'B'), 'cada valor con cotización tiene su gráfico (el mismo del Replay de un valor)')
+    ok(/aún no cotiza/.test((m.raiz.busca(n => n.getAttribute('data-celda-varios') === 'C') || {}).textContent || ''), 'C aún no cotiza el primer día: lo dice en su sitio')
+    ok(recibe.A && recibe.A.data.length === 1 && Array.isArray(recibe.A.lineasReplay) && Array.isArray(recibe.A.cajasReplay) && typeof recibe.A.onPriceAlarm === 'function' && typeof recibe.A.onLineaReplay === 'function',
+      'el gráfico recibe lo mismo que en el Replay de un valor: velas hasta hoy, líneas y cajas, doble clic y arrastre')
+    ok((m.raiz.buscaTodos ? m.raiz.buscaTodos(n => n.hasAttribute('data-cfg-replay')).length : 1) >= 1 && !m.raiz.busca(n => n.hasAttribute('data-compacto')), 'cada gráfico lleva el panel de operar entero, con ⚙ junto a Compra / Venta')
     ok(/la lista \(3\)/.test(txt('data-cifras-replay')) && /S&P 500/.test(txt('data-cifras-replay')), 'las cifras comparan con el Buy&Hold de la lista (3) y con el S&P 500')
-    DF.pulsa(m.raiz.busca(n => n.hasAttribute('data-cinco-varios'))); await DF.espera(30)
-    ok(/09\/01\/2024/.test(txt('data-hoy-varios')), `«▶▶ 5» avanza cinco velas del calendario común: al 09/01 (${txt('data-hoy-varios')})`)
-    ok(!!m.raiz.busca(n => n.hasAttribute('data-compacto')) && !m.raiz.busca(n => n.hasAttribute('data-casilla-viva')), 'en la rejilla, el panel de cada gráfico es compacto (sin casillas)')
+    DF.pulsa(m.raiz.busca(n => n.hasAttribute('data-varias'))); await DF.espera(30)
+    ok(/09\/01\/2024/.test(txt('data-hoy-replay')) && recibe.A.data.length === 6, `«▶▶ 5» avanza cinco velas del calendario común: al 09/01, y A ya ve sus 6 velas (${txt('data-hoy-replay')})`)
+    DF.pulsa(m.raiz.busca(n => n.hasAttribute('data-atras'))); await DF.espera(30)
+    ok(/08\/01\/2024/.test(txt('data-hoy-replay')) && /1 retroceso/.test(m.raiz.textContent), '«|◀» vuelve una vela y cuenta el retroceso')
     DF.pulsa(m.raiz.busca(n => n.getAttribute('data-tam-varios') === 'g6')); await DF.espera(20)
-    ok(!!m.raiz.busca(n => n.hasAttribute('data-rejilla-varios')), '«Pequeños · 6» cambia la rejilla')
+    ok(!!m.raiz.busca(n => n.getAttribute('data-rejilla-varios') === 'g6'), '«Pequeños · 6»: 6 gráficos por fila (todos los valores, sin páginas)')
+    DF.pulsa(m.raiz.busca(n => n.getAttribute('data-ampliar-varios') === 'A')); await DF.espera(20)
+    ok(!m.raiz.busca(n => n.hasAttribute('data-rejilla-varios')) && !!m.raiz.busca(n => n.hasAttribute('data-panel-derecho-varios')) && recibe.A.chartHeight === 600, '⤢ amplía A dentro de la zona de los gráficos; el panel de la derecha sigue a la vista')
+    DF.pulsa(m.raiz.busca(n => n.getAttribute('data-ampliar-varios') === 'A')); await DF.espera(20)
+    ok(!!m.raiz.busca(n => n.hasAttribute('data-rejilla-varios')), '«← Rejilla» vuelve a la rejilla')
     m.quita()
     // El panel compacto: posición en una línea.
     const e = { version: 1, valores: ['A'], desde: D[0], hoy: D[2], capitalInicial: 10000, comision: 1, ejecucion: 'apertura', acciones: [{ fecha: D[0], simbolo: 'A', tipo: 'orden', id: 1, lado: 1, entrada: null, clase: null, stop: null, objetivo: null, tam: { modo: 'invertir', pct: 50 } }], retrocesos: 0 }
