@@ -1,4 +1,4 @@
-// scripts/comprobaciones/replay-operar.js — OPERAR en el Replay (lib/replay/orden.js y components/PanelReplay.js, docs/builder.md §228).
+// scripts/comprobaciones/replay-operar.js — OPERAR en el Replay (lib/replay/orden.js y components/PanelReplay.js, docs/builder.md §228 y §250).
 // Las corre comunes.sh. Termina en 0 si todo da lo esperado. Cuentas a mano con las velas de replay.js (10.000 €, 1 € por orden).
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'clave-falsa-del-arnes'
 const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
@@ -39,44 +39,76 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   ok(tr.length === 1 && tr[0].num === 1 && tr[0].entryDate === D6[1] && tr[0].exitDate === D6[2] && tr[0].entryPrice === 101 && tr[0].exitPrice === 98 && Math.abs(tr[0].pnlPct - (98 / 101 - 1) * 100) < 1e-9, `operación para el gráfico: #1 de 101 a 98, ${tr[0] && tr[0].pnlPct.toFixed(2)} %`)
   ok(O.tradesDe(r, 'B').length === 0, 'las de otro valor no salen')
 
-  // ── El panel de la derecha ──
+  // ── El panel de la derecha (§250: cifras, ⚙ y Terminar) ──
   const React = require(R + '/node_modules/react'), RDC = require(R + '/node_modules/react-dom/client')
   const P = require(R + '/components/PanelReplay.js')
   const acciones = []; let termina = null
   const hoy2 = { ...conOrden, hoy: D6[1] }, r2 = M.calcula(hoy2, VELAS), c2 = M.cifras(hoy2, VELAS, r2)
-  let m = D.monta(React.createElement(P.PanelOperar, { estado: hoy2, simbolo: 'A', r: r2, cif: c2, ahora: 104, onAccion: a => acciones.push(a), onTerminar: v => { termina = v } }), RDC); await D.espera(20)
+  let m = D.monta(React.createElement(P.PanelOperar, { estado: hoy2, simbolo: 'A', r: r2, cif: c2, onTerminar: v => { termina = v } }), RDC); await D.espera(20)
   const txt = (sel) => m.raiz.busca(n => n.hasAttribute(sel))?.textContent || ''
   // El d2 entró: 49 acciones a 101; liquidez 5.050; al cierre (104) 10.146 €.
   ok(/10\.146 €/.test(txt('data-cifras-replay')) && /5\.050 €/.test(txt('data-cifras-replay')) && /\+146 € · 1,5 %/.test(txt('data-cifras-replay')), `cifras: tu dinero 10.146 €, liquidez 5.050 €, ganancia +146 € (1,5 %) (${txt('data-cifras-replay').slice(0, 140)})`)
-  ok(/Abierta #1/.test(txt('data-posicion-replay')) && /Largo 49 a 101,00/.test(txt('data-posicion-replay')) && /Stop 98,00/.test(txt('data-posicion-replay')), 'posición abierta: #1 largo 49 a 101,00, stop 98,00')
-  D.pulsa(m.raiz.busca(n => n.hasAttribute('data-cerrar-replay'))); await D.espera(10)
-  ok(igual(acciones[0], { fecha: D6[1], simbolo: 'A', tipo: 'cerrar' }), '«Cerrar a mercado» manda «cerrar» con la fecha de hoy')
-  const boton = (sel, val) => m.raiz.busca(n => n.getAttribute(sel) === val)
-  // §233: el panel ya solo pone órdenes A MERCADO (las de un precio se marcan en el gráfico). Corto a mercado con el precio a 104.
-  // §234: dos botones a mercado: verde «Compra a mercado» y rojo «Venta a mercado».
-  ok(/Compra a mercado/.test(boton('data-enviar-orden', '1')?.textContent || '') && /Venta a mercado/.test(boton('data-enviar-orden', '-1')?.textContent || ''), 'a mercado: botón verde «Compra a mercado» y rojo «Venta a mercado»')
-  D.escribe(m.raiz.busca(n => n.hasAttribute('data-stop')), '100'); await D.espera(10)
-  D.pulsa(boton('data-enviar-orden', '-1')); await D.espera(10)
-  ok(acciones.length === 1 && /por encima/.test(txt('data-error-orden')), 'stop 100 en un corto con el precio a 104: no se pone, aviso rojo')
-  D.escribe(m.raiz.busca(n => n.hasAttribute('data-stop')), '110'); await D.espera(10)
-  D.pulsa(boton('data-enviar-orden', '-1')); await D.espera(10)
-  ok(acciones.length === 2 && igual({ ...acciones[1] }, { fecha: D6[1], simbolo: 'A', tipo: 'orden', id: 2, lado: -1, entrada: null, clase: null, stop: 110, objetivo: null, tam: { modo: 'invertir', pct: 20 } }), `con stop 110: se pone la orden a mercado (${JSON.stringify(acciones[1])})`)
-  ok(m.raiz.busca(n => n.hasAttribute('data-stop')).value === '' && txt('data-error-orden') === '', 'después, las casillas de precio quedan vacías')
+  // §249: invertido de media (0 + 5.096 / 10.146) / 2 = 25,1 %; tiempo con algo dentro 1 de 2 velas = 50,0 %; 1 día: sin CAGR.
+  ok(/Invertido de media25,1 %/.test(txt('data-cifras-replay')) && /Tiempo con algo dentro50,0 %/.test(txt('data-cifras-replay')) && /CAGR—/.test(txt('data-cifras-replay')), 'cifras nuevas: invertido de media 25,1 %, tiempo dentro 50,0 %, CAGR «—» (menos de 90 días)')
+  ok(!m.raiz.busca(n => n.hasAttribute('data-nueva-orden')) && !m.raiz.busca(n => n.hasAttribute('data-posicion-replay')), '§250: a la derecha ya no está «Nueva orden» ni la posición (van dentro del gráfico)')
   D.pulsa(m.raiz.busca(n => n.hasAttribute('data-terminar'))); await D.espera(10)
   ok(termina === true, '«Terminar» pide cerrar todo al cierre de hoy')
+  m.quita()
+  // ⚙: la tarjeta «Valores por defecto» en lugar de las cifras.
+  let form = { ...F({ mercado: true }), stopPct: '5', rr: '2' }, cfgCerrada = false
+  const onForm = g => { form = typeof g === 'function' ? g(form) : g }
+  m = D.monta(React.createElement(P.PanelOperar, { estado: hoy2, simbolo: 'A', r: r2, cif: c2, onTerminar() {}, cfg: true, form, onForm, onCfg: v => { cfgCerrada = v === false } }), RDC); await D.espera(20)
+  ok(!!m.raiz.busca(n => n.hasAttribute('data-tarjeta-defecto')) && !m.raiz.busca(n => n.hasAttribute('data-cifras-replay')), '⚙: sale la tarjeta «Valores por defecto» en lugar de las cifras')
+  const def = (k) => m.raiz.busca(n => n.getAttribute('data-def') === k)
+  const dv = (k) => D.propsDe(def(k)).value
+  ok(dv('stopModo') === 'pct' && dv('stopPct') === '5' && dv('tpModo') === 'rr' && dv('rr') === '2' && dv('tipo') === 'precio', 'con stop a 5 % y R:R 2 guardados: «A un % de la entrada» 5 y «Por R:R» 2; tipo «En un precio»')
+  D.escribe(def('stopModo'), 'no'); await D.espera(10)
+  D.escribe(def('tipo'), 'mercado'); await D.espera(10)
+  ok(form.stopModo === 'no' && form.tipo === 'mercado', 'cambiar el stop a «Sin stop» y el tipo a «A mercado» cambia el formulario')
+  form = { ...form, stopPct: '', rr: '' }
+  D.escribe(def('stopModo'), 'pct'); await D.espera(10)
+  D.escribe(def('tpModo'), 'rr'); await D.espera(10)
+  ok(form.stopPct === '5' && form.rr === '2', 'elegir «A un %» y «Por R:R» con las casillas vacías las rellena con 5 % y 1 : 2')
+  D.pulsa(m.raiz.busca(n => n.hasAttribute('data-cerrar-defecto'))); await D.espera(10)
+  ok(cfgCerrada, '«← Cifras» vuelve a las cifras')
+  m.quita()
+
+  // ── El panel dentro del gráfico (§250) ──
+  const pg = (o) => React.createElement(P.PanelGrafico, { estado: hoy2, simbolo: 'A', r: r2, ahora: 104, total: c2.final, form: F({}), onMarcar() {}, onAccion: a => acciones.push(a), onCfg() {}, ...o })
+  m = D.monta(pg({}), RDC); await D.espera(20)
+  ok(/Abierta #1/.test(txt('data-posicion-replay')) && /Largo 49 a 101,00/.test(txt('data-posicion-replay')) && /Stop 98,00/.test(txt('data-posicion-replay')), 'posición abierta: #1 largo 49 a 101,00, stop 98,00')
+  D.pulsa(m.raiz.busca(n => n.hasAttribute('data-cerrar-replay'))); await D.espera(10)
+  ok(igual(acciones[0], { fecha: D6[1], simbolo: 'A', tipo: 'cerrar' }), '«Cerrar ✕» manda «cerrar» con la fecha de hoy')
+  const boton = (sel, val) => m.raiz.busca(n => n.getAttribute(sel) === val)
+  ok(/🎯 Compra/.test(boton('data-marcar-replay', '1')?.textContent || '') && /🎯 Venta/.test(boton('data-marcar-replay', '-1')?.textContent || '') && !boton('data-enviar-orden', '1') && !!m.raiz.busca(n => n.hasAttribute('data-cfg-replay')),
+    'tipo «En un precio»: botones 🎯 Compra / 🎯 Venta y ⚙ (sin botones a mercado)')
+  m.quita()
+  // Tipo «A mercado» con stop a 5 %: «Venta» con el precio a 104 → corto a mercado con stop 104 × 1,05 = 109,20.
+  m = D.monta(pg({ form: F({ tipo: 'mercado', stopPct: '5' }) }), RDC); await D.espera(20)
+  ok(/^Compra$/.test(boton('data-enviar-orden', '1')?.textContent || '') && /^Venta$/.test(boton('data-enviar-orden', '-1')?.textContent || '') && !boton('data-marcar-replay', '1'), 'tipo «A mercado»: botones «Compra» / «Venta» sin 🎯')
+  D.pulsa(boton('data-enviar-orden', '-1')); await D.espera(10)
+  ok(acciones.length === 2 && igual({ ...acciones[1] }, { fecha: D6[1], simbolo: 'A', tipo: 'orden', id: 2, lado: -1, entrada: null, clase: null, stop: 109.2, objetivo: null, tam: { modo: 'invertir', pct: 20 } }), `«Venta» pone el corto a mercado con stop 109,20 (${JSON.stringify(acciones[1])})`)
+  m.quita()
+  // Arriesgar un % sin stop: no se puede, aviso rojo.
+  m = D.monta(pg({ form: F({ tipo: 'mercado', stopModo: 'no', modo: 'arriesgar', pct: 1 }) }), RDC); await D.espera(20)
+  D.pulsa(boton('data-enviar-orden', '1')); await D.espera(10)
+  ok(acciones.length === 2 && /stop/.test(txt('data-error-orden')), `arriesgar un % sin stop: no se pone, aviso rojo (${txt('data-error-orden')})`)
   m.quita()
   // Con una orden viva: «✕» la cancela.
   const viva = { ...est, hoy: D6[2], acciones: [{ fecha: D6[0], simbolo: 'A', tipo: 'orden', id: 7, lado: 1, entrada: 90, clase: 'limite', stop: null, objetivo: null, tam: { modo: 'invertir', pct: 20 } }] }
   const r3 = M.calcula(viva, VELAS); acciones.length = 0
-  m = D.monta(React.createElement(P.PanelOperar, { estado: viva, simbolo: 'A', r: r3, cif: M.cifras(viva, VELAS, r3), ahora: 99, onAccion: a => acciones.push(a), onTerminar() {} }), RDC); await D.espera(20)
+  m = D.monta(pg({ estado: viva, r: r3, ahora: 99 }), RDC); await D.espera(20)
   ok(/Compra límite a 90,00 · invertir 20 %/.test(txt('data-ordenes-vivas')), 'órdenes vivas: «Compra límite a 90,00 · invertir 20 %»')
   D.pulsa(m.raiz.busca(n => n.getAttribute('data-cancelar') === '7')); await D.espera(10)
   ok(igual(acciones[0], { fecha: D6[2], tipo: 'cancelar', id: 7 }), '✕ la cancela (sin preguntar)')
   m.quita()
-  // Terminada: sin «Nueva orden», con «Reabrir».
+  // Terminada: sin botones de operar; a la derecha, «Reabrir».
   const fin = { ...conOrden, terminada: true }, r4 = M.calcula(fin, VELAS)
-  m = D.monta(React.createElement(P.PanelOperar, { estado: fin, simbolo: 'A', r: r4, cif: M.cifras(fin, VELAS, r4), ahora: 111, onAccion() {}, onTerminar() {} }), RDC); await D.espera(20)
-  ok(!m.raiz.busca(n => n.hasAttribute('data-nueva-orden')) && /Reabrir/.test(txt('data-terminar')), 'terminada: no se puede operar; el botón dice «Reabrir»')
+  m = D.monta(pg({ estado: fin, r: r4, ahora: 111 }), RDC); await D.espera(20)
+  ok(!boton('data-marcar-replay', '1') && !m.raiz.busca(n => n.hasAttribute('data-cerrar-replay')), 'terminada: no se puede operar desde el gráfico')
+  m.quita()
+  m = D.monta(React.createElement(P.PanelOperar, { estado: fin, simbolo: 'A', r: r4, cif: M.cifras(fin, VELAS, r4), onTerminar() {} }), RDC); await D.espera(20)
+  ok(/Reabrir/.test(txt('data-terminar')), 'terminada: el botón de la derecha dice «Reabrir»')
   m.quita()
 
   // ── Debajo del gráfico ──

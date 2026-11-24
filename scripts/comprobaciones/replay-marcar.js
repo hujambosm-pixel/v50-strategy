@@ -71,19 +71,24 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   ok(igual(B.accionMover(viva, r3, 'viva:7:stop', null, 99).accion, { fecha: D6[2], simbolo: 'A', tipo: 'mover', id: 7, stop: null }) && /no se puede quitar/.test(B.accionMover(viva, r3, 'viva:7:entrada', null, 99).error), 'casilla vacía: quita el stop; la entrada no se puede quitar')
   ok(/número/.test(B.accionMover(viva, r3, 'viva:7:stop', NaN, 99).error), 'un texto que no es un número: aviso')
 
-  // ── Las casillas de la orden viva en el panel ──
+  // ── Las casillas de la orden viva en el panel del gráfico (§250) ──
   {
     const React = require(R + '/node_modules/react'), RDC = require(R + '/node_modules/react-dom/client'), P = require(R + '/components/PanelReplay.js')
     const movidos = []
-    const pp = (arr) => ({ estado: viva, simbolo: 'A', r: r3, cif: M.cifras(viva, VELAS, r3), ahora: 99, onAccion() {}, onTerminar() {}, onMover: (id, p) => movidos.push([id, p]), arrastre: arr })
-    let mm = D.monta(React.createElement(P.PanelOperar, pp(null)), RDC); await D.espera(20)
+    let marcaLinea = null
+    const pp = (arr) => ({ estado: viva, simbolo: 'A', r: r3, ahora: 99, total: 10000, form: B.FORM_INICIAL, onMarcar() {}, onMarcarLinea: id => { marcaLinea = id }, onAccion() {}, onMover: (id, p) => movidos.push([id, p]), arrastre: arr })
+    let mm = D.monta(React.createElement(P.PanelGrafico, pp(null)), RDC); await D.espera(20)
     const cas = (id) => mm.raiz.busca(n => n.getAttribute('data-casilla-viva') === id)
     ok(cas('viva:7:entrada').value === '90' && cas('viva:7:stop').value === '85' && cas('viva:7:objetivo').value === '', 'la orden viva tiene sus casillas: entrada 90, stop 85, objetivo vacío')
     D.escribe(cas('viva:7:objetivo'), '104,5'); await D.espera(10)
     D.propsDe(cas('viva:7:objetivo')).onKeyDown({ key: 'Enter' }); await D.espera(10)
     ok(igual(movidos, [['viva:7:objetivo', 104.5]]), `escribir 104,5 en el objetivo y Enter: se lo pone a la orden (${JSON.stringify(movidos)})`)
+    D.pulsa(mm.raiz.busca(n => n.getAttribute('data-marcar-linea') === 'viva:7:stop')); await D.espera(10)
+    ok(marcaLinea === 'viva:7:stop', '§250: el 🎯 del stop pide marcar esa línea en el gráfico')
+    D.pulsa(mm.raiz.busca(n => n.getAttribute('data-quitar-linea') === 'viva:7:stop')); await D.espera(10)
+    ok(igual(movidos[1], ['viva:7:stop', null]), '§250: el ✕ del stop lo quita')
     mm.quita()
-    mm = D.monta(React.createElement(P.PanelOperar, pp({ id: 'viva:7:stop', precio: 87.25 })), RDC); await D.espera(20)
+    mm = D.monta(React.createElement(P.PanelGrafico, pp({ id: 'viva:7:stop', precio: 87.25 })), RDC); await D.espera(20)
     ok(cas('viva:7:stop').value === '87,25', 'mientras se arrastra su línea, la casilla del stop va con ella (87,25)')
     mm.quita()
   }
@@ -95,27 +100,43 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   ok(igual(a3, [{ fecha: D6[1], simbolo: 'A', tipo: 'mover', stop: 101, objetivo: 110 }]), 'arrastrar varias veces el mismo día deja un solo «mover» con lo último')
   ok(B.anade(a3, { fecha: D6[1], simbolo: 'A', tipo: 'mover', id: 7, entrada: 97 }).length === 2, 'otra cosa (una orden viva): acción aparte')
 
-  // ── El panel con el formulario de fuera ──
+  // ── El panel del gráfico con el formulario de fuera (§250) ──
   const React = require(R + '/node_modules/react'), RDC = require(R + '/node_modules/react-dom/client')
   const P = require(R + '/components/PanelReplay.js')
   const est0 = { ...base, acciones: [], hoy: D6[0] }, r0 = M.calcula(est0, VELAS), c0 = M.cifras(est0, VELAS, r0)
   let marcar = 0, cancela = 0, form = F
-  const props = (o = {}) => ({ estado: est0, simbolo: 'A', r: r0, cif: c0, ahora: 100, onAccion() {}, onTerminar() {}, form, onForm: g => { form = typeof g === 'function' ? g(form) : g }, onMarcar: (lado) => { marcar = lado }, onCancelaMarca: () => cancela++, ...o })
-  let m = D.monta(React.createElement(P.PanelOperar, props()), RDC); await D.espera(20)
+  const props = (o = {}) => ({ estado: est0, simbolo: 'A', r: r0, ahora: 100, total: c0.final, onAccion() {}, form, onMarcar: (lado) => { marcar = lado }, onCancelaMarca: () => cancela++, ...o })
+  let m = D.monta(React.createElement(P.PanelGrafico, props()), RDC); await D.espera(20)
   const txt = (sel) => m.raiz.busca(n => n.hasAttribute(sel))?.textContent || ''
-  ok(/20 acciones/.test(txt('data-estima-replay')) && /arriesgas 60 €/.test(txt('data-estima-replay')) && /R:R 1 : 2,0/.test(txt('data-estima-replay')), `a mercado (precio 100, stop 97, objetivo 106): ≈ 20 acciones · arriesgas 60 € · R:R 1 : 2,0 (${txt('data-estima-replay')})`)
-  ok(/−3,0 %/.test(txt('data-nueva-orden')) && /6,0 %/.test(txt('data-nueva-orden')), 'el % del stop y del objetivo junto a sus casillas')
-  ok(!m.raiz.busca(n => n.hasAttribute('data-entrada')) && /Compra a mercado/.test(txt('data-enviar-orden')), '§233: sin casilla de entrada ni «Enviar orden»: a mercado, «Compra a mercado»')
-  ok(!/doble clic en el gráfico|Orden en un precio/.test(txt('data-nueva-orden')), '§234: sin textos fijos («o doble clic…», «Orden en un precio…»)')
+  ok(!m.raiz.busca(n => n.hasAttribute('data-entrada')) && !m.raiz.busca(n => n.hasAttribute('data-enviar-orden')) && /🎯 Compra/.test(m.raiz.textContent), '§250: en un precio, solo 🎯 Compra / 🎯 Venta (sin casilla de entrada ni botones a mercado)')
+  ok(!/doble clic en el gráfico|Orden en un precio/.test(m.raiz.textContent), '§234: sin textos fijos («o doble clic…», «Orden en un precio…»)')
   D.pulsa(m.raiz.busca(n => n.getAttribute('data-marcar-replay') === '-1')); await D.espera(10)
   ok(marcar === -1, '§234: «🎯 Venta» avisa a la página con el lado −1')
   m.quita()
   form = { ...B.FORM_INICIAL, mercado: false, entrada: '100', stop: '97' }
-  m = D.monta(React.createElement(P.PanelOperar, props({ captura: 'objetivo' })), RDC); await D.espera(20)
+  m = D.monta(React.createElement(P.PanelGrafico, props({ captura: 'objetivo' })), RDC); await D.espera(20)
+  // Entrada 100, stop 97, 20 % de 10.000 €: 2.000 / 100 = 20 acciones; arriesgas 20 × 3 = 60 €.
+  ok(/20 acciones/.test(txt('data-estima-replay')) && /arriesgas 60 €/.test(txt('data-estima-replay')), `marcando (entrada 100, stop 97): ≈ 20 acciones · arriesgas 60 € (${txt('data-estima-replay')})`)
   ok(/marca el Objetivo/.test(txt('data-guia-marca')) && /Entrada 100 · Stop 97 \(−3,0 %\)/.test(txt('data-guia-marca')) && /Enter: ponerla sin objetivo/.test(txt('data-guia-marca')) && /MARCANDO/.test(txt('data-marcando')),
     `marcando: guía con lo marcado (Entrada 100 · Stop 97) y «Enter: ponerla sin objetivo» (${txt('data-guia-marca')})`)
   ok(!m.raiz.busca(n => n.hasAttribute('data-enviar-orden')) && !m.raiz.busca(n => n.hasAttribute('data-marcar-replay')), 'marcando: sin el botón de mercado ni el de 🎯')
   m.quita()
+
+  // ── §250: los modos de la tarjeta ⚙ (stop: % / lo marco / sin stop; objetivo: R:R / lo marco / sin objetivo) ──
+  {
+    const marca = (o, clics) => { let c = B.empiezaMarca({ ...B.FORM_INICIAL, ...o }, 1); for (const p of clics) c = B.conClic(c.f, c.captura, p, 104); return c }
+    let c5 = marca({ stopModo: 'no', tpModo: 'rr', rr: '2' }, [100])
+    ok(c5.listo && c5.f.stop === '' && c5.f.objetivo === '', 'sin stop (y R:R): un clic en la entrada 100 y lista, sin stop ni objetivo (sin stop no hay R:R)')
+    c5 = marca({ stopModo: 'pct', stopPct: '5', tpModo: 'no' }, [100])
+    ok(c5.listo && c5.f.stop === '95' && c5.f.objetivo === '', 'stop a 5 % y sin objetivo: entrada 100 → stop 95, lista')
+    c5 = marca({ stopModo: 'marco', stopPct: '10', tpModo: 'no' }, [100])
+    ok(c5.captura === 'stop' && c5.f.stop === '', '«Lo marco yo» aunque haya un % guardado: tras la entrada, se marca el stop')
+    c5 = marca({ stopModo: 'marco', tpModo: 'no' }, [100, 95])
+    ok(c5.listo && c5.f.stop === '95' && c5.f.objetivo === '', 'lo marco yo y sin objetivo: entrada 100 y stop 95, lista')
+    c5 = marca({ stopModo: 'pct', stopPct: '5', tpModo: 'marco', rr: '2' }, [100])
+    ok(c5.captura === 'objetivo' && c5.f.stop === '95' && c5.f.objetivo === '', 'stop a 5 % y objetivo «Lo marco yo» (aunque haya R:R guardado): tras la entrada, se marca el objetivo')
+    ok(B.modoStop({ stopPct: '' }) === 'marco' && B.modoStop({ stopPct: '7' }) === 'pct' && B.modoObjetivo({ rr: '2' }) === 'rr' && B.modoObjetivo({}) === 'marco', 'formularios de antes (sin modos): con un % es «pct», sin él «marco»; igual el R:R')
+  }
 
   // ── §233: lo marcado ES la orden ──
   const cl = B.conClic({ ...B.FORM_INICIAL, mercado: false, entrada: '100', stop: '97' }, 'objetivo', 106, 100)

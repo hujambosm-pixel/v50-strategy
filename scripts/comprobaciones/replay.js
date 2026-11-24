@@ -159,6 +159,20 @@ const d = (i) => D[i - 1]
   r = corre([orden(1, { tam: { modo: 'invertir', pct: 100 } }), orden(2, { tam: { modo: 'invertir', pct: 50 } })], { hoy: d(4) })
   ok(r.posiciones.A.acciones === 99 && r.avisos.some(a => /no llega el dinero/.test(a.texto)), 'todo invertido: la segunda compra no cabe y lo avisa')
 
+  // ── 15 · §249: CAGR, invertido de media y tiempo con algo dentro ──
+  // Compra a mercado el d1 (invertir 50 %) → el d2 a 101: 5.000 / 101 = 49,5 → 49 acciones; liquidez 10.000 − 4.949 − 1 = 5.050.
+  // Al cierre: d1 nada dentro · d2 49 × 104 = 5.096 (tu dinero 10.146) · d3 4.851 (9.901) · d4 4.704 (9.754) · d5 5.292 (10.342) · d6 5.439 (10.489).
+  r = corre([orden(1)])
+  const cf15 = M.cifras(sim([orden(1)]), VELAS, r)
+  ok(r.curva[0].invertido === 0 && r.curva[1].invertido === 5096 && r.curva[5].invertido === 5439, `invertido al cierre: d1 0, d2 5.096, d6 5.439 (${r.curva.map(c => c.invertido).join(', ')})`)
+  const media15 = (0 + 5096 / 10146 + 4851 / 9901 + 4704 / 9754 + 5292 / 10342 + 5439 / 10489) / 6 * 100
+  ok(cerca(cf15.invertidoMedia, media15) && Math.abs(cf15.invertidoMedia - 41.75) < 0.01, `invertido de media ≈ 41,75 % (${cf15.invertidoMedia})`)
+  ok(cerca(cf15.tiempoDentro, 5 / 6 * 100), `tiempo con algo dentro: 5 de 6 velas = 83,3 % (${cf15.tiempoDentro})`)
+  ok(cf15.cagr === null && cf15.dias === 7, 'del 02/01 al 09/01 son 7 días: con menos de 90 no hay CAGR')
+  // CAGR: 10.000 → 12.100 en dos años (730 días) = 1,21^(365,25 / 730) − 1 ≈ 10,0 %.
+  const cagr15 = M.cifras(sim([], { desde: '2022-01-01', hoy: '2024-01-01' }), VELAS, { curva: [{ fecha: '2022-01-01', valor: 10000, invertido: 0 }, { fecha: '2024-01-01', valor: 12100, invertido: 0 }], operaciones: [], comisiones: 0, ordenes: 0 })
+  ok(Math.abs(cagr15.cagr - 10.007) < 0.001, `10.000 → 12.100 en 2 años: CAGR ≈ 10,0 % (${cagr15.cagr})`)
+
   console.log(fallos ? `replay: ${fallos} fallos` : 'replay: todas bien')
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error('ERROR', e); process.exit(2) })

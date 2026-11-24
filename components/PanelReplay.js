@@ -1,5 +1,6 @@
 // components/PanelReplay.js — OPERAR en el Replay (docs/builder.md §228; boceto bocetos/replay-simulacion.html v2).
-// PanelOperar: el panel de la derecha (cifras, posición abierta, nueva orden, órdenes vivas, avisos, Terminar).
+// PanelOperar: el panel de la derecha (nombre, cifras o la tarjeta ⚙ «Valores por defecto», avisos, Terminar).
+// §250: PanelGrafico: el panel de operar DENTRO del gráfico (botones, órdenes vivas y posición con sus casillas).
 // ResultadosReplay: debajo del gráfico, pestañas «Operaciones · N» y «Curva del capital».
 // Todo sale de lib/replay/motor.js (calcula y cifras); esto solo pinta y avisa (onAccion, onTerminar).
 // §229: el formulario puede venir de fuera (form + onForm, lo lleva pages/index.js para que el gráfico lo rellene con 🎯 / doble clic y
@@ -7,7 +8,7 @@
 import { useState } from 'react'
 import Ayuda from './BuilderAyuda'
 import { compruebaOrden, nuevaAccion, textoOrden } from '../lib/replay/orden'
-import { FORM_INICIAL, estima, pctFrente, redondea, deMercado } from '../lib/replay/borrador'
+import { estima, pctFrente, redondea, deMercado, modoStop, modoObjetivo } from '../lib/replay/borrador'
 import { Papelera } from './VentanaPregunta'
 
 const BZ = { fondo: '#22262f', panel: '#2c303b', caja: '#353945', borde: '#4c5263', texto: '#f3f3f5', gris: '#a9adb8', verde: '#3fb950', rojo: '#f85149', ambar: '#d29922', azul: '#58a6ff' }
@@ -25,11 +26,12 @@ const btn = (activo = true, on = false) => ({ background: on ? 'rgba(88,166,255,
 const casilla = { background: BZ.caja, color: BZ.texto, border: `1px solid ${BZ.borde}`, borderRadius: 5, padding: '4px 6px', font: `13px ${LETRA}`, width: 90 }
 const cajaSt = { background: BZ.panel, border: `1px solid ${BZ.borde}`, borderRadius: 8, padding: '8px 10px', margin: '8px 0' }
 
-export const AYUDA_ORDEN = 'EN UN PRECIO: pulsa «🎯 Compra» (verde) o «🎯 Venta» (roja, en corto) y marca en el gráfico la Entrada, el Stop y el Objetivo; la orden se pone sola al marcar el Objetivo (Enter: sin objetivo; tras la entrada, sin stop ni objetivo). También con doble clic en el gráfico o con el 🎯 de arriba del gráfico (el lado sale del stop: por debajo de la entrada = compra; con «Stop a X %», el del último botón). Entrada por debajo del precio de ahora = orden LÍMITE (compra si baja hasta ahí); por encima = orden STOP (compra si sube hasta ahí, una ruptura); en corto, al revés. Sigue viva hasta que se cumple o la cancelas; sus líneas y sus casillas se pueden cambiar. Si la vela abre ya más allá, se ejecuta a la apertura.\n\n' +
-  'STOP A X % y R:R (opcionales): con «Stop a X %» el stop sale solo a ese % de la entrada; con «R:R 1 : N», el objetivo sale solo a N veces la distancia entre la entrada y el stop. Con los dos, un clic en la entrada pone la orden entera.\n' +
-  'Ejemplo: Stop a 10 % y R:R 1 : 2. Compra con entrada en 100 → stop 90 y objetivo 100 + 2 × 10 = 120. Solo R:R 1 : 2: marcas entrada 100 y stop 95 → objetivo 110. En corto, al revés (entrada 100, 10 % → stop 110, objetivo 80).\n\n' +
-  'A MERCADO: «Compra a mercado» (verde) o «Venta a mercado» (roja, en corto), a la apertura de la vela siguiente (o al cierre de hoy, si lo elegiste al empezar), con stop y objetivo opcionales (vacíos, los de «Stop a X %» y R:R si los pusiste).\n\n' +
-  'STOP y OBJETIVO: se vende al tocarlos; si la vela abre ya al otro lado (hueco), a la apertura. Si en la misma vela se tocan los dos, cuenta el stop (lo prudente).\n\n' +
+export const AYUDA_ORDEN = 'OPERAR DESDE EL GRÁFICO. Con «En un precio» (en ⚙): pulsa «🎯 Compra» (verde) o «🎯 Venta» (roja, en corto) y haz clic en el gráfico en la Entrada; el stop y el objetivo salen solos con los valores de ⚙ (o los marcas tú si elegiste «Lo marco yo»). La orden se pone sola en cuanto está completa (Enter: ponerla con lo marcado; Esc cancela). También con doble clic en el gráfico.\n' +
+  'Entrada por debajo del precio de ahora = orden LÍMITE (compra si baja hasta ahí); por encima = orden STOP (compra si sube hasta ahí, una ruptura); en corto, al revés. Sigue viva hasta que se cumple o la cancelas. Si la vela abre ya más allá, se ejecuta a la apertura.\n\n' +
+  'Con «A mercado» (en ⚙): los botones dicen «Compra» / «Venta» y la orden va a la apertura de la vela siguiente (o al cierre de hoy, si lo elegiste al empezar), con el stop y el objetivo de ⚙.\n\n' +
+  'CASILLAS: cada orden viva y la posición abierta tienen Entrada, Stop y Objetivo. Escribe un precio y pulsa Enter, pulsa 🎯 y haz clic en el gráfico, o arrastra su línea. ✕ quita el stop o el objetivo; en la entrada, cancela la orden.\n\n' +
+  'STOP y OBJETIVO: se vende al tocarlos; si la vela abre ya al otro lado (hueco), a la apertura. Si en la misma vela se tocan los dos, cuenta el stop (lo prudente).\n' +
+  'Ejemplo con stop a 10 % y R:R 1 : 2: compra con entrada en 100 → stop 90 y objetivo 100 + 2 × 10 = 120. En corto, al revés (entrada 100 → stop 110, objetivo 80).\n\n' +
   'TAMAÑO: «Invertir X %» del dinero total en el momento de ejecutarse; «Arriesgar X %» = lo que perderías si salta el stop. Siempre se redondea hacia abajo.\n' +
   'Ejemplo: tienes 10.000 € y compras a 96 con stop en 90 arriesgando un 1 %: 100 € ÷ (96 − 90) = 16,7 → 16 acciones (1.536 €).'
 
@@ -39,11 +41,11 @@ function Cifra({ titulo, valor, col, tip }) {
 
 // §230: casilla de precio de una orden ya enviada o de la posición. Muestra el precio de ahora (o el de la línea mientras se arrastra);
 // al escribir, se fija con Enter o al salir de la casilla (vacía = quitar). Esc deja el que había.
-function CasillaPrecio({ valor, onFija, dato, titulo }) {
+function CasillaPrecio({ valor, onFija, dato, titulo, ancho = 80 }) {
   const [txt, setTxt] = useState(null)
   const muestra = txt != null ? txt : (valor == null ? '' : String(redondea(valor)).replace('.', ','))
   const fija = () => { if (txt == null) return; const t = txt.trim(); setTxt(null); onFija(t === '' ? null : Number(t.replace(',', '.'))) }
-  return <input data-casilla-viva={dato} title={titulo} style={{ ...casilla, width: 80 }} placeholder="—" value={muestra} onChange={e => setTxt(e.target.value)} onBlur={fija}
+  return <input data-casilla-viva={dato} title={titulo} style={{ ...casilla, width: ancho, padding: '2px 5px', textAlign: 'right' }} placeholder="—" value={muestra} onChange={e => setTxt(e.target.value)} onBlur={fija}
     onKeyDown={e => { if (e.key === 'Enter') fija(); else if (e.key === 'Escape') setTxt(null) }} />
 }
 
@@ -65,35 +67,49 @@ function NombreReplay({ nombre, onNombre, guardado, onMisReplays }) {
     </div>)
 }
 
-export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTerminar, form, onForm, captura = null, onMarcar, onCancelaMarca, formMercado = null, aviso = '', onMover, arrastre = null, nombre = null, onNombre, guardado = '', onMisReplays }) {
-  const [propio, setPropio] = useState(FORM_INICIAL)
-  const f = form || propio, setF = onForm || setPropio
-  const [error, setError] = useState('')
-  const pon = (k, v) => { setError(''); setF(x => ({ ...x, [k]: v })) }
-  const pos = r.posiciones[simbolo]
+// §250: la tarjeta ⚙ «Valores por defecto» (en lugar de las cifras). Cambia el formulario (form / onForm), que la página recuerda en el
+// navegador (replay.orden) para cualquier Replay. Lo que ya está puesto (órdenes vivas, la posición) no cambia.
+export function TarjetaDefecto({ form, onForm, estado, onCerrar }) {
+  const f = form
+  // Al elegir «A un %» o «Por R:R» con la casilla vacía, se rellena con 5 % y 1 : 2 (los de fábrica).
+  const pon = (k, v) => onForm(x => ({ ...x, [k]: v, ...(k === 'stopModo' && v === 'pct' && (x.stopPct === '' || x.stopPct == null) ? { stopPct: '5' } : {}), ...(k === 'tpModo' && v === 'rr' && (x.rr === '' || x.rr == null) ? { rr: '2' } : {}) }))
+  const sel = (k, valor, ops, dato) => <select data-def={dato || k} value={valor} onChange={e => pon(k, e.target.value)} style={{ ...casilla, width: '100%' }}>{ops.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>
+  const numero = (k, dato, suf) => <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><input data-def={dato} value={f[k] ?? ''} onChange={e => pon(k, e.target.value)} style={{ ...casilla, width: 62, textAlign: 'right' }} />{suf}</span>
+  const fila = (titulo, cosa) => <><span style={{ color: BZ.gris }}>{titulo}</span><span>{cosa}</span></>
+  const grupo = (t) => <div style={{ gridColumn: '1 / -1', borderTop: `1px solid ${BZ.borde}`, marginTop: 6, paddingTop: 4, color: BZ.azul, fontSize: 12 }}>{t}</div>
+  const ms = modoStop(f), mo = modoObjetivo(f)
+  return (
+    <div data-tarjeta-defecto="" style={{ ...cajaSt, marginTop: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <b>⚙ Valores por defecto</b><Ayuda texto={AYUDA_ORDEN} etiqueta="Cómo funcionan las órdenes" />
+        <button data-cerrar-defecto="" onClick={onCerrar} style={{ ...btn(), marginLeft: 'auto', padding: '1px 8px' }} title="Volver a las cifras">← Cifras</button>
+      </div>
+      <div style={{ color: BZ.gris, fontSize: 11, marginTop: 2 }}>Valen para las órdenes nuevas de cualquier Replay; lo que ya está puesto no cambia.</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '96px 1fr', gap: '5px 8px', alignItems: 'center', marginTop: 4, fontSize: 12 }}>
+        {grupo('Orden')}
+        {fila('Tipo', sel('tipo', f.tipo || 'precio', [['precio', 'En un precio (🎯)'], ['mercado', 'A mercado']]))}
+        {grupo('Stop inicial')}
+        {fila('Stop', sel('stopModo', ms, [['pct', 'A un %'], ['marco', 'Lo marco yo'], ['no', 'Sin stop']]))}
+        {ms === 'pct' && fila('a', numero('stopPct', 'stopPct', '% de la entrada'))}
+        {grupo('Objetivo')}
+        {fila('Objetivo', sel('tpModo', mo, [['rr', 'Por R:R'], ['marco', 'Lo marco yo'], ['no', 'Sin objetivo']]))}
+        {mo === 'rr' && fila('R:R 1 :', numero('rr', 'rr', ms === 'no' ? <span style={{ color: BZ.ambar }}>sin stop no hay R:R</span> : ''))}
+        {grupo('Tamaño')}
+        {fila('Tamaño', sel('modo', f.modo, [['invertir', 'Invertir un %'], ['arriesgar', 'Arriesgar un %']]))}
+        {fila(f.modo === 'arriesgar' ? 'arriesgar' : 'invertir', numero('pct', 'pct', '% de tu dinero'))}
+        {f.modo === 'arriesgar' && ms === 'no' && <div style={{ gridColumn: '1 / -1', color: BZ.ambar }}>Para arriesgar un % hace falta un stop.</div>}
+        {grupo('De este Replay (al empezar)')}
+        <div style={{ gridColumn: '1 / -1', color: BZ.gris }}>{estado.comision ? `${com(estado.comision)} € por orden` : 'Sin comisión'} · a mercado {estado.ejecucion === 'cierre' ? 'al cierre de hoy' : 'a la apertura siguiente'}</div>
+      </div>
+    </div>)
+}
+
+// §250: el panel de la DERECHA: el nombre, las cifras de tu cuenta (o, con ⚙, los valores por defecto), avisos y Terminar.
+// Operar (botones, órdenes vivas, la posición) va en el panel de dentro del gráfico (PanelGrafico).
+export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', nombre = null, onNombre, guardado = '', onMisReplays, cfg = false, form = null, onForm, onCfg }) {
   const terminada = !!estado.terminada
-  // §234: a mercado con el lado del botón (verde compra, rojo venta en corto); con «Stop a X %» y R:R, el stop y el objetivo vacíos salen solos.
-  const mercadoDe = (lado) => (formMercado ? formMercado(lado) : deMercado(f, lado, ahora))
-  const envia = (lado) => {
-    const c = compruebaOrden(mercadoDe(lado), ahora)
-    if (c.error) { setError(c.error); return }
-    onAccion(nuevaAccion(estado, simbolo, c.orden)); setF(x => ({ ...x, entrada: '', stop: '', objetivo: '' })); onCancelaMarca && onCancelaMarca()
-  }
-  const ref = captura && f.entrada !== '' ? Number(String(f.entrada).replace(',', '.')) : ahora
-  const fm = captura ? null : mercadoDe(f.lado)   // lo que mandaría «a mercado» (con el stop y el objetivo que salen solos)
-  const est = estima(captura ? { ...f, mercado: !f.entrada } : fm, cif.final, ahora)
-  const pcS = pctFrente(Number(String(captura ? f.stop : fm.stop).replace(',', '.')), ref), pcO = pctFrente(Number(String(captura ? f.objetivo : fm.objetivo).replace(',', '.')), ref)
-  const auto = (k) => (!captura && f[k] === '' && fm[k] !== '' && fm[k] != null ? `${fm[k]} (solo)` : 'opcional')
-  const QUE = { entrada: 'la Entrada', stop: 'el Stop', objetivo: 'el Objetivo' }
-  // El precio que se ve en la casilla de una línea: el de la línea mientras se arrastra.
-  const vivo = (id, v) => (arrastre && arrastre.id === id ? arrastre.precio : v)
-  const editable = !!onMover && !terminada
-  const filaPrecio = (etq, id, v, ref, col) => <>
-    <span>{etq}</span>
-    <span><CasillaPrecio valor={vivo(id, v)} dato={id} onFija={p => onMover(id, p)} titulo="Escribe el precio y pulsa Enter (vacía = quitarlo); o arrastra su línea en el gráfico" />
-      {vivo(id, v) != null && ref != null && <span style={{ color: col, marginLeft: 6 }}>{pc(pctFrente(vivo(id, v), ref))}</span>}</span>
-  </>
-  const cuando = estado.ejecucion === 'cierre' ? 'al cierre de hoy' : 'a la apertura de la vela siguiente'
+  const g = (x) => (x == null ? '—' : pc(x))
+  const pf = cif.factorBeneficio == null ? '—' : cif.factorBeneficio === Infinity ? '∞' : loc(cif.factorBeneficio, 2)
   return (
     <div data-panel-replay="" style={{ padding: '8px 10px', font: `13px/1.45 ${LETRA}`, color: BZ.texto }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -101,81 +117,22 @@ export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTermin
         <span style={{ marginLeft: 'auto', color: BZ.gris, fontSize: 12 }}>{estado.comision ? `${com(estado.comision)} € por orden` : 'sin comisión'}</span>
       </div>
       {nombre != null && <NombreReplay nombre={nombre} onNombre={onNombre} guardado={guardado} onMisReplays={onMisReplays} />}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8 }} data-cifras-replay="">
-        <Cifra titulo="Tu dinero" valor={eur(cif.final)} tip={`Empezaste con ${eur(estado.capitalInicial)}`} />
-        <Cifra titulo="Ganancia" valor={`${signo(cif.ganancia)}${eur(Math.abs(cif.ganancia))} · ${pc(cif.pct)}`} col={color(cif.ganancia)} />
-        <Cifra titulo="Liquidez" valor={eur(r.caja)} />
-        <Cifra titulo={`Buy&Hold ${simbolo}`} valor={eur(cif.buyHold?.final)} tip="Comprar al cierre del primer día que viste y vender hoy, con el mismo dinero y pagando las dos comisiones" />
-        <Cifra titulo="Peor caída" valor={pc(cif.peorCaida)} col={cif.peorCaida < 0 ? BZ.rojo : BZ.texto} />
-        <Cifra titulo="Operaciones" valor={`${cif.operaciones}${cif.ganadoras != null ? ` · ${pc(cif.ganadoras, 0)} ganan` : ''}`} />
-      </div>
-      {pos && <div style={cajaSt} data-posicion-replay="">
-        <b>Abierta #{pos.num}</b> · {pos.lado > 0 ? 'Largo' : 'Corto'} {pos.acciones} a {pr(pos.precioMedio)} desde el {fmt(pos.fecha)}
-        {editable
-          ? <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 8px', alignItems: 'center', margin: '4px 0' }} data-precios-posicion="">
-              {filaPrecio('Stop', `pos:${simbolo}:stop`, pos.stop, pos.precioMedio, BZ.rojo)}
-              {filaPrecio('Objetivo', `pos:${simbolo}:objetivo`, pos.objetivo, pos.precioMedio, BZ.verde)}
-            </div>
-          : <div style={{ color: BZ.gris }}>Stop {pr(pos.stop)} · objetivo {pr(pos.objetivo)}</div>}
-        <div>Ahora: <b style={{ color: color(pos.ganancia) }}>{signo(pos.ganancia)}{eur(Math.abs(pos.ganancia))}</b></div>
-        {!terminada && <button style={{ ...btn(), marginTop: 6 }} data-cerrar-replay="" onClick={() => onAccion({ fecha: estado.hoy, simbolo, tipo: 'cerrar' })}
-          title={`Vende (o recompra el corto) ${cuando}`}>Cerrar a mercado</button>}
-      </div>}
-      {!terminada && <div style={cajaSt} data-nueva-orden="">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-          <b>Nueva orden</b><Ayuda texto={AYUDA_ORDEN} etiqueta="Cómo funcionan las órdenes" />
-          {captura && <span data-marcando="" style={{ color: BZ.azul, fontWeight: 700, fontSize: 12 }}>MARCANDO</span>}
-        </div>
-        {/* §234: el lado lo da el botón (🎯 Compra verde / 🎯 Venta roja); sin textos fijos: todo en el «?» y en los tooltips. */}
-        {onMarcar && !captura && <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-          <button data-marcar-replay="1" style={{ ...btn(), background: 'rgba(63,185,80,0.25)', borderColor: BZ.verde, fontWeight: 600 }} onClick={() => onMarcar(1)} title="Compra en un precio: marca en el gráfico la Entrada, el Stop y el Objetivo (o doble clic en el gráfico)">🎯 Compra</button>
-          <button data-marcar-replay="-1" style={{ ...btn(), background: 'rgba(248,81,73,0.25)', borderColor: BZ.rojo, fontWeight: 600 }} onClick={() => onMarcar(-1)} title="Venta en corto en un precio: marca en el gráfico la Entrada, el Stop y el Objetivo">🎯 Venta</button>
+      {cfg && form && onForm
+        ? <TarjetaDefecto form={form} onForm={onForm} estado={estado} onCerrar={() => onCfg && onCfg(false)} />
+        : <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8 }} data-cifras-replay="">
+          <Cifra titulo="Tu dinero" valor={eur(cif.final)} tip={`Empezaste con ${eur(estado.capitalInicial)}`} />
+          <Cifra titulo="Ganancia" valor={`${signo(cif.ganancia)}${eur(Math.abs(cif.ganancia))} · ${pc(cif.pct)}`} col={color(cif.ganancia)} />
+          <Cifra titulo="CAGR" valor={g(cif.cagr)} col={cif.cagr == null ? BZ.texto : color(cif.cagr)} tip={cif.cagr == null ? 'Con menos de 90 días no se da: un mes bueno daría un CAGR absurdo' : `Rentabilidad al año: del ${fmt(estado.desde)} al ${fmt(estado.hoy)}`} />
+          <Cifra titulo="Peor caída" valor={pc(cif.peorCaida)} col={cif.peorCaida < 0 ? BZ.rojo : BZ.texto} />
+          <Cifra titulo="Operaciones" valor={cif.operaciones} />
+          <Cifra titulo="Ganadoras" valor={cif.ganadoras == null ? '—' : pc(cif.ganadoras, 0)} />
+          <Cifra titulo="Profit factor" valor={pf} tip="Lo ganado en las ganadoras ÷ lo perdido en las perdedoras" />
+          <Cifra titulo="Invertido de media" valor={g(cif.invertidoMedia)} tip="La media, vela a vela, de lo que tenías invertido frente a tu dinero" />
+          <Cifra titulo="Tiempo con algo dentro" valor={g(cif.tiempoDentro)} tip="De las velas que llevas, en cuántas acabaste con algo abierto" />
+          <Cifra titulo="Liquidez" valor={eur(r.caja)} />
+          <Cifra titulo={`Buy&Hold ${simbolo}`} valor={eur(cif.buyHold?.final)} tip="Comprar al cierre del primer día que viste y vender hoy, con el mismo dinero y pagando las dos comisiones" />
+          <Cifra titulo="Tú, frente a él" valor={cif.buyHold ? `${signo(Math.round(cif.final - cif.buyHold.final))}${eur(Math.abs(cif.final - cif.buyHold.final))}` : '—'} col={cif.buyHold ? color(Math.round(cif.final - cif.buyHold.final)) : BZ.texto} />
         </div>}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
-          <select value={f.modo} onChange={e => pon('modo', e.target.value)} style={{ ...casilla, width: 'auto' }} data-modo="" title="Invertir: ese % de tu dinero. Arriesgar: lo que perderías si salta el stop">
-            <option value="invertir">Invertir</option><option value="arriesgar">Arriesgar</option>
-          </select>
-          <span><input data-pct="" style={{ ...casilla, width: 56 }} value={f.pct} onChange={e => pon('pct', e.target.value)} /> % del dinero</span>
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
-          <span title="Vacío: el stop lo marcas tú. Con un %: sale solo a ese % de la entrada (por debajo en una compra, por encima en un corto)">Stop a <input data-stop-pct="" style={{ ...casilla, width: 48 }} placeholder="—" value={f.stopPct ?? ''} onChange={e => pon('stopPct', e.target.value)} /> %</span>
-          <span title="Vacío: el objetivo lo marcas tú. Con un número N: sale solo a N veces la distancia entre la entrada y el stop (1 : 2 = ganar el doble de lo que arriesgas)">R:R 1 : <input data-rr="" style={{ ...casilla, width: 48 }} placeholder="—" value={f.rr ?? ''} onChange={e => pon('rr', e.target.value)} /></span>
-        </div>
-        {onMarcar && captura && <div data-guia-marca="" style={{ background: 'rgba(88,166,255,0.12)', border: `1px solid ${BZ.azul}`, borderRadius: 5, padding: '5px 8px', marginBottom: 6 }}>
-            {f.ladoFijo && <b style={{ color: f.lado > 0 ? BZ.verde : BZ.rojo }}>{f.lado > 0 ? 'Compra' : 'Venta'} </b>}▶ marca <b>{QUE[captura]}</b>
-            {(f.entrada || f.stop) && <div style={{ color: BZ.gris, fontSize: 12 }}>{f.entrada ? `Entrada ${f.entrada}` : ''}{f.stop ? ` · Stop ${f.stop}${pcS != null ? ` (${pc(pcS)})` : ''}` : ''}</div>}
-            <div style={{ color: BZ.gris, fontSize: 12 }}>{captura === 'entrada' ? 'Esc cancela' : captura === 'stop' ? 'Enter: ponerla sin stop ni objetivo · Esc cancela' : 'Enter: ponerla sin objetivo · Esc cancela'}</div>
-            {onCancelaMarca && <button onClick={onCancelaMarca} style={{ ...btn(), padding: '0 7px', marginTop: 4 }}>Cancelar</button>}
-          </div>}
-        {!captura && <>
-          <div style={{ borderTop: `1px solid ${BZ.borde}`, paddingTop: 8, marginTop: 4 }} title={`Se ejecuta ${cuando}`}><b style={{ fontSize: 12 }}>A mercado</b></div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 8px', alignItems: 'center', marginTop: 4 }}>
-            <span>Stop</span><span><input data-stop="" style={casilla} placeholder={auto('stop')} value={f.stop} onChange={e => pon('stop', e.target.value)} />{pcS != null && <span style={{ color: BZ.rojo, marginLeft: 6 }}>{pc(pcS)}</span>}</span>
-            <span>Objetivo</span><span><input data-objetivo="" style={casilla} placeholder={auto('objetivo')} value={f.objetivo} onChange={e => pon('objetivo', e.target.value)} />{pcO != null && <span style={{ color: BZ.verde, marginLeft: 6 }}>{pc(pcO)}</span>}</span>
-          </div>
-        </>}
-        {est && <div data-estima-replay="" style={{ color: BZ.gris, fontSize: 12, marginTop: 6 }} title="Con tu dinero de ahora; al ejecutarse se calcula con el de ese momento">
-          ≈ <b style={{ color: BZ.texto }}>{est.acciones} acciones</b> ({eur(est.coste)}){est.arriesgas != null ? ` · arriesgas ${eur(est.arriesgas)}` : ''}{est.rr != null ? ` · R:R 1 : ${loc(est.rr, 1)}` : ''}</div>}
-        {error && <div data-error-orden="" style={{ color: BZ.rojo, marginTop: 6 }}>⚠ {error}</div>}
-        {!captura && <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-          <button data-enviar-orden="1" title={`Compra a mercado ${cuando}`} style={{ ...btn(), background: 'rgba(63,185,80,0.25)', borderColor: BZ.verde }} onClick={() => envia(1)}>Compra a mercado</button>
-          <button data-enviar-orden="-1" title={`Venta en corto a mercado ${cuando}`} style={{ ...btn(), background: 'rgba(248,81,73,0.25)', borderColor: BZ.rojo }} onClick={() => envia(-1)}>Venta a mercado</button>
-        </div>}
-      </div>}
-      {r.ordenesVivas.length > 0 && <div style={cajaSt} data-ordenes-vivas="">
-        <b>Órdenes vivas</b>
-        {r.ordenesVivas.map(o => <div key={o.id} style={{ marginTop: 4 }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <span style={{ flex: 1 }}>{textoOrden(o)}</span>
-            {!terminada && <button title="Cancelar la orden" data-cancelar={o.id} onClick={() => onAccion({ fecha: estado.hoy, tipo: 'cancelar', id: o.id })} style={{ ...btn(), padding: '0 7px', color: BZ.rojo }}>✕</button>}
-          </div>
-          {editable && <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 8px', alignItems: 'center', margin: '4px 0 2px' }} data-precios-viva={o.id}>
-            {o.entrada != null && filaPrecio('Entrada', `viva:${o.id}:entrada`, o.entrada, null, BZ.azul)}
-            {filaPrecio('Stop', `viva:${o.id}:stop`, o.stop, o.entrada == null ? ahora : vivo(`viva:${o.id}:entrada`, o.entrada), BZ.rojo)}
-            {filaPrecio('Objetivo', `viva:${o.id}:objetivo`, o.objetivo, o.entrada == null ? ahora : vivo(`viva:${o.id}:entrada`, o.entrada), BZ.verde)}
-          </div>}
-        </div>)}
-      </div>}
       {aviso && <div data-aviso-linea="" style={{ color: BZ.ambar, fontSize: 12, margin: '6px 0' }}>⚠ {aviso}</div>}
       {r.avisos.length > 0 && <div style={{ ...cajaSt, borderColor: BZ.ambar }} data-avisos-replay="">
         {r.avisos.slice(-4).map((a, i) => <div key={i} style={{ color: BZ.ambar, fontSize: 12 }}>{fmt(a.fecha)}: {a.texto}</div>)}
@@ -185,6 +142,88 @@ export function PanelOperar({ estado, simbolo, r, cif, ahora, onAccion, onTermin
           title={terminada ? 'Volver a operar (deshace el cierre final)' : 'Cerrar todo al cierre de hoy y ver el resultado final (norma de la app: cierre al final)'}>{terminada ? 'Reabrir' : 'Terminar'}</button>
         {terminada && <span style={{ color: BZ.ambar }}>Terminada: todo vendido al cierre de hoy.</span>}
       </div>
+    </div>)
+}
+
+// §250: el panel de OPERAR DENTRO DEL GRÁFICO (arriba a la derecha; boceto bocetos/replay-operar-multiactivo.html). Una pieza que sirve
+// para cualquier gráfico: botones 🎯 Compra / 🎯 Venta (o Compra / Venta a mercado), ⚙, «Cerrar ✕» con posición, y las casillas
+// Entrada · Stop · Objetivo (con 🎯 para marcar en el gráfico y ✕ para quitar) de la posición y de cada orden viva.
+//   onMarcar(lado): empieza a marcar una orden nueva. onMarcarLinea(id): el próximo clic en el gráfico mueve esa línea (pos:… / viva:…).
+//   onMover(id, precio | null): cambia o quita un precio. onAccion: «cerrar», «cancelar» y las órdenes a mercado.
+export function PanelGrafico({ estado, simbolo, r, ahora, total, form, captura = null, capturaLinea = null, onMarcar, onMarcarLinea, onCancelaMarca, onAccion, formMercado, onMover, arrastre = null, onCfg, cfgAbierta = false, aviso = '', style = null }) {
+  const [error, setError] = useState('')
+  const f = form
+  const pos = r.posiciones[simbolo]
+  const vivas = (r.ordenesVivas || []).filter(o => o.simbolo === simbolo)
+  const terminada = !!estado.terminada
+  const mercado = (f.tipo || 'precio') === 'mercado'
+  const cuando = estado.ejecucion === 'cierre' ? 'al cierre de hoy' : 'a la apertura de la vela siguiente'
+  const envia = (lado) => {
+    const c = compruebaOrden(formMercado ? formMercado(lado) : deMercado(f, lado, ahora), ahora)
+    if (c.error) { setError(c.error); return }
+    setError(''); onAccion(nuevaAccion(estado, simbolo, c.orden))
+  }
+  const vivo = (id, v) => (arrastre && arrastre.id === id ? arrastre.precio : v)
+  const QUE = { entrada: 'la Entrada', stop: 'el Stop', objetivo: 'el Objetivo' }
+  const ref = captura && f.entrada !== '' ? Number(String(f.entrada).replace(',', '.')) : ahora
+  const pcS = pctFrente(Number(String(f.stop).replace(',', '.')), ref)
+  const est = captura ? estima({ ...f, mercado: !f.entrada }, total, ahora) : null
+  const ic = { cursor: 'pointer', borderRadius: 4, padding: '0 3px', userSelect: 'none', textAlign: 'center' }
+  // Una fila de precio: «Stop  [98,00]  −3,0 %  🎯  ✕».
+  const filaPrecio = (etq, id, v, refP, col, quitar) => <div key={id} style={{ display: 'grid', gridTemplateColumns: '54px 74px 50px 20px 16px', gap: 3, alignItems: 'center', marginTop: 3 }}>
+    <span style={{ color: BZ.gris }}>{etq}</span>
+    <CasillaPrecio valor={vivo(id, v)} dato={id} ancho={74} onFija={p => onMover(id, p)} titulo="Escribe el precio y pulsa Enter (vacía = quitarlo); o pulsa 🎯 y haz clic en el gráfico; o arrastra su línea" />
+    <span style={{ color: col, fontSize: 11, textAlign: 'right' }}>{vivo(id, v) != null && refP != null ? pc(pctFrente(vivo(id, v), refP)) : ''}</span>
+    <span data-marcar-linea={id} title="Marcar en el gráfico" onClick={() => onMarcarLinea && onMarcarLinea(capturaLinea === id ? null : id)} style={{ ...ic, background: capturaLinea === id ? BZ.azul : 'transparent' }}>🎯</span>
+    <span data-quitar-linea={id} title={quitar} onClick={quitar ? () => onMover(id, null) : undefined} style={{ ...ic, color: BZ.rojo, visibility: quitar ? 'visible' : 'hidden' }}>✕</span>
+  </div>
+  return (
+    <div data-panel-grafico="" style={{ background: 'rgba(44,48,59,0.95)', border: `1px solid ${BZ.borde}`, borderRadius: 7, padding: '5px 6px', font: `12px/1.4 ${LETRA}`, color: BZ.texto, maxWidth: 300, boxShadow: '0 4px 14px rgba(0,0,0,0.45)', ...(style || {}) }}
+      onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onWheel={e => e.stopPropagation()}>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+        {!terminada && !captura && (mercado
+          ? <>
+            <button data-enviar-orden="1" title={`Compra a mercado ${cuando}, con el stop y el objetivo de ⚙`} style={{ ...btn(), padding: '2px 8px', background: 'rgba(63,185,80,0.25)', borderColor: BZ.verde, fontWeight: 600 }} onClick={() => envia(1)}>Compra</button>
+            <button data-enviar-orden="-1" title={`Venta en corto a mercado ${cuando}, con el stop y el objetivo de ⚙`} style={{ ...btn(), padding: '2px 8px', background: 'rgba(248,81,73,0.25)', borderColor: BZ.rojo, fontWeight: 600 }} onClick={() => envia(-1)}>Venta</button>
+          </>
+          : <>
+            <button data-marcar-replay="1" title="Compra en un precio: haz clic en el gráfico en la entrada (o doble clic en el gráfico)" style={{ ...btn(), padding: '2px 8px', background: 'rgba(63,185,80,0.25)', borderColor: BZ.verde, fontWeight: 600 }} onClick={() => onMarcar(1)}>🎯 Compra</button>
+            <button data-marcar-replay="-1" title="Venta en corto en un precio: haz clic en el gráfico en la entrada" style={{ ...btn(), padding: '2px 8px', background: 'rgba(248,81,73,0.25)', borderColor: BZ.rojo, fontWeight: 600 }} onClick={() => onMarcar(-1)}>🎯 Venta</button>
+          </>)}
+        {pos && !terminada && !captura && <button data-cerrar-replay="" title={`Vende (o recompra el corto) ${cuando}`} style={{ ...btn(), padding: '2px 8px' }} onClick={() => onAccion({ fecha: estado.hoy, simbolo, tipo: 'cerrar' })}>Cerrar ✕</button>}
+        {onCfg && <button data-cfg-replay="" title="Valores por defecto: tipo de orden, stop, objetivo y tamaño" style={{ ...btn(true, cfgAbierta), padding: '2px 7px', marginLeft: 'auto' }} onClick={() => onCfg(!cfgAbierta)}>⚙</button>}
+      </div>
+      {captura && <div data-guia-marca="" style={{ background: 'rgba(88,166,255,0.12)', border: `1px solid ${BZ.azul}`, borderRadius: 5, padding: '4px 7px', marginTop: 5 }}>
+        <span data-marcando="" style={{ color: BZ.azul, fontWeight: 700 }}>MARCANDO </span>
+        {f.ladoFijo && <b style={{ color: f.lado > 0 ? BZ.verde : BZ.rojo }}>{f.lado > 0 ? 'Compra' : 'Venta'} </b>}▶ marca <b>{QUE[captura]}</b>
+        {(f.entrada || f.stop) && <div style={{ color: BZ.gris }}>{f.entrada ? `Entrada ${f.entrada}` : ''}{f.stop ? ` · Stop ${f.stop}${pcS != null ? ` (${pc(pcS)})` : ''}` : ''}</div>}
+        <div style={{ color: BZ.gris, fontSize: 11 }}>{captura === 'entrada' ? 'Esc cancela' : captura === 'stop' ? 'Enter: ponerla sin stop ni objetivo · Esc cancela' : 'Enter: ponerla sin objetivo · Esc cancela'}</div>
+        {onCancelaMarca && <button onClick={onCancelaMarca} style={{ ...btn(), padding: '0 7px', marginTop: 3 }}>Cancelar</button>}
+      </div>}
+      {est && <div data-estima-replay="" style={{ color: BZ.gris, marginTop: 4 }} title="Con tu dinero de ahora; al ejecutarse se calcula con el de ese momento">
+        ≈ <b style={{ color: BZ.texto }}>{est.acciones} acciones</b> ({eur(est.coste)}){est.arriesgas != null ? ` · arriesgas ${eur(est.arriesgas)}` : ''}{est.rr != null ? ` · R:R 1 : ${loc(est.rr, 1)}` : ''}</div>}
+      {capturaLinea && <div data-guia-linea="" style={{ color: BZ.azul, marginTop: 4 }}>▶ Haz clic en el gráfico en el precio nuevo · Esc cancela</div>}
+      {pos && <div data-posicion-replay="" style={{ marginTop: 5, borderTop: `1px solid ${BZ.borde}`, paddingTop: 4 }}>
+        <div><b>Abierta #{pos.num}</b> · {pos.lado > 0 ? 'Largo' : 'Corto'} {pos.acciones} a {pr(pos.precioMedio)} · <b style={{ color: color(pos.ganancia) }}>{signo(pos.ganancia)}{eur(Math.abs(pos.ganancia))}</b></div>
+        {onMover && !terminada
+          ? <div data-precios-posicion="">{filaPrecio('Stop', `pos:${simbolo}:stop`, pos.stop, pos.precioMedio, BZ.rojo, 'Quitar el stop')}{filaPrecio('Objetivo', `pos:${simbolo}:objetivo`, pos.objetivo, pos.precioMedio, BZ.verde, 'Quitar el objetivo')}</div>
+          : <div style={{ color: BZ.gris }}>Stop {pr(pos.stop)} · objetivo {pr(pos.objetivo)}</div>}
+      </div>}
+      {vivas.length > 0 && <div data-ordenes-vivas="" style={{ marginTop: 5 }}>
+        {vivas.map(o => { const refO = o.entrada == null ? ahora : vivo(`viva:${o.id}:entrada`, o.entrada)
+          return <div key={o.id} style={{ borderTop: `1px solid ${BZ.borde}`, paddingTop: 4, marginTop: 4 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <span style={{ flex: 1 }}>{textoOrden(o)}</span>
+              {!terminada && <span data-cancelar={o.id} title="Cancelar la orden" onClick={() => onAccion({ fecha: estado.hoy, tipo: 'cancelar', id: o.id })} style={{ ...ic, color: BZ.rojo }}>✕</span>}
+            </div>
+            {onMover && !terminada && <div data-precios-viva={o.id}>
+              {o.entrada != null && filaPrecio('Entrada', `viva:${o.id}:entrada`, o.entrada, null, BZ.azul, null)}
+              {filaPrecio('Stop', `viva:${o.id}:stop`, o.stop, refO, BZ.rojo, 'Quitar el stop')}
+              {filaPrecio('Objetivo', `viva:${o.id}:objetivo`, o.objetivo, refO, BZ.verde, 'Quitar el objetivo')}
+            </div>}
+          </div> })}
+      </div>}
+      {(error || aviso) && <div data-error-orden="" style={{ color: error ? BZ.rojo : BZ.ambar, marginTop: 4 }}>⚠ {error || aviso}</div>}
     </div>)
 }
 
