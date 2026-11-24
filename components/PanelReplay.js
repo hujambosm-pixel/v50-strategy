@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import Ayuda from './BuilderAyuda'
 import { compruebaOrden, nuevaAccion, textoOrden } from '../lib/replay/orden'
+import { TIPOS_SIGUE } from '../lib/replay/motor'
 import { estima, pctFrente, redondea, deMercado, modoStop, modoObjetivo } from '../lib/replay/borrador'
 import { Papelera } from './VentanaPregunta'
 
@@ -67,17 +68,30 @@ function NombreReplay({ nombre, onNombre, guardado, onMisReplays }) {
     </div>)
 }
 
+export const AYUDA_SIGUE = 'STOP QUE SIGUE AL PRECIO: son los mismos stops que suben de las tarjetas de las estrategias. Al cierre de cada vela se mira dónde quedaría y, desde la vela siguiente, el stop pasa ahí SOLO si es a favor (en una compra solo sube; en un corto solo baja). Se aplica a las órdenes nuevas.\n\n' +
+  '· A un % del máximo: compras a 100 con 10 %; el precio llega a 130 → el stop pasa a 117 (130 − 10 %). Si luego baja a 117, sales con +17 %.\n' +
+  '· Mínimo de las N últimas velas: con 3, si los mínimos de las 3 últimas son 98, 101 y 99, el stop pasa a 98 (si estaba más abajo).\n' +
+  '· Mínimo de la vela que cierra bajo la EMA: cada vela que cierra por debajo de su EMA propone su mínimo (solo en compras).\n' +
+  '· Línea del SuperTrend y último mínimo de swing: como en las tarjetas (si el SuperTrend se da la vuelta, su línea queda al otro lado y sales a la apertura siguiente).'
+export const AYUDA_SOLO = 'EJECUTAR SOLO: cada vela, al cierre, mira la señal elegida en la barra del Replay (una condición o una estrategia). Si sale y no tienes nada en ese valor, compra a mercado (a la apertura de la vela siguiente, o al cierre si lo elegiste al empezar) con el tamaño, el stop, el objetivo y el stop que sigue de aquí. Puedes seguir operando a mano a la vez.\n\n' +
+  'Sale con el stop y el objetivo de aquí o, si la señal es una estrategia y lo eliges, con las salidas de la estrategia (además del stop de aquí, si pusiste uno).\n\n' +
+  'Si no llega el dinero, la señal se salta y se cuenta en «Señales sin dinero». Ejemplo: 10.000 € e invertir 50 % → caben dos compras; con el dinero ya invertido, la siguiente señal se salta.\n\n' +
+  'Si cambias los valores con «Ejecutar solo» encendido, los nuevos valen desde hoy. Al retroceder velas, vuelve a como estaba entonces.'
+
 // §250: la tarjeta ⚙ «Valores por defecto» (en lugar de las cifras). Cambia el formulario (form / onForm), que la página recuerda en el
 // navegador (replay.orden) para cualquier Replay. Lo que ya está puesto (órdenes vivas, la posición) no cambia.
-export function TarjetaDefecto({ form, onForm, estado, onCerrar }) {
+// §252: auto = { activo, puede, senal (texto), esEstrategia, onCambia(bool) } para «Ejecutar solo».
+export function TarjetaDefecto({ form, onForm, estado, onCerrar, auto = null }) {
   const f = form
-  // Al elegir «A un %» o «Por R:R» con la casilla vacía, se rellena con 5 % y 1 : 2 (los de fábrica).
-  const pon = (k, v) => onForm(x => ({ ...x, [k]: v, ...(k === 'stopModo' && v === 'pct' && (x.stopPct === '' || x.stopPct == null) ? { stopPct: '5' } : {}), ...(k === 'tpModo' && v === 'rr' && (x.rr === '' || x.rr == null) ? { rr: '2' } : {}) }))
+  // Al elegir «A un %», «A X veces el ATR» o «Por R:R» con la casilla vacía, se rellena con 5 %, 2 veces y 1 : 2 (los de fábrica).
+  const pon = (k, v) => onForm(x => ({ ...x, [k]: v, ...(k === 'stopModo' && v === 'pct' && (x.stopPct === '' || x.stopPct == null) ? { stopPct: '5' } : {}), ...(k === 'stopModo' && v === 'atr' && (x.stopAtr === '' || x.stopAtr == null) ? { stopAtr: '2' } : {}), ...(k === 'tpModo' && v === 'rr' && (x.rr === '' || x.rr == null) ? { rr: '2' } : {}) }))
   const sel = (k, valor, ops, dato) => <select data-def={dato || k} value={valor} onChange={e => pon(k, e.target.value)} style={{ ...casilla, width: '100%' }}>{ops.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>
   const numero = (k, dato, suf) => <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><input data-def={dato} value={f[k] ?? ''} onChange={e => pon(k, e.target.value)} style={{ ...casilla, width: 62, textAlign: 'right' }} />{suf}</span>
   const fila = (titulo, cosa) => <><span style={{ color: BZ.gris }}>{titulo}</span><span>{cosa}</span></>
   const grupo = (t) => <div style={{ gridColumn: '1 / -1', borderTop: `1px solid ${BZ.borde}`, marginTop: 6, paddingTop: 4, color: BZ.azul, fontSize: 12 }}>{t}</div>
   const ms = modoStop(f), mo = modoObjetivo(f)
+  const tsig = TIPOS_SIGUE.find(x => x.tipo === (f.sigueTipo || 'no')) || TIPOS_SIGUE[0]
+  const ponSigue = (tipo) => { const ts = TIPOS_SIGUE.find(x => x.tipo === tipo) || TIPOS_SIGUE[0]; onForm(x => ({ ...x, sigueTipo: tipo, sigueN: String(ts.campos[0]?.[2] ?? ''), sigueK: String(ts.campos[1]?.[2] ?? '') })) }
   return (
     <div data-tarjeta-defecto="" style={{ ...cajaSt, marginTop: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -89,8 +103,12 @@ export function TarjetaDefecto({ form, onForm, estado, onCerrar }) {
         {grupo('Orden')}
         {fila('Tipo', sel('tipo', f.tipo || 'precio', [['precio', 'En un precio (🎯)'], ['mercado', 'A mercado']]))}
         {grupo('Stop inicial')}
-        {fila('Stop', sel('stopModo', ms, [['pct', 'A un %'], ['marco', 'Lo marco yo'], ['no', 'Sin stop']]))}
+        {fila('Stop', sel('stopModo', ms, [['pct', 'A un %'], ['atr', 'A X veces el ATR'], ['marco', 'Lo marco yo'], ['no', 'Sin stop']]))}
         {ms === 'pct' && fila('a', numero('stopPct', 'stopPct', '% de la entrada'))}
+        {ms === 'atr' && fila('a', numero('stopAtr', 'stopAtr', <span title={f.atrHoy ? `ATR (14) de hoy: ${pr(f.atrHoy)}` : ''}>veces el ATR (14){f.atrHoy ? ` · hoy ${pr(f.atrHoy)}` : ''}</span>))}
+        {grupo(<span>Stop que sigue al precio <Ayuda texto={AYUDA_SIGUE} etiqueta="Stop que sigue al precio" /></span>)}
+        {fila('Sigue', <select data-def="sigueTipo" value={tsig.tipo} onChange={e => ponSigue(e.target.value)} style={{ ...casilla, width: '100%' }}>{TIPOS_SIGUE.map(x => <option key={x.tipo} value={x.tipo}>{x.nombre}</option>)}</select>)}
+        {tsig.campos.map(([k, txt], i) => <span key={k} style={{ display: 'contents' }}>{fila(i ? 'y' : 'con', numero(k === 'n' ? 'sigueN' : 'sigueK', k === 'n' ? 'sigueN' : 'sigueK', txt))}</span>)}
         {grupo('Objetivo')}
         {fila('Objetivo', sel('tpModo', mo, [['rr', 'Por R:R'], ['marco', 'Lo marco yo'], ['no', 'Sin objetivo']]))}
         {mo === 'rr' && fila('R:R 1 :', numero('rr', 'rr', ms === 'no' ? <span style={{ color: BZ.ambar }}>sin stop no hay R:R</span> : ''))}
@@ -98,6 +116,11 @@ export function TarjetaDefecto({ form, onForm, estado, onCerrar }) {
         {fila('Tamaño', sel('modo', f.modo, [['invertir', 'Invertir un %'], ['arriesgar', 'Arriesgar un %']]))}
         {fila(f.modo === 'arriesgar' ? 'arriesgar' : 'invertir', numero('pct', 'pct', '% de tu dinero'))}
         {f.modo === 'arriesgar' && ms === 'no' && <div style={{ gridColumn: '1 / -1', color: BZ.ambar }}>Para arriesgar un % hace falta un stop.</div>}
+        {auto && grupo(<span>Ejecutar solo <Ayuda texto={AYUDA_SOLO} etiqueta="Ejecutar solo" /></span>)}
+        {auto && <label data-auto-replay="" title={auto.puede ? '' : 'Elige antes una señal en la barra del Replay (una condición o una estrategia)'} style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 6, opacity: auto.puede ? 1 : 0.5, cursor: auto.puede ? 'pointer' : 'default' }}>
+          <input type="checkbox" data-def="solo" checked={!!auto.activo} disabled={!auto.puede} onChange={e => auto.onCambia(e.target.checked)} />
+          <span>Compra solo al salir la señal{auto.senal ? <>: <b>{auto.senal}</b></> : ' (elige una en la barra)'}</span></label>}
+        {auto && auto.esEstrategia && fila('Sale con', sel('sale', f.sale || 'panel', [['panel', 'El stop y el objetivo de aquí'], ['estrategia', 'Las salidas de la estrategia']]))}
         {grupo('De este Replay (al empezar)')}
         <div style={{ gridColumn: '1 / -1', color: BZ.gris }}>{estado.comision ? `${com(estado.comision)} € por orden` : 'Sin comisión'} · a mercado {estado.ejecucion === 'cierre' ? 'al cierre de hoy' : 'a la apertura siguiente'}</div>
       </div>
@@ -106,7 +129,7 @@ export function TarjetaDefecto({ form, onForm, estado, onCerrar }) {
 
 // §250: el panel de la DERECHA: el nombre, las cifras de tu cuenta (o, con ⚙, los valores por defecto), avisos y Terminar.
 // Operar (botones, órdenes vivas, la posición) va en el panel de dentro del gráfico (PanelGrafico).
-export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', nombre = null, onNombre, guardado = '', onMisReplays, cfg = false, form = null, onForm, onCfg }) {
+export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', nombre = null, onNombre, guardado = '', onMisReplays, cfg = false, form = null, onForm, onCfg, auto = null }) {
   const terminada = !!estado.terminada
   const g = (x) => (x == null ? '—' : pc(x))
   const pf = cif.factorBeneficio == null ? '—' : cif.factorBeneficio === Infinity ? '∞' : loc(cif.factorBeneficio, 2)
@@ -118,7 +141,7 @@ export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', n
       </div>
       {nombre != null && <NombreReplay nombre={nombre} onNombre={onNombre} guardado={guardado} onMisReplays={onMisReplays} />}
       {cfg && form && onForm
-        ? <TarjetaDefecto form={form} onForm={onForm} estado={estado} onCerrar={() => onCfg && onCfg(false)} />
+        ? <TarjetaDefecto form={form} onForm={onForm} estado={estado} auto={auto} onCerrar={() => onCfg && onCfg(false)} />
         : <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8 }} data-cifras-replay="">
           <Cifra titulo="Tu dinero" valor={eur(cif.final)} tip={`Empezaste con ${eur(estado.capitalInicial)}`} />
           <Cifra titulo="Ganancia" valor={`${signo(cif.ganancia)}${eur(Math.abs(cif.ganancia))} · ${pc(cif.pct)}`} col={color(cif.ganancia)} />
@@ -131,6 +154,7 @@ export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', n
           <Cifra titulo="Tiempo con algo dentro" valor={g(cif.tiempoDentro)} tip="De las velas que llevas, en cuántas acabaste con algo abierto" />
           <Cifra titulo="Liquidez" valor={eur(r.caja)} />
           <Cifra titulo={`Buy&Hold ${simbolo}`} valor={eur(cif.buyHold?.final)} tip="Comprar al cierre del primer día que viste y vender hoy, con el mismo dinero y pagando las dos comisiones" />
+          {(auto?.activo || (cif.sinDinero || 0) > 0) && <Cifra titulo="Señales sin dinero" valor={cif.sinDinero || 0} col={cif.sinDinero ? BZ.ambar : BZ.texto} tip="Señales de «Ejecutar solo» que se saltaron porque no llegaba el dinero" />}
           <Cifra titulo="Tú, frente a él" valor={cif.buyHold ? `${signo(Math.round(cif.final - cif.buyHold.final))}${eur(Math.abs(cif.final - cif.buyHold.final))}` : '—'} col={cif.buyHold ? color(Math.round(cif.final - cif.buyHold.final)) : BZ.texto} />
         </div>}
       {aviso && <div data-aviso-linea="" style={{ color: BZ.ambar, fontSize: 12, margin: '6px 0' }}>⚠ {aviso}</div>}
@@ -150,7 +174,7 @@ export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', n
 // Entrada · Stop · Objetivo (con 🎯 para marcar en el gráfico y ✕ para quitar) de la posición y de cada orden viva.
 //   onMarcar(lado): empieza a marcar una orden nueva. onMarcarLinea(id): el próximo clic en el gráfico mueve esa línea (pos:… / viva:…).
 //   onMover(id, precio | null): cambia o quita un precio. onAccion: «cerrar», «cancelar» y las órdenes a mercado.
-export function PanelGrafico({ estado, simbolo, r, ahora, total, form, captura = null, capturaLinea = null, onMarcar, onMarcarLinea, onCancelaMarca, onAccion, formMercado, onMover, arrastre = null, onCfg, cfgAbierta = false, aviso = '', style = null }) {
+export function PanelGrafico({ estado, simbolo, r, ahora, total, form, captura = null, capturaLinea = null, onMarcar, onMarcarLinea, onCancelaMarca, onAccion, formMercado, onMover, arrastre = null, onCfg, cfgAbierta = false, aviso = '', style = null, autoActivo = false }) {
   const [error, setError] = useState('')
   const f = form
   const pos = r.posiciones[simbolo]
@@ -191,6 +215,7 @@ export function PanelGrafico({ estado, simbolo, r, ahora, total, form, captura =
             <button data-marcar-replay="-1" title="Venta en corto en un precio: haz clic en el gráfico en la entrada" style={{ ...btn(), padding: '2px 8px', background: 'rgba(248,81,73,0.25)', borderColor: BZ.rojo, fontWeight: 600 }} onClick={() => onMarcar(-1)}>🎯 Venta</button>
           </>)}
         {pos && !terminada && !captura && <button data-cerrar-replay="" title={`Vende (o recompra el corto) ${cuando}`} style={{ ...btn(), padding: '2px 8px' }} onClick={() => onAccion({ fecha: estado.hoy, simbolo, tipo: 'cerrar' })}>Cerrar ✕</button>}
+        {autoActivo && <span data-solo-activo="" title="«Ejecutar solo» está encendido: compra al salir la señal (se apaga en ⚙)" style={{ color: '#bc8cff', fontWeight: 700, fontSize: 11 }}>🤖 Solo</span>}
         {onCfg && <button data-cfg-replay="" title="Valores por defecto: tipo de orden, stop, objetivo y tamaño" style={{ ...btn(true, cfgAbierta), padding: '2px 7px', marginLeft: 'auto' }} onClick={() => onCfg(!cfgAbierta)}>⚙</button>}
       </div>
       {captura && <div data-guia-marca="" style={{ background: 'rgba(88,166,255,0.12)', border: `1px solid ${BZ.azul}`, borderRadius: 5, padding: '4px 7px', marginTop: 5 }}>
@@ -204,7 +229,8 @@ export function PanelGrafico({ estado, simbolo, r, ahora, total, form, captura =
         ≈ <b style={{ color: BZ.texto }}>{est.acciones} acciones</b> ({eur(est.coste)}){est.arriesgas != null ? ` · arriesgas ${eur(est.arriesgas)}` : ''}{est.rr != null ? ` · R:R 1 : ${loc(est.rr, 1)}` : ''}</div>}
       {capturaLinea && <div data-guia-linea="" style={{ color: BZ.azul, marginTop: 4 }}>▶ Haz clic en el gráfico en el precio nuevo · Esc cancela</div>}
       {pos && <div data-posicion-replay="" style={{ marginTop: 5, borderTop: `1px solid ${BZ.borde}`, paddingTop: 4 }}>
-        <div><b>Abierta #{pos.num}</b> · {pos.lado > 0 ? 'Largo' : 'Corto'} {pos.acciones} a {pr(pos.precioMedio)} · <b style={{ color: color(pos.ganancia) }}>{signo(pos.ganancia)}{eur(Math.abs(pos.ganancia))}</b></div>
+        <div><b>Abierta #{pos.num}</b> · {pos.lado > 0 ? 'Largo' : 'Corto'} {pos.acciones} a {pr(pos.precioMedio)} · <b style={{ color: color(pos.ganancia) }}>{signo(pos.ganancia)}{eur(Math.abs(pos.ganancia))}</b>{pos.auto ? <span style={{ color: '#bc8cff' }}> · 🤖</span> : null}</div>
+        {pos.sigue && <div data-sigue-pos="" style={{ color: BZ.gris, fontSize: 11 }}>El stop sigue al precio: {(TIPOS_SIGUE.find(x => x.tipo === pos.sigue.tipo) || {}).nombre}</div>}
         {onMover && !terminada
           ? <div data-precios-posicion="">{filaPrecio('Stop', `pos:${simbolo}:stop`, pos.stop, pos.precioMedio, BZ.rojo, 'Quitar el stop')}{filaPrecio('Objetivo', `pos:${simbolo}:objetivo`, pos.objetivo, pos.precioMedio, BZ.verde, 'Quitar el objetivo')}</div>
           : <div style={{ color: BZ.gris }}>Stop {pr(pos.stop)} · objetivo {pr(pos.objetivo)}</div>}
@@ -269,7 +295,8 @@ export function ResultadosReplay({ estado, r, cif, velas, simbolo, onQuitar = nu
   const [orden, setOrden] = useState({ col: 'num', dir: 'desc' })
   const pulsaCol = (id) => setOrden(o => o.col === id ? { col: id, dir: o.dir === 'desc' ? 'asc' : 'desc' } : { col: id, dir: ['simbolo', 'motivo', 'lado'].includes(id) ? 'asc' : 'desc' })
   const [quitando, setQuitando] = useState(null)
-  const papelera = (num, op) => !onQuitar || estado.terminada ? <td style={td} /> : <td style={{ ...td, whiteSpace: 'nowrap' }}>
+  // §252: las de «Ejecutar solo» no se quitan una a una (las pone la señal): sin papelera, con 🤖.
+  const papelera = (num, op) => op?.auto ? <td style={{ ...td, textAlign: 'center' }} title="La abrió «Ejecutar solo»">🤖</td> : !onQuitar || estado.terminada ? <td style={td} /> : <td style={{ ...td, whiteSpace: 'nowrap' }}>
     {quitando === num
       ? <span><span style={{ color: BZ.rojo }}>¿Quitarla? </span><button data-si-quitar={num} style={{ ...btn(), padding: '0 7px', color: BZ.rojo, borderColor: BZ.rojo }} onClick={() => { setQuitando(null); onQuitar(op) }}>Sí</button> <button style={{ ...btn(), padding: '0 7px' }} onClick={() => setQuitando(null)}>No</button></span>
       : <button data-quitar-op={num} title="Quitar esta operación del historial (como si no la hubieras hecho): desaparece del gráfico y de la curva" onClick={() => setQuitando(num)} style={{ ...btn(), display: 'flex', padding: '1px 5px' }}><Papelera tamano={14} /></button>}

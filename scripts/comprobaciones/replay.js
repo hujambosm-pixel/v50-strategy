@@ -173,6 +173,58 @@ const d = (i) => D[i - 1]
   const cagr15 = M.cifras(sim([], { desde: '2022-01-01', hoy: '2024-01-01' }), VELAS, { curva: [{ fecha: '2022-01-01', valor: 10000, invertido: 0 }, { fecha: '2024-01-01', valor: 12100, invertido: 0 }], operaciones: [], comisiones: 0, ordenes: 0 })
   ok(Math.abs(cagr15.cagr - 10.007) < 0.001, `10.000 → 12.100 en 2 años: CAGR ≈ 10,0 % (${cagr15.cagr})`)
 
+  // ── 16 · §252: el stop que sigue al precio ──
+  // A un 5 % del máximo: compra a mercado el d1 → el d2 a 101. Al cierre del d2 el máximo desde la entrada es 105 → stop 105 × 0,95 = 99,75.
+  // El d3 abre a 104 y baja a 98: salta a 99,75.
+  r = corre([orden(1, { sigue: { tipo: 'pctMax', n: 5 } })])
+  ok(op1(r).fechaSalida === d(3) && cerca(op1(r).precioSalida, 99.75) && op1(r).motivo === 'stop', `a un 5 % del máximo (105): stop 99,75, salta el d3 (${op1(r).fechaSalida} ${op1(r).precioSalida})`)
+  // Mínimo de las 2 últimas velas: compra el d1 con stop 98 → el d2 a 101. Al cierre del d2: mín(99, 100) = 99 > 98 → stop 99; el d3 baja a 98: sale a 99.
+  r = corre([orden(1, { stop: 98, sigue: { tipo: 'minimoMovil', n: 2 } })])
+  ok(op1(r).fechaSalida === d(3) && op1(r).precioSalida === 99, `mínimo de 2 velas: el stop sube de 98 a 99 y sale a 99 el d3 (${op1(r).precioSalida})`)
+  // El stop solo se mueve a favor: con stop 99,5 y el mínimo de 2 velas en 99, se queda en 99,5.
+  r = corre([orden(1, { stop: 99.5, sigue: { tipo: 'minimoMovil', n: 2 } })], { hoy: d(2) })
+  ok(r.posiciones.A.stop === 99.5, `con stop 99,5 y el candidato en 99, el stop no baja (${r.posiciones.A.stop})`)
+  // En corto, a un 5 % del mínimo: corto el d1 → el d2 a 101. Mínimo desde la entrada al cierre del d2: 100 → stop 105. El d3 sube a 106: sale a 105.
+  r = corre([orden(1, { lado: -1, sigue: { tipo: 'pctMax', n: 5 } })])
+  ok(op1(r).fechaSalida === d(3) && cerca(op1(r).precioSalida, 105), `corto a un 5 % del mínimo (100): stop 105, salta el d3 (${op1(r).precioSalida})`)
+
+  // ── 17 · §252: «Ejecutar solo» ──
+  // Señales de entrada el d1 y el d5. Stop a 3 %, R:R 1 : 2, invertir 50 %.
+  //   d1 → el d2 a 101: 5.000 / 101 = 49 acciones; stop 101 × 0,97 = 97,97; objetivo 101 + 2 × 3,03 = 107,06. El d4 abre a 97: stop con hueco a 97.
+  //   Liquidez: 10.000 − 4.949 − 1 + 49 × 97 − 1 = 9.802. d5 → el d6 a 109: 4.901 / 109 = 44 acciones; stop 105,73; objetivo 115,54 (sigue abierta).
+  const auto = (o = {}) => [{ desde: d(1), hasta: null, sale: 'panel', orden: { tam: { modo: 'invertir', pct: 50 }, stop: { modo: 'pct', pct: 3 }, rr: 2, sigue: null }, ...o }]
+  const SEN = { A: { entradas: [d(1), d(5)], salidas: [d(3)] } }
+  r = M.calcula(sim([], { auto: auto() }), VELAS, { senales: SEN })
+  ok(r.operaciones.length === 1 && op1(r).auto && op1(r).fechaEntrada === d(2) && op1(r).acciones === 49 && op1(r).precioSalida === 97 && op1(r).motivo === 'stop (hueco)', `«Ejecutar solo»: entra el d2 a 101 con 49 y sale el d4 a 97 por el stop (${JSON.stringify(op1(r))})`)
+  ok(r.posiciones.A && r.posiciones.A.auto && r.posiciones.A.acciones === 44 && cerca(r.posiciones.A.stop, 105.73) && cerca(r.posiciones.A.objetivo, 115.54), `segunda señal: el d6 a 109, 44 acciones, stop 105,73 y objetivo 115,54 (${JSON.stringify(r.posiciones.A)})`)
+  ok(r.ordenesVivas.length === 0, 'las órdenes de «Ejecutar solo» no salen como órdenes vivas')
+  // Apagado el d3 (hasta d3): la señal del d5 ya no compra.
+  r = M.calcula(sim([], { auto: auto({ hasta: d(3) }) }), VELAS, { senales: SEN })
+  ok(r.operaciones.length === 1 && !r.posiciones.A, 'apagado el d3: la señal del d5 no compra')
+  // Sale con la estrategia (stop a 10 % para que no salte): la salida del d3 cierra el d4 a la apertura (97).
+  r = M.calcula(sim([], { auto: auto({ sale: 'estrategia', orden: { tam: { modo: 'invertir', pct: 50 }, stop: { modo: 'pct', pct: 10 }, rr: null, sigue: null } }) }), VELAS, { senales: { A: { entradas: [d(1)], salidas: [d(3)] } } })
+  ok(op1(r).fechaSalida === d(4) && op1(r).precioSalida === 97 && op1(r).motivo === 'salida de la estrategia', `sale con la estrategia: la salida del d3 cierra el d4 a 97 (${op1(r).motivo})`)
+  // Stop por ATR: k × ATR(14) de la vela de la señal.
+  {
+    const I = require(R + '/lib/condiciones/indicadores.js')
+    const largas = []; for (let i = 0; i < 40; i++) { const c = 100 + (i % 5) * 2; largas.push(v(`2024-02-${String(i % 28 + 1).padStart(2, '0')}`, c, c + 3, c - 3, c + 1)) }
+    const fechas = []; for (let i = 0; i < 40; i++) { const dd = new Date(Date.UTC(2024, 1, 1 + i)); fechas.push(dd.toISOString().slice(0, 10)) }
+    largas.forEach((x, i) => { x.date = fechas[i] })
+    const atr = I.atr(largas, 14)[30]
+    const e = { version: 1, valores: ['L'], desde: fechas[20], hoy: fechas[35], capitalInicial: 10000, comision: 0, ejecucion: 'apertura', acciones: [], retrocesos: 0,
+      auto: [{ desde: fechas[20], hasta: null, sale: 'panel', orden: { tam: { modo: 'invertir', pct: 50 }, stop: { modo: 'atr', k: 2 }, rr: null, sigue: null } }] }
+    const rr = M.calcula(e, { L: largas }, { senales: { L: { entradas: [fechas[30]] } } })
+    const p = rr.posiciones.L || (rr.operaciones[0] && { precioMedio: rr.operaciones[0].precioEntrada, stop: rr.operaciones[0].stop })
+    ok(p && cerca(p.stop, p.precioMedio - 2 * atr), `stop por ATR: entrada − 2 × ATR(14) de la vela de la señal (${p && p.precioMedio} − 2 × ${atr && atr.toFixed(3)} = ${p && p.stop})`)
+  }
+  // Sin dinero: todo invertido en A (manual, 100 %) y señal en B el d2 → B no cotiza el d3, el d4 no hay dinero: se salta y se cuenta.
+  r = M.calcula(sim([orden(1, { tam: { modo: 'invertir', pct: 100 } })], { valores: ['A', 'B'], auto: auto() }), VELAS, { senales: { B: { entradas: [d(2)] } } })
+  ok(r.sinDinero === 1 && !r.posiciones.B && r.avisos.some(x => /sin dinero/.test(x.texto)), `sin dinero para la señal de B: se salta y se cuenta (sinDinero ${r.sinDinero})`)
+  ok(M.cifras(sim([], { valores: ['A', 'B'] }), VELAS, r).sinDinero === 1, 'las cifras dicen «1 señal sin dinero»')
+  // Retroceder: un tramo que empezó después se quita; uno que acababa después vuelve a estar encendido.
+  const ra = M.irA(sim([], { hoy: d(6), auto: [{ desde: d(1), hasta: d(5) }, { desde: d(5), hasta: null }] }), d(3))
+  ok(ra.auto.length === 1 && ra.auto[0].hasta === null, 'volver al d3: el tramo del d5 desaparece y el del d1 vuelve a estar encendido')
+
   console.log(fallos ? `replay: ${fallos} fallos` : 'replay: todas bien')
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error('ERROR', e); process.exit(2) })

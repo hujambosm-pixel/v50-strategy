@@ -69,6 +69,8 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   D.escribe(def('stopModo'), 'pct'); await D.espera(10)
   D.escribe(def('tpModo'), 'rr'); await D.espera(10)
   ok(form.stopPct === '5' && form.rr === '2', 'elegir «A un %» y «Por R:R» con las casillas vacías las rellena con 5 % y 1 : 2')
+  D.escribe(def('stopModo'), 'atr'); await D.espera(10)
+  ok(form.stopAtr === '2', '§252: elegir «A X veces el ATR» con la casilla vacía la rellena con 2')
   D.pulsa(m.raiz.busca(n => n.hasAttribute('data-cerrar-defecto'))); await D.espera(10)
   ok(cfgCerrada, '«← Cifras» vuelve a las cifras')
   m.quita()
@@ -132,6 +134,29 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   D.pulsa(cab('resultado')); await D.espera(10)
   ok(/Resultado ▲/.test(cab('resultado').textContent), '… y al pulsar otra vez, ▲')
   m.quita()
+
+  // ── §252: stop por ATR, stop que sigue y «Ejecutar solo» en la tarjeta ⚙ ──
+  {
+    const B = require(R + '/lib/replay/borrador.js')
+    // Entrada 100, ATR 2,5 y k = 2 → stop 95; con R:R 1 : 2, objetivo 110.
+    const c = B.conClic(B.empiezaMarca({ ...B.FORM_INICIAL, stopModo: 'atr', stopAtr: '2', atrHoy: 2.5, tpModo: 'rr', rr: '2' }, 1).f, 'entrada', 100, 104)
+    ok(c.listo && c.f.stop === '95' && c.f.objetivo === '110', `stop a 2 × ATR (2,5): entrada 100 → stop 95 y objetivo 110 en un clic (${c.f.stop} / ${c.f.objetivo})`)
+    ok(igual(O.compruebaOrden(F({ stop: '98', sigueTipo: 'pctMax', sigueN: '10' }), 100).orden.sigue, { tipo: 'pctMax', n: 10, k: null }) && O.compruebaOrden(F({ stop: '98' }), 100).orden.sigue === undefined, 'la orden lleva el stop que sigue (a un 10 % del máximo); sin él, nada')
+    ok(igual(O.configAuto(F({ stopModo: 'pct', stopPct: '3', tpModo: 'rr', rr: '2', pct: 50 })), { tam: { modo: 'invertir', pct: 50 }, stop: { modo: 'pct', pct: 3 }, rr: 2, sigue: null }), '«Ejecutar solo» guarda los valores de ese momento: invertir 50 %, stop a 3 %, R:R 2')
+    let fo = F({}), cambia = null
+    const of = g => { fo = typeof g === 'function' ? g(fo) : g }
+    const tarjeta = (auto) => React.createElement(P.TarjetaDefecto, { form: fo, onForm: of, estado: est, onCerrar() {}, auto })
+    m = D.monta(tarjeta({ activo: false, puede: false, senal: '', esEstrategia: false, onCambia: v => { cambia = v } }), RDC); await D.espera(20)
+    const caja = () => m.raiz.busca(n => n.getAttribute('data-def') === 'solo')
+    ok(caja() && D.propsDe(caja()).disabled === true && /elige una en la barra/.test(m.raiz.busca(n => n.hasAttribute('data-auto-replay')).textContent), 'sin señal elegida: «Ejecutar solo» apagado y lo dice')
+    m.quita()
+    m = D.monta(tarjeta({ activo: false, puede: true, senal: 'estrategia «Cruce»', esEstrategia: true, onCambia: v => { cambia = v } }), RDC); await D.espera(20)
+    D.escribe(caja(), true); D.propsDe(caja()).onChange({ target: { checked: true } }); await D.espera(10)
+    ok(cambia === true && !!m.raiz.busca(n => n.getAttribute('data-def') === 'sale'), 'con una estrategia: se enciende y deja elegir con qué sale')
+    D.escribe(m.raiz.busca(n => n.getAttribute('data-def') === 'sigueTipo'), 'supertrend'); await D.espera(10)
+    ok(fo.sigueTipo === 'supertrend' && fo.sigueN === '10' && fo.sigueK === '3', 'elegir «Línea del SuperTrend» pone sus valores de fábrica (10 y 3)')
+    m.quita()
+  }
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTodo en verde')
   process.exit(fallos ? 1 : 0)
