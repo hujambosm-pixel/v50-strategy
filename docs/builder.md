@@ -3830,3 +3830,9 @@ Pedido por Sergi el 23/11 (ejemplo: pararse en cada cruce de la EMA 20, hacia ar
 Pedido por Sergi el 24/11 (más tiempo para probar las señales).
 - La ventana de empezar ofrece «Hace 1 año», «Hace 5 años», «Hace 10 años» y «Al azar» (antes 1, 2 y 5). El Replay usa las velas que tiene cargadas el gráfico (su periodo): si no hay tantos años (lib/replay/grafico.js anosCargados, con 0,1 años de margen), el botón sale apagado y su tooltip dice cuántos hay y que se amplíe el periodo del gráfico.
 - Prueba en replay-grafico.js: velas semanales del 02/01/2015 al 30/12/2022 = 7,99 años → «Hace 5 años» encendido (pone el 29/12/2017), «Hace 10 años» apagado con su aviso; ya no hay «Hace 2 años».
+## 242. Replay: toda la historia guardada del valor y texto de la ventana de empezar (24/11)
+Visto por Sergi el 24/11 (captura NVDA): con «Hace 10 años» el gráfico enseñaba UNA vela, y la ventana decía «Verás hasta el…» (se leía como «hasta» en vez de «desde»).
+- Causa: el Replay usaba las velas del gráfico, que son las del periodo elegido (10 años): empezar hace 10 años era empezar en la primera vela, sin nada detrás.
+- Ahora el Replay pide TODA la historia guardada del valor (/api/velas, diarias desde que hay datos; con el gráfico en semanales, semanas hechas con las diarias: lib/replay/grafico.js historiaReplay; solo velas cerradas). pages/index.js: historiaRep / baseReplay sustituyen a result.chartData en todo el Replay (ventana, avanzar, rangos, motor, señales, guardar, resultados). Mientras llega o si falla, la del gráfico. La ventana dice «Cargando las velas…» hasta tenerla.
+- Texto: «Empiezas el lun 28/11/2016: verás las velas hasta ese día y quedan 2.510 por descubrir (hay datos desde el …).»
+- Prueba en replay-grafico.js: historia diaria sin la vela en curso; semanal 01/01 (abre 10, máx 15, mín 9, cierra 14, vol 300) y la semana abierta fuera; textos nuevos.

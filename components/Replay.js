@@ -105,7 +105,7 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
             {hace(1)}{hace(5)}{hace(10)}{rapido('Al azar', () => inicioAlAzar(vs))}
           </div>
           <div style={{ color: '#7a9bc0', marginBottom: 14 }}>
-            {elegida ? <>Verás hasta el <b style={{ color: '#e2eaf5' }}>{diaSemana(elegida)} {fmt(elegida)}</b>; quedan {posicion(vs, elegida, elegida).quedan} velas por descubrir.</> : 'Elige un día.'}
+            {elegida ? <>Empiezas el <b style={{ color: '#e2eaf5' }}>{diaSemana(elegida)} {fmt(elegida)}</b>: verás las velas hasta ese día y quedan <b style={{ color: '#e2eaf5' }}>{posicion(vs, elegida, elegida).quedan.toLocaleString('es-ES')}</b> por descubrir{vs.length ? <> (hay datos desde el {fmt(vs[0].date)})</> : null}.</> : 'Elige un día.'}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 10px', alignItems: 'center', marginBottom: 14 }}>
             <span>Dinero inicial</span><span><input data-capital-replay="" value={aj.capital} onChange={e => setAj(x => ({ ...x, capital: e.target.value }))} style={{ fontFamily: MONO, fontSize: 13, padding: '3px 6px', width: 110, background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }} /> €</span>

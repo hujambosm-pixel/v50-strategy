@@ -21,7 +21,7 @@ import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/co
 import CandleChart from '../components/CandleChart'
 import VentanaIndicadores from '../components/VentanaIndicadores'
 import { BotonReplay, BotonDiana, VentanaReplay, BarraReplay, VentanaSenal } from '../components/Replay'   // §226: modo Replay del gráfico grande
-import { recortaVelas, desplazaRango, vecina, rangoVer } from '../lib/replay/grafico'
+import { recortaVelas, desplazaRango, vecina, rangoVer, historiaReplay } from '../lib/replay/grafico'
 import { irA as replayIrA, calcula as replayCalcula, cifras as replayCifras } from '../lib/replay/motor'
 import { marcasDe as replayMarcas, nuevaAccion as nuevaAccionReplay, tradesDe as tradesReplayDe } from '../lib/replay/orden'
 import { PanelOperar, ResultadosReplay } from '../components/PanelReplay'   // §228: operar en el Replay
@@ -46,7 +46,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1307'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1308'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1934,7 +1934,15 @@ export default function Home() {
   const anchoReplayRef=useRef(120)
   const anchoReplayCambia=(w)=>setReplayVer(v=>v===w?v:0)   // un zoom tuyo distinto de «Ver N» pasa a «Libre» (y se queda tu zoom)
   useEffect(()=>{ if(replay&&replay.valores[0]!==simbolo){ guardaReplay(replay,calcReplay); setReplay(null); isNewResultRef.current=true } },[simbolo])   // eslint-disable-line
-  const velasReplay=useMemo(()=>replay?recortaVelas(result?.chartData||[],replay.hoy):null,[replay?.hoy,result?.chartData])   // eslint-disable-line
+  // §242: el Replay usa TODA la historia guardada del valor (/api/velas), no solo el periodo del gráfico; mientras llega, la del gráfico.
+  const [historiaRep,setHistoriaRep]=useState(null)   // { sym, intervalo, velas }
+  const symHistRep=replay?replay.valores[0]:(ventanaReplay?simbolo:null)
+  useEffect(()=>{ if(!symHistRep||(historiaRep?.sym===symHistRep&&historiaRep?.intervalo===estrategiaIntervalo)) return; let vivo=true
+    apiFetch(`/api/velas?simbolo=${encodeURIComponent(symHistRep)}`).then(r=>r.ok?r.json():null).then(j=>{ if(vivo) setHistoriaRep({sym:symHistRep,intervalo:estrategiaIntervalo,velas:j?.velas?.length?historiaReplay(j.velas,estrategiaIntervalo,j.semanaAbierta):[]}) }).catch(()=>{ if(vivo) setHistoriaRep({sym:symHistRep,intervalo:estrategiaIntervalo,velas:[]}) })   // sin historia: la del gráfico
+    return ()=>{ vivo=false } },[symHistRep,estrategiaIntervalo])   // eslint-disable-line
+  const baseReplay=useMemo(()=>{ const s=replay?replay.valores[0]:simbolo; return (historiaRep?.sym===s&&historiaRep?.intervalo===estrategiaIntervalo&&historiaRep.velas.length>2)?historiaRep.velas:(result?.chartData||[]) },[historiaRep,replay?.valores?.[0],simbolo,estrategiaIntervalo,result?.chartData])   // eslint-disable-line
+  const historiaRepLista=historiaRep?.sym===simbolo&&historiaRep?.intervalo===estrategiaIntervalo
+  const velasReplay=useMemo(()=>replay?recortaVelas(baseReplay,replay.hoy):null,[replay?.hoy,baseReplay])   // eslint-disable-line
   // §229: el formulario de la orden vive aquí para que el gráfico lo rellene (🎯 / doble clic) y sus líneas se arrastren (lib/replay/borrador.js).
   // §234: el tamaño, «Stop a X %» y el R:R se recuerdan en el navegador (replay.orden) para el siguiente Replay.
   const formReplayInicial=()=>{ try{ const g=JSON.parse(localStorage.getItem('replay.orden')||'{}'); return {...FORM_REPLAY,...['modo','pct','stopPct','rr'].reduce((o,k)=>g[k]!=null?{...o,[k]:g[k]}:o,{})} }catch(_){ return FORM_REPLAY } }
@@ -1961,28 +1969,28 @@ export default function Home() {
       .then(ls=>{ if(vivo) setVelasExtraReplay(v=>({...v,...Object.fromEntries(ls)})) })
     return ()=>{ vivo=false } },[faltanVelasSenal.join(',')])   // eslint-disable-line
   const fechasSenalReplay=useMemo(()=>{ if(!replay||!senalConDefReplay||faltanVelasSenal.length) return null
-    const sym=replay.valores[0], velas=result?.chartData||[]
+    const sym=replay.valores[0], velas=baseReplay
     const sinPrecios=simbolosSenal(senalConDefReplay,sym,tickersDeReplay).filter(t=>!(velasExtraReplay[t]||[]).length)
     if(sinPrecios.length) return { error:`sin precios de ${sinPrecios.join(', ')}` }
     try{
       if(senalConDefReplay.tipo==='condicion'){ const velasDe=q=>(q===sym||q==='valor')?velas:(velasExtraReplay[q]||[]); return senalesCondicion(senalConDefReplay.filas,velasDe,velas.filter(v=>!v.enCurso).map(v=>v.date)) }
       const refs=Object.fromEntries(tickersDeReplay(senalConDefReplay.def).map(t=>[t,velasExtraReplay[t]||[]]))
       return senalesEstrategia({def:senalConDefReplay.def,params:senalConDefReplay.params||{},velas,referencias:refs})
-    }catch(e){ return { error:String(e?.message||e) } } },[senalConDefReplay,faltanVelasSenal.length,velasExtraReplay,result?.chartData,replay?.valores?.[0]])   // eslint-disable-line
+    }catch(e){ return { error:String(e?.message||e) } } },[senalConDefReplay,faltanVelasSenal.length,velasExtraReplay,baseReplay,replay?.valores?.[0]])   // eslint-disable-line
   // El gráfico pone sus marcas solo al rehacerse: una copia nueva de las velas cuando cambian las señales lo rehace (los ▲ salen sin avanzar).
   const velasGraficoReplay=useMemo(()=>velasReplay?[...velasReplay]:null,[velasReplay,fechasSenalReplay])   // eslint-disable-line
   const ahoraReplay=(velasReplay&&velasReplay.length)?velasReplay[velasReplay.length-1].close:null
   const terminadaReplayRef=useRef(false); terminadaReplayRef.current=!!replay?.terminada
   const limpiaMarcaReplay=()=>{ setCapturaReplay(null); setFormReplay(f=>({...f,mercado:true,entrada:'',stop:'',objetivo:''})) }
   const reiniciaMarcaReplay=()=>{ if(replayVer>0) anchoReplayRef.current=replayVer; setFormReplay(f=>({...FORM_REPLAY,modo:f.modo,pct:f.pct,stopPct:f.stopPct,rr:f.rr})); setCapturaReplay(null); setLineaElegidaReplay(null); setAvisoLineaReplay(''); setAvisoSenalReplay('') }
-  const empiezaReplay=(desde,aj={})=>{ reiniciaMarcaReplay(); nuevaSesionReplay(null,nombreReplayDe({valores:[simbolo],desde})); setVentanaReplay(false); const _r=rangoVer(result?.chartData||[],desde,replayVer); if(_r){ savedRangeRef.current=_r; isNewResultRef.current=false } else isNewResultRef.current=true; setReplay({version:1,valores:[simbolo],desde,hoy:desde,capitalInicial:10000,comision:0,ejecucion:'apertura',...aj,acciones:[],retrocesos:0,terminada:false}) }
+  const empiezaReplay=(desde,aj={})=>{ reiniciaMarcaReplay(); nuevaSesionReplay(null,nombreReplayDe({valores:[simbolo],desde})); setVentanaReplay(false); const _r=rangoVer(baseReplay,desde,replayVer); if(_r){ savedRangeRef.current=_r; isNewResultRef.current=false } else isNewResultRef.current=true; setReplay({version:1,valores:[simbolo],desde,hoy:desde,capitalInicial:10000,comision:0,ejecucion:'apertura',...aj,acciones:[],retrocesos:0,terminada:false}) }
   const saleReplay=()=>{ guardaReplay(replay,calcReplay); reiniciaMarcaReplay(); setReplay(null); isNewResultRef.current=true }
   // Avanzar o retroceder n velas: la ventana visible se mueve con ella (misma anchura). Devuelve false si no se movió (▶ deja de reproducir).
   const irAFechaReplay=(est,f)=>{ if(!f||f===est.hoy) return false
-    const _r=replayVer?rangoVer(result?.chartData||[],f,replayVer):null
+    const _r=replayVer?rangoVer(baseReplay,f,replayVer):null
     if(_r) savedRangeRef.current=_r; else if(savedRangeRef.current) savedRangeRef.current=desplazaRango(savedRangeRef.current,est.hoy,f)
     setAvisoLineaReplay(''); setAvisoSenalReplay(''); setReplay(replayIrA(est,f)); return true }
-  const avanzaReplay=(est,n)=>irAFechaReplay(est,vecina(result?.chartData||[],est.desde,est.hoy,n))
+  const avanzaReplay=(est,n)=>irAFechaReplay(est,vecina(baseReplay,est.desde,est.hoy,n))
   // §233: lo marcado en el gráfico ES la orden. Si se avanza mientras se marca y ya hay entrada, la orden se pone con lo marcado; sin entrada,
   // el marcado se cancela. Retroceder también cancela el marcado.
   const accionDeMarcaReplay=(f)=>{ if(!replay||!f.entrada) return null; const c=ordenDeMarcaReplay(f,ahoraReplay)
@@ -2006,10 +2014,10 @@ export default function Home() {
       opciones:[...(cond?[{valor:'cond',texto:`Condición: ${fraseFilasReplay(senalReplay.filas||[])}`},{valor:'cond-nueva',texto:'Cambiar la condición…'}]:[{valor:'cond',texto:'Una condición del catálogo…'}]),
         ...estrategiasSenalReplay.map(x=>({valor:'e:'+x.id,texto:`Estrategia «${x.name}»`}))],
       estado:!senalReplay?'sin':err?'error':Array.isArray(ff)?'lista':'cargando', n:Array.isArray(ff)?ff.length:0, aviso:err?`No se pueden buscar las señales: ${err}`:avisoSenalReplay } })()
-  const cambiaVerReplay=(v)=>{ setReplayVer(v); if(v>0) anchoReplayRef.current=v; const _r=replay&&v?rangoVer(result?.chartData||[],replay.hoy,v):null; if(!_r) return
+  const cambiaVerReplay=(v)=>{ setReplayVer(v); if(v>0) anchoReplayRef.current=v; const _r=replay&&v?rangoVer(baseReplay,replay.hoy,v):null; if(!_r) return
     savedRangeRef.current=_r; chartApiRef.current?.verVelas?.(v); chartApiFullscreenRef.current?.verVelas?.(v) }
   // §228: el motor recalcula la simulación desde el principio en cada cambio (acciones o vela de hoy).
-  const velasMotorReplay=useMemo(()=>replay?{[replay.valores[0]]:result?.chartData||[]}:null,[replay?.valores?.[0],result?.chartData])   // eslint-disable-line
+  const velasMotorReplay=useMemo(()=>replay?{[replay.valores[0]]:baseReplay}:null,[replay?.valores?.[0],baseReplay])   // eslint-disable-line
   const calcReplay=useMemo(()=>replay&&velasMotorReplay?replayCalcula(replay,velasMotorReplay):null,[replay,velasMotorReplay])
   const cifReplay=useMemo(()=>calcReplay?replayCifras(replay,velasMotorReplay,calcReplay):null,[calcReplay])   // eslint-disable-line
   const marcasReplay=useMemo(()=>calcReplay?replayMarcas(calcReplay):VACIO_REPLAY,[calcReplay])
@@ -2023,7 +2031,7 @@ export default function Home() {
   const ctxReplay=useMemo(()=>hayConfigSupabase()?ctxConSesion():null,[])
   const nuevaSesionReplay=(id,nombre)=>{ sesionReplayRef.current++; replayIdRef.current=id; nombreReplayRef.current=nombre; creandoReplayRef.current=null; ultimoGuardadoReplayRef.current=''; setReplayGuardado({id,nombre,estado:id?'guardado':''}) }
   const guardaReplay=async(est,calc)=>{ if(!est||!ctxReplay||!calc||!hayQueGuardarReplay(est)) return
-    const datos=paraGuardarReplay(est,{[est.valores[0]]:result?.chartData||[]},calc), json=JSON.stringify(datos)
+    const datos=paraGuardarReplay(est,{[est.valores[0]]:baseReplay},calc), json=JSON.stringify(datos)
     if(json===ultimoGuardadoReplayRef.current) return
     const tok=sesionReplayRef.current; ultimoGuardadoReplayRef.current=json
     const pon=(x)=>{ if(tok===sesionReplayRef.current) setReplayGuardado(g=>({...g,...x})) }
@@ -2048,7 +2056,7 @@ export default function Home() {
   const abreVentanaReplay=()=>{ setVentanaReplay(true); setGuardadosReplay(null); if(ctxReplay) leerSimulaciones(ctxReplay).then(f=>setGuardadosReplay(f)).catch(()=>setGuardadosReplay([])) }
   const borraReplayGuardado=async(id)=>{ try{ await borrarSimulacion(ctxReplay,id); setMisReplays(m=>m?{...m,filas:m.filas.filter(x=>x.id!==id)}:m) }catch(e){ setMisReplays(m=>m?{...m,error:e.message}:m) } }
   const aplicaReplayGuardado=(fila)=>{ const e=deGuardadoReplay(fila.estado); reiniciaMarcaReplay(); nuevaSesionReplay(fila.id,fila.nombre)
-    const _r=rangoVer(result?.chartData||[],e.hoy,replayVer); if(_r){ savedRangeRef.current=_r; isNewResultRef.current=false } else isNewResultRef.current=true
+    const _r=rangoVer(baseReplay,e.hoy,replayVer); if(_r){ savedRangeRef.current=_r; isNewResultRef.current=false } else isNewResultRef.current=true
     setReplay(e) }
   const abreReplayGuardado=(fila)=>{ const sym=(fila.estado?.valores||[])[0]; if(!sym) return; setMisReplays(null)
     if(replay) guardaReplay(replay,calcReplay)
@@ -5882,7 +5890,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1307</title>
+        <title>Trading Simulator V9.1308</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5971,7 +5979,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1307
+            <span className="dot"/>Trading Simulator V9.1308
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8301,7 +8309,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                   )}
 
                   {/* §228: en el Replay, sus operaciones y su curva del capital */}
-                  {replay&&calcReplay&&<ResultadosReplay estado={replay} r={calcReplay} cif={cifReplay} velas={result?.chartData||[]} simbolo={replay.valores[0]} onQuitar={op=>{ const n=quitaOperacionReplay(replay,op); if(n) setReplay(n) }}/>}
+                  {replay&&calcReplay&&<ResultadosReplay estado={replay} r={calcReplay} cif={cifReplay} velas={baseReplay} simbolo={replay.valores[0]} onQuitar={op=>{ const n=quitaOperacionReplay(replay,op); if(n) setReplay(n) }}/>}
                   {/* Equity + Barras + Historial — ocultos en Risk Management, bare chart y Replay (§226: dirían el futuro) */}
                   {!result.isBareChart&&sidePanel!=='risk'&&!replay&&<>
                   <div className="equity-section" onContextMenu={e=>openCtx(e,'equity')}>
@@ -11035,7 +11043,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
         onAceptar={f=>{ setSenalReplay({tipo:'condicion',filas:f}); setVentanaSenalReplay(false); setAvisoSenalReplay('') }} onCancelar={()=>setVentanaSenalReplay(false)}/>}
       {misReplays&&<MisReplays filas={misReplays.filas} cargando={misReplays.cargando} error={misReplays.error} abiertoId={replay?replayGuardado.id:null}
         onAbrir={abreReplayGuardado} onBorrar={borraReplayGuardado} onCerrar={()=>setMisReplays(null)}/>}
-      {ventanaReplay&&<VentanaReplay key={simbolo} simbolo={simbolo} velas={displayedSimbolo===simbolo?(result?.chartData||[]):[]} cargando={displayedSimbolo!==simbolo||!result?.chartData}
+      {ventanaReplay&&<VentanaReplay key={simbolo} simbolo={simbolo} velas={historiaRepLista&&(historiaRep.velas.length>2||displayedSimbolo===simbolo)?baseReplay:[]} cargando={!historiaRepLista||(historiaRep.velas.length<=2&&(displayedSimbolo!==simbolo||!result?.chartData))}
         onValorAzar={()=>{ const l=[...new Set((watchlist||[]).map(w=>w?.symbol).filter(x=>x&&x!==simbolo))]; if(l.length) setSimbolo(l[Math.floor(Math.random()*l.length)]) }} onEmpezar={empiezaReplay} onCancelar={()=>setVentanaReplay(false)}
         guardados={ctxReplay?guardadosReplay:[]} onAbrir={ctxReplay?(f=>{ setVentanaReplay(false); abreReplayGuardado(f) }):null}/>}
       {ventanaInd&&<VentanaIndicadores enGrafico={indicadores} onCerrar={()=>setVentanaInd(false)}

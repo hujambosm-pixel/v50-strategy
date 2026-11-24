@@ -81,14 +81,21 @@ const VELAS = F.map((date, i) => ({ date, open: 10 + i, high: 11 + i, low: 9 + i
   let empezo = null, cancelo = 0
   m = D.monta(React.createElement(RP.VentanaReplay, { simbolo: 'AAPL', velas: VELAS, onEmpezar: f => { empezo = f }, onCancelar: () => { cancelo++ } }), RDC); await D.espera(20)
   const v = () => m.raiz.busca(n => n.hasAttribute('data-ventana-replay')).textContent
-  ok(/Replay de AAPL/.test(v()) && /Verás hasta el mar 03\/01\/2023; quedan 8 velas/.test(v()), `propone «hace 1 año» (aquí, la 2.ª vela, mar 03/01) y dice cuántas quedan (${v().slice(0, 160)})`)
+  ok(/Replay de AAPL/.test(v()) && /Empiezas el mar 03\/01\/2023: verás las velas hasta ese día y quedan 8 por descubrir \(hay datos desde el 02\/01\/2023\)/.test(v()), `propone «hace 1 año» (aquí, la 2.ª vela, mar 03/01) y dice cuántas quedan (${v().slice(0, 160)})`)
   D.escribe(m.raiz.busca(n => n.hasAttribute('data-fecha-replay')), '2023-01-08'); await D.espera(10)
-  ok(/Verás hasta el vie 06\/01\/2023; quedan 5 velas/.test(v()), 'eligiendo el dom 08/01: empieza el vie 06/01, quedan 5')
+  ok(/Empiezas el vie 06\/01\/2023: verás las velas hasta ese día y quedan 5 por descubrir/.test(v()), 'eligiendo el dom 08/01: empieza el vie 06/01, quedan 5')
   D.pulsa(m.raiz.busca(n => n.hasAttribute('data-empezar-replay')))
   ok(empezo === F[4], '«Empezar» con el 06/01')
   for (const f of OV.keydown || []) f({ key: 'Escape', target: { tagName: 'DIV' }, preventDefault() {}, stopPropagation() {} })
   ok(cancelo === 1, 'Esc cierra la ventana')
   m.quita()
+
+  // ── §242: la historia del Replay (toda la guardada, solo cerradas; semanales hechas con las diarias) ──
+  const DI = [['2024-01-01',10,12,9,11],['2024-01-02',11,13,10,12],['2024-01-05',12,15,11,14],['2024-01-08',14,14,8,9],['2024-01-09',9,10,7,8,true]].map(([date,open,high,low,close,enCurso]) => ({ date, open, high, low, close, volume: 100, ...(enCurso ? { enCurso } : {}) }))
+  ok(igual(G.historiaReplay(DI, 'diario').map(v => v.date), ['2024-01-01','2024-01-02','2024-01-05','2024-01-08']), 'diario: todas menos la vela en curso')
+  const SE = G.historiaReplay(DI, 'semanal', '2024-01-08')
+  ok(SE.length === 1 && SE[0].date === '2024-01-01' && SE[0].open === 10 && SE[0].high === 15 && SE[0].low === 9 && SE[0].close === 14 && SE[0].volume === 300, `semanal: la semana del 01/01 (abre 10, máx 15, mín 9, cierra 14, vol 300); la del 08/01 está abierta y no sale (${JSON.stringify(SE)})`)
+  ok(G.historiaReplay(DI.slice(0, 4), 'semanal', null).length === 2, 'semanal sin semana abierta: la del 08/01 (solo con su lunes) sí sale')
 
   // ── §241: «Hace 1 / 5 / 10 años»; apagados si el gráfico no tiene tantos años cargados ──
   // Una vela cada 7 días del 02/01/2015 al 30/12/2022: 7,99 años (2.921 días ÷ 365,25).
