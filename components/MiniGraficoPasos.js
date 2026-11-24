@@ -91,12 +91,17 @@ export default function MiniGraficoPasos({ def, simbolo, velas = VACIO, cargaVel
             <rect x={X(i) - cw / 2} y={Y(Math.max(v.open, v.close))} width={cw} height={Math.max(0.6, Math.abs(Y(v.open) - Y(v.close)))} fill={sube ? K.verde : K.rojo}/></g> })}
         {medias.map((s, j) => <polyline key={'m' + j} fill="none" stroke={s.color} strokeWidth="1"
           points={Array.from({ length: b - a + 1 }, (_, q) => a + q).filter(i => s.valores[i] > 0).map(i => `${X(i).toFixed(1)},${Y(s.valores[i]).toFixed(1)}`).join(' ')}/>)}
-        {dib.lineas.map((l, j) => <g key={'l' + j} data-mini-linea={l.texto}>
-          <line x1={X(l.i0)} y1={Y(l.p0)} x2={X(l.i1)} y2={Y(l.p0)} stroke={K.lila} strokeDasharray="4 3" strokeWidth="1"/>
-          <line x1={X(l.i1)} y1={Y(l.p0)} x2={X(l.i1)} y2={Y(l.p1)} stroke={K.lila} strokeWidth="1"/>
-          <text x={X(l.i1) + 4} y={(Y(l.p0) + Y(l.p1)) / 2 + 3} fill={K.lila} fontWeight="bold">{l.texto}</text></g>)}
+        {dib.lineas.map((l, j) => { const elegida = l.i1 === iSenal, x0 = X(l.i0), x1 = X(l.i1), y0 = Y(l.p0), y1 = Y(l.p1)
+          // §246: punto en la referencia, línea discontinua hasta la vela de la señal, raya y punto en el precio EXACTO; texto solo en la elegida.
+          return <g key={'l' + j} data-mini-linea={l.texto} data-mini-elegida={elegida ? '' : undefined} opacity={elegida ? 1 : 0.3}>
+            {!l.fuera && <circle cx={x0} cy={y0} r="2.5" fill={K.lila}/>}
+            <line x1={x0} y1={y0} x2={x1} y2={y0} stroke={K.lila} strokeDasharray="4 3" strokeWidth="1"/>
+            <line x1={x1} y1={y0} x2={x1} y2={y1} stroke={K.lila} strokeDasharray="2 2" strokeWidth="1"/>
+            <line x1={x1 - 9} y1={y1} x2={x1 + 9} y2={y1} stroke={K.lila} strokeWidth="1.5"/>
+            <circle cx={x1} cy={y1} r="2.5" fill={K.texto} stroke={K.lila}/>
+            {elegida && <text data-mini-nivel="" x={x1 + 12} y={y1 + 3} fill={K.lila} fontWeight="bold">{l.precio} · {l.texto}</text>}</g> })}
         {dib.marcas.map((m, j) => { const v = e.velas[m.i], x = X(m.i)
-          if (m.tipo === 'senal') { const y = Y(v.low) + 4; return <path key={'s' + j} data-mini-marca="senal" d={`M${x} ${y} l-5 9 h10 z`} fill={K.lila}><title>{m.texto}</title></path> }
+          if (m.tipo === 'senal') { const y = Y(v.low) + 4; return <path key={'s' + j} data-mini-marca="senal" d={`M${x} ${y} l-5 9 h10 z`} fill={K.lila} opacity={m.i === iSenal ? 1 : 0.45}><title>{m.texto}</title></path> }
           if (m.tipo === 'armado') return <circle key={'r' + j} data-mini-marca="armado" cx={x} cy={Y(v.high) - 6} r="3.5" fill={K.azul}><title>{m.texto}</title></circle>
           return <text key={'x' + j} data-mini-marca="anulado" x={x} y={Y(v.high) - 3} textAnchor="middle" fill={K.rojo} fontSize="12" fontWeight="bold">✕<title>{m.texto}</title></text> })}
       </svg>

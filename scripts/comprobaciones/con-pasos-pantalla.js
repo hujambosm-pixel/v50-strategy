@@ -16,15 +16,17 @@ const fecha = (i) => new Date(Date.UTC(2020, 0, 1) + i * 864e5).toISOString().sl
   const S = require(R + '/lib/replay/senales.js')
 
   // ── Textos ──
-  ok(P.fraseMovimiento({ mov: 'cae', pct: 10, desde: 'maxHist', quien: 'AAPL' }) === 'el cierre de AAPL cae un 10 % desde su máximo histórico', 'una fila de movimiento en palabras')
-  ok(P.fraseMovimiento({ mov: 'mueve', pct: 2.5, desde: 'senal', quien: 'AAPL' }) === 'el cierre de AAPL se mueve un 2,5 % (arriba o abajo) desde el precio de la última señal', '«se mueve», con decimales en castellano')
+  ok(P.fraseMovimiento({ mov: 'cae', pct: 10, desde: 'maxHist', quien: 'AAPL' }) === 'el precio de AAPL cae un 10 % desde su máximo histórico', 'una fila de movimiento en palabras')
+  ok(P.fraseMovimiento({ mov: 'mueve', pct: 2.5, desde: 'senal', quien: 'AAPL' }) === 'el precio de AAPL se mueve un 2,5 % (arriba o abajo) desde el precio de la última señal', '«se mueve», con decimales en castellano')
+  ok(P.fraseMovimiento({ mov: 'cae', pct: 10, desde: 'maxN', n: 252, quien: 'AAPL', cuando: 'cierra', escalones: true }) === 'el cierre de AAPL cae un 10 % desde el máximo de las últimas 252 velas, y luego cada 10 % más',
+    '§246: «el cierre de», las últimas 252 velas y los escalones, en palabras')
 
   // ── La nueva y los ejemplos: válidos, y «Así se lee» ──
   ok(validaConPasos(P.conPasosNueva('AAPL')).length === 0, 'la condición nueva ya es válida (cae un 10 % desde su máximo histórico, cada vez)')
-  ok(P.fraseConPasos(P.conPasosNueva('AAPL')) === 'Cada vez que el cierre de AAPL cae un 10 % desde su máximo histórico → señal.', `«Así se lee» de la nueva (${P.fraseConPasos(P.conPasosNueva('AAPL'))})`)
+  ok(P.fraseConPasos(P.conPasosNueva('AAPL')) === 'Cada vez que el precio de AAPL cae un 10 % desde su máximo histórico → señal.', `«Así se lee» de la nueva (${P.fraseConPasos(P.conPasosNueva('AAPL'))})`)
   for (const x of P.EJEMPLOS_CON_PASOS) { const d = x.def('AAPL'); ok(validaConPasos(d).length === 0 && mismo(P.ajustaConPasos(d), d), `ejemplo «${x.nombre}»: válido y ya ajustado (${validaConPasos(d).join(' | ')})`) }
   const e1 = P.fraseConPasos(P.EJEMPLOS_CON_PASOS[0].def('AAPL'))
-  ok(e1 === 'Primero, el cierre de AAPL cae un 10 % desde su máximo histórico (y ya da señal); después, cada vez que el cierre de AAPL se mueve un 10 % (arriba o abajo) desde el precio de la última señal → señal. Con un máximo histórico nuevo, vuelve a esperar el paso 1.', `«Así se lee» del ejemplo 1 (${e1})`)
+  ok(e1 === 'Primero, el precio de AAPL cae un 10 % desde su máximo histórico (y ya da señal); después, cada vez que el precio de AAPL se mueve un 10 % (arriba o abajo) desde el precio de la última señal → señal. Con un máximo histórico nuevo, vuelve a esperar el paso 1.', `«Así se lee» del ejemplo 1 (${e1})`)
   const e3 = P.fraseConPasos(P.EJEMPLOS_CON_PASOS[2].def('AAPL'))
   ok(/^Primero, la media exponencial de 10 velas de AAPL está por encima de la media exponencial de 20 velas; después, la primera vez que AAPL cierra bajo su media exponencial de 10 velas → señal\. Si antes .* por debajo .*, se olvida el paso 1\. Vuelve a empezar con el siguiente paso 1\.$/.test(e3), `«Así se lee» del ejemplo 3 (${e3})`)
   ok(/^Mientras AAPL cierra sobre su media exponencial de 200 velas: cada vez que .*Fuera del tramo, nada\.$/.test(P.fraseConPasos(P.EJEMPLOS_CON_PASOS[1].def('AAPL'))), '«Así se lee» con «Mientras…» empieza por él y acaba en «Fuera del tramo, nada.»')
@@ -39,7 +41,7 @@ const fecha = (i) => new Date(Date.UTC(2020, 0, 1) + i * 864e5).toISOString().sl
   const sinTramo = P.ajustaConPasos({ ...tramo, mientras: null })
   ok(sinTramo.paso1.filas[0].desde === 'maxHist' && validaConPasos(sinTramo).length === 0, 'quitar «Mientras…»: «el máximo del tramo» pasa a «su máximo histórico»')
   ok(P.ajustaConPasos({ ...P.conPasosNueva('A'), paso1: { filas: [{ mov: 'cae', pct: 5, desde: 'paso1', quien: 'A' }] } }).paso1.filas[0].desde === 'maxHist', '«el precio del paso 1» no vale en el paso 1: pasa a «su máximo histórico»')
-  ok(igual(P.referenciasPara('paso2', d2), ['maxHist', 'maxTramo', 'minTramo', 'maxSenal', 'minSenal', 'senal', 'paso1', 'compra']) && igual(P.referenciasPara('paso1', P.conPasosNueva('A')), ['maxHist', 'maxSenal', 'minSenal', 'senal', 'compra']) && P.referenciasPara('mientras', d2).length === 0,
+  ok(igual(P.referenciasPara('paso2', d2), ['maxHist', 'maxN', 'minN', 'maxTramo', 'minTramo', 'maxSenal', 'minSenal', 'senal', 'paso1', 'compra']) && igual(P.referenciasPara('paso1', P.conPasosNueva('A')), ['maxHist', 'maxN', 'minN', 'maxSenal', 'minSenal', 'senal', 'compra']) && P.referenciasPara('mientras', d2).length === 0,
     'desde dónde: el tramo solo con «Mientras…», el paso 1 solo en el paso 2 y «se anula si», nada en «Mientras…»')
   ok(igual(P.opcionesEmpieza({ veces: 'primera', paso2: {}, mientras: {} }).map(o => o[0]), ['paso1', 'tramo', 'maxHist']) && igual(P.opcionesEmpieza({ veces: 'cada', paso2: {} }).map(o => o[0]), ['maxHist', 'nunca']) && P.opcionesEmpieza({ veces: 'cada' }).length === 0,
     '«vuelve a empezar»: las opciones que valen en cada caso')
@@ -56,11 +58,11 @@ const fecha = (i) => new Date(Date.UTC(2020, 0, 1) + i * 864e5).toISOString().sl
   const F = V.map(v => v.date)
   const r1 = senalesConPasos(P.EJEMPLOS_CON_PASOS[0].def('A'), () => V, F, { simbolo: 'A' })
   ok(igual(r1.senales, [F[2], F[4], F[5], F[7]]), `ejemplo 1: señales en las velas 2, 4, 5 y 7 (${JSON.stringify(r1.senales)})`)
-  // «Tu última compra»: compras a mano a 95 en la vela 1 → «cae un 5 % desde tu última compra» = 90,25 → vela 2 (90) y vela 5 (89,1; la 4
-  // cerró a 99, por encima). Sin compra, nada.
+  // «Tu última compra»: compras a mano a 95 en la vela 1 → «cae un 5 % desde tu última compra» = 90,25 → vela 2 (90). La vela 5 (89,1) ya
+  // no: es el mismo nivel de la misma compra (§246: cada nivel salta una vez). Sin compra, nada.
   const conCompra = { ...P.conPasosNueva('A'), paso1: { filas: [{ mov: 'cae', pct: 5, desde: 'compra', quien: 'A' }] } }
-  ok(igual(senalesConPasos(conCompra, () => V, F, { simbolo: 'A', compras: [{ fecha: F[1], precio: 95 }] }).senales, [F[2], F[5]]) && senalesConPasos(conCompra, () => V, F, { simbolo: 'A' }).senales.length === 0,
-    'desde tu última compra (95 en la vela 1): 95 × 0,95 = 90,25 → señales en las velas 2 y 5; sin compra, ninguna')
+  ok(igual(senalesConPasos(conCompra, () => V, F, { simbolo: 'A', compras: [{ fecha: F[1], precio: 95 }] }).senales, [F[2]]) && senalesConPasos(conCompra, () => V, F, { simbolo: 'A' }).senales.length === 0,
+    'desde tu última compra (95 en la vela 1): 95 × 0,95 = 90,25 → señal en la vela 2 (la 5, mismo nivel: no); sin compra, ninguna')
 
   // ── La barra: qué velas pedir y qué dibujar ──
   const sQ = { tipo: 'pasos', def: { ...d2, mientras: { filas: [{ quien: 'QQQ', velas: 'diarias', si: { c: 'precioVsMedia', p: { lado: 'encima', tipo: 'EMA', periodo: 200 } } }] } } }
@@ -79,8 +81,8 @@ const fecha = (i) => new Date(Date.UTC(2020, 0, 1) + i * 864e5).toISOString().sl
   ok(attr(m.raiz, 'data-modo-senal', 'condicion') && attr(m.raiz, 'data-modo-senal', 'pasos') && !attr(m.raiz, 'data-editor-pasos'), 'la ventana empieza en «Una condición», con la pestaña «Condición con pasos» al lado')
   ok(D.propsDe(attr(m.raiz, 'data-aceptar-senal')).disabled === true, 'sin condición, «Usar esta señal» apagado')
   D.pulsa(attr(m.raiz, 'data-modo-senal', 'pasos')); await D.espera(20)
-  ok(attr(m.raiz, 'data-editor-pasos') && attr(m.raiz, 'data-fila-mov', 0) && /Cada vez que el cierre de AAPL cae un 10 % desde su máximo histórico/.test(attr(m.raiz, 'data-asi-se-lee-pasos').textContent),
-    'con pasos: el paso 1 nace con «el cierre de AAPL cae un 10 % desde su máximo histórico» y su «Así se lee»')
+  ok(attr(m.raiz, 'data-editor-pasos') && attr(m.raiz, 'data-fila-mov', 0) && /Cada vez que el precio de AAPL cae un 10 % desde su máximo histórico/.test(attr(m.raiz, 'data-asi-se-lee-pasos').textContent),
+    'con pasos: el paso 1 nace con «el precio de AAPL cae un 10 % desde su máximo histórico» y su «Así se lee»')
   ok(!attr(m.raiz, 'data-boton', 'anadir-movimiento') === false && !attr(m.raiz, 'data-seccion-pasos', 'paso2') && attr(m.raiz, 'data-pon-seccion', 'paso2') && attr(m.raiz, 'data-pon-seccion', 'mientras') && !attr(m.raiz, 'data-pon-seccion', 'anula'),
     'botones «+ cae / sube un %», «+ Mientras…» y «+ Paso 2»; «+ Se anula si…» solo con paso 2')
   D.escribe(attr(m.raiz, 'data-pct-mov', 0), '15'); await D.espera(10)
@@ -88,6 +90,16 @@ const fecha = (i) => new Date(Date.UTC(2020, 0, 1) + i * 864e5).toISOString().sl
   D.escribe(attr(m.raiz, 'data-pct-mov', 0), ''); await D.espera(10)
   ok(attr(m.raiz, 'data-errores-pasos') && D.propsDe(attr(m.raiz, 'data-aceptar-senal')).disabled === true, 'sin %: el error en rojo y «Usar esta señal» apagado')
   D.escribe(attr(m.raiz, 'data-pct-mov', 0), '10'); await D.espera(10)
+  // §246: «el cierre de», «el máximo de las últimas N velas» (nace con 252) y «y luego cada 10 % más».
+  D.escribe(attr(m.raiz, 'data-cuando-mov', 0), 'cierra'); await D.espera(10)
+  D.escribe(attr(m.raiz, 'data-desde-mov', 0), 'maxN'); await D.espera(10)
+  const esc = attr(m.raiz, 'data-escalones-mov', 0); esc.checked = true; D.propsDe(esc).onChange({ target: esc }); await D.espera(10)
+  ok(D.propsDe(attr(m.raiz, 'data-n-mov', 0)).value === 252 && /el cierre de AAPL cae un 10 % desde el máximo de las últimas 252 velas, y luego cada 10 % más/.test(attr(m.raiz, 'data-asi-se-lee-pasos').textContent),
+    '«el cierre de», «últimas 252 velas» y escalones: se ven en «Así se lee»')
+  D.escribe(attr(m.raiz, 'data-desde-mov', 0), 'maxHist'); await D.espera(10)
+  D.escribe(attr(m.raiz, 'data-cuando-mov', 0), 'toca'); await D.espera(10)
+  esc.checked = false; D.propsDe(attr(m.raiz, 'data-escalones-mov', 0)).onChange({ target: esc }); await D.espera(10)
+  ok(!attr(m.raiz, 'data-n-mov', 0) && /Cada vez que el precio de AAPL cae un 10 % desde su máximo histórico → señal/.test(attr(m.raiz, 'data-asi-se-lee-pasos').textContent), 'y de vuelta: sin las velas y como al principio')
   D.pulsa(attr(m.raiz, 'data-pon-seccion', 'paso2')); await D.espera(20)
   const p2 = attr(m.raiz, 'data-seccion-pasos', 'paso2')
   ok(p2 && attr(m.raiz, 'data-da-senal') && attr(m.raiz, 'data-pon-seccion', 'anula') && /el precio del paso 1/.test(p2.textContent), 'al poner el paso 2: sale, con «este paso también da señal» en el paso 1 y «+ Se anula si…»; el paso 2 mide desde el precio del paso 1')

@@ -48,30 +48,30 @@ const mov = (m, pct, desde, extra = {}) => ({ mov: m, pct, desde, quien: 'A', ..
 
   // ── Ejemplo 2: mientras el cierre de B esté sobre su SMA 3 (tramos k1–k10 y desde k20), cada vez que A cae un 5 %…
   // A (k0…k25): 100 100 104 98,5 99 98 93 93 93 93 93, k11–k20 80, k21–k25 75.
-  //   «… desde el máximo del tramo»: tramo 1 desde k1 (100); k2 104 → máximo 104, umbral 98,8. k3: 98,5 → SEÑAL. k4: 99 no. k5: 98 → SEÑAL
-  //   (vuelve a cruzar). k6: 93, seguía cumpliéndose → no. Tramo 2 desde k20: máximo 80, umbral 76; k21: 75 → SEÑAL. → k3, k5, k21.
+  //   «… desde el máximo del tramo»: tramo 1 desde k1 (100); k2 104 → máximo 104, umbral 98,8. k3: 98,5 → SEÑAL. k4: 99 no. k5: 98 ya NO
+  //   (§246: el nivel 98,8 del máximo 104 ya saltó). Tramo 2 desde k20: máximo 80, umbral 76; k21: 75 → SEÑAL. → k3, k21.
   //   «… desde el máximo desde la última señal»: k3 SEÑAL (98,5). k4 99 → máximo 99, umbral 94,05. k5 98 no. k6 93 → SEÑAL. k21 → SEÑAL.
   const A2 = serie([100, 100, 104, 98.5, 99, 98, 93, 93, 93, 93, 93, ...Array(10).fill(80), 75, 75, 75, 75, 75])
   const ej2 = (desde) => ({ version: 1, mientras: { filas: [sma3('encima')] }, paso1: { filas: [mov('cae', 5, desde)] }, paso2: null, anula: null, veces: 'cada', empieza: 'tramo' })
   const r2a = corre(A2, ej2('maxTramo')), r2b = corre(A2, ej2('maxSenal'))
-  ok(igual(r2a.senales, Fs(3, 5, 21)), `ejemplo 2 «desde el máximo del tramo»: k3, k5 y k21 (salta otra vez al volver a cruzar el −5 %) (${JSON.stringify(r2a.senales)})`)
+  ok(igual(r2a.senales, Fs(3, 21)), `ejemplo 2 «desde el máximo del tramo»: k3 y k21 (k5 no: cada nivel salta una vez) (${JSON.stringify(r2a.senales)})`)
   ok(igual(r2b.senales, Fs(3, 6, 21)), `ejemplo 2 «desde el máximo desde la última señal»: k3, k6 y k21 (una por caída) (${JSON.stringify(r2b.senales)})`)
   ok(igual(r2a.tramos, [{ desde: F(1), hasta: F(10) }, { desde: F(20), hasta: null }]), `tramos: k1–k10 y desde k20 (${JSON.stringify(r2a.tramos)})`)
-  ok(r2a.detalle[0].movimientos[0].precioRef === 104 && r2a.detalle[0].movimientos[0].fechaRef === F(2) && r2a.detalle[2].movimientos[0].precioRef === 80 && r2a.detalle[2].movimientos[0].fechaRef === F(20),
+  ok(r2a.detalle[0].movimientos[0].precioRef === 104 && r2a.detalle[0].movimientos[0].fechaRef === F(2) && r2a.detalle[1].movimientos[0].precioRef === 80 && r2a.detalle[1].movimientos[0].fechaRef === F(20),
     'el máximo del tramo: 104 (k2) en el 1.º; en el 2.º empieza de cero: 80 (k20)')
 
   // ── Ejemplo 3: primero B cruza por encima de su SMA 3 (k1 y k20); después, la PRIMERA vez que A cae un 5 % desde el precio del paso 1;
   // se anula si B pasa por debajo de su SMA 3 (k11); vuelve a empezar con el siguiente paso 1.
   // A (k0…k25): 100 100 98 95 90 96 94 94 94 94 94, k11–k20 80, k21–k25 75.
   //   k1: armado (A = 100, umbral 95). k3: 95 → SEÑAL; «solo la primera» → hecho. k6 (94) no cuenta. k20: armado otra vez (80, umbral 76).
-  //   k21: 75 → SEÑAL. → k3, k21. Con «cada vez»: k3; k4 90 seguía; k5 96 deja de cumplirse; k6 94 → SEÑAL; k11 se anula; k20 arma; k21. → k3, k6, k21.
+  //   k21: 75 → SEÑAL. → k3, k21. Con «cada vez»: k3; k6 94 ya no (el nivel 95 del paso 1 de k1 ya saltó); k11 se anula; k20 arma; k21. → k3, k21.
   const A3 = serie([100, 100, 98, 95, 90, 96, 94, 94, 94, 94, 94, ...Array(10).fill(80), 75, 75, 75, 75, 75])
   const ej3 = { version: 1, mientras: null, paso1: { filas: [sma3('encima')], daSenal: false }, paso2: { filas: [mov('cae', 5, 'paso1')] }, anula: { filas: [sma3('debajo')] }, veces: 'primera', empieza: 'paso1' }
   ok(K.validaConPasos(ej3).length === 0, 'ejemplo 3: válido')
   const r3 = corre(A3, ej3)
   ok(igual(r3.senales, Fs(3, 21)), `ejemplo 3 «solo la primera»: k3 y k21 (${JSON.stringify(r3.senales)})`)
   ok(igual(r3.eventos.filter(e => e.tipo === 'armado').map(e => e.fecha), Fs(1, 20)), 'armado en k1 y k20')
-  ok(igual(corre(A3, { ...ej3, veces: 'cada' }).senales, Fs(3, 6, 21)), 'ejemplo 3 «cada vez»: k3, k6 y k21')
+  ok(igual(corre(A3, { ...ej3, veces: 'cada' }).senales, Fs(3, 21)), 'ejemplo 3 «cada vez»: k3 y k21 (k6 no: mismo nivel)')
   ok(igual(corre(A3, { ...ej3, paso1: { ...ej3.paso1, daSenal: true } }).senales, Fs(1, 3, 20, 21)), 'con «el paso 1 también da señal»: k1, k3, k20 y k21')
   // Se anula: A no cae hasta k12 (94), pero en k11 B pasa por debajo de su SMA 3 → se olvida el paso 1; k20 arma; k21 → SEÑAL.
   const A3b = serie([...Array(12).fill(100), ...Array(8).fill(94), 80, 75, 75, 75, 75, 75])
@@ -95,6 +95,33 @@ const mov = (m, pct, desde, extra = {}) => ({ mov: m, pct, desde, quien: 'A', ..
   // ── Solo con filas del catálogo, «cada vez»: lo mismo que la señal del Replay de hoy (senalesCondicion).
   const fech = A1.map(x => x.date), vd = (q) => ({ A: A1, B }[q] || [])
   ok(igual(K.senalesConPasos({ ...ej4, paso1: { filas: [sma3('encima')] } }, vd, fech, { simbolo: 'A' }).senales, S.senalesCondicion([sma3('encima')], vd, fech)), 'solo catálogo y «cada vez» = senalesCondicion (k1 y k20)')
+
+  // ── §246: velas con máximo y mínimo. Tras 5 velas planas a 100 (abre / máx. / mín. / cierre):
+  //   k0 100/112/99/110 → máximo histórico 112 (el MÁXIMO de la vela, no el cierre). Nivel −10 %: 100,80.
+  //   k1 108/109/100/101: el mínimo 100 llega al 100,80 → «toca»: SEÑAL a 100,80 exactos (abrió por encima). «cierra»: 101 > 100,80, no.
+  //   k2 101/103/99/100,5: mismo máximo (112) → ese nivel ya saltó: «toca» no. «cierra»: 100,5 ≤ 100,80 → SEÑAL a 100,5 (su primera).
+  //   k3 95/97/90/96: nada (en escalones, el 2.º nivel es 112 × 0,80 = 89,60 y el mínimo 90 no llega).
+  //   k4 88/89/85/86: en escalones, abre a 88, ya por debajo de 89,60 → SEÑAL a 88 (hueco: a la apertura); el 3.º (78,40) no.
+  //   k5 115/125/114/124: máximo nuevo 125 → nivel nuevo 112,50 (para «toca», desde mañana).
+  //   k6 120/121/112/113: el mínimo 112 llega al 112,50 → «toca» (y en escalones, su 1.er nivel): SEÑAL a 112,50. «cierra»: 113, no.
+  const ohlc = (xs) => [...Array(P).fill([100, 100, 100, 100]), ...xs].map(([o, h, l, c], i) => ({ date: fecha(i), open: o, high: h, low: l, close: c, volume: 1000 }))
+  const A6 = ohlc([[100, 112, 99, 110], [108, 109, 100, 101], [101, 103, 99, 100.5], [95, 97, 90, 96], [88, 89, 85, 86], [115, 125, 114, 124], [120, 121, 112, 113]])
+  const c6 = (extra) => corre(A6, { ...ej4, paso1: { filas: [mov('cae', 10, 'maxHist', extra)] } })
+  const t6 = c6({}), e6 = c6({ escalones: true }), z6 = c6({ cuando: 'cierra' })
+  ok(igual(t6.senales, Fs(1, 6)), `«toca» (por defecto): k1 y k6; k2 no, el nivel de 112 ya saltó (${JSON.stringify(t6.senales)})`)
+  const m1 = t6.detalle[0].movimientos[0]
+  ok(m1.precioRef === 112 && m1.fechaRef === F(0) && Math.abs(m1.precio - 100.8) < 1e-9 && Math.abs(m1.cambio + 0.1) < 1e-12 && m1.cuando === 'toca' && Math.abs(t6.detalle[1].movimientos[0].precio - 112.5) < 1e-9,
+    'k1: desde el MÁXIMO de la vela (112, k0) al nivel exacto 100,80 (−10,0 %); k6: 125 → 112,50')
+  ok(igual(e6.senales, Fs(1, 4, 6)) && e6.detalle[1].movimientos[0].escalon === 2 && e6.detalle[1].movimientos[0].precio === 88 && e6.detalle[2].movimientos[0].escalon === 1,
+    `en escalones: k1 (100,80), k4 (2.º escalón, 89,60; abrió a 88 → 88) y k6 (máximo nuevo: 1.er escalón) (${JSON.stringify(e6.senales)})`)
+  ok(igual(z6.senales, Fs(2)) && z6.detalle[0].movimientos[0].precio === 100.5, `«cierra»: solo k2 a 100,50 (${JSON.stringify(z6.senales)})`)
+  // Últimas N velas: planas 120 (k0), 110 (k1), 100 (k2), 99 (k3). «Cae un 10 % desde el máximo de las 2 velas anteriores»: k2 (máx. 120 →
+  // 108; abre a 100 → 100), k3 (máx. de k1–k2 = 110 → 99,00). Con el máximo histórico: solo k2 (el nivel de 120 ya saltó).
+  const A7 = serie([120, 110, 100, 99])
+  ok(igual(corre(A7, { ...ej4, paso1: { filas: [mov('cae', 10, 'maxN', { n: 2 })] } }).senales, Fs(2, 3)) && igual(corre(A7, { ...ej4, paso1: { filas: [mov('cae', 10, 'maxHist')] } }).senales, Fs(2)),
+    'máximo de las últimas 2 velas: k2 (120) y k3 (110 → 99); con el máximo histórico, solo k2')
+  ok(/las velas, de 2 a 5000/.test(K.validaConPasos({ ...ej4, paso1: { filas: [mov('cae', 10, 'maxN', { n: 1 })] } }).join()) && /«toca» o «cierra»/.test(K.validaConPasos({ ...ej4, paso1: { filas: [mov('cae', 10, 'maxHist', { cuando: 'x' })] } }).join()),
+    'valida las velas de «últimas N» y «toca / cierra»')
 
   // ── Validar ──
   const errores = (d) => K.validaConPasos(d).join(' | ')

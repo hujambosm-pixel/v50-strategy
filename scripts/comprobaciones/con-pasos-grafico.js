@@ -39,11 +39,11 @@ const velasDe = (cierres) => cierres.map((c, i) => ({ date: fecha(i), open: c, h
   const d = G.dibujoEscenario(e, 0, 7)
   ok(igual(d.marcas.filter(m => m.tipo === 'armado').map(m => m.i), [2, 7]), `● paso 1 armado en las velas 2 y 7 (tras el máximo histórico nuevo de la 6) (${JSON.stringify(d.marcas.filter(m => m.tipo === 'armado').map(m => m.i))})`)
   ok(igual(d.marcas.filter(m => m.tipo === 'senal').map(m => m.i), [2, 4, 5, 7]), '▲ en las velas 2, 4, 5 y 7')
-  ok(igual(d.lineas.map(l => [l.i0, l.p0, l.i1, l.p1, l.texto]), [[0, 100, 2, 90, '−10,0 %'], [2, 90, 4, 99, '+10,0 %'], [4, 99, 5, 89.1, '−10,0 %'], [6, 120, 7, 108, '−10,0 %']]),
+  ok(igual(d.lineas.map(l => [l.i0, l.p0, l.i1, l.p1, l.texto, l.precio]), [[0, 100, 2, 90, '−10,0 %', '90,00'], [2, 90, 4, 99, '+10,0 %', '99,00'], [4, 99, 5, 89.1, '−10,0 %', '89,10'], [6, 120, 7, 108, '−10,0 %', '108,00']]),
     `líneas de referencia: 100 → 90 (−10 %), 90 → 99 (+10 %), 99 → 89,1 (−10 %), 120 → 108 (−10 %) (${JSON.stringify(d.lineas.map(l => l.texto))})`)
-  ok(/Señal \(paso 1\) · 03\/01\/2020 · cierre 90,00\nA: de 100,00 \(01\/01\/2020\) a 90,00, −10,0 %/.test(d.marcas.find(m => m.tipo === 'senal').texto), 'el porqué de la primera señal al pasar el ratón')
+  ok(/Señal \(paso 1\) · 03\/01\/2020 · a 90,00\nA: de 100,00 \(01\/01\/2020\) a 90,00, −10,0 %/.test(d.marcas.find(m => m.tipo === 'senal').texto), 'el porqué de la primera señal al pasar el ratón')
   const d3 = G.dibujoEscenario(e, 3, 7)
-  ok(igual(d3.lineas[0], { i0: 3, fuera: true, p0: 90, i1: 4, p1: 99, texto: '+10,0 %' }) && !d3.marcas.some(m => m.i < 3), 'con la ventana desde la vela 3: la referencia de la vela 2 empieza en el borde (fuera) y no hay marcas antes')
+  ok(igual(d3.lineas[0], { i0: 3, fuera: true, p0: 90, i1: 4, p1: 99, texto: '+10,0 %', precio: '99,00' }) && !d3.marcas.some(m => m.i < 3), 'con la ventana desde la vela 3: la referencia de la vela 2 empieza en el borde (fuera) y no hay marcas antes')
   // Tramos: «Mientras el cierre está sobre su SMA 2». Cierres 10, 11, 12, 11, 10, 11, 12: SMA 2 = —, 10,5, 11,5, 11,5, 10,5, 10,5, 11,5 → dentro 1–2 y 5–6.
   const VT = velasDe([10, 11, 12, 11, 10, 11, 12])
   const dt = { ...P.conPasosNueva('A'), mientras: { filas: [{ quien: 'A', velas: 'diarias', si: { c: 'precioVsMedia', p: { lado: 'encima', tipo: 'SMA', periodo: 2 } } }] }, paso1: { filas: [{ mov: 'cae', pct: 50, desde: 'maxHist', quien: 'A' }] } }
@@ -68,6 +68,7 @@ const velasDe = (cierres) => cierres.map((c, i) => ({ date: fecha(i), open: c, h
   D.pulsa(attr(m.raiz, 'data-mini-modo', 'reales')); await D.espera(30)
   ok(attr(m.raiz, 'data-mini-pasos', 'reales') && attr(m.raiz, 'data-mini-n').getAttribute('data-mini-n') === '4' && /toda la historia de A/.test(m.raiz.textContent) && /después de hoy/.test(m.raiz.textContent),
     '«Velas reales»: las del valor (4 señales en toda su historia) y el aviso de que se ve lo de después de hoy')
+  ok(todos(m.raiz, 'data-mini-elegida').length === 1 && /^90,00 · −10,0 %$/.test(attr(m.raiz, 'data-mini-nivel').textContent), 'solo la señal elegida lleva su texto: «90,00 · −10,0 %»')
   ok(attr(m.raiz, 'data-mini-hoy') && igual(todos(m.raiz, 'data-mini-linea').map(n => n.getAttribute('data-mini-linea')), ['−10,0 %', '+10,0 %', '−10,0 %', '−10,0 %']), 'la raya de «hoy en el Replay» y las 4 líneas con su %')
   D.pulsa(attr(m.raiz, 'data-mini-siguiente')); await D.espera(10)
   ok(/señal 2 de 4 · 05\/01\/2020/.test(attr(m.raiz, 'data-mini-k').textContent), '▶: la señal 2 de 4 (05/01/2020)')

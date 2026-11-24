@@ -28,7 +28,8 @@ const AYUDA_UNION = '«Y ADEMÁS»: la señal pide que se cumplan las dos filas 
 // Sin ella (alertas, la señal de siempre), todo igual que antes.
 const guardaFilas = (xs) => xs.map((f, k) => {
   const u = k ? { union: f.union === 'O' ? 'O' : 'Y' } : {}
-  if (f.mov !== undefined) return { mov: f.mov, pct: f.pct, desde: f.desde, quien: f.quien, ...u }
+  if (f.mov !== undefined) return { mov: f.mov, pct: f.pct, desde: f.desde, quien: f.quien, ...(f.cuando === 'cierra' ? { cuando: 'cierra' } : {}),
+    ...(f.escalones ? { escalones: true } : {}), ...(f.desde === 'maxN' || f.desde === 'minN' ? { n: f.n } : {}), ...u }
   const { union, ...g } = filasGuardadasRegla([f])[0]
   return { ...g, ...u }
 })
@@ -71,7 +72,8 @@ export default function FilasAlerta({ simbolo, filas, onCambia, inicial = null, 
             : <div style={{ ...S.apagado, marginTop: 6 }}>y además</div>)}
           {f.mov !== undefined ? (
             <div data-fila-mov={j} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-              <span style={S.secundario}>el cierre de</span>
+              <select data-cuando-mov={j} aria-label="Toca o cierra" style={mini} value={f.cuando === 'cierra' ? 'cierra' : 'toca'} onChange={e => cambiaFila(j, { cuando: e.target.value })}>
+                <option value="toca">el precio de</option><option value="cierra">el cierre de</option></select>
               <select data-quien-mov={j} aria-label="De quién" style={mini} value={f.quien || ''}
                 onChange={e => { const q = e.target.value; if (q === OTRO_REGLA) { setOtro(j); setOtroTxt('') } else { setOtro(null); cambiaFila(j, { quien: q }) } }}>
                 {opcionesQuienRegla([sim].filter(Boolean), f.quien).map(o => <option key={o.v} value={o.v}>{o.t}</option>)}</select>
@@ -81,8 +83,15 @@ export default function FilasAlerta({ simbolo, filas, onCambia, inicial = null, 
                 onChange={e => cambiaFila(j, { pct: e.target.value === '' ? null : Number(e.target.value) })}
                 style={{ ...mini, width: 58, borderColor: Number.isFinite(f.pct) && f.pct > 0 && f.pct < 100 ? undefined : C.rojo }}/>
               <span style={S.secundario}>%{f.mov === 'mueve' ? ' (arriba o abajo)' : ''} desde</span>
-              <select data-desde-mov={j} aria-label="Desde dónde se mide" style={mini} value={f.desde} onChange={e => cambiaFila(j, { desde: e.target.value })}>
+              <select data-desde-mov={j} aria-label="Desde dónde se mide" style={mini} value={f.desde}
+                onChange={e => { const d = e.target.value; cambiaFila(j, (d === 'maxN' || d === 'minN') && !Number.isInteger(f.n) ? { desde: d, n: 252 } : { desde: d }) }}>
                 {(movimientos || []).concat((movimientos || []).includes(f.desde) ? [] : [f.desde]).map(v => <option key={v} value={v}>{REF_TEXTO[v] || v}</option>)}</select>
+              {(f.desde === 'maxN' || f.desde === 'minN') && <><input data-n-mov={j} type="number" min="2" max="5000" step="1" aria-label="Cuántas velas" value={Number.isFinite(f.n) ? f.n : ''}
+                onChange={e => cambiaFila(j, { n: e.target.value === '' ? null : Number(e.target.value) })}
+                style={{ ...mini, width: 66, borderColor: Number.isInteger(f.n) && f.n >= 2 && f.n <= 5000 ? undefined : C.rojo }}/><span style={S.secundario}>velas</span></>}
+              <label style={{ ...S.secundario, display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} title="Con el mismo punto de referencia: −10 %, −20 %, −30 %…">
+                <input data-escalones-mov={j} type="checkbox" checked={!!f.escalones} onChange={e => cambiaFila(j, { escalones: e.target.checked })} style={{ width: 'auto', margin: 0 }}/>
+                y luego cada {Number.isFinite(f.pct) ? String(f.pct).replace('.', ',') : '…'} % más</label>
               <Ayuda texto={AYUDA_PASOS.movimiento} etiqueta="Cae / sube un % desde…" zIndice={10100}/>
               <button type="button" style={{ ...S.enlace, color: B.apagado, fontSize: 18, lineHeight: 1 }} aria-label="Quitar esta condición" onClick={() => { setOtro(null); ponFilas(xs => xs.filter((_, q) => q !== j)) }}>×</button>
             </div>
