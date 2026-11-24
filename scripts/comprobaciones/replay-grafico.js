@@ -90,6 +90,18 @@ const VELAS = F.map((date, i) => ({ date, open: 10 + i, high: 11 + i, low: 9 + i
   ok(cancelo === 1, 'Esc cierra la ventana')
   m.quita()
 
+  // ── §241: «Hace 1 / 5 / 10 años»; apagados si el gráfico no tiene tantos años cargados ──
+  // Una vela cada 7 días del 02/01/2015 al 30/12/2022: 7,99 años (2.921 días ÷ 365,25).
+  const LARGAS = []; for (let d = new Date(Date.UTC(2015, 0, 2)); d <= new Date(Date.UTC(2022, 11, 30)); d = new Date(d.getTime() + 7 * 864e5)) LARGAS.push({ date: d.toISOString().slice(0, 10), open: 10, high: 11, low: 9, close: 10 })
+  ok(Math.abs(G.anosCargados(LARGAS) - 2919 / 365.25) < 1e-9 && G.anosCargados([]) === 0, `años cargados: ${G.anosCargados(LARGAS).toFixed(2)} (2.919 días ÷ 365,25)`)
+  m = D.monta(React.createElement(RP.VentanaReplay, { simbolo: 'AAPL', velas: LARGAS, onEmpezar() {}, onCancelar() {} }), RDC); await D.espera(20)
+  const bh = (t) => m.raiz.busca(n => n.getAttribute && n.getAttribute('data-hace') === t)
+  ok(bh('Hace 1 año') && bh('Hace 5 años') && bh('Hace 10 años') && !bh('Hace 2 años'), 'botones «Hace 1 año», «Hace 5 años», «Hace 10 años» (ya no «Hace 2 años»)')
+  ok(!D.propsDe(bh('Hace 5 años')).disabled && D.propsDe(bh('Hace 10 años')).disabled && /solo tiene 8 años/.test(D.propsDe(bh('Hace 10 años')).title), `con 8 años cargados: 5 encendido; 10 apagado y lo dice (${D.propsDe(bh('Hace 10 años')).title})`)
+  D.pulsa(bh('Hace 5 años')); await D.espera(10)
+  ok(m.raiz.busca(n => n.hasAttribute('data-fecha-replay')) && D.propsDe(m.raiz.busca(n => n.hasAttribute('data-fecha-replay'))).value === G.inicioHace(LARGAS, 5) && G.inicioHace(LARGAS, 5) <= '2017-12-30', `«Hace 5 años» pone ${G.inicioHace(LARGAS, 5)} (la vela del 30/12/2017 o antes)`)
+  m.quita()
+
   // ── El botón de arriba ──
   const RDS = require(R + '/node_modules/react-dom/server')
   ok(/⏪ Replay/.test(RDS.renderToString(React.createElement(RP.BotonReplay, { activo: false, onClick() {} }))) && /Salir del Replay/.test(RDS.renderToString(React.createElement(RP.BotonReplay, { activo: true, onClick() {} }))), 'botón «⏪ Replay»; encendido, su ayuda dice «Salir del Replay»')

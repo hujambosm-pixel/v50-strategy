@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { MONO } from '../lib/utils'
 import Ayuda from './BuilderAyuda'
-import { inicioHace, inicioAlAzar, velaDeInicio, posicion } from '../lib/replay/grafico'
+import { inicioHace, inicioAlAzar, velaDeInicio, posicion, anosCargados } from '../lib/replay/grafico'
 import FilasAlerta from './FilasAlerta'
 
 const fmt = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}` : '—')
@@ -80,7 +80,10 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
   const min = vs.length > 2 ? vs[1].date : '', max = vs.length > 2 ? vs[vs.length - 2].date : ''
   const elegida = fecha ? velaDeInicio(vs, fecha) : null
   useEffect(() => { const t = (e) => { if (e.key === 'Escape') onCancelar() }; window.addEventListener('keydown', t); return () => window.removeEventListener('keydown', t) }, [onCancelar])
-  const rapido = (txt, f) => <button key={txt} onClick={() => setFecha(f())} style={boton()}>{txt}</button>
+  const rapido = (txt, f, titulo = '', activo = true) => <button key={txt} onClick={() => { if (activo) setFecha(f()) }} disabled={!activo} title={titulo} style={{ ...boton(), opacity: activo ? 1 : 0.4, cursor: activo ? 'pointer' : 'default' }} data-hace={txt}>{txt}</button>
+  // §241: «Hace 1 / 5 / 10 años». El Replay usa las velas que tiene cargadas el gráfico (su periodo): si no llegan, el botón se apaga y lo dice.
+  const hay = anosCargados(vs)
+  const hace = (n) => rapido(`Hace ${n} ${n === 1 ? 'año' : 'años'}`, () => inicioHace(vs, n), hay >= n - 0.1 ? '' : `El gráfico solo tiene ${hay.toLocaleString('es-ES', { maximumFractionDigits: 1 })} años de velas cargados. Para empezar hace ${n} años, amplía el periodo del gráfico.`, hay >= n - 0.1)
   return (
     <div data-ventana-replay="" role="dialog" aria-modal="true" onMouseDown={e => { if (e.target === e.currentTarget) onCancelar() }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10050, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -99,7 +102,7 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
           <input type="date" value={fecha || ''} min={min} max={max} onChange={e => setFecha(e.target.value)} data-fecha-replay=""
             style={{ fontFamily: MONO, fontSize: 13, padding: '4px 6px', background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3, colorScheme: 'dark' }} />
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '10px 0' }}>
-            {rapido('Hace 1 año', () => inicioHace(vs, 1))}{rapido('Hace 2 años', () => inicioHace(vs, 2))}{rapido('Hace 5 años', () => inicioHace(vs, 5))}{rapido('Al azar', () => inicioAlAzar(vs))}
+            {hace(1)}{hace(5)}{hace(10)}{rapido('Al azar', () => inicioAlAzar(vs))}
           </div>
           <div style={{ color: '#7a9bc0', marginBottom: 14 }}>
             {elegida ? <>Verás hasta el <b style={{ color: '#e2eaf5' }}>{diaSemana(elegida)} {fmt(elegida)}</b>; quedan {posicion(vs, elegida, elegida).quedan} velas por descubrir.</> : 'Elige un día.'}
