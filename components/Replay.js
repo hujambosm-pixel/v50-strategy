@@ -149,7 +149,7 @@ export function VentanaSenal({ simbolo, filas: inicial, onAceptar, onCancelar })
           <Ayuda texto={AYUDA_SENAL} etiqueta="Saltar a la señal" zIndice={10100} />
           <span style={{ marginLeft: 'auto', cursor: 'pointer', color: BZ.gris }} onClick={onCancelar} title="Cerrar">✕</span>
         </div>
-        <FilasAlerta simbolo={simbolo} filas={filas} onCambia={setFilas} para="señal" />
+        <FilasAlerta simbolo={simbolo} filas={filas} onCambia={setFilas} para="señal" conO />
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
           <button onClick={onCancelar} style={bz()}>Cancelar</button>
           <button data-aceptar-senal="" onClick={() => filas.length && onAceptar(filas)} disabled={!filas.length} style={{ ...bz(!!filas.length), borderColor: BZ.azul }}>Usar esta señal</button>

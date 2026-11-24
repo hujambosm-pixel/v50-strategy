@@ -7,7 +7,7 @@
 //   · vela 30 cierra a 105 → señal.
 // Estrategia: nuevo máximo de 2 velas, compra a la apertura siguiente, stop 5 %, salida por tiempo 3 velas → señales en las velas 10 y 30.
 // Condición del catálogo: la vela en que PASA a cumplirse (cuentas de la SMA 3 junto a su prueba).
-const C0 = require('./cargador'), R = C0.RAIZ
+const C0 = require('./cargador'), R = C0.RAIZ, D = require('./domFalso')
 let fallos = 0
 const ok = (c, t) => { console.log(`${c ? 'OK  ' : 'MAL '} ${t}`); if (!c) fallos++ }
 const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b)
@@ -48,6 +48,38 @@ const F = (k) => VELAS[PRE + k].date
   ok(igual(c2, [F(10), F(12), F(30)]), `condición de estado «cierre sobre la SMA 3»: la vela en que PASA a cumplirse: 10, 12 y 30 (${JSON.stringify(c2)})`)
   // Con una SMA 1 el cierre nunca está por encima de sí mismo → ninguna.
   ok(S.senalesCondicion(fila({ c: 'precioVsMedia', p: { lado: 'encima', tipo: 'SMA', periodo: 1 } }), velasDe, fechas).length === 0, 'una condición que nunca se cumple: sin señales')
+
+  // ── §240: «y además» / «o bien» ──
+  // A = cierre SOBRE la SMA 3 (10, 12, 30, como arriba). B = cierre BAJO la SMA 3: vela 11: 100 < 101,67 sí (la 10 no); 12: 110 > 105 no;
+  // 13: 100 < 103,33 sí; 14: 100 < (110+100+100)/3 = 103,33 sí; 15: 100 = 100 no; 31: 100 < (100+105+100)/3 = 101,67 sí (la 30 no);
+  // 32: 100 < 101,67 sí; 33: 100 no. → B: 11, 13, 31.
+  const sma = (lado) => ({ quien: 'A', velas: 'diarias', si: { c: 'precioVsMedia', p: { lado, tipo: 'SMA', periodo: 3 } } })
+  const A = sma('encima'), Bf = sma('debajo')
+  ok(igual(S.senalesCondicion([Bf], velasDe, fechas), [F(11), F(13), F(31)]), `B «cierre bajo la SMA 3» sola: 11, 13 y 31`)
+  const o = S.senalesCondicion([A, { ...Bf, union: 'O' }], velasDe, fechas)
+  ok(igual(o, [F(10), F(11), F(12), F(13), F(30), F(31)]), `A o bien B: cada parte por separado → 10, 11, 12, 13, 30 y 31 (un cruce cada vez) (${JSON.stringify(o)})`)
+  // Si se mirara la unión entera (A ó B), se cumple del 10 al 14 y del 30 al 32 seguidos → solo 10 y 30: lo que NO queremos.
+  ok(o.length === 6, 'con «o bien» no se pierden los cruces que caen seguidos (la unión entera daría solo 10 y 30)')
+  ok(S.senalesCondicion([A, { ...Bf, union: 'Y' }], velasDe, fechas).length === 0, 'A y además B (nunca a la vez): ninguna')
+  ok(igual(S.senalesCondicion([A, { ...Bf, union: 'Y' }, { ...A, union: 'O' }], velasDe, fechas), [F(10), F(12), F(30)]), '(A y B) o bien A: «y además» une antes → lo de A: 10, 12 y 30')
+  ok(igual(S.gruposFilas([A, { ...Bf, union: 'Y' }, { ...A, union: 'O' }]).map(g => g.length), [2, 1]) && S.gruposFilas([A, { ...Bf, union: 'O' }])[1][0].union === undefined, 'grupos: (A y B) | (A); la primera fila de cada grupo, sin unión')
+  ok(igual(S.senalesCondicion([A, { ...A, union: 'Y' }], velasDe, fechas), [F(10), F(12), F(30)]), 'todo con «y además»: un solo grupo, como antes')
+
+  // ── §240: la ventana. En la señal del Replay (conO) entre filas sale el selector; en las alertas, el texto «y además» de siempre ──
+  D.pon()
+  const React = require(R + '/node_modules/react'), RDC = require(R + '/node_modules/react-dom/client')
+  const FA = require(R + '/components/FilasAlerta.js').default
+  let cambio = null
+  const m = D.monta(React.createElement(FA, { simbolo: 'A', filas: [A, { ...Bf, union: 'Y' }], onCambia: f => { cambio = f }, para: 'señal', conO: true }), RDC); await D.espera(20)
+  const sel = m.raiz.busca(n => n.hasAttribute && n.hasAttribute('data-union-alerta'))
+  ok(sel && D.propsDe(sel).value === 'Y', 'Replay: entre la fila 1 y la 2, un selector «y además / o bien» (empieza en «y además»)')
+  D.escribe(sel, 'O'); await D.espera(10)
+  ok(cambio && cambio.length === 2 && cambio[1].union === 'O' && cambio[0].union === undefined, `elegir «o bien» guarda union 'O' en la fila 2 (${JSON.stringify(cambio && cambio.map(f => f.union))})`)
+  m.quita()
+  cambio = null
+  const m2 = D.monta(React.createElement(FA, { simbolo: 'A', filas: [A, { ...Bf, union: 'O' }], onCambia: f => { cambio = f } }), RDC); await D.espera(20)
+  ok(!m2.raiz.busca(n => n.hasAttribute && n.hasAttribute('data-union-alerta')) && /y además/.test(m2.raiz.textContent), 'alertas (sin conO): sin selector, el texto «y además» de siempre')
+  m2.quita()
 
   // ── §234: los indicadores de la señal, para el gráfico ──
   // Condición «cierre sobre la SMA 3» de A: una serie SMA 3 con un valor por vela. Vela 10: (100 + 100 + 105) / 3 = 101,67.

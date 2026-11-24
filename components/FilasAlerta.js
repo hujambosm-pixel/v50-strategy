@@ -16,14 +16,20 @@ import { OTRO_REGLA, MAX_FILAS_REGLA, filaDePantallaRegla, filasGuardadasRegla, 
 const conY = (fs) => fs.map((f, k) => { const { union, ...r } = f; return k ? { ...r, union: 'Y' } : r })
 const SIMBOLO = /^[A-Z0-9.^=-]{1,30}$/
 
-export default function FilasAlerta({ simbolo, filas, onCambia, inicial = null, para = 'alerta' }) {   // para: lo que sale en el título del catálogo (§231: 'señal' en el Replay)
+// §240: conO (solo la señal del Replay; las alertas siguen todas con «Y»): entre fila y fila, «y además» / «o bien».
+const AYUDA_UNION = '«Y ADEMÁS»: la señal pide que se cumplan las dos filas a la vez.\n«O BIEN»: basta con una de ellas.\n\n' +
+  'Con «o bien», la señal es la vela en que CUALQUIERA de las partes pasa a cumplirse, mirando cada parte por separado. ' +
+  'Ejemplo: «el cierre está por encima de la EMA 20» o bien «el cierre está por debajo de la EMA 20» da una señal en cada cruce: ' +
+  'si cruza hacia arriba el día 10 y hacia abajo el día 25, señales el 10 y el 25.\n\n' +
+  '«Y además» une antes que «o bien»: A y además B, o bien C = (A y B a la vez) o bien C.'
+export default function FilasAlerta({ simbolo, filas, onCambia, inicial = null, para = 'alerta', conO = false }) {   // para: lo que sale en el título del catálogo (§231: 'señal' en el Replay)
   const sim = String(simbolo || '').toUpperCase()
   const [catalogo, setCatalogo] = useState(!!inicial?.catalogo)
   const [buscar, setBuscar] = useState(inicial?.buscar || '')
   const [otro, setOtro] = useState(null)       // la fila que está eligiendo «Otro símbolo…»
   const [otroTxt, setOtroTxt] = useState('')
   const fs = (filas || []).map(filaDePantallaRegla)
-  const ponFilas = (f) => onCambia(conY(filasGuardadasRegla(f(fs))))
+  const ponFilas = (f) => { const g = filasGuardadasRegla(f(fs)); onCambia(conO ? g : conY(g)) }
   const cierra = () => { setCatalogo(false); setBuscar('') }
   useEffect(() => {
     if (!catalogo) return
@@ -44,7 +50,14 @@ export default function FilasAlerta({ simbolo, filas, onCambia, inicial = null, 
     <div data-filas-alerta={fs.length}>
       {fs.map((f, j) => (
         <div key={j} data-fila-alerta={j}>
-          {j > 0 && <div style={{ ...S.apagado, marginTop: 6 }}>y además</div>}
+          {j > 0 && (conO
+            ? <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                <select data-union-alerta={j} aria-label="Cómo se une esta fila con la anterior" value={f.union === 'O' ? 'O' : 'Y'} style={mini}
+                  onChange={e => ponFilas(xs => xs.map((y, p) => p === j ? { ...y, union: e.target.value } : y))}>
+                  <option value="Y">y además</option><option value="O">o bien</option></select>
+                {j === 1 && <Ayuda texto={AYUDA_UNION} etiqueta="y además / o bien" zIndice={10100}/>}
+              </div>
+            : <div style={{ ...S.apagado, marginTop: 6 }}>y además</div>)}
           {f.rara ? (
             <div data-fila-rara style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, color: B.secundario }}>
               <span style={{ flex: 1 }}>Una condición que aquí no se puede editar.</span>
@@ -56,7 +69,7 @@ export default function FilasAlerta({ simbolo, filas, onCambia, inicial = null, 
               onQuien={q => { if (q === OTRO_REGLA) { setOtro(j); setOtroTxt('') } else { setOtro(null); ponFilas(xs => xs.map((y, p) => p === j ? { ...y, quien: q } : y)) } }}
               extra={<select data-velas-alerta style={mini} aria-label="Con qué velas se mira" title="Con qué velas se mira esta condición (semanales: la semana ya cerrada)" value={f.velas} onChange={e => ponFilas(xs => xs.map((y, p) => p === j ? { ...y, velas: e.target.value } : y))}>
                 <option value="diarias">velas diarias</option><option value="semanales">velas semanales</option></select>}
-              onCambia={g => ponFilas(xs => xs.map((y, p) => p === j ? { ...g, quien: f.quien, velas: f.velas, union: 'Y' } : y))}
+              onCambia={g => ponFilas(xs => xs.map((y, p) => p === j ? { ...g, quien: f.quien, velas: f.velas, union: conO && f.union === 'O' ? 'O' : 'Y' } : y))}
               onQuita={() => { setOtro(null); ponFilas(xs => xs.filter((_, p) => p !== j)) }}/>
           )}
           {otro === j && (
