@@ -162,7 +162,7 @@ export function VentanaSenal({ simbolo, senal = null, onAceptar, onCancelar, vel
   return (
     <div data-ventana-senal="" role="dialog" aria-modal="true" onMouseDown={e => { if (e.target === e.currentTarget) onCancelar() }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10050, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: BZ.fondo, border: `1px solid ${BZ.borde}`, borderRadius: 8, padding: 16, width: modo === 'pasos' ? 720 : 560, maxWidth: '100%', maxHeight: '90vh', overflow: 'auto', font: `13px/1.5 ${LETRA}`, color: BZ.texto }}>
+      <div style={{ background: BZ.fondo, border: `1px solid ${BZ.borde}`, borderRadius: 8, padding: 16, width: 720, maxWidth: '100%', maxHeight: '90vh', overflow: 'auto', font: `13px/1.5 ${LETRA}`, color: BZ.texto }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <b style={{ fontSize: 14 }}>Señal</b>
           {pestana('condicion', 'Una condición')}{pestana('pasos', 'Condición con pasos')}
@@ -170,7 +170,8 @@ export function VentanaSenal({ simbolo, senal = null, onAceptar, onCancelar, vel
           <span style={{ marginLeft: 'auto', cursor: 'pointer', color: BZ.gris }} onClick={onCancelar} title="Cerrar">✕</span>
         </div>
         {modo === 'pasos' ? <><EditorConPasos simbolo={simbolo} def={def} onCambia={setDef}/>
-          <MiniGraficoPasos def={def} simbolo={simbolo} velas={velas} cargaVelas={cargaVelas} simbolosAzar={simbolosAzar} compras={compras} hoy={hoy}/></> : <FilasAlerta simbolo={simbolo} filas={filas} onCambia={setFilas} para="señal" conO />}
+          <MiniGraficoPasos def={def} simbolo={simbolo} velas={velas} cargaVelas={cargaVelas} simbolosAzar={simbolosAzar} compras={compras} hoy={hoy}/></> : <><FilasAlerta simbolo={simbolo} filas={filas} onCambia={setFilas} para="señal" conO />
+          <MiniGraficoPasos senal={{ tipo: 'condicion', filas }} simbolo={simbolo} velas={velas} cargaVelas={cargaVelas} simbolosAzar={simbolosAzar} hoy={hoy}/></>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
           <button onClick={onCancelar} style={bz()}>Cancelar</button>
           <button data-aceptar-senal="" onClick={acepta} disabled={!vale} style={{ ...bz(vale), borderColor: BZ.azul }}>Usar esta señal</button>

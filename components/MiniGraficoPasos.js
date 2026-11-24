@@ -5,8 +5,7 @@
 // lib/replay/conPasosGrafico.js (puro); las medias de la condición, con graficoSenal (lib/replay/senales.js).
 import { useState, useEffect, useMemo } from 'react'
 import Ayuda from './BuilderAyuda'
-import { validaConPasos } from '../lib/condiciones/conPasos'
-import { buscaInventadas, escenario, otrosSimbolos, ventanaDe, dibujoEscenario, AYUDA_MINI } from '../lib/replay/conPasosGrafico'
+import { buscaInventadas, escenario, otrosSimbolos, ventanaDe, dibujoEscenario, senalValida, comoSenal, AYUDA_MINI } from '../lib/replay/conPasosGrafico'
 import { graficoSenal } from '../lib/replay/senales'
 
 const K = { caja: '#353945', borde: '#4c5263', texto: '#f3f3f5', gris: '#a9adb8', azul: '#58a6ff', lila: '#bc8cff', rojo: '#f85149', verde: '#3fb950', ambar: '#d29922' }
@@ -17,17 +16,20 @@ const fmt = (x) => Number.isFinite(x) ? x.toLocaleString('es-ES', { minimumFract
 const fmtF = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}` : '')
 
 const VACIO = Object.freeze([])   // la misma lista vacía en cada repintado (si no, el escenario se recalcularía siempre y ▶ volvería a la señal 1)
-export default function MiniGraficoPasos({ def, simbolo, velas = VACIO, cargaVelas = null, simbolosAzar = VACIO, compras = VACIO, hoy = null }) {
+// §247: senal = { tipo: 'condicion', filas } («Una condición»: solo ▲) o { tipo: 'pasos', def }; def sola = con pasos (como en §245).
+export default function MiniGraficoPasos({ def, senal: senalProp = null, simbolo, velas = VACIO, cargaVelas = null, simbolosAzar = VACIO, compras = VACIO, hoy = null }) {
   const sim = String(simbolo || '').toUpperCase()
   const [modo, setModo] = useState('inventadas')
   const [semilla, setSemilla] = useState(1)
   const [otro, setOtro] = useState(null)          // «🎲 Valor al azar» en velas reales (null = el del Replay)
   const [extra, setExtra] = useState({})          // velas de otros símbolos ya cargadas
   const [k, setK] = useState(0)                   // la señal que se ve
-  const valida = !!def && validaConPasos(def).length === 0
+  const firma = JSON.stringify(senalProp || { tipo: 'pasos', def })
+  const senal = useMemo(() => comoSenal(JSON.parse(firma)), [firma])   // la misma mientras no cambie (si no, ▶ volvería a la señal 1)
+  const valida = senalValida(senal)
   const cerradas = useMemo(() => (velas || []).filter(v => v && v.date && !v.enCurso), [velas])
   const principal = otro ? extra[otro] : cerradas
-  const faltan = useMemo(() => modo !== 'reales' || !valida ? [] : [...otrosSimbolos(def, sim), ...(otro ? [otro] : [])].filter(q => !extra[q]), [modo, valida, def, sim, otro, extra])
+  const faltan = useMemo(() => modo !== 'reales' || !valida ? [] : [...otrosSimbolos(senal, sim), ...(otro ? [otro] : [])].filter(q => !extra[q]), [modo, valida, senal, sim, otro, extra])
   useEffect(() => {
     if (!faltan.length || !cargaVelas) return
     let vivo = true
@@ -37,18 +39,18 @@ export default function MiniGraficoPasos({ def, simbolo, velas = VACIO, cargaVel
   }, [faltan.join(','), cargaVelas])   // eslint-disable-line
   const e = useMemo(() => {
     if (!valida) return null
-    if (modo === 'inventadas') return buscaInventadas(def, sim, semilla) || { sinNada: true }
+    if (modo === 'inventadas') return buscaInventadas(senal, sim, semilla) || { sinNada: true }
     if (faltan.length) return { cargando: true }
     if (!principal?.length) return { sinVelas: true }
-    return escenario(def, (q) => (q === sim || q === 'valor' ? principal : extra[q] || []), sim, otro ? VACIO : compras)
-  }, [valida, modo, def, sim, semilla, faltan.length, principal, extra, otro, compras])   // eslint-disable-line
+    return escenario(senal, (q) => (q === sim || q === 'valor' ? principal : extra[q] || []), sim, otro ? VACIO : compras)
+  }, [valida, modo, senal, sim, semilla, faltan.length, principal, extra, otro, compras])   // eslint-disable-line
   const n = e?.velas?.length || 0, senales = e?.r?.senales || []
   useEffect(() => { setK(0) }, [e])
   const idxDe = useMemo(() => new Map((e?.fechas || []).map((f, i) => [f, i])), [e])
   const iSenal = senales.length ? idxDe.get(senales[Math.min(k, senales.length - 1)]) : null
   const [a, b] = n ? ventanaDe(n, iSenal) : [0, 0]
   const dib = useMemo(() => (n ? dibujoEscenario(e, a, b) : null), [e, a, b])   // eslint-disable-line
-  const medias = useMemo(() => (n ? graficoSenal({ tipo: 'pasos', def }, e.velas, sim)?.series || [] : []), [e])   // eslint-disable-line
+  const medias = useMemo(() => (n ? graficoSenal(senal, e.velas, sim)?.series || [] : []), [e])   // eslint-disable-line
 
   const cabecera = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -65,10 +67,10 @@ export default function MiniGraficoPasos({ def, simbolo, velas = VACIO, cargaVel
       <Ayuda texto={AYUDA_MINI} etiqueta="Así se vería" zIndice={10100}/>
     </div>)
   let cuerpo
-  if (!valida) cuerpo = <div style={{ color: K.gris }}>Arregla lo que sale en rojo y aquí verás el escenario.</div>
+  if (!valida) cuerpo = <div style={{ color: K.gris }}>{senal.tipo === 'condicion' ? 'Añade una condición y aquí verás dónde salta.' : 'Arregla lo que sale en rojo y aquí verás el escenario.'}</div>
   else if (e?.cargando) cuerpo = <div style={{ color: K.gris }}>Cargando velas…</div>
   else if (e?.sinVelas) cuerpo = <div style={{ color: K.ambar }}>No hay velas de {otro || sim}.</div>
-  else if (e?.sinNada) cuerpo = <div data-mini-sin-nada="" style={{ color: K.ambar }}>En {40} juegos de velas inventadas no salta ninguna vez (¿usas «tu última compra»? En velas inventadas no hay compras). Prueba con «Velas reales».</div>
+  else if (e?.sinNada) cuerpo = <div data-mini-sin-nada="" style={{ color: K.ambar }}>En {40} juegos de velas inventadas no salta ninguna vez{senal.tipo === 'pasos' ? ' (¿usas «tu última compra»? En velas inventadas no hay compras)' : ''}. Prueba con «Velas reales».</div>
   else {
     const ys = []
     for (let i = a; i <= b; i++) ys.push(e.velas[i].high, e.velas[i].low)

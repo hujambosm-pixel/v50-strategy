@@ -51,6 +51,16 @@ const velasDe = (cierres) => cierres.map((c, i) => ({ date: fecha(i), open: c, h
   ok(igual(G.dibujoEscenario(G.escenario(dt, () => VT, 'A'), 2, 5).tramos, [[2, 2], [5, 5]]), 'los tramos se recortan a la ventana')
   ok(igual(G.otrosSimbolos({ ...dt, mientras: { filas: [{ ...dt.mientras.filas[0], quien: 'QQQ' }] } }, 'A'), ['QQQ']), 'velas que pedir aparte: QQQ del «Mientras…»')
 
+  // ── §247: «Una condición» (del catálogo): solo ▲. «Cierre de A sobre su SMA 2» con cierres 10, 11, 12, 11, 10, 11, 12 (SMA 2: —, 10,5,
+  // 11,5, 11,5, 10,5, 10,5, 11,5) → se cumple en 1–2 y 5–6: pasa a cumplirse en las velas 1 y 5.
+  const cond = { tipo: 'condicion', filas: [{ quien: 'A', velas: 'diarias', si: { c: 'precioVsMedia', p: { lado: 'encima', tipo: 'SMA', periodo: 2 } } }] }
+  const ec = G.escenario(cond, () => VT, 'A')
+  ok(igual(ec.r.senales, [fecha(1), fecha(5)]) && igual(G.dibujoEscenario(ec, 0, 6).marcas.map(m => [m.i, m.tipo]), [[1, 'senal'], [5, 'senal']]) && !G.dibujoEscenario(ec, 0, 6).lineas.length,
+    '«Una condición»: ▲ en las velas 1 y 5, sin líneas ni tramos')
+  const bc = G.buscaInventadas(cond, 'A', 1)
+  ok(bc && bc.r.senales.length > 0 && G.senalValida(cond) && !G.senalValida({ tipo: 'condicion', filas: [] }) && igual(G.otrosSimbolos({ tipo: 'condicion', filas: [{ ...cond.filas[0], quien: 'QQQ' }] }, 'A'), ['QQQ']),
+    '«Una condición» en velas inventadas, sin filas no vale, y pide las velas de QQQ si la fila es de QQQ')
+
   // ── Montado ──
   D.pon()
   const React = require(R + '/node_modules/react'), RDC = require(R + '/node_modules/react-dom/client')
@@ -82,6 +92,12 @@ const velasDe = (cierres) => cierres.map((c, i) => ({ date: fecha(i), open: c, h
   const m2 = D.monta(React.createElement(Mini, { def: { paso1: null }, simbolo: 'A', velas: V }), RDC); await D.espera(20)
   ok(!attr(m2.raiz, 'data-mini-grafico') && /Arregla lo que sale en rojo/.test(m2.raiz.textContent), 'con la condición sin terminar: sin gráfico y lo dice')
   m2.quita()
+
+  const Vent = require(R + '/components/Replay.js').VentanaSenal
+  const m3 = D.monta(React.createElement(Vent, { simbolo: 'A', senal: cond, velas: VT, onAceptar: () => {}, onCancelar: () => {} }), RDC); await D.espera(30)
+  D.pulsa(attr(m3.raiz, 'data-mini-modo', 'reales')); await D.espera(30)
+  ok(attr(m3.raiz, 'data-mini-pasos', 'reales') && attr(m3.raiz, 'data-mini-n').getAttribute('data-mini-n') === '2', 'la ventana en «Una condición» también enseña el minigráfico (2 señales en las velas reales)')
+  m3.quita()
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTodo en verde')
   process.exit(fallos ? 1 : 0)
