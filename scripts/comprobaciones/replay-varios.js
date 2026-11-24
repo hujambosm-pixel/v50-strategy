@@ -4,7 +4,7 @@
 // VELAS INVENTADAS (cierres): A d1 100 · d2 104 · d3 99 · d4 96 · d5 108 · d6 111. B (no cotiza el d3): d1 50 · d2 52 · d4 55 · d5 56 · d6 57.
 // C empieza el d4: d4 20 · d5 21 · d6 22.
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'clave-falsa-del-arnes'
-const C0 = require('./cargador'), R = C0.RAIZ
+const C0 = require('./cargador'), R = C0.RAIZ, DF = require('./domFalso')
 let fallos = 0
 const ok = (c, t) => { console.log(`${c ? 'OK  ' : 'MAL '} ${t}`); if (!c) fallos++ }
 const cerca = (a, b, tol = 1e-9) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= tol * Math.max(1, Math.abs(b))
@@ -17,6 +17,7 @@ const VELAS = {
 }
 
 ;(async () => {
+  DF.pon()
   await C0.prepara(); C0.registra(R)
   const M = require(R + '/lib/replay/motor.js'), V = require(R + '/lib/replay/varios.js'), G = require(R + '/lib/replay/guardados.js')
   const est = (o = {}) => ({ version: 1, valores: ['A', 'B'], desde: D[0], hoy: D[5], capitalInicial: 10000, comision: 1, ejecucion: 'apertura', acciones: [], retrocesos: 0, ...o })
@@ -57,6 +58,41 @@ const VELAS = {
   const SEN = { A: { entradas: [D[1], D[4]] }, B: { entradas: [D[3]] } }
   ok([...V.conSenalHoy(SEN, D[3])].join() === 'B' && V.siguienteSenalVarios(SEN, D[1]) === D[3] && V.siguienteSenalVarios(SEN, D[5]) === null, 'con señal hoy (d4): B; la próxima desde el d2: el d4 (de B); desde el d6, ninguna')
   ok(G.nombreDe(est()) === '2 valores · desde 02/01/2024' && G.nombreDe(est({ valores: ['A'] })) === 'A · desde 02/01/2024', 'nombre: «2 valores · desde 02/01/2024»; con uno, el de siempre')
+
+  // ── §254: la pantalla (components/ReplayVarios.js) ──
+  {
+    const React = require(R + '/node_modules/react'), RDC = require(R + '/node_modules/react-dom/client')
+    const RV = require(R + '/components/ReplayVarios.js'), P = require(R + '/components/PanelReplay.js')
+    ok(RV.primerDia(VELAS, ['B', 'C'], '2024-01-04') === D[3] && RV.primerDia(VELAS, ['C'], '2024-01-01') === D[3], 'el primer día con vela desde la fecha elegida: el 05/01 (B no cotiza el 04/01; C empieza el 05/01)')
+    const VR = { A: VELAS.A.map(x => ({ ...x, open: x.close })), B: VELAS.B.map(x => ({ ...x, open: x.close })), C: VELAS.C.map(x => ({ ...x, open: x.close })), '^GSPC': VELAS.A }
+    let m = DF.monta(React.createElement(RV.default, { inicial: { nuevo: { valores: ['A', 'B', 'C'], fecha: D[0], capitalInicial: 10000, comision: 1, ejecucion: 'apertura' } }, cargaVelas: async (s) => VR[s] || [], onSalir() {} }), RDC)
+    await DF.espera(80)
+    const celdas = () => m.raiz.buscaTodos ? m.raiz.buscaTodos(n => n.hasAttribute('data-celda-varios')).map(n => n.getAttribute('data-celda-varios')) : []
+    const txt = (sel) => m.raiz.busca(n => n.hasAttribute(sel))?.textContent || ''
+    ok(/02\/01\/2024/.test(txt('data-hoy-varios')) && /3 valores/.test(m.raiz.textContent), `empieza el 02/01/2024 con los 3 valores (${txt('data-hoy-varios')})`)
+    ok(!!m.raiz.busca(n => n.getAttribute('data-celda-varios') === 'A') && !!m.raiz.busca(n => n.getAttribute('data-celda-varios') === 'C'), 'la rejilla tiene un gráfico por valor (A, B, C)')
+    ok(/aún no cotiza/.test((m.raiz.busca(n => n.getAttribute('data-celda-varios') === 'C') || {}).textContent || ''), 'C aún no cotiza el primer día: lo dice en su gráfico')
+    ok(/la lista \(3\)/.test(txt('data-cifras-replay')) && /S&P 500/.test(txt('data-cifras-replay')), 'las cifras comparan con el Buy&Hold de la lista (3) y con el S&P 500')
+    DF.pulsa(m.raiz.busca(n => n.hasAttribute('data-cinco-varios'))); await DF.espera(30)
+    ok(/09\/01\/2024/.test(txt('data-hoy-varios')), `«▶▶ 5» avanza cinco velas del calendario común: al 09/01 (${txt('data-hoy-varios')})`)
+    ok(!!m.raiz.busca(n => n.hasAttribute('data-compacto')) && !m.raiz.busca(n => n.hasAttribute('data-casilla-viva')), 'en la rejilla, el panel de cada gráfico es compacto (sin casillas)')
+    DF.pulsa(m.raiz.busca(n => n.getAttribute('data-tam-varios') === 'g6')); await DF.espera(20)
+    ok(!!m.raiz.busca(n => n.hasAttribute('data-rejilla-varios')), '«Pequeños · 6» cambia la rejilla')
+    m.quita()
+    // El panel compacto: posición en una línea.
+    const e = { version: 1, valores: ['A'], desde: D[0], hoy: D[2], capitalInicial: 10000, comision: 1, ejecucion: 'apertura', acciones: [{ fecha: D[0], simbolo: 'A', tipo: 'orden', id: 1, lado: 1, entrada: null, clase: null, stop: null, objetivo: null, tam: { modo: 'invertir', pct: 50 } }], retrocesos: 0 }
+    const VA = { A: VR.A }, r0 = M.calcula(e, VA)
+    m = DF.monta(React.createElement(P.PanelGrafico, { estado: e, simbolo: 'A', r: r0, ahora: 99, total: 10000, form: { modo: 'invertir', pct: 20, lado: 1, mercado: true, entrada: '', stop: '', objetivo: '' }, compacto: true, onMarcar() {}, onAccion() {} }), RDC); await DF.espera(20)
+    // Compra el d2 a 104: 5.000 / 104 = 48 acciones; el d3 a 99: 48 × (99 − 104) − 1 = −241 €.
+    ok(/Largo 48 · −241 €/.test(txt('data-linea-compacta')) && !!m.raiz.busca(n => n.hasAttribute('data-cerrar-replay')), `compacto: «Largo 48 · −241 €» y «Cerrar ✕» (${txt('data-linea-compacta')})`)
+    m.quita()
+    // «Por valor» en la tabla de abajo.
+    const e2 = { ...e, valores: ['A', 'B'], hoy: D[5] }, r2 = M.calcula(e2, VR)
+    m = DF.monta(React.createElement(P.ResultadosReplay, { estado: e2, r: r2, cif: M.cifras(e2, VR, r2), velas: null, simbolo: null, varios: true }), RDC); await DF.espera(20)
+    DF.pulsa(m.raiz.busca(n => n.getAttribute('data-vista-replay') === 'valor')); await DF.espera(10)
+    ok(!!m.raiz.busca(n => n.getAttribute('data-fila-valor') === 'A') && !!m.raiz.busca(n => n.getAttribute('data-fila-valor') === 'B'), 'con varios valores, la tabla tiene «Por valor» con una fila por valor')
+    m.quita()
+  }
 
   console.log(fallos ? `replay-varios: ${fallos} fallos` : 'replay-varios: todas bien')
   process.exit(fallos ? 1 : 0)

@@ -9,6 +9,7 @@ import { useState } from 'react'
 import Ayuda from './BuilderAyuda'
 import { compruebaOrden, nuevaAccion, textoOrden } from '../lib/replay/orden'
 import { TIPOS_SIGUE } from '../lib/replay/motor'
+import { porValor } from '../lib/replay/varios'
 import { estima, pctFrente, redondea, deMercado, modoStop, modoObjetivo } from '../lib/replay/borrador'
 import { Papelera } from './VentanaPregunta'
 
@@ -129,7 +130,7 @@ export function TarjetaDefecto({ form, onForm, estado, onCerrar, auto = null }) 
 
 // §250: el panel de la DERECHA: el nombre, las cifras de tu cuenta (o, con ⚙, los valores por defecto), avisos y Terminar.
 // Operar (botones, órdenes vivas, la posición) va en el panel de dentro del gráfico (PanelGrafico).
-export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', nombre = null, onNombre, guardado = '', onMisReplays, cfg = false, form = null, onForm, onCfg, auto = null }) {
+export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', nombre = null, onNombre, guardado = '', onMisReplays, cfg = false, form = null, onForm, onCfg, auto = null, indice = null }) {
   const terminada = !!estado.terminada
   const g = (x) => (x == null ? '—' : pc(x))
   const pf = cif.factorBeneficio == null ? '—' : cif.factorBeneficio === Infinity ? '∞' : loc(cif.factorBeneficio, 2)
@@ -153,7 +154,8 @@ export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', n
           <Cifra titulo="Invertido de media" valor={g(cif.invertidoMedia)} tip="La media, vela a vela, de lo que tenías invertido frente a tu dinero" />
           <Cifra titulo="Tiempo con algo dentro" valor={g(cif.tiempoDentro)} tip="De las velas que llevas, en cuántas acabaste con algo abierto" />
           <Cifra titulo="Liquidez" valor={eur(r.caja)} />
-          <Cifra titulo={`Buy&Hold ${simbolo}`} valor={eur(cif.buyHold?.final)} tip="Comprar al cierre del primer día que viste y vender hoy, con el mismo dinero y pagando las dos comisiones" />
+          <Cifra titulo={`Buy&Hold ${cif.buyHold?.simbolo || simbolo}`} valor={eur(cif.buyHold?.final)} tip={estado.valores.length > 1 ? 'El mismo dinero a partes iguales entre los valores, comprados al cierre del primer día (un valor que aún no cotizaba, el día que empieza) y vendidos hoy, con las comisiones' : 'Comprar al cierre del primer día que viste y vender hoy, con el mismo dinero y pagando las dos comisiones'} />
+          {indice != null && <Cifra titulo="Buy&Hold S&P 500" valor={eur(indice)} tip="El mismo dinero en el S&P 500 (^GSPC), comprado al cierre del primer día y vendido hoy, con las comisiones" />}
           {(auto?.activo || (cif.sinDinero || 0) > 0) && <Cifra titulo="Señales sin dinero" valor={cif.sinDinero || 0} col={cif.sinDinero ? BZ.ambar : BZ.texto} tip="Señales de «Ejecutar solo» que se saltaron porque no llegaba el dinero" />}
           <Cifra titulo="Tú, frente a él" valor={cif.buyHold ? `${signo(Math.round(cif.final - cif.buyHold.final))}${eur(Math.abs(cif.final - cif.buyHold.final))}` : '—'} col={cif.buyHold ? color(Math.round(cif.final - cif.buyHold.final)) : BZ.texto} />
         </div>}
@@ -174,7 +176,8 @@ export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', n
 // Entrada · Stop · Objetivo (con 🎯 para marcar en el gráfico y ✕ para quitar) de la posición y de cada orden viva.
 //   onMarcar(lado): empieza a marcar una orden nueva. onMarcarLinea(id): el próximo clic en el gráfico mueve esa línea (pos:… / viva:…).
 //   onMover(id, precio | null): cambia o quita un precio. onAccion: «cerrar», «cancelar» y las órdenes a mercado.
-export function PanelGrafico({ estado, simbolo, r, ahora, total, form, captura = null, capturaLinea = null, onMarcar, onMarcarLinea, onCancelaMarca, onAccion, formMercado, onMover, arrastre = null, onCfg, cfgAbierta = false, aviso = '', style = null, autoActivo = false }) {
+// §254: compacto (gráficos pequeños de la rejilla con varios valores): solo los botones y una línea con lo que hay; las casillas, al ampliar.
+export function PanelGrafico({ estado, simbolo, r, ahora, total, form, captura = null, capturaLinea = null, onMarcar, onMarcarLinea, onCancelaMarca, onAccion, formMercado, onMover, arrastre = null, onCfg, cfgAbierta = false, aviso = '', style = null, autoActivo = false, compacto = false }) {
   const [error, setError] = useState('')
   const f = form
   const pos = r.posiciones[simbolo]
@@ -201,6 +204,22 @@ export function PanelGrafico({ estado, simbolo, r, ahora, total, form, captura =
     <span data-marcar-linea={id} title="Marcar en el gráfico" onClick={() => onMarcarLinea && onMarcarLinea(capturaLinea === id ? null : id)} style={{ ...ic, background: capturaLinea === id ? BZ.azul : 'transparent' }}>🎯</span>
     <span data-quitar-linea={id} title={quitar} onClick={quitar ? () => onMover(id, null) : undefined} style={{ ...ic, color: BZ.rojo, visibility: quitar ? 'visible' : 'hidden' }}>✕</span>
   </div>
+  if (compacto) {
+    const linea = captura ? `▶ marca ${QUE[captura]} · Esc cancela` : pos ? `${pos.lado > 0 ? 'Largo' : 'Corto'} ${pos.acciones} · ${signo(pos.ganancia)}${eur(Math.abs(pos.ganancia))}${pos.auto ? ' · 🤖' : ''}` : vivas.length ? `${vivas.length} orden${vivas.length === 1 ? '' : 'es'} sin ejecutar` : ''
+    const b = { ...btn(), padding: '1px 6px', font: `11px ${LETRA}`, fontWeight: 600 }
+    return (
+      <div data-panel-grafico="" data-compacto="" style={{ background: 'rgba(44,48,59,0.92)', border: `1px solid ${BZ.borde}`, borderRadius: 6, padding: '2px 4px', font: `11px/1.3 ${LETRA}`, color: BZ.texto, maxWidth: 220, ...(style || {}) }}
+        onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
+          {!terminada && !captura && (mercado
+            ? <><button data-enviar-orden="1" style={{ ...b, background: 'rgba(63,185,80,0.25)', borderColor: BZ.verde }} onClick={() => envia(1)}>Compra</button><button data-enviar-orden="-1" style={{ ...b, background: 'rgba(248,81,73,0.25)', borderColor: BZ.rojo }} onClick={() => envia(-1)}>Venta</button></>
+            : <><button data-marcar-replay="1" style={{ ...b, background: 'rgba(63,185,80,0.25)', borderColor: BZ.verde }} onClick={() => onMarcar(1)}>🎯 Compra</button><button data-marcar-replay="-1" style={{ ...b, background: 'rgba(248,81,73,0.25)', borderColor: BZ.rojo }} onClick={() => onMarcar(-1)}>🎯 Venta</button></>)}
+          {pos && !terminada && !captura && <button data-cerrar-replay="" title={`Cerrar ${cuando}`} style={b} onClick={() => onAccion({ fecha: estado.hoy, simbolo, tipo: 'cerrar' })}>Cerrar ✕</button>}
+          {captura && onCancelaMarca && <button onClick={onCancelaMarca} style={b}>Cancelar</button>}
+        </div>
+        {(linea || error) && <div data-linea-compacta="" style={{ color: error ? BZ.rojo : captura ? BZ.azul : BZ.gris, marginTop: 2 }}>{error ? `⚠ ${error}` : linea}</div>}
+      </div>)
+  }
   return (
     <div data-panel-grafico="" style={{ background: 'rgba(44,48,59,0.95)', border: `1px solid ${BZ.borde}`, borderRadius: 7, padding: '5px 6px', font: `12px/1.4 ${LETRA}`, color: BZ.texto, maxWidth: 300, boxShadow: '0 4px 14px rgba(0,0,0,0.45)', ...(style || {}) }}
       onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onWheel={e => e.stopPropagation()}>
@@ -254,7 +273,7 @@ export function PanelGrafico({ estado, simbolo, r, ahora, total, form, captura =
 }
 
 // ── Debajo del gráfico ──
-function Curva({ curva, buyHold, cif }) {
+function Curva({ curva, buyHold, cif, nombreBH = 'Buy&Hold', indice = null }) {
   const W = 900, H = 200, P = 34
   if (curva.length < 2) return <div style={{ color: BZ.gris, padding: 10 }}>Avanza alguna vela para ver la curva.</div>
   const todos = [...curva.map(c => c.valor), ...buyHold.map(b => b.valor)]
@@ -268,7 +287,7 @@ function Curva({ curva, buyHold, cif }) {
         <path d={linea(curva)} fill="none" stroke={BZ.azul} strokeWidth="1.8" />
       </svg>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', color: BZ.gris, fontSize: 12 }}>
-        <span><span style={{ color: BZ.azul }}>━</span> Tu dinero</span><span><span style={{ color: BZ.ambar }}>┅</span> Buy&Hold</span>
+        <span><span style={{ color: BZ.azul }}>━</span> Tu dinero</span><span><span style={{ color: BZ.ambar }}>┅</span> {nombreBH}</span>{indice != null && <span>S&P 500 hoy: {eur(indice)}</span>}
         <span data-caida-replay="">Peor caída <b style={{ color: BZ.rojo }}>{pc(cif.peorCaida)}</b> ({signo(cif.peorCaidaEur)}{eur(Math.abs(cif.peorCaidaEur))}) el {fmt(cif.fechaPeorCaida)}</span>
         <span>Caída más larga: {cif.caidaMasLarga} velas sin volver al máximo</span>
         <span>Factor de beneficio {cif.factorBeneficio == null ? '—' : cif.factorBeneficio === Infinity ? '∞' : pr(cif.factorBeneficio)}</span>
@@ -290,7 +309,8 @@ export function ordenaOps(ops, orden) {
   const c = COLUMNAS_OPS.find(x => x.id === orden.col) || COLUMNAS_OPS[0], s = orden.dir === 'asc' ? 1 : -1
   return [...ops].sort((a, b) => { const x = c.v(a), y = c.v(b); const d = x == null ? (y == null ? 0 : 1) : y == null ? -1 : typeof x === 'string' ? x.localeCompare(y, 'es') : x - y; return d * s || (b.num - a.num) })
 }
-export function ResultadosReplay({ estado, r, cif, velas, simbolo, onQuitar = null }) {
+// §254: varios = Replay con varios valores: todas las posiciones abiertas, pestaña «Por valor» y la curva del Buy&Hold de la lista (cif.buyHold.curva).
+export function ResultadosReplay({ estado, r, cif, velas, simbolo, onQuitar = null, varios = false, indice = null }) {
   const [vista, setVista] = useState('ops')
   const [orden, setOrden] = useState({ col: 'num', dir: 'desc' })
   const pulsaCol = (id) => setOrden(o => o.col === id ? { col: id, dir: o.dir === 'desc' ? 'asc' : 'desc' } : { col: id, dir: ['simbolo', 'motivo', 'lado'].includes(id) ? 'asc' : 'desc' })
@@ -303,32 +323,37 @@ export function ResultadosReplay({ estado, r, cif, velas, simbolo, onQuitar = nu
   </td>
   const cm = estado.comision || 0, vs = (velas || []).filter(v => v.date >= estado.desde && v.date <= estado.hoy)
   const q = vs.length ? Math.floor((estado.capitalInicial - cm) / vs[0].close) : 0
-  const bh = q > 0 ? vs.map(v => ({ fecha: v.date, valor: estado.capitalInicial - cm - q * vs[0].close + q * v.close })) : []
+  const bh = varios ? (cif.buyHold?.curva || []) : q > 0 ? vs.map(v => ({ fecha: v.date, valor: estado.capitalInicial - cm - q * vs[0].close + q * v.close })) : []
   const th = { textAlign: 'left', color: BZ.gris, fontWeight: 500, padding: '4px 8px', borderBottom: `1px solid ${BZ.borde}` }
   const td = { padding: '4px 8px', borderBottom: `1px solid ${BZ.caja}` }, tdc = { ...td, textAlign: 'center' }
   const tab = (id, txt) => <button onClick={() => setVista(id)} data-vista-replay={id} style={{ ...btn(true, vista === id), borderRadius: 6 }}>{txt}</button>
-  const pos = r.posiciones[simbolo]
+  const abiertas = varios ? Object.entries(r.posiciones || {}).sort((a, b) => b[1].num - a[1].num) : (r.posiciones[simbolo] ? [[simbolo, r.posiciones[simbolo]]] : [])
+  const resumen = varios ? porValor(r, estado.valores) : []
   return (
     <div data-resultados-replay="" style={{ background: BZ.fondo, padding: '8px 10px', font: `13px/1.45 ${LETRA}`, color: BZ.texto }}>
-      <div style={{ display: 'flex', gap: 4 }}>{tab('ops', `Operaciones · ${r.operaciones.length}`)}{tab('curva', 'Curva del capital')}</div>
+      <div style={{ display: 'flex', gap: 4 }}>{tab('ops', `Operaciones · ${r.operaciones.length}`)}{varios && tab('valor', 'Por valor')}{tab('curva', 'Curva del capital')}</div>
       <div style={{ ...cajaSt }}>
         {vista === 'ops' ? <>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>{COLUMNAS_OPS.map(c => <th key={c.id} data-col-ops={c.id} onClick={() => pulsaCol(c.id)} title="Pulsa para ordenar por esta columna (otra vez, al revés)" style={{ ...th, textAlign: 'center', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', color: orden.col === c.id ? BZ.azul : BZ.gris }}>{c.t}{orden.col === c.id ? (orden.dir === 'desc' ? ' ▼' : ' ▲') : ''}</th>)}<th style={th} /></tr></thead>
             <tbody>
-              {pos && <tr data-fila-abierta="" style={{ color: BZ.gris }}><td style={tdc}>{pos.num}</td><td style={tdc}>{simbolo}</td><td style={tdc}>{pos.lado > 0 ? 'Largo' : 'Corto'}</td><td style={tdc}>{fmt(pos.fecha)}</td>
+              {abiertas.map(([sim, pos]) => <tr key={`a${pos.num}`} data-fila-abierta={sim} style={{ color: BZ.gris }}><td style={tdc}>{pos.num}</td><td style={tdc}>{sim}</td><td style={tdc}>{pos.lado > 0 ? 'Largo' : 'Corto'}</td><td style={tdc}>{fmt(pos.fecha)}</td>
                 <td style={tdc}>{pr(pos.precioMedio)}</td><td style={tdc} colSpan={2}>abierta</td><td style={tdc}>{pos.acciones}</td><td style={tdc}>{eur(pos.acciones * pos.precioMedio)}</td>
-                <td style={{ ...tdc, color: color(pos.ganancia) }}>{signo(pos.ganancia)}{eur(Math.abs(pos.ganancia), 2)}</td><td style={tdc} colSpan={2}>sin vender</td>{papelera(pos.num, { ids: pos.ids, simbolo, fechaSalida: null })}</tr>}
+                <td style={{ ...tdc, color: color(pos.ganancia) }}>{signo(pos.ganancia)}{eur(Math.abs(pos.ganancia), 2)}</td><td style={tdc} colSpan={2}>sin vender</td>{papelera(pos.num, { ids: pos.ids, simbolo: sim, fechaSalida: null, auto: pos.auto })}</tr>)}
               {ordenaOps(r.operaciones, orden).map(o => <tr key={o.num} data-fila-op={o.num}>
                 <td style={tdc}>{o.num}</td><td style={tdc}>{o.simbolo}</td><td style={tdc}>{o.lado > 0 ? 'Largo' : 'Corto'}</td><td style={tdc}>{fmt(o.fechaEntrada)}</td>
                 <td style={tdc}>{pr(o.precioEntrada)}</td><td style={tdc}>{fmt(o.fechaSalida)}</td><td style={tdc}>{pr(o.precioSalida)}</td>
                 <td style={tdc}>{o.acciones}</td><td style={tdc}>{eur(o.acciones * o.precioEntrada)}</td><td style={{ ...tdc, color: color(o.resultado) }}>{signo(o.resultado)}{eur(Math.abs(o.resultado), 2)}</td>
                 <td style={{ ...tdc, color: color(o.resultado) }}>{signo(o.pct)}{pc(Math.abs(o.pct))}</td><td style={tdc}>{o.motivo}</td>{papelera(o.num, o)}</tr>)}
-              {!r.operaciones.length && !pos && <tr><td colSpan={13} style={{ ...td, color: BZ.gris }}>Aún no has operado.</td></tr>}
+              {!r.operaciones.length && !abiertas.length && <tr><td colSpan={13} style={{ ...td, color: BZ.gris }}>Aún no has operado.</td></tr>}
             </tbody>
           </table>
           <div style={{ color: BZ.gris, fontSize: 12, marginTop: 6 }}>Con comisiones ({cm ? `${com(cm)} € por orden` : 'ninguna'}), sin impuestos. {r.ordenes} órdenes, {eur(r.comisiones, 2)} de comisiones.</div>
-        </> : <Curva curva={r.curva} buyHold={bh} cif={cif} />}
+        </> : vista === 'valor' ? <table data-por-valor="" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr>{['Valor', 'Operaciones', 'Ganadoras', 'Resultado (con comisiones)', 'Abierta, ahora'].map(h => <th key={h} style={{ ...th, textAlign: 'center' }}>{h}</th>)}</tr></thead>
+          <tbody>{resumen.map(x => <tr key={x.simbolo} data-fila-valor={x.simbolo}><td style={tdc}><b>{x.simbolo}</b></td><td style={tdc}>{x.operaciones}</td><td style={tdc}>{x.operaciones ? pc(x.ganadoras / x.operaciones * 100, 0) : '—'}</td>
+            <td style={{ ...tdc, color: color(x.resultado) }}>{x.operaciones ? `${signo(x.resultado)}${eur(Math.abs(x.resultado), 2)}` : '—'}</td><td style={{ ...tdc, color: x.abierta == null ? BZ.gris : color(x.abierta) }}>{x.abierta == null ? '—' : `${signo(x.abierta)}${eur(Math.abs(x.abierta), 2)}`}</td></tr>)}</tbody></table>
+          : <Curva curva={r.curva} buyHold={bh} cif={cif} nombreBH={varios ? 'Buy&Hold de la lista' : 'Buy&Hold'} indice={indice} />}
       </div>
     </div>)
 }

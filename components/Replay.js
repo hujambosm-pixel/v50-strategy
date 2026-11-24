@@ -72,7 +72,7 @@ function SeguirGuardado({ simbolo, guardados, onAbrir }) {
     </div>)
 }
 
-export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAzar = null, cargando = false, guardados = undefined, onAbrir = null }) {
+export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAzar = null, cargando = false, guardados = undefined, onAbrir = null, onVarios = null }) {
   const [fecha, setFecha] = useState(() => inicioHace(velas, 1))
   useEffect(() => { if (!fecha && Array.isArray(velas) && velas.length > 2) setFecha(inicioHace(velas, 1)) }, [velas])   // §233: las velas llegan después (valor al azar)
   // Dinero, comisión y cuándo van las órdenes a mercado (se recuerdan en el navegador para la próxima vez).
@@ -97,6 +97,7 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
           <b style={{ color: '#e2eaf5', fontSize: 14 }}>⏪ Replay de {simbolo}</b>
           <Ayuda texto={AYUDA_REPLAY} etiqueta="Qué es el Replay" zIndice={10100} />
           {onValorAzar && <button onClick={onValorAzar} data-valor-azar="" title="Cambiar a un valor al azar de tu Watchlist" style={{ ...boton(), marginLeft: 8 }}>🎲 Valor al azar</button>}
+          {onVarios && <button onClick={onVarios} data-varios-replay="" title="Un Replay con varios valores a la vez, en la misma fecha y con una sola cuenta" style={boton()}>Varios valores…</button>}
           <span style={{ marginLeft: 'auto', cursor: 'pointer', color: '#7a9bc0' }} onClick={onCancelar} title="Cerrar">✕</span>
         </div>
         <SeguirGuardado simbolo={simbolo} guardados={guardados} onAbrir={onAbrir} />

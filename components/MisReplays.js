@@ -18,7 +18,7 @@ export const AYUDA_MIS_REPLAYS = 'Cada Replay se guarda solo en cuanto avanzas a
   'Ejemplo: empiezas un Replay de un valor el 02/01/2020, avanzas hasta el 15/03/2020 y haces 3 operaciones; sales. En «Mis replays» sale ' +
   '«desde 02/01/2020 · vas por el 15/03/2020 · 3 operaciones» con lo que ganaste o perdiste en %; al abrirlo vuelves al 15/03/2020 con las 3 operaciones.'
 
-export default function MisReplays({ filas, cargando = false, error = '', abiertoId = null, onAbrir, onBorrar, onCerrar }) {
+export default function MisReplays({ filas, cargando = false, error = '', abiertoId = null, onAbrir, onBorrar, onCerrar, onVarios = null }) {
   const [q, setQ] = useState('')
   const [borrando, setBorrando] = useState(null)
   useEffect(() => { const t = (e) => { if (e.key === 'Escape') onCerrar() }; window.addEventListener('keydown', t); return () => window.removeEventListener('keydown', t) }, [onCerrar])
@@ -35,7 +35,8 @@ export default function MisReplays({ filas, cargando = false, error = '', abiert
               style={{ background: BZ.caja, color: BZ.texto, border: `1px solid ${BZ.borde}`, borderRadius: 5, padding: '4px 24px 4px 8px', font: `13px ${LETRA}`, width: 220 }} />
             {q && <span onClick={() => setQ('')} title="Limpiar" style={{ position: 'absolute', right: 7, top: 4, cursor: 'pointer', color: BZ.gris }}>✕</span>}
           </span>
-          <span style={{ marginLeft: 'auto', cursor: 'pointer', color: BZ.gris }} onClick={onCerrar} title="Cerrar (Esc)">✕</span>
+          {onVarios && <button data-nuevo-varios="" onClick={onVarios} title="Empezar un Replay con varios valores a la vez, con una sola cuenta" style={{ marginLeft: 'auto', background: BZ.caja, color: BZ.texto, border: `1px solid ${BZ.borde}`, borderRadius: 5, padding: '3px 9px', font: `13px ${LETRA}`, cursor: 'pointer' }}>＋ Con varios valores</button>}
+          <span style={{ marginLeft: onVarios ? 8 : 'auto', cursor: 'pointer', color: BZ.gris }} onClick={onCerrar} title="Cerrar (Esc)">✕</span>
         </div>
         {error && <div style={{ color: BZ.rojo, marginBottom: 8 }}>⚠ {error}</div>}
         <div style={{ overflow: 'auto', flex: 1 }}>
