@@ -48,7 +48,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1310'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1311'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1974,13 +1974,16 @@ export default function Home() {
   const calcReplay=useMemo(()=>replay&&velasMotorReplay?replayCalcula(replay,velasMotorReplay):null,[replay,velasMotorReplay])
   // §244: «tu última compra» de la «Condición con pasos»: las compras del Replay (misma lista mientras no cambien).
   const firmaComprasReplay=calcReplay&&replay?JSON.stringify(calcReplay.marcas.filter(m=>m.tipo==='compra'&&m.simbolo===replay.valores[0]).map(m=>({fecha:m.fecha,precio:m.precio}))):'[]'
+  const comprasReplay=useMemo(()=>JSON.parse(firmaComprasReplay),[firmaComprasReplay])
+  // §245: el minigráfico de la ventana de la señal pide las velas de otros símbolos (y del «🎲 Valor al azar») por /api/velas.
+  const cargaVelasReplay=useCallback(t=>apiFetch(`/api/velas?simbolo=${encodeURIComponent(t)}`).then(r=>r.ok?r.json():null).then(j=>j?.velas||[]).catch(()=>[]),[])
   const fechasSenalReplay=useMemo(()=>{ if(!replay||!senalConDefReplay||faltanVelasSenal.length) return null
     const sym=replay.valores[0], velas=baseReplay
     const sinPrecios=simbolosSenal(senalConDefReplay,sym,tickersDeReplay).filter(t=>!(velasExtraReplay[t]||[]).length)
     if(sinPrecios.length) return { error:`sin precios de ${sinPrecios.join(', ')}` }
     try{
       if(senalConDefReplay.tipo==='condicion'){ const velasDe=q=>(q===sym||q==='valor')?velas:(velasExtraReplay[q]||[]); return senalesCondicion(senalConDefReplay.filas,velasDe,velas.filter(v=>!v.enCurso).map(v=>v.date)) }
-      if(senalConDefReplay.tipo==='pasos'){ const velasDe=q=>(q===sym||q==='valor')?velas.filter(v=>!v.enCurso):(velasExtraReplay[q]||[]); return senalesConPasos(senalConDefReplay.def,velasDe,velas.filter(v=>!v.enCurso).map(v=>v.date),{simbolo:sym,compras:JSON.parse(firmaComprasReplay)}).senales }
+      if(senalConDefReplay.tipo==='pasos'){ const velasDe=q=>(q===sym||q==='valor')?velas.filter(v=>!v.enCurso):(velasExtraReplay[q]||[]); return senalesConPasos(senalConDefReplay.def,velasDe,velas.filter(v=>!v.enCurso).map(v=>v.date),{simbolo:sym,compras:comprasReplay}).senales }
       const refs=Object.fromEntries(tickersDeReplay(senalConDefReplay.def).map(t=>[t,velasExtraReplay[t]||[]]))
       return senalesEstrategia({def:senalConDefReplay.def,params:senalConDefReplay.params||{},velas,referencias:refs})
     }catch(e){ return { error:String(e?.message||e) } } },[senalConDefReplay,faltanVelasSenal.length,velasExtraReplay,baseReplay,replay?.valores?.[0],senalReplay?.tipo==='pasos'?firmaComprasReplay:''])   // eslint-disable-line
@@ -5895,7 +5898,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1310</title>
+        <title>Trading Simulator V9.1311</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5984,7 +5987,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1310
+            <span className="dot"/>Trading Simulator V9.1311
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -11045,6 +11048,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
           Los campos salen del catálogo (CATALOGO_INDICADORES[tipo].params), así que añadir un parámetro
           a un tipo no obliga a tocar este modal. */}
       {replay&&ventanaSenalReplay&&<VentanaSenal simbolo={replay.valores[0]} senal={senalReplay?.tipo==='condicion'||senalReplay?.tipo==='pasos'?senalReplay:null}
+        velas={baseReplay} cargaVelas={cargaVelasReplay} compras={comprasReplay} hoy={replay.hoy} simbolosAzar={[...new Set((watchlist||[]).map(w=>w?.symbol).filter(Boolean))]}
         onAceptar={x=>{ setSenalReplay(x); setVentanaSenalReplay(false); setAvisoSenalReplay('') }} onCancelar={()=>setVentanaSenalReplay(false)}/>}
       {misReplays&&<MisReplays filas={misReplays.filas} cargando={misReplays.cargando} error={misReplays.error} abiertoId={replay?replayGuardado.id:null}
         onAbrir={abreReplayGuardado} onBorrar={borraReplayGuardado} onCerrar={()=>setMisReplays(null)}/>}

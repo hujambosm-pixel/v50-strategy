@@ -7,6 +7,7 @@ import Ayuda from './BuilderAyuda'
 import { inicioHace, inicioAlAzar, velaDeInicio, posicion, anosCargados } from '../lib/replay/grafico'
 import FilasAlerta from './FilasAlerta'
 import EditorConPasos from './EditorConPasos'
+import MiniGraficoPasos from './MiniGraficoPasos'
 import { validaConPasos } from '../lib/condiciones/conPasos'
 import { conPasosNueva } from '../lib/replay/conPasosPantalla'
 
@@ -146,7 +147,9 @@ export const AYUDA_SENAL = 'SEÑAL ⏭ salta hasta la próxima vela con la seña
 
 // §244: arriba se elige «Una condición» (filas del catálogo, §231/§240) o «Condición con pasos» (components/EditorConPasos.js).
 // onAceptar recibe la señal entera: { tipo: 'condicion', filas } o { tipo: 'pasos', def }.
-export function VentanaSenal({ simbolo, senal = null, onAceptar, onCancelar }) {
+// §245: velas (las del valor del Replay, toda su historia), cargaVelas(símbolo), simbolosAzar, compras y hoy: para el minigráfico.
+const SIN = Object.freeze([])
+export function VentanaSenal({ simbolo, senal = null, onAceptar, onCancelar, velas = SIN, cargaVelas = null, simbolosAzar = SIN, compras = SIN, hoy = null }) {
   const [modo, setModo] = useState(senal?.tipo === 'pasos' ? 'pasos' : 'condicion')
   const [filas, setFilas] = useState(senal?.tipo === 'condicion' ? senal.filas || [] : [])
   const [def, setDef] = useState(senal?.tipo === 'pasos' && senal.def ? senal.def : conPasosNueva(String(simbolo || '').toUpperCase()))
@@ -166,7 +169,8 @@ export function VentanaSenal({ simbolo, senal = null, onAceptar, onCancelar }) {
           <Ayuda texto={AYUDA_SENAL} etiqueta="Saltar a la señal" zIndice={10100} />
           <span style={{ marginLeft: 'auto', cursor: 'pointer', color: BZ.gris }} onClick={onCancelar} title="Cerrar">✕</span>
         </div>
-        {modo === 'pasos' ? <EditorConPasos simbolo={simbolo} def={def} onCambia={setDef}/> : <FilasAlerta simbolo={simbolo} filas={filas} onCambia={setFilas} para="señal" conO />}
+        {modo === 'pasos' ? <><EditorConPasos simbolo={simbolo} def={def} onCambia={setDef}/>
+          <MiniGraficoPasos def={def} simbolo={simbolo} velas={velas} cargaVelas={cargaVelas} simbolosAzar={simbolosAzar} compras={compras} hoy={hoy}/></> : <FilasAlerta simbolo={simbolo} filas={filas} onCambia={setFilas} para="señal" conO />}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
           <button onClick={onCancelar} style={bz()}>Cancelar</button>
           <button data-aceptar-senal="" onClick={acepta} disabled={!vale} style={{ ...bz(vale), borderColor: BZ.azul }}>Usar esta señal</button>
