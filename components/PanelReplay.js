@@ -251,8 +251,23 @@ function Curva({ curva, buyHold, cif }) {
 }
 
 // §233: onQuitar(op) quita una operación (cerrada o la abierta) del historial: la papelera pregunta en la fila («¿Quitarla? Sí / No»).
+// §251: la tabla sale con la ÚLTIMA operación arriba y cada columna se ordena pulsando su título (otra vez, al revés); la abierta, siempre
+// arriba. Columna «Capital invertido» (acciones × precio de entrada) y las cifras centradas.
+export const COLUMNAS_OPS = [
+  { id: 'num', t: '#', v: o => o.num }, { id: 'simbolo', t: 'Valor', v: o => o.simbolo }, { id: 'lado', t: 'Lado', v: o => o.lado },
+  { id: 'fechaEntrada', t: 'Entra', v: o => o.fechaEntrada }, { id: 'precioEntrada', t: 'Precio', v: o => o.precioEntrada },
+  { id: 'fechaSalida', t: 'Sale', v: o => o.fechaSalida }, { id: 'precioSalida', t: 'Precio', v: o => o.precioSalida },
+  { id: 'acciones', t: 'Acciones', v: o => o.acciones }, { id: 'capital', t: 'Capital invertido', v: o => o.acciones * o.precioEntrada },
+  { id: 'resultado', t: 'Resultado', v: o => o.resultado }, { id: 'pct', t: '%', v: o => o.pct }, { id: 'motivo', t: 'Cómo salió', v: o => o.motivo },
+]
+export function ordenaOps(ops, orden) {
+  const c = COLUMNAS_OPS.find(x => x.id === orden.col) || COLUMNAS_OPS[0], s = orden.dir === 'asc' ? 1 : -1
+  return [...ops].sort((a, b) => { const x = c.v(a), y = c.v(b); const d = x == null ? (y == null ? 0 : 1) : y == null ? -1 : typeof x === 'string' ? x.localeCompare(y, 'es') : x - y; return d * s || (b.num - a.num) })
+}
 export function ResultadosReplay({ estado, r, cif, velas, simbolo, onQuitar = null }) {
   const [vista, setVista] = useState('ops')
+  const [orden, setOrden] = useState({ col: 'num', dir: 'desc' })
+  const pulsaCol = (id) => setOrden(o => o.col === id ? { col: id, dir: o.dir === 'desc' ? 'asc' : 'desc' } : { col: id, dir: ['simbolo', 'motivo', 'lado'].includes(id) ? 'asc' : 'desc' })
   const [quitando, setQuitando] = useState(null)
   const papelera = (num, op) => !onQuitar || estado.terminada ? <td style={td} /> : <td style={{ ...td, whiteSpace: 'nowrap' }}>
     {quitando === num
@@ -263,7 +278,7 @@ export function ResultadosReplay({ estado, r, cif, velas, simbolo, onQuitar = nu
   const q = vs.length ? Math.floor((estado.capitalInicial - cm) / vs[0].close) : 0
   const bh = q > 0 ? vs.map(v => ({ fecha: v.date, valor: estado.capitalInicial - cm - q * vs[0].close + q * v.close })) : []
   const th = { textAlign: 'left', color: BZ.gris, fontWeight: 500, padding: '4px 8px', borderBottom: `1px solid ${BZ.borde}` }
-  const td = { padding: '4px 8px', borderBottom: `1px solid ${BZ.caja}` }
+  const td = { padding: '4px 8px', borderBottom: `1px solid ${BZ.caja}` }, tdc = { ...td, textAlign: 'center' }
   const tab = (id, txt) => <button onClick={() => setVista(id)} data-vista-replay={id} style={{ ...btn(true, vista === id), borderRadius: 6 }}>{txt}</button>
   const pos = r.posiciones[simbolo]
   return (
@@ -272,17 +287,17 @@ export function ResultadosReplay({ estado, r, cif, velas, simbolo, onQuitar = nu
       <div style={{ ...cajaSt }}>
         {vista === 'ops' ? <>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr>{['#', 'Valor', 'Lado', 'Entra', 'Precio', 'Sale', 'Precio', 'Acciones', 'Resultado', '%', 'Cómo salió', ''].map((h, i) => <th key={i} style={{ ...th, textAlign: i >= 4 && i !== 5 && i !== 10 ? 'right' : 'left' }}>{h}</th>)}</tr></thead>
+            <thead><tr>{COLUMNAS_OPS.map(c => <th key={c.id} data-col-ops={c.id} onClick={() => pulsaCol(c.id)} title="Pulsa para ordenar por esta columna (otra vez, al revés)" style={{ ...th, textAlign: 'center', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', color: orden.col === c.id ? BZ.azul : BZ.gris }}>{c.t}{orden.col === c.id ? (orden.dir === 'desc' ? ' ▼' : ' ▲') : ''}</th>)}<th style={th} /></tr></thead>
             <tbody>
-              {r.operaciones.map(o => <tr key={o.num}>
-                <td style={td}>{o.num}</td><td style={td}>{o.simbolo}</td><td style={td}>{o.lado > 0 ? 'Largo' : 'Corto'}</td><td style={td}>{fmt(o.fechaEntrada)}</td>
-                <td style={{ ...td, textAlign: 'right' }}>{pr(o.precioEntrada)}</td><td style={td}>{fmt(o.fechaSalida)}</td><td style={{ ...td, textAlign: 'right' }}>{pr(o.precioSalida)}</td>
-                <td style={{ ...td, textAlign: 'right' }}>{o.acciones}</td><td style={{ ...td, textAlign: 'right', color: color(o.resultado) }}>{signo(o.resultado)}{eur(Math.abs(o.resultado), 2)}</td>
-                <td style={{ ...td, textAlign: 'right', color: color(o.resultado) }}>{signo(o.pct)}{pc(Math.abs(o.pct))}</td><td style={td}>{o.motivo}</td>{papelera(o.num, o)}</tr>)}
-              {pos && <tr style={{ color: BZ.gris }}><td style={td}>{pos.num}</td><td style={td}>{simbolo}</td><td style={td}>{pos.lado > 0 ? 'Largo' : 'Corto'}</td><td style={td}>{fmt(pos.fecha)}</td>
-                <td style={{ ...td, textAlign: 'right' }}>{pr(pos.precioMedio)}</td><td style={td} colSpan={2}>abierta</td><td style={{ ...td, textAlign: 'right' }}>{pos.acciones}</td>
-                <td style={{ ...td, textAlign: 'right', color: color(pos.ganancia) }}>{signo(pos.ganancia)}{eur(Math.abs(pos.ganancia), 2)}</td><td style={td} colSpan={2}>sin vender</td>{papelera(pos.num, { ids: pos.ids, simbolo, fechaSalida: null })}</tr>}
-              {!r.operaciones.length && !pos && <tr><td colSpan={12} style={{ ...td, color: BZ.gris }}>Aún no has operado.</td></tr>}
+              {pos && <tr data-fila-abierta="" style={{ color: BZ.gris }}><td style={tdc}>{pos.num}</td><td style={tdc}>{simbolo}</td><td style={tdc}>{pos.lado > 0 ? 'Largo' : 'Corto'}</td><td style={tdc}>{fmt(pos.fecha)}</td>
+                <td style={tdc}>{pr(pos.precioMedio)}</td><td style={tdc} colSpan={2}>abierta</td><td style={tdc}>{pos.acciones}</td><td style={tdc}>{eur(pos.acciones * pos.precioMedio)}</td>
+                <td style={{ ...tdc, color: color(pos.ganancia) }}>{signo(pos.ganancia)}{eur(Math.abs(pos.ganancia), 2)}</td><td style={tdc} colSpan={2}>sin vender</td>{papelera(pos.num, { ids: pos.ids, simbolo, fechaSalida: null })}</tr>}
+              {ordenaOps(r.operaciones, orden).map(o => <tr key={o.num} data-fila-op={o.num}>
+                <td style={tdc}>{o.num}</td><td style={tdc}>{o.simbolo}</td><td style={tdc}>{o.lado > 0 ? 'Largo' : 'Corto'}</td><td style={tdc}>{fmt(o.fechaEntrada)}</td>
+                <td style={tdc}>{pr(o.precioEntrada)}</td><td style={tdc}>{fmt(o.fechaSalida)}</td><td style={tdc}>{pr(o.precioSalida)}</td>
+                <td style={tdc}>{o.acciones}</td><td style={tdc}>{eur(o.acciones * o.precioEntrada)}</td><td style={{ ...tdc, color: color(o.resultado) }}>{signo(o.resultado)}{eur(Math.abs(o.resultado), 2)}</td>
+                <td style={{ ...tdc, color: color(o.resultado) }}>{signo(o.pct)}{pc(Math.abs(o.pct))}</td><td style={tdc}>{o.motivo}</td>{papelera(o.num, o)}</tr>)}
+              {!r.operaciones.length && !pos && <tr><td colSpan={13} style={{ ...td, color: BZ.gris }}>Aún no has operado.</td></tr>}
             </tbody>
           </table>
           <div style={{ color: BZ.gris, fontSize: 12, marginTop: 6 }}>Con comisiones ({cm ? `${com(cm)} € por orden` : 'ninguna'}), sin impuestos. {r.ordenes} órdenes, {eur(r.comisiones, 2)} de comisiones.</div>

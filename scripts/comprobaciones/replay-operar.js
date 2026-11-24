@@ -119,6 +119,19 @@ const VELAS = { A: [v(D6[0], 100, 102, 99, 100), v(D6[1], 101, 105, 100, 104), v
   // Curva: 10.000 · 10.146 · 9.851 ×4 → peor caída 9.851 / 10.146 − 1 = −2,9 % (−295 €) el 04/01.
   ok(/Peor caída −2,9 %/.test(res()) && /295 €/.test(res()) && /04\/01\/2024/.test(res()), `curva: peor caída −2,9 % (−295 €) el 04/01/2024 (${(m.raiz.busca(n => n.hasAttribute('data-caida-replay')) || {}).textContent})`)
   m.quita()
+  // §251: la tabla, con la última arriba y ordenable. Tres operaciones inventadas: #1 −5 €, #2 +10 €, #3 +3 €.
+  const tres = [{ num: 1, resultado: -5, simbolo: 'A' }, { num: 2, resultado: 10, simbolo: 'A' }, { num: 3, resultado: 3, simbolo: 'A' }]
+  ok(P.ordenaOps(tres, { col: 'num', dir: 'desc' }).map(o => o.num).join() === '3,2,1', 'por defecto, la última arriba: #3, #2, #1')
+  ok(P.ordenaOps(tres, { col: 'resultado', dir: 'desc' }).map(o => o.num).join() === '2,3,1' && P.ordenaOps(tres, { col: 'resultado', dir: 'asc' }).map(o => o.num).join() === '1,3,2', 'por resultado: de más a menos #2, #3, #1; al revés #1, #3, #2')
+  m = D.monta(React.createElement(P.ResultadosReplay, { estado: conOrden, r, cif: M.cifras(conOrden, VELAS, r), velas: VELAS.A, simbolo: 'A' }), RDC); await D.espera(20)
+  const cab = (id) => m.raiz.busca(n => n.getAttribute('data-col-ops') === id)
+  ok(/# ▼/.test(cab('num').textContent) && /Capital invertido/.test(cab('capital').textContent), 'la tabla sale ordenada por # (▼) y tiene «Capital invertido»')
+  ok(/4\.949 €/.test(m.raiz.busca(n => n.getAttribute('data-fila-op') === '1').textContent), 'capital invertido de #1: 49 × 101 = 4.949 €')
+  D.pulsa(cab('resultado')); await D.espera(10)
+  ok(/Resultado ▼/.test(cab('resultado').textContent), 'pulsar «Resultado» ordena por él (▼); otra vez, al revés')
+  D.pulsa(cab('resultado')); await D.espera(10)
+  ok(/Resultado ▲/.test(cab('resultado').textContent), '… y al pulsar otra vez, ▲')
+  m.quita()
 
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTodo en verde')
   process.exit(fallos ? 1 : 0)
