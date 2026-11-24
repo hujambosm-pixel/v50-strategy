@@ -11,6 +11,7 @@ import ConLimpiar from './LimpiarBusqueda'
 import { Fila, entrada, mini } from './BuilderFila'
 import { nombreCond, explicacionCond } from '../lib/builder/tarjetas'
 import { OTRO_REGLA, MAX_FILAS_REGLA, filaDePantallaRegla, filasGuardadasRegla, catalogoRegla, filaNuevaRegla, opcionesQuienRegla, erroresFilaRegla, AYUDA_REGLAS } from '../lib/builder/reglasPesos'
+import { MOV_TEXTO, REF_TEXTO, filaMovimientoNueva, AYUDA_PASOS } from '../lib/replay/conPasosPantalla'
 
 // Todas con «Y» (la primera sin unión).
 const conY = (fs) => fs.map((f, k) => { const { union, ...r } = f; return k ? { ...r, union: 'Y' } : r })
@@ -22,14 +23,24 @@ const AYUDA_UNION = '«Y ADEMÁS»: la señal pide que se cumplan las dos filas 
   'Ejemplo: «el cierre está por encima de la EMA 20» o bien «el cierre está por debajo de la EMA 20» da una señal en cada cruce: ' +
   'si cruza hacia arriba el día 10 y hacia abajo el día 25, señales el 10 y el 25.\n\n' +
   '«Y además» une antes que «o bien»: A y además B, o bien C = (A y B a la vez) o bien C.'
-export default function FilasAlerta({ simbolo, filas, onCambia, inicial = null, para = 'alerta', conO = false }) {   // para: lo que sale en el título del catálogo (§231: 'señal' en el Replay)
+// §244: movimientos (solo la «Condición con pasos» del Replay): la lista de «desde dónde» que valen aquí; con ella, además de las del
+// catálogo, filas «el cierre cae / sube / se mueve un X % desde…» ({ mov, pct, desde, quien, union? }, lib/condiciones/conPasos.js).
+// Sin ella (alertas, la señal de siempre), todo igual que antes.
+const guardaFilas = (xs) => xs.map((f, k) => {
+  const u = k ? { union: f.union === 'O' ? 'O' : 'Y' } : {}
+  if (f.mov !== undefined) return { mov: f.mov, pct: f.pct, desde: f.desde, quien: f.quien, ...u }
+  const { union, ...g } = filasGuardadasRegla([f])[0]
+  return { ...g, ...u }
+})
+export default function FilasAlerta({ simbolo, filas, onCambia, inicial = null, para = 'alerta', conO = false, movimientos = null }) {   // para: lo que sale en el título del catálogo (§231: 'señal' en el Replay)
   const sim = String(simbolo || '').toUpperCase()
   const [catalogo, setCatalogo] = useState(!!inicial?.catalogo)
   const [buscar, setBuscar] = useState(inicial?.buscar || '')
   const [otro, setOtro] = useState(null)       // la fila que está eligiendo «Otro símbolo…»
   const [otroTxt, setOtroTxt] = useState('')
-  const fs = (filas || []).map(filaDePantallaRegla)
-  const ponFilas = (f) => { const g = filasGuardadasRegla(f(fs)); onCambia(conO ? g : conY(g)) }
+  const fs = (filas || []).map(r => r && r.mov !== undefined ? { ...r, union: r.union === 'O' ? 'O' : 'Y' } : filaDePantallaRegla(r))
+  const ponFilas = (f) => { const g = guardaFilas(f(fs)); onCambia(conO ? g : conY(g)) }
+  const cambiaFila = (j, c) => ponFilas(xs => xs.map((y, p) => p === j ? { ...y, ...c } : y))
   const cierra = () => { setCatalogo(false); setBuscar('') }
   useEffect(() => {
     if (!catalogo) return
@@ -58,7 +69,24 @@ export default function FilasAlerta({ simbolo, filas, onCambia, inicial = null, 
                 {j === 1 && <Ayuda texto={AYUDA_UNION} etiqueta="y además / o bien" zIndice={10100}/>}
               </div>
             : <div style={{ ...S.apagado, marginTop: 6 }}>y además</div>)}
-          {f.rara ? (
+          {f.mov !== undefined ? (
+            <div data-fila-mov={j} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+              <span style={S.secundario}>el cierre de</span>
+              <select data-quien-mov={j} aria-label="De quién" style={mini} value={f.quien || ''}
+                onChange={e => { const q = e.target.value; if (q === OTRO_REGLA) { setOtro(j); setOtroTxt('') } else { setOtro(null); cambiaFila(j, { quien: q }) } }}>
+                {opcionesQuienRegla([sim].filter(Boolean), f.quien).map(o => <option key={o.v} value={o.v}>{o.t}</option>)}</select>
+              <select data-mov={j} aria-label="Cae, sube o se mueve" style={mini} value={f.mov} onChange={e => cambiaFila(j, { mov: e.target.value })}>
+                {MOV_TEXTO.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>
+              <input data-pct-mov={j} type="number" min="0.1" max="99" step="0.5" aria-label="Por ciento" value={Number.isFinite(f.pct) ? f.pct : ''}
+                onChange={e => cambiaFila(j, { pct: e.target.value === '' ? null : Number(e.target.value) })}
+                style={{ ...mini, width: 58, borderColor: Number.isFinite(f.pct) && f.pct > 0 && f.pct < 100 ? undefined : C.rojo }}/>
+              <span style={S.secundario}>%{f.mov === 'mueve' ? ' (arriba o abajo)' : ''} desde</span>
+              <select data-desde-mov={j} aria-label="Desde dónde se mide" style={mini} value={f.desde} onChange={e => cambiaFila(j, { desde: e.target.value })}>
+                {(movimientos || []).concat((movimientos || []).includes(f.desde) ? [] : [f.desde]).map(v => <option key={v} value={v}>{REF_TEXTO[v] || v}</option>)}</select>
+              <Ayuda texto={AYUDA_PASOS.movimiento} etiqueta="Cae / sube un % desde…" zIndice={10100}/>
+              <button type="button" style={{ ...S.enlace, color: B.apagado, fontSize: 18, lineHeight: 1 }} aria-label="Quitar esta condición" onClick={() => { setOtro(null); ponFilas(xs => xs.filter((_, q) => q !== j)) }}>×</button>
+            </div>
+          ) : f.rara ? (
             <div data-fila-rara style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, color: B.secundario }}>
               <span style={{ flex: 1 }}>Una condición que aquí no se puede editar.</span>
               <button type="button" style={{ ...S.enlace, color: B.apagado, fontSize: 18, lineHeight: 1 }} aria-label="Quitar esta condición" onClick={() => ponFilas(xs => xs.filter((_, q) => q !== j))}>×</button>
@@ -84,7 +112,9 @@ export default function FilasAlerta({ simbolo, filas, onCambia, inicial = null, 
       ))}
       {!fs.length && <div style={{ color: C.rojo, fontSize: 12 }}>Pon al menos una condición.</div>}
       <div style={{ marginTop: 8 }}><button type="button" data-boton="anadir-condicion-alerta" disabled={fs.length >= MAX_FILAS_REGLA} title={fs.length >= MAX_FILAS_REGLA ? `Como mucho ${MAX_FILAS_REGLA} condiciones` : 'Una condición del catálogo, sobre este valor u otro símbolo'}
-        style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }} onClick={() => setCatalogo(true)}>+ condición</button></div>
+        style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }} onClick={() => setCatalogo(true)}>+ condición</button>
+        {movimientos && movimientos.length > 0 && <button type="button" data-boton="anadir-movimiento" disabled={fs.length >= MAX_FILAS_REGLA} title="«El cierre cae / sube un X % desde…» un precio que se recuerda"
+          style={{ ...S.boton, padding: '4px 10px', fontSize: 13, marginLeft: 6 }} onClick={() => ponFilas(xs => [...xs, filaMovimientoNueva(xs[0]?.quien || sim, movimientos[0])])}>+ cae / sube un %</button>}</div>
 
       {catalogo && (
         <div data-catalogo-alerta role="dialog" aria-modal="true" aria-label="Añadir condición" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 995, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onMouseDown={e => { if (e.target === e.currentTarget) cierra() }}>

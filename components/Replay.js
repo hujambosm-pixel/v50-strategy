@@ -6,6 +6,9 @@ import { MONO } from '../lib/utils'
 import Ayuda from './BuilderAyuda'
 import { inicioHace, inicioAlAzar, velaDeInicio, posicion, anosCargados } from '../lib/replay/grafico'
 import FilasAlerta from './FilasAlerta'
+import EditorConPasos from './EditorConPasos'
+import { validaConPasos } from '../lib/condiciones/conPasos'
+import { conPasosNueva } from '../lib/replay/conPasosPantalla'
 
 const fmt = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}` : '—')
 const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
@@ -137,25 +140,36 @@ export const AYUDA_SENAL = 'SEÑAL ⏭ salta hasta la próxima vela con la seña
   '⏮ SEÑAL vuelve a la anterior (cuenta como retroceso). Las velas con señal que ya ves llevan un ▲ morado.\n\n' +
   'Con una CONDICIÓN DEL CATÁLOGO, la señal es la vela en que pasa a cumplirse (la anterior no se cumplía): con «el cierre está por encima de la EMA 200», ' +
   'una señal cada vez que el precio cruza la media hacia arriba, no una en cada vela por encima.\n' +
+  'Con una CONDICIÓN CON PASOS, la vela en que se cumple su último paso, recordando lo de antes (el tramo, el paso 1, el precio de la última señal…).\n' +
   'Con una ESTRATEGIA de tarjetas, la vela en que da señal de compra (como «Da señal de compra con…» del screener).\n\n' +
   'Ejemplo: hoy en el Replay es el 03/02 y la EMA 10 cruza por encima de la EMA 30 el 17/02: «Señal ⏭» te deja en el cierre del 17/02, listo para decidir.'
 
-export function VentanaSenal({ simbolo, filas: inicial, onAceptar, onCancelar }) {
-  const [filas, setFilas] = useState(inicial || [])
+// §244: arriba se elige «Una condición» (filas del catálogo, §231/§240) o «Condición con pasos» (components/EditorConPasos.js).
+// onAceptar recibe la señal entera: { tipo: 'condicion', filas } o { tipo: 'pasos', def }.
+export function VentanaSenal({ simbolo, senal = null, onAceptar, onCancelar }) {
+  const [modo, setModo] = useState(senal?.tipo === 'pasos' ? 'pasos' : 'condicion')
+  const [filas, setFilas] = useState(senal?.tipo === 'condicion' ? senal.filas || [] : [])
+  const [def, setDef] = useState(senal?.tipo === 'pasos' && senal.def ? senal.def : conPasosNueva(String(simbolo || '').toUpperCase()))
+  const vale = modo === 'pasos' ? validaConPasos(def).length === 0 : filas.length > 0
+  const acepta = () => { if (vale) onAceptar(modo === 'pasos' ? { tipo: 'pasos', def } : { tipo: 'condicion', filas }) }
+  const pestana = (m, t) => (
+    <button type="button" data-modo-senal={m} onClick={() => setModo(m)}
+      style={{ ...bz(), background: modo === m ? 'rgba(88,166,255,0.18)' : BZ.caja, borderColor: modo === m ? BZ.azul : BZ.borde }}>{t}</button>)
   useEffect(() => { const t = (e) => { if (e.key === 'Escape') onCancelar() }; window.addEventListener('keydown', t); return () => window.removeEventListener('keydown', t) }, [onCancelar])
   return (
     <div data-ventana-senal="" role="dialog" aria-modal="true" onMouseDown={e => { if (e.target === e.currentTarget) onCancelar() }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10050, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: BZ.fondo, border: `1px solid ${BZ.borde}`, borderRadius: 8, padding: 16, width: 560, maxWidth: '100%', maxHeight: '90vh', overflow: 'auto', font: `13px/1.5 ${LETRA}`, color: BZ.texto }}>
+      <div style={{ background: BZ.fondo, border: `1px solid ${BZ.borde}`, borderRadius: 8, padding: 16, width: modo === 'pasos' ? 720 : 560, maxWidth: '100%', maxHeight: '90vh', overflow: 'auto', font: `13px/1.5 ${LETRA}`, color: BZ.texto }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <b style={{ fontSize: 14 }}>Señal: una condición del catálogo</b>
+          <b style={{ fontSize: 14 }}>Señal</b>
+          {pestana('condicion', 'Una condición')}{pestana('pasos', 'Condición con pasos')}
           <Ayuda texto={AYUDA_SENAL} etiqueta="Saltar a la señal" zIndice={10100} />
           <span style={{ marginLeft: 'auto', cursor: 'pointer', color: BZ.gris }} onClick={onCancelar} title="Cerrar">✕</span>
         </div>
-        <FilasAlerta simbolo={simbolo} filas={filas} onCambia={setFilas} para="señal" conO />
+        {modo === 'pasos' ? <EditorConPasos simbolo={simbolo} def={def} onCambia={setDef}/> : <FilasAlerta simbolo={simbolo} filas={filas} onCambia={setFilas} para="señal" conO />}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
           <button onClick={onCancelar} style={bz()}>Cancelar</button>
-          <button data-aceptar-senal="" onClick={() => filas.length && onAceptar(filas)} disabled={!filas.length} style={{ ...bz(!!filas.length), borderColor: BZ.azul }}>Usar esta señal</button>
+          <button data-aceptar-senal="" onClick={acepta} disabled={!vale} style={{ ...bz(vale), borderColor: BZ.azul }}>Usar esta señal</button>
         </div>
       </div>
     </div>)
