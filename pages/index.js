@@ -26,7 +26,7 @@ import { irA as replayIrA, calcula as replayCalcula, cifras as replayCifras } fr
 import { marcasDe as replayMarcas, nuevaAccion as nuevaAccionReplay, tradesDe as tradesReplayDe } from '../lib/replay/orden'
 import { PanelOperar, ResultadosReplay } from '../components/PanelReplay'   // §228: operar en el Replay
 import { FORM_INICIAL as FORM_REPLAY, hayBorrador as hayBorradorReplay, conClic as clicBorrador, dobleClic as dobleClicBorrador, empiezaMarca as empiezaMarcaReplay, enCasilla as enCasillaReplay, ladoDe as ladoBorrador, mueveBorrador as mueveBorradorReplay, deMercado as deMercadoReplay, redondea as redondeaReplay, lineasDe as lineasReplayDe, cajasDe as cajasReplayDe, accionMover as accionMoverReplay, anade as anadeAccionReplay, ordenDeMarca as ordenDeMarcaReplay, quitaOperacion as quitaOperacionReplay } from '../lib/replay/borrador'   // §229: marcar en el gráfico
-import { senalesCondicion, senalesEstrategia, siguienteSenal, anteriorSenal, marcasSenal, simbolosSenal, graficoSenal } from '../lib/replay/senales'   // §231: saltar a la señal
+import { senalesCondicion, entradasYSalidasEstrategia, fechasDeSalto, siguienteSenal, anteriorSenal, marcasSenal, marcasSalida, simbolosSenal, graficoSenal } from '../lib/replay/senales'   // §231: saltar a la señal
 import { senalesConPasos } from '../lib/condiciones/conPasos'   // §244: la «Condición con pasos» como señal del Replay
 import { textoCortoConPasos } from '../lib/replay/conPasosPantalla'
 import { fraseFilasRegla as fraseFilasReplay } from '../lib/builder/reglasPesos'   // §234: el selector de señal dice qué condición es
@@ -48,7 +48,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1313'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1314'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1977,7 +1977,9 @@ export default function Home() {
   const comprasReplay=useMemo(()=>JSON.parse(firmaComprasReplay),[firmaComprasReplay])
   // §245: el minigráfico de la ventana de la señal pide las velas de otros símbolos (y del «🎲 Valor al azar») por /api/velas.
   const cargaVelasReplay=useCallback(t=>apiFetch(`/api/velas?simbolo=${encodeURIComponent(t)}`).then(r=>r.ok?r.json():null).then(j=>j?.velas||[]).catch(()=>[]),[])
-  const fechasSenalReplay=useMemo(()=>{ if(!replay||!senalConDefReplay||faltanVelasSenal.length) return null
+  const [tipoSaltoReplay,setTipoSaltoReplay]=useState('ambas')   // §248: con una estrategia, a qué saltan «Señal ⏭» / «⏮ Señal»
+  // resSenalReplay: [fechas] (condición), { entradas, salidas } (estrategia, §248) o { error }.
+  const resSenalReplay=useMemo(()=>{ if(!replay||!senalConDefReplay||faltanVelasSenal.length) return null
     const sym=replay.valores[0], velas=baseReplay
     const sinPrecios=simbolosSenal(senalConDefReplay,sym,tickersDeReplay).filter(t=>!(velasExtraReplay[t]||[]).length)
     if(sinPrecios.length) return { error:`sin precios de ${sinPrecios.join(', ')}` }
@@ -1985,8 +1987,9 @@ export default function Home() {
       if(senalConDefReplay.tipo==='condicion'){ const velasDe=q=>(q===sym||q==='valor')?velas:(velasExtraReplay[q]||[]); return senalesCondicion(senalConDefReplay.filas,velasDe,velas.filter(v=>!v.enCurso).map(v=>v.date)) }
       if(senalConDefReplay.tipo==='pasos'){ const velasDe=q=>(q===sym||q==='valor')?velas.filter(v=>!v.enCurso):(velasExtraReplay[q]||[]); return senalesConPasos(senalConDefReplay.def,velasDe,velas.filter(v=>!v.enCurso).map(v=>v.date),{simbolo:sym,compras:comprasReplay}).senales }
       const refs=Object.fromEntries(tickersDeReplay(senalConDefReplay.def).map(t=>[t,velasExtraReplay[t]||[]]))
-      return senalesEstrategia({def:senalConDefReplay.def,params:senalConDefReplay.params||{},velas,referencias:refs})
+      return entradasYSalidasEstrategia({def:senalConDefReplay.def,params:senalConDefReplay.params||{},velas,referencias:refs})
     }catch(e){ return { error:String(e?.message||e) } } },[senalConDefReplay,faltanVelasSenal.length,velasExtraReplay,baseReplay,replay?.valores?.[0],senalReplay?.tipo==='pasos'?firmaComprasReplay:''])   // eslint-disable-line
+  const fechasSenalReplay=useMemo(()=>{ const r=resSenalReplay; if(!r||Array.isArray(r)||r.error) return r; return fechasDeSalto(r,tipoSaltoReplay) },[resSenalReplay,tipoSaltoReplay])
   // El gráfico pone sus marcas solo al rehacerse: una copia nueva de las velas cuando cambian las señales lo rehace (los ▲ salen sin avanzar).
   const velasGraficoReplay=useMemo(()=>velasReplay?[...velasReplay]:null,[velasReplay,fechasSenalReplay])   // eslint-disable-line
   const ahoraReplay=(velasReplay&&velasReplay.length)?velasReplay[velasReplay.length-1].close:null
@@ -2023,6 +2026,7 @@ export default function Home() {
     return { elegida:senalReplay?(cond?'cond':'e:'+senalReplay.id):'', onElige:eligeSenalReplay, onSiguiente:()=>saltaSenalReplay(1), onAnterior:()=>saltaSenalReplay(-1),
       opciones:[...(cond?[{valor:'cond',texto:senalReplay.tipo==='pasos'?`Con pasos: ${textoCortoConPasos(senalReplay.def)}`:`Condición: ${fraseFilasReplay(senalReplay.filas||[])}`},{valor:'cond-nueva',texto:'Cambiar la condición…'}]:[{valor:'cond',texto:'Una condición (del catálogo o con pasos)…'}]),
         ...estrategiasSenalReplay.map(x=>({valor:'e:'+x.id,texto:`Estrategia «${x.name}»`}))],
+      ...(resSenalReplay&&resSenalReplay.entradas?{ tipos:{ valor:tipoSaltoReplay, onCambia:setTipoSaltoReplay }, textoN:`${resSenalReplay.entradas.length} entradas · ${resSenalReplay.salidas.length} salidas` }:{}),
       estado:!senalReplay?'sin':err?'error':Array.isArray(ff)?'lista':'cargando', n:Array.isArray(ff)?ff.length:0, aviso:err?`No se pueden buscar las señales: ${err}`:avisoSenalReplay } })()
   const cambiaVerReplay=(v)=>{ setReplayVer(v); if(v>0) anchoReplayRef.current=v; const _r=replay&&v?rangoVer(baseReplay,replay.hoy,v):null; if(!_r) return
     savedRangeRef.current=_r; chartApiRef.current?.verVelas?.(v); chartApiFullscreenRef.current?.verVelas?.(v) }
@@ -2076,8 +2080,10 @@ export default function Home() {
   // §231: ▲ morado en las velas con señal que ya se ven.
   // §234: los indicadores de la señal elegida (p. ej. las dos EMA del cruce), calculados solo con las velas que ya se ven.
   const graficoReplay=useMemo(()=>replay&&senalConDefReplay&&velasReplay?graficoSenal(senalConDefReplay,velasReplay,replay.valores[0],velasExtraReplay):null,[senalConDefReplay,velasReplay,velasExtraReplay,replay?.valores?.[0]])   // eslint-disable-line
-  const marcasTodasReplay=useMemo(()=>{ const m=replay&&Array.isArray(fechasSenalReplay)?marcasSenal(fechasSenalReplay,replay.hoy):[]
-    return m.length?[...marcasReplay,...m].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0):marcasReplay },[marcasReplay,fechasSenalReplay,replay?.hoy])   // eslint-disable-line
+  // §248: con una estrategia, ▲ en sus entradas y ▼ en sus salidas (las dos siempre, salte a lo que salte).
+  const marcasTodasReplay=useMemo(()=>{ const r=resSenalReplay, ent=r&&r.entradas?r.entradas:(Array.isArray(fechasSenalReplay)?fechasSenalReplay:[])
+    const m=replay?[...marcasSenal(ent,replay.hoy),...marcasSalida(r&&r.salidas,replay.hoy)]:[]
+    return m.length?[...marcasReplay,...m].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0):marcasReplay },[marcasReplay,fechasSenalReplay,resSenalReplay,replay?.hoy])   // eslint-disable-line
   const accionReplay=(a)=>setReplay(r=>r?{...r,acciones:anadeAccionReplay(r.acciones,a)}:r)
   // §229: 🎯 / doble clic / clics seguidos / arrastrar las líneas.
   const marcaReplay=(lado=null)=>{ if(!replay||replay.terminada) return; const c=empiezaMarcaReplay(formReplay,lado); setFormReplay(c.f); setCapturaReplay(c.captura); setAvisoLineaReplay('') }
@@ -5898,7 +5904,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1313</title>
+        <title>Trading Simulator V9.1314</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -5987,7 +5993,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1313
+            <span className="dot"/>Trading Simulator V9.1314
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}

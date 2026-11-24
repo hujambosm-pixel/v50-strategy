@@ -76,6 +76,18 @@ const VELAS = F.map((date, i) => ({ date, open: 10 + i, high: 11 + i, low: 9 + i
   m = D.monta(barra({ ...e0, hoy: F[9] }), RDC); await D.espera(20)
   ok(/última vela/.test(m.raiz.busca(n => n.hasAttribute('data-barra-replay')).textContent) && D.propsDe(boton("▶|")).disabled === true, 'en la última vela: «última vela» y ▶| apagado')
   m.quita()
+  // §248: con una estrategia, el selector «a qué salta» y «N entradas · M salidas».
+  let tipo = null
+  const senalE = { elegida: 'e:1', opciones: [{ valor: 'e:1', texto: 'Estrategia «X»' }], onElige() {}, onSiguiente() {}, onAnterior() {}, estado: 'lista', n: 4,
+    tipos: { valor: 'ambas', onCambia: v => { tipo = v } }, textoN: '2 entradas · 2 salidas' }
+  m = D.monta(React.createElement(RP.BarraReplay, { velas: VELAS, estado: { ...e0, hoy: F[4] }, onIr() {}, onSalir() {}, senal: senalE }), RDC); await D.espera(20)
+  const ts = m.raiz.busca(n => n.hasAttribute('data-tipo-salto'))
+  D.escribe(ts, 'salidas'); await D.espera(10)
+  ok(ts && tipo === 'salidas' && /2 entradas · 2 salidas/.test(m.raiz.busca(n => n.hasAttribute('data-n-senales')).textContent), 'con una estrategia: «a qué salta» (elige «salidas») y «2 entradas · 2 salidas»')
+  m.quita()
+  m = D.monta(React.createElement(RP.BarraReplay, { velas: VELAS, estado: { ...e0, hoy: F[4] }, onIr() {}, onSalir() {}, senal: { ...senalE, tipos: undefined, textoN: undefined, n: 3 } }), RDC); await D.espera(20)
+  ok(!m.raiz.busca(n => n.hasAttribute('data-tipo-salto')) && /3 señales en total/.test(m.raiz.busca(n => n.hasAttribute('data-n-senales')).textContent), 'con una condición: sin ese selector y «3 señales en total»')
+  m.quita()
 
   // ── La ventana de empezar ──
   let empezo = null, cancelo = 0

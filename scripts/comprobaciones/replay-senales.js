@@ -33,6 +33,12 @@ const F = (k) => VELAS[PRE + k].date
   const e = S.senalesEstrategia({ def, velas: VELAS })
   ok(igual(e, [F(10), F(30)]), `estrategia: señales en las velas 10 y 30; la 12 no cuenta (operación abierta) (${JSON.stringify(e)})`)
   ok(igual(S.senalesEstrategia({ def, velas: [...VELAS.slice(0, PRE + 31), { ...VELAS[PRE + 31], enCurso: true }] }), [F(10), F(30)]), 'la vela en curso no se usa')
+  // §248: las SALIDAS: compra a la apertura de la 11 y vende por tiempo (3 velas) a la de la 14; compra en la 31 y vende en la 34.
+  const es = S.entradasYSalidasEstrategia({ def, velas: VELAS })
+  ok(igual(es, { entradas: [F(10), F(30)], salidas: [F(14), F(34)] }), `estrategia: entradas 10 y 30, salidas 14 y 34 (${JSON.stringify(es)})`)
+  ok(igual(S.fechasDeSalto(es, 'ambas'), [F(10), F(14), F(30), F(34)]) && igual(S.fechasDeSalto(es, 'entradas'), [F(10), F(30)]) && igual(S.fechasDeSalto(es, 'salidas'), [F(14), F(34)]),
+    'a qué salta: las dos (10, 14, 30, 34), solo entradas o solo salidas')
+  ok(igual(S.marcasSalida(es.salidas, F(20)).map(m => [m.date, m.position, m.shape]), [[F(14), 'aboveBar', 'arrowDown']]), '▼ encima de la vela, solo en las salidas que ya se ven (hasta hoy)')
   // Sin mirar el futuro: con las velas solo hasta la 20, las señales hasta la 20 son las mismas.
   ok(igual(S.senalesEstrategia({ def, velas: VELAS.slice(0, PRE + 21) }), [F(10)]), 'cortando las velas en la 20, la señal de la 10 sale igual (no depende de lo que viene)')
 

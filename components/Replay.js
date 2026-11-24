@@ -2,6 +2,7 @@
 // VentanaReplay: elegir la vela de inicio. BarraReplay: la barra de abajo (◀ ▶| ▶▶ ▶/⏸, velocidad, «hoy», Salir) con sus teclas.
 // El estado lo lleva pages/index.js; esto solo pinta y avisa (onIr, onSalir, onEmpezar).
 import { useState, useEffect, useRef } from 'react'
+import { TIPOS_SALTO } from '../lib/replay/senales'
 import { MONO } from '../lib/utils'
 import Ayuda from './BuilderAyuda'
 import { inicioHace, inicioAlAzar, velaDeInicio, posicion, anosCargados } from '../lib/replay/grafico'
@@ -142,7 +143,8 @@ export const AYUDA_SENAL = 'SEÑAL ⏭ salta hasta la próxima vela con la seña
   'Con una CONDICIÓN DEL CATÁLOGO, la señal es la vela en que pasa a cumplirse (la anterior no se cumplía): con «el cierre está por encima de la EMA 200», ' +
   'una señal cada vez que el precio cruza la media hacia arriba, no una en cada vela por encima.\n' +
   'Con una CONDICIÓN CON PASOS, la vela en que se cumple su último paso, recordando lo de antes (el tramo, el paso 1, el precio de la última señal…).\n' +
-  'Con una ESTRATEGIA de tarjetas, la vela en que da señal de compra (como «Da señal de compra con…» del screener).\n\n' +
+  'Con una ESTRATEGIA de tarjetas, ▲ en las velas en que da señal de compra (como «Da señal de compra con…» del screener) y ▼ en las que vende; ' +
+  'al lado eliges a qué saltar: entradas y salidas, solo entradas o solo salidas.\n\n' +
   'Ejemplo: hoy en el Replay es el 03/02 y la EMA 10 cruza por encima de la EMA 30 el 17/02: «Señal ⏭» te deja en el cierre del 17/02, listo para decidir.'
 
 // §244: arriba se elige «Una condición» (filas del catálogo, §231/§240) o «Condición con pasos» (components/EditorConPasos.js).
@@ -239,7 +241,9 @@ export function BarraReplay({ velas, estado, onIr, onSalir, onIndicadores, ver =
           {senal.opciones.map(o => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
         </select>
         {senal.estado === 'cargando' && <span style={{ color: BZ.gris }}>buscando señales…</span>}
-        {senal.estado === 'lista' && <span style={{ color: BZ.gris }} data-n-senales="">{senal.n} {senal.n === 1 ? 'señal' : 'señales'} en total</span>}
+        {senal.tipos && <select value={senal.tipos.valor} onChange={e => senal.tipos.onCambia(e.target.value)} data-tipo-salto="" title="A qué saltan «Señal ⏭» y «⏮ Señal»" style={caja}>
+          {TIPOS_SALTO.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>}
+        {senal.estado === 'lista' && <span style={{ color: BZ.gris }} data-n-senales="">{senal.textoN || `${senal.n} ${senal.n === 1 ? 'señal' : 'señales'} en total`}</span>}
         {senal.aviso && <span style={{ color: BZ.ambar }} data-aviso-senal="">{senal.aviso}</span>}
         <Ayuda texto={AYUDA_SENAL} etiqueta="Saltar a la señal" />
       </>}
