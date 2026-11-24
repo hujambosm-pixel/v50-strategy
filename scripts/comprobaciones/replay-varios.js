@@ -1,0 +1,63 @@
+// scripts/comprobaciones/replay-varios.js — el Replay con VARIOS valores (lib/replay/varios.js y buyHoldLista de lib/replay/motor.js,
+// docs/builder.md §253). Las corre comunes.sh. Termina en 0 si todo da lo esperado. Cuentas a mano (10.000 €, 1 € por orden).
+//
+// VELAS INVENTADAS (cierres): A d1 100 · d2 104 · d3 99 · d4 96 · d5 108 · d6 111. B (no cotiza el d3): d1 50 · d2 52 · d4 55 · d5 56 · d6 57.
+// C empieza el d4: d4 20 · d5 21 · d6 22.
+process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'clave-falsa-del-arnes'
+const C0 = require('./cargador'), R = C0.RAIZ
+let fallos = 0
+const ok = (c, t) => { console.log(`${c ? 'OK  ' : 'MAL '} ${t}`); if (!c) fallos++ }
+const cerca = (a, b, tol = 1e-9) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= tol * Math.max(1, Math.abs(b))
+const D = ['2024-01-02', '2024-01-03', '2024-01-04', '2024-01-05', '2024-01-08', '2024-01-09']
+const v = (date, c) => ({ date, open: c, high: c, low: c, close: c })
+const VELAS = {
+  A: [v(D[0], 100), v(D[1], 104), v(D[2], 99), v(D[3], 96), v(D[4], 108), v(D[5], 111)],
+  B: [v(D[0], 50), v(D[1], 52), v(D[3], 55), v(D[4], 56), v(D[5], 57)],
+  C: [v(D[3], 20), v(D[4], 21), v(D[5], 22)],
+}
+
+;(async () => {
+  await C0.prepara(); C0.registra(R)
+  const M = require(R + '/lib/replay/motor.js'), V = require(R + '/lib/replay/varios.js'), G = require(R + '/lib/replay/guardados.js')
+  const est = (o = {}) => ({ version: 1, valores: ['A', 'B'], desde: D[0], hoy: D[5], capitalInicial: 10000, comision: 1, ejecucion: 'apertura', acciones: [], retrocesos: 0, ...o })
+
+  // ── Buy&Hold de la lista a partes iguales ──
+  // A: 5.000 → (5.000 − 1) / 100 = 49 acciones, sobran 5.000 − 4.900 − 1 = 99; hoy 49 × 111 − 1 + 99 = 5.537.
+  // B: (5.000 − 1) / 50 = 99 acciones, sobran 49; hoy 99 × 57 − 1 + 49 = 5.691. Total 11.228.
+  const bh = M.buyHoldLista(est(), VELAS)
+  ok(cerca(bh.final, 11228), `A y B a partes iguales: 5.537 + 5.691 = 11.228 € (${bh.final})`)
+  // El d3 B no cotiza: vale su último cierre (52). A 49 × 99 + 99 = 4.950; B 99 × 52 + 49 = 5.197 → 10.147.
+  ok(cerca(bh.curva.find(c => c.fecha === D[2]).valor, 10147), `el d3 (B sin vela, con su cierre de 52): 10.147 € (${bh.curva.find(c => c.fecha === D[2]).valor})`)
+  // C empieza el d4: su parte espera en liquidez; el d4 compra (5.000 − 1) / 20 = 249, sobran 19; hoy 249 × 22 − 1 + 19 = 5.496. Con A: 11.033.
+  const bh2 = M.buyHoldLista(est({ valores: ['A', 'C'] }), VELAS)
+  ok(cerca(bh2.final, 11033) && cerca(bh2.curva.find(c => c.fecha === D[1]).valor, 49 * 104 + 99 + 5000), `C entra el d4, cuando empieza: 5.537 + 5.496 = 11.033 € (antes, su parte espera: el d2 vale 5.195 + 5.000) (${bh2.final})`)
+  ok(cerca(M.cifras(est(), VELAS, M.calcula(est(), VELAS)).buyHold.final, 11228), 'con varios valores, la cifra «Buy&Hold» de la cuenta es la de la lista')
+  ok(cerca(M.buyHoldLista(est({ valores: ['A'] }), VELAS).final, M.buyHold(est({ valores: ['A'] }), VELAS).final), 'con un solo valor, da lo mismo que el Buy&Hold de siempre')
+
+  // ── La cuenta común: compras en dos valores con el mismo dinero ──
+  // d1: compra A (invertir 40 %) y B (invertir 40 %) a mercado → el d2: A 4.000 / 104 = 38 (3.952 + 1); B con lo que queda: total 10.000 →
+  // 4.000 / 52 = 76 (3.952 + 1). Liquidez 10.000 − 3.953 − 3.953 = 2.094.
+  const ord = (s, id) => ({ fecha: D[0], simbolo: s, tipo: 'orden', id, lado: 1, entrada: null, clase: null, stop: null, objetivo: null, tam: { modo: 'invertir', pct: 40 } })
+  const VO = { A: VELAS.A.map(x => ({ ...x, open: x.close })), B: VELAS.B.map(x => ({ ...x, open: x.close })) }
+  const r = M.calcula(est({ acciones: [ord('A', 1), ord('B', 2)] }), VO)
+  ok(r.posiciones.A.acciones === 38 && r.posiciones.B.acciones === 76 && cerca(r.caja, 2094), `una cuenta para los dos: A 38 y B 76 acciones, liquidez 2.094 € (${r.posiciones.A.acciones} / ${r.posiciones.B.acciones} / ${r.caja})`)
+
+  // ── Orden de la rejilla y páginas ──
+  const rr = { posiciones: { D: {} }, ordenesVivas: [{ simbolo: 'B' }] }
+  ok(V.ordenRejilla(['E', 'D', 'C', 'B', 'A'], rr, new Set(['E'])).join() === 'D,B,E,A,C', 'primero con posición (D), luego con orden (B), luego con señal (E), y el resto alfabético')
+  ok(V.ordenRejilla(['E', 'D', 'C'], rr, new Set(), 'alfa').join() === 'C,D,E', 'alfabético')
+  const pg = V.pagina(['a', 'b', 'c', 'd', 'e', 'f', 'g'], 6, 1)
+  ok(pg.valores.join() === 'g' && pg.paginas === 2 && V.pagina(['a'], 4, 5).pagina === 0, '7 valores de 6 en 6: 2 páginas, la segunda con el último; una página que no existe vuelve a la primera')
+
+  // ── Por valor ──
+  const pv = V.porValor({ operaciones: [{ simbolo: 'A', resultado: 10 }, { simbolo: 'A', resultado: -4 }, { simbolo: 'B', resultado: -2 }], posiciones: { C: { ganancia: 20 } } }, ['A', 'B', 'C', 'D'])
+  ok(pv.map(x => x.simbolo).join() === 'C,A,D,B' && pv[1].operaciones === 2 && pv[1].ganadoras === 1 && pv[1].resultado === 6, 'por valor: C (+20 abierta), A (+6 en 2, 1 ganadora), D (nada), B (−2)')
+
+  // ── Señales de cualquier valor ──
+  const SEN = { A: { entradas: [D[1], D[4]] }, B: { entradas: [D[3]] } }
+  ok([...V.conSenalHoy(SEN, D[3])].join() === 'B' && V.siguienteSenalVarios(SEN, D[1]) === D[3] && V.siguienteSenalVarios(SEN, D[5]) === null, 'con señal hoy (d4): B; la próxima desde el d2: el d4 (de B); desde el d6, ninguna')
+  ok(G.nombreDe(est()) === '2 valores · desde 02/01/2024' && G.nombreDe(est({ valores: ['A'] })) === 'A · desde 02/01/2024', 'nombre: «2 valores · desde 02/01/2024»; con uno, el de siempre')
+
+  console.log(fallos ? `replay-varios: ${fallos} fallos` : 'replay-varios: todas bien')
+  process.exit(fallos ? 1 : 0)
+})().catch(e => { console.error('ERROR', e); process.exit(2) })
