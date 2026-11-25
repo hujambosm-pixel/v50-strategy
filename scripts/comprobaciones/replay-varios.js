@@ -168,6 +168,23 @@ const VELAS = {
     ok(/data-mini="quieto"/.test(h) && /display:none/.test(h.slice(h.indexOf('position:absolute'), h.indexOf('position:absolute') + 400)) && !/top:38px/.test(h), 'con «mini»: la rueda apagada al empezar, sin leyenda y sin la lista de indicadores')
   }
 
+  // ── §261: velas semanales (se eligen al empezar; las de la lista y del índice, en semanales; se guarda en el estado) ──
+  {
+    const React = require(R + '/node_modules/react'), RDC = require(R + '/node_modules/react-dom/client')
+    const RV = require(R + '/components/ReplayVarios.js')
+    const W = ['2024-01-01', '2024-01-08', '2024-01-15'].map((d, k) => v(d, 100 + k))
+    const pedidas = []
+    const Falso = (p) => React.createElement('div', { 'data-grafico-falso': p.simbolo })
+    const m = DF.monta(React.createElement(RV.default, { inicial: { nuevo: { valores: ['A', 'B'], fecha: '2024-01-01', capitalInicial: 10000, comision: 1, ejecucion: 'apertura', intervalo: 'semanal' } },
+      cargaVelas: async (s, iv) => { pedidas.push(`${s}:${iv}`); return W }, onSalir() {}, Grafico: Falso }), RDC)
+    await DF.espera(80)
+    ok(pedidas.length === 3 && pedidas.every(x => x.endsWith(':semanal')), `con «Semanales», las velas de A, B y el S&P 500 se piden semanales (${pedidas.join(' ')})`)
+    ok(/velas semanales/.test(m.raiz.textContent) && /01\/01\/2024/.test(m.raiz.busca(n => n.hasAttribute('data-hoy-replay'))?.textContent || ''), 'la cabecera dice «velas semanales» y empieza el lunes 01/01/2024')
+    const w = DF.monta(React.createElement(RV.VentanaVarios, { listas: [{ nombre: 'L', simbolos: ['A', 'B'] }], onEmpezar() {}, onCancelar() {} }), RDC)
+    await DF.espera(20)
+    ok(/Semanales/.test(w.raiz.busca(n => n.hasAttribute('data-velas-varios'))?.textContent || ''), 'la ventana de empezar ofrece «Velas: Diarias / Semanales»')
+  }
+
   // ── §260: la señal con varios valores (condición del catálogo o con pasos), lib/replay/varios.js ──
   {
     const S = require(R + '/lib/replay/senales.js'), CP = require(R + '/lib/condiciones/conPasos.js')
