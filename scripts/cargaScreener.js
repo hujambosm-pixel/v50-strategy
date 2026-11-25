@@ -12,6 +12,9 @@
 //                                                    que YA están en la caché de precios (sin descargar: antes, llenaCachePrecios.js
 //                                                    --screener). Escribe con guardar_tecnico_screener, como la app (botón
 //                                                    «Actualizar precios»), simulando al usuario de Sergi. Admite --solo.
+//   node scripts/cargaScreener.js --splits           solo pregunta a Yahoo los SPLITS de las empresas del screener y los guarda en
+//                                                    public.precios_splits (sql/precios_splits.sql; ~3 min). Admite --solo. La carga
+//                                                    entera también lo hace (paso 5).
 //   opciones: --pausa-sec 150 (ms entre peticiones a la SEC; su límite es 10 por segundo) · --pausa-yahoo 250
 //
 // LA SEC EXIGE que cada petición diga quién la hace (nombre y correo de contacto). Se lee de SEC_UA en .env.local (no
@@ -27,6 +30,7 @@
 //      las cuentas y se meten las nuevas (la SEC puede corregir cifras: se guarda siempre lo último). Al final (sin --solo),
 //      las empresas que ya no están en el universo se quedan con sus marcas a false (no se borran).
 //   4. Calcula las cifras de cada empresa (lib/screener/metricas.js) con lo guardado en la base y las escribe en `metricas`.
+//   5. Los splits de cada empresa (Yahoo, chart v8 con events=split) en public.precios_splits (lib/screener/splits.js).
 // Escribe por la Management API (conecta como postgres), como scripts/universoNasdaq100.js.
 const fs = require('fs')
 const path = require('path')
@@ -39,6 +43,7 @@ const SOLO = opcion('--solo') ? opcion('--solo').split(',').map(s => s.trim().to
 const ENSAYO = args.includes('--ensayo')
 const SOLO_METRICAS = args.includes('--metricas')
 const SOLO_TECNICO = args.includes('--tecnico')
+const SOLO_SPLITS = args.includes('--splits')
 const USUARIO = 'c006506d-084b-4c2e-a458-70c5caa35d3a'   // el de Sergi (guardar_tecnico_screener exige un usuario)
 const PAUSA_SEC = Number(opcion('--pausa-sec', 150))
 const PAUSA_YAHOO = Number(opcion('--pausa-yahoo', 250))
@@ -80,6 +85,34 @@ async function yahooCierre(simbolo) {
   for (let i = ts.length - 1; i >= 0; i--) if (c[i] != null) return { precio: c[i], fecha: new Date(ts[i] * 1000).toISOString().slice(0, 10) }
   return null
 }
+// Los splits de toda la historia (velas mensuales: la respuesta es pequeña; los splits vienen igual).
+async function yahooSplits(simbolo, splitsDeYahoo) {
+  const t = await pide(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(simbolo)}?interval=1mo&period1=0&period2=${Math.floor(Date.now() / 1000)}&events=split`, { 'User-Agent': UA_YAHOO, Accept: 'application/json' })
+  const r = JSON.parse(t)?.chart?.result?.[0]
+  if (!r) throw new Error('Yahoo no da datos')
+  return splitsDeYahoo(r.events)
+}
+// 5. Guarda los splits de las empresas del screener (todas, o las de `simbolos`). Un fallo en una no para: se cuenta y se sigue
+// (su fila anterior, si la había, se queda). Escribe de 50 en 50.
+async function cargaSplits({ splitsDeYahoo }, simbolos = null) {
+  const lista = (await consulta(`SELECT simbolo FROM public.screener_empresas${simbolos ? ` WHERE simbolo IN (${simbolos.map(lit).join(', ')})` : ''} ORDER BY simbolo;`)).map(e => e.simbolo)
+  const fallan = [], filas = []
+  let conSplits = 0
+  const escribe = async () => {
+    if (!filas.length) return
+    if (!ENSAYO) await consulta(`INSERT INTO public.precios_splits (simbolo, splits, revisado) VALUES ${filas.join(', ')}
+      ON CONFLICT (simbolo) DO UPDATE SET splits = EXCLUDED.splits, revisado = EXCLUDED.revisado;`)
+    filas.length = 0
+  }
+  for (const s of lista) {
+    try { const sp = await yahooSplits(s, splitsDeYahoo); if (sp.length) conSplits++; filas.push(`(${lit(s)}, ${lit(JSON.stringify(sp))}::jsonb, now())`) }
+    catch (err) { fallan.push(s + ' (' + err.message + ')') }
+    await pausa(PAUSA_YAHOO)
+    if (filas.length >= 50) await escribe()
+  }
+  await escribe()
+  return { total: lista.length, conSplits, fallan }
+}
 async function yahooPeg(simbolo) {
   const ahora = Math.floor(Date.now() / 1000), e = encodeURIComponent(simbolo)
   const t = await pide(`https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${e}?symbol=${e}&type=trailingPegRatio&period1=${ahora - 40 * 86400}&period2=${ahora}`, { 'User-Agent': UA_YAHOO, Accept: 'application/json' })
@@ -117,16 +150,16 @@ ${ENSAYO ? 'ROLLBACK' : 'COMMIT'};`
 
 // 4. La columna `metricas` de las empresas (todas, o las de `simbolos`), con sus cuentas de la base. Por tandas de 40.
 async function recalculaMetricas(metricasDe, simbolos = null) {
-  const empresas = await consulta(`SELECT simbolo, cik, precio, peg_esperado FROM public.screener_empresas${simbolos ? ` WHERE simbolo IN (${simbolos.map(lit).join(', ')})` : ''} ORDER BY simbolo;`)
+  const empresas = await consulta(`SELECT e.simbolo, e.cik, e.precio, e.precio_fecha::text AS precio_fecha, e.peg_esperado, s.splits FROM public.screener_empresas e LEFT JOIN public.precios_splits s USING (simbolo)${simbolos ? ` WHERE simbolo IN (${simbolos.map(lit).join(', ')})` : ''} ORDER BY simbolo;`)
   let hechas = 0
   for (let i = 0; i < empresas.length; i += 40) {
     const lote = empresas.slice(i, i + 40)
     const ciks = [...new Set(lote.map(e => e.cik).filter(c => c != null))]
-    const cuentas = ciks.length ? await consulta(`SELECT cik, concepto, periodo, fin::text AS fin, valor::text AS valor, unidad FROM public.screener_cuentas WHERE cik IN (${ciks.join(', ')});`) : []
+    const cuentas = ciks.length ? await consulta(`SELECT cik, concepto, periodo, fin::text AS fin, valor::text AS valor, unidad, presentado::text AS presentado FROM public.screener_cuentas WHERE cik IN (${ciks.join(', ')});`) : []
     const porCik = {}
     for (const c of cuentas) (porCik[c.cik] ||= []).push(c)
     const valores = lote.map(e => {
-      const r = metricasDe(e, porCik[e.cik] || [])
+      const r = metricasDe(e, porCik[e.cik] || [], e.splits)
       const x = { moneda: r.moneda, cuentasHasta: r.cuentasHasta, fechas: r.fechas, piezas: r.piezas, m: r.m }
       return `(${lit(e.simbolo)}, ${lit(JSON.stringify(x))}::jsonb)`
     })
@@ -164,6 +197,12 @@ async function recalculaTecnico({ tecnicoDe, ANIOS_TECNICO }, simbolos = null) {
 }
 
 if (require.main === module) (async () => {
+  if (SOLO_SPLITS) {
+    await preparaEsm()
+    const t0 = Date.now(), r = await cargaSplits(require('../lib/screener/splits'), SOLO)
+    console.log(`Splits: ${r.total - r.fallan.length} de ${r.total} empresas revisadas (${r.conSplits} con algún split) en ${Math.round((Date.now() - t0) / 1000)} s${ENSAYO ? ' · ENSAYO: no se ha escrito nada' : ''}.${r.fallan.length ? ` Fallan (${r.fallan.length}): ${r.fallan.join(', ')}.` : ''}`)
+    return
+  }
   if (SOLO_TECNICO) {
     await preparaEsm()
     const t0 = Date.now(), r = await recalculaTecnico(require('../lib/screener/tecnico'), SOLO)
@@ -243,6 +282,10 @@ if (require.main === module) (async () => {
   if (!ENSAYO) {
     const { metricasDe } = require('../lib/screener/metricas')
     console.log(`Métricas: ${await recalculaMetricas(metricasDe, SOLO ? empresas.map(e => e.simbolo) : null)} empresas.`)
+  }
+  {
+    const r = await cargaSplits(require('../lib/screener/splits'), SOLO ? empresas.map(e => e.simbolo) : null)
+    console.log(`Splits: ${r.total - r.fallan.length} de ${r.total} revisadas (${r.conSplits} con algún split).${r.fallan.length ? ` Fallan: ${r.fallan.join(', ')}.` : ''}`)
   }
   const tot = await consulta(`SELECT (SELECT count(*) FROM public.screener_empresas) AS empresas, (SELECT count(*) FROM public.screener_cuentas) AS cuentas, pg_size_pretty(pg_total_relation_size('public.screener_cuentas')) AS tamano;`)
   console.log(`Hecho en ${Math.round((Date.now() - t0) / 1000)} s: ${n} empresas (${conAviso} con aviso), ${filasTot} filas de cuentas descargadas${ENSAYO ? ' · ENSAYO: no se ha escrito nada' : ''}. En la base: ${JSON.stringify(tot[0])}`)

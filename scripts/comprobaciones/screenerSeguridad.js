@@ -38,5 +38,11 @@ const prueba = async (nombre, sql, espera) => {
   await prueba('número negativo, rechazado', `${como(A)} SELECT public.guardar_tecnico_screener('AAPL', '{"fecha":"2026-11-06","cierre":1,"ema200":-3}');`, 'error')
   await prueba('texto en un número, rechazado', `${como(A)} SELECT public.guardar_tecnico_screener('AAPL', '{"fecha":"2026-11-06","cierre":1,"max52":"x"}');`, 'error')
   await prueba('más de 2 KB, rechazado', `${como(A)} SELECT public.guardar_tecnico_screener('AAPL', jsonb_build_object('fecha','2026-11-06','cierre',1,'relleno',repeat('x',3000)));`, 'error')
+  // §25 (sql/precios_splits.sql): los splits, solo lectura con sesión.
+  await prueba('§25: anon no lee splits', `SET LOCAL ROLE anon; SELECT count(*) FROM public.precios_splits;`, 'error')
+  await prueba('§25: con sesión lee splits', `${como(A)} SELECT count(*) AS splits FROM public.precios_splits;`)
+  await prueba('§25: con sesión no escribe splits', `${como(A)} UPDATE public.precios_splits SET splits = '[]' WHERE simbolo = 'AAPL';`, 'error')
+  await prueba('§25: con sesión no crea splits', `${como(A)} INSERT INTO public.precios_splits (simbolo) VALUES ('ZZZZ9');`, 'error')
+  await prueba('§25: lista que no es una lista, rechazada', `INSERT INTO public.precios_splits (simbolo, splits) VALUES ('ZZZZ9', '{}');`, 'error')
   console.log(`screenerSeguridad: ${fallos ? fallos + ' fallos' : 'todo bien'}`); process.exit(fallos ? 1 : 0)
 })()

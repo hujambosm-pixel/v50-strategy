@@ -322,6 +322,15 @@ Pedido por Sergi el 11/11.
 - Un clic sencillo sigue abriendo el detalle del valor, pero espera 250 ms por si llega el segundo clic (el doble clic empieza con un clic).
 - Ninguna cifra cambia. **Comprobación** `screener.js` (268).
 
+
+## 25. Splits de cada valor (paso 1 de «la lista del screener de cada día»)
+- POR QUÉ. Los precios de Yahoo están ajustados por todos los splits; las acciones de la SEC (acciones_diluidas) están en las acciones del día en que se presentó su documento. Cada 10-K repite los años anteriores y, si es posterior a un split, ya los trae multiplicados; si no, no. Ejemplo AAPL: 2017 = 5.252 millones (del informe de oct. 2019, antes del 4:1 de ago. 2020), 2018 = 20.000 (del de oct. 2020, después).
+- REGLA (lib/screener/splits.js): con precios AJUSTADOS (los de precios_diarios), acciones × los splits POSTERIORES a `presentado` (factorDesde, accionesAjustadas): AAPL 2017 5.252 × 4 = 21.008. Con un precio SIN ajustar de un día (el `precio` de screener_empresas, del día `precio_fecha`), solo los splits entre `presentado` y ese día (factorEntre). Un split del mismo día en que se presentó no cuenta.
+- BASE: tabla nueva public.precios_splits (sql/precios_splits.sql, con REVERSIÓN): una fila por símbolo con `splits` = [[fecha, numerador, denominador], …] y `revisado`. Solo lectura con sesión; la escriben los scripts. Cargada el 25/11/2026: 599 empresas, 392 con algún split, 1.537 splits, 168 kB.
+- CARGA: `node scripts/cargaScreener.js --splits` (~4 min; admite --solo y --ensayo); la carga semanal entera lo hace también (paso 5). Yahoo, chart v8 con velas mensuales y events=split.
+- CIFRAS DE HOY: metricasDe(empresa, cuentas, splits) multiplica las acciones por factorEntre(splits, presentado, precio_fecha); el factor queda en piezas.accionesFactor solo si no es 1. El 25/11 NO CAMBIA NINGUNA (huella de las 599 idéntica): el único caso, SNDK (8:1 del 20/11/2026), tiene su precio guardado del 10/11, antes del split. Sin esto, en la próxima carga SNDK saldría con la capitalización 8 veces más pequeña.
+- VISTO Y SIN ARREGLAR (otro tema): algunas empresas presentan acciones en otra escala (en miles o millones): hoy MCD (708 acciones), NVMI (32.800) y VPG (13.431) salen con capitalización y PER casi 0; en años sueltos también NVDA 2008–2009 y GRMN 2011–2016, 2020–2021. Tras el ajuste quedan 207 saltos de año a año de ×1,6 o más (antes 322): los demás son de verdad (salidas a bolsa, fusiones, recompras) o de esa escala.
+- Comprobaciones: scripts/comprobaciones/splits.js (en comunes.sh, cifras a mano) y screenerSeguridad.js (5 nuevas, §25).
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:

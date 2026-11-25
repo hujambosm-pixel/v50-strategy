@@ -69,6 +69,7 @@ tail -1 "$SAL/plan-por-dentro.txt"
 paso plan-tu-dinero-lista node "$DIR/plan-tu-dinero-lista.js" < /dev/null
 tail -1 "$SAL/plan-tu-dinero-lista.txt"
 paso screener node "$DIR/screener.js" < /dev/null
+paso splits node "$DIR/splits.js" < /dev/null
 tail -1 "$SAL/screener.txt"
 paso screener-senales node "$DIR/screener-senales.js" < /dev/null
 tail -1 "$SAL/screener-senales.txt"
