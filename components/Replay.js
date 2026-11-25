@@ -170,6 +170,27 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
     </div>)
 }
 
+// §263 (decidido por Sergi el 25/11): cada Replay tiene UNA temporalidad. Cambiar de velas (W / D) dentro del Replay empieza uno NUEVO;
+// el de ahora se queda guardado en «Mis replays». onElige('inicio' | 'hoy'): desde el mismo día de inicio o desde hoy en el replay.
+const NOMBRE_VELAS = { diario: 'diarias', semanal: 'semanales' }
+export function VentanaCambioVelas({ a, desde, hoy, onElige, onCancelar }) {
+  useEffect(() => { const t = (e) => { if (e.key === 'Escape') onCancelar() }; window.addEventListener('keydown', t); return () => window.removeEventListener('keydown', t) }, [onCancelar])
+  const b = (modo, texto) => <button data-cambio-velas={modo} onClick={() => onElige(modo)} style={{ ...bz(), textAlign: 'left', borderColor: modo === 'inicio' ? BZ.azul : BZ.borde }}>{texto}</button>
+  return (
+    <div data-ventana-cambio-velas="" role="dialog" aria-modal="true" onMouseDown={e => { if (e.target === e.currentTarget) onCancelar() }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10060, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: BZ.fondo, border: `1px solid ${BZ.borde}`, borderRadius: 8, padding: 16, width: 460, maxWidth: '100%', font: `13px/1.5 ${LETRA}`, color: BZ.texto }}>
+        <b style={{ fontSize: 14 }}>Cambiar a velas {NOMBRE_VELAS[a] || a}</b>
+        <div style={{ color: BZ.gris, margin: '8px 0 12px' }}>Cada Replay va con unas velas. Cambiarlas empieza un Replay <b style={{ color: BZ.texto }}>nuevo</b>, con el mismo dinero y la misma comisión; el de ahora se queda guardado en «Mis replays».</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {b('inicio', <>Desde el mismo día de inicio <span style={{ color: BZ.gris }}>({diaSemana(desde)} {fmt(desde)})</span></>)}
+          {b('hoy', <>Desde hoy en el replay <span style={{ color: BZ.gris }}>({diaSemana(hoy)} {fmt(hoy)})</span></>)}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}><button data-cambio-velas="cancelar" onClick={onCancelar} style={bz()}>Cancelar · sigo con las velas de ahora</button></div>
+      </div>
+    </div>)
+}
+
 // Colores y letra del boceto (bocetos/replay-simulacion.html), elegidos por Sergi el 21/11 frente a los de la barra del gráfico.
 const BZ = { fondo: '#2c303b', caja: '#353945', borde: '#4c5263', texto: '#f3f3f5', gris: '#a9adb8', ambar: '#d29922', azul: '#58a6ff' }
 const LETRA = 'system-ui, "Segoe UI", sans-serif'

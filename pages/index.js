@@ -20,8 +20,8 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchConditions, lsGetConds, lsSaveConds, COND_LS_KEY } from '../lib/conditions'
 import CandleChart from '../components/CandleChart'
 import VentanaIndicadores from '../components/VentanaIndicadores'
-import { BotonReplay, BotonDiana, VentanaReplay, BarraReplay, VentanaSenal } from '../components/Replay'   // §226: modo Replay del gráfico grande
-import { recortaVelas, desplazaRango, vecina, rangoVer, historiaReplay } from '../lib/replay/grafico'
+import { BotonReplay, BotonDiana, VentanaReplay, BarraReplay, VentanaSenal, VentanaCambioVelas } from '../components/Replay'   // §226: modo Replay del gráfico grande
+import { recortaVelas, desplazaRango, vecina, rangoVer, historiaReplay, velaDeInicio as velaDeInicioReplay } from '../lib/replay/grafico'
 import { irA as replayIrA, calcula as replayCalcula, cifras as replayCifras } from '../lib/replay/motor'
 import { marcasDe as replayMarcas, nuevaAccion as nuevaAccionReplay, tradesDe as tradesReplayDe, configAuto as configAutoReplay } from '../lib/replay/orden'
 import { atr as atrReplayDe } from '../lib/condiciones/indicadores'   // §252: el ATR (14) de hoy, para el stop por ATR del Replay
@@ -50,7 +50,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1328'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1329'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1041,8 +1041,10 @@ export default function Home() {
   // `estrategiaIntervalo` es el MISMO estado que lee el campo Temporalidad del panel de
   // condiciones, asi que el distintivo y el panel se mueven juntos sin nada que sincronizar.
   const toggleHeaderIntervalo = () => {
-    setEstrategiaIntervalo(estrategiaIntervalo==='semanal' ? 'diario' : 'semanal')
+    pideIntervalo(estrategiaIntervalo==='semanal' ? 'diario' : 'semanal')
   }
+  // §263: con un Replay abierto, cambiar de velas pregunta antes (empieza un Replay nuevo; el de ahora se queda guardado).
+  const pideIntervalo = (nuevo) => { if(replay&&nuevo!==estrategiaIntervalo){ setCambioVelasReplay(nuevo); return } setEstrategiaIntervalo(nuevo) }
   // La temporalidad que DECLARA la estrategia activa: su valor por defecto y el que usa el
   // ranking. Solo sirve para avisar de que la simulacion esta explorando otra distinta.
   const _estrActiva = currentStratId ? strategies.find(st=>st.id===currentStratId) : null
@@ -2016,6 +2018,16 @@ export default function Home() {
   const reiniciaMarcaReplay=()=>{ if(replayVer>0) anchoReplayRef.current=replayVer; setFormReplay(f=>({...FORM_REPLAY,...AJUSTES_ORDEN_REPLAY.reduce((o,k)=>({...o,[k]:f[k]}),{})})); setCapturaReplay(null); setCapturaLineaReplay(null); setLineaElegidaReplay(null); setAvisoLineaReplay(''); setAvisoSenalReplay('') }
   const empiezaReplay=(desde,aj={})=>{ reiniciaMarcaReplay(); nuevaSesionReplay(null,nombreReplayDe({valores:[simbolo],desde})); setVentanaReplay(false); const _r=rangoVer(baseReplay,desde,replayVer); if(_r){ savedRangeRef.current=_r; isNewResultRef.current=false } else isNewResultRef.current=true; setReplay({version:1,valores:[simbolo],desde,hoy:desde,capitalInicial:10000,comision:0,ejecucion:'apertura',...aj,acciones:[],retrocesos:0,terminada:false}) }
   const saleReplay=()=>{ guardaReplay(replay,calcReplay); reiniciaMarcaReplay(); setReplay(null); isNewResultRef.current=true }
+  // §263: cambiar de velas dentro del Replay. Se guarda y se cierra el de ahora (con sus velas), se cambian las velas y, cuando llegan,
+  // empieza uno nuevo con el mismo dinero, comisión y «a mercado», desde el mismo día de inicio o desde hoy en el replay.
+  const [cambioVelasReplay,setCambioVelasReplay]=useState(null)   // 'diario' | 'semanal' mientras se pregunta
+  const [nuevoTrasCambioVelas,setNuevoTrasCambioVelas]=useState(null)   // { fecha, aj, intervalo }
+  const eligeCambioVelasReplay=(modo)=>{ const a=cambioVelasReplay; setCambioVelasReplay(null); if(!replay||!a) return
+    setNuevoTrasCambioVelas({fecha:modo==='inicio'?replay.desde:replay.hoy,aj:{capitalInicial:replay.capitalInicial,comision:replay.comision,ejecucion:replay.ejecucion},intervalo:a})
+    saleReplay(); setEstrategiaIntervalo(a) }
+  useEffect(()=>{ const p=nuevoTrasCambioVelas; if(!p||replay) return
+    if(!(historiaRepLista&&historiaRep.intervalo===p.intervalo&&historiaRep.velas.length>2)) return
+    setNuevoTrasCambioVelas(null); const d=velaDeInicioReplay(historiaRep.velas,p.fecha); if(d) empiezaReplay(d,p.aj) },[nuevoTrasCambioVelas,historiaRep,historiaRepLista,replay])   // eslint-disable-line
   // §257: el Replay es de la Watchlist (pedido por Sergi el 25/11): sus botones solo salen allí y, al ir a otra sección (Risk Mgmt, Fundamentals…), se guarda y se cierra.
   useEffect(()=>{ if(replay&&sidePanel!=='watchlist') saleReplay(); if(sidePanel!=='watchlist') setVentanaReplay(false) },[sidePanel])   // eslint-disable-line
   // Avanzar o retroceder n velas: la ventana visible se mueve con ella (misma anchura). Devuelve false si no se movió (▶ deja de reproducir).
@@ -5951,7 +5963,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1328</title>
+        <title>Trading Simulator V9.1329</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6040,7 +6052,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1328
+            <span className="dot"/>Trading Simulator V9.1329
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -6276,7 +6288,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                   desde={indDesde} setDesde={v=>{indCondTocadaRef.current=true;setIndDesde(v)}}
                   hasta={indHasta} setHasta={v=>{indCondTocadaRef.current=true;setIndHasta(v)}}
                   capitalIni={capitalIni} setCapitalIni={v=>{indCondTocadaRef.current=true;setCapitalIni(v)}}
-                  temporalidad={estrategiaIntervalo} setTemporalidad={setEstrategiaIntervalo}
+                  temporalidad={estrategiaIntervalo} setTemporalidad={pideIntervalo}
                   temporalidadEstrategia={temporalidadEstrategia}
                   comisiones={indComisiones} setComisiones={setComisionesUsuario}
                   claveLs="v50_cond_abierto_ind"/>
@@ -11108,7 +11120,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
         onAceptar={x=>{ setSenalReplay(x); setVentanaSenalReplay(false); setAvisoSenalReplay('') }} onCancelar={()=>setVentanaSenalReplay(false)}/>}
       {misReplays&&<MisReplays filas={misReplays.filas} cargando={misReplays.cargando} error={misReplays.error} abiertoId={replay?replayGuardado.id:null}
         onAbrir={abreReplayGuardado} onBorrar={borraReplayGuardado} onCerrar={()=>setMisReplays(null)} onVarios={abreVarios}/>}
-      {replayVarios&&<ReplayVarios key={replayVarios.id||'nuevo'} inicial={replayVarios} cargaVelas={cargaVelasVarios} estrategias={estrategiasSenalReplay} tickersDe={tickersDeReplay} ctx={ctxReplay} onSalir={()=>setReplayVarios(null)} indicadores={indicadores} onIndicadores={()=>setVentanaInd(true)}/>}
+      {replayVarios&&<ReplayVarios key={replayVarios.id||('nuevo'+(replayVarios.n||0))} inicial={replayVarios} onReiniciar={n=>setReplayVarios({nuevo:n,n:Date.now()})} cargaVelas={cargaVelasVarios} estrategias={estrategiasSenalReplay} tickersDe={tickersDeReplay} ctx={ctxReplay} onSalir={()=>setReplayVarios(null)} indicadores={indicadores} onIndicadores={()=>setVentanaInd(true)}/>}
+      {cambioVelasReplay&&replay&&<VentanaCambioVelas a={cambioVelasReplay} desde={replay.desde} hoy={replay.hoy} onElige={eligeCambioVelasReplay} onCancelar={()=>setCambioVelasReplay(null)}/>}
       {ventanaReplay&&<VentanaReplay key={simbolo} listas={listasVarios} intervalo={estrategiaIntervalo} fuenteInicial={fuenteVentanaReplay} onEmpezarVarios={n=>{ setVentanaReplay(false); setReplayVarios({nuevo:n}) }} simbolo={simbolo} velas={historiaRepLista&&(historiaRep.velas.length>2||displayedSimbolo===simbolo)?baseReplay:[]} cargando={!historiaRepLista||(historiaRep.velas.length<=2&&(displayedSimbolo!==simbolo||!result?.chartData))}
         onValorAzar={()=>{ const l=[...new Set((watchlist||[]).map(w=>w?.symbol).filter(x=>x&&x!==simbolo))]; if(l.length) setSimbolo(l[Math.floor(Math.random()*l.length)]) }} onEmpezar={empiezaReplay} onCancelar={()=>setVentanaReplay(false)}
         guardados={ctxReplay?guardadosReplay:[]} onAbrir={ctxReplay?(f=>{ setVentanaReplay(false); abreReplayGuardado(f) }):null}/>}

@@ -182,6 +182,34 @@ const VELAS = {
     ok(/velas semanales/.test(m.raiz.textContent) && /01\/01\/2024/.test(m.raiz.busca(n => n.hasAttribute('data-hoy-replay'))?.textContent || ''), 'la cabecera dice «velas semanales» y empieza el lunes 01/01/2024')
   }
 
+  // ── §263: cambiar de velas (D / S) dentro del Replay empieza uno nuevo ──
+  {
+    const React = require(R + '/node_modules/react'), RDC = require(R + '/node_modules/react-dom/client')
+    const RV = require(R + '/components/ReplayVarios.js')
+    const W = ['2024-01-01', '2024-01-08', '2024-01-15', '2024-01-22'].map((d, k) => v(d, 100 + k))
+    let nuevo = null
+    const m = DF.monta(React.createElement(RV.default, { inicial: { nuevo: { valores: ['A', 'B'], fecha: '2024-01-01', capitalInicial: 20000, comision: 2, ejecucion: 'cierre', intervalo: 'diario' } },
+      cargaVelas: async () => W, onSalir() {}, onReiniciar: (n) => { nuevo = n }, Grafico: (p) => React.createElement('div', null, p.simbolo) }), RDC)
+    await DF.espera(80)
+    DF.pulsa(m.raiz.busca(n => n.hasAttribute('data-varias'))); await DF.espera(30)   // ▶▶: avanza, para que «hoy» no sea el día de inicio
+    DF.pulsa(m.raiz.busca(n => n.getAttribute('data-velas') === 'diario')); await DF.espera(20)
+    ok(!m.raiz.busca(n => n.hasAttribute('data-ventana-cambio-velas')), 'pulsar las velas que ya tiene (D) no hace nada')
+    DF.pulsa(m.raiz.busca(n => n.getAttribute('data-velas') === 'semanal')); await DF.espera(20)
+    const ve = m.raiz.busca(n => n.hasAttribute('data-ventana-cambio-velas'))
+    ok(!!ve && /Cambiar a velas semanales/.test(ve.textContent) && /empieza un Replay nuevo/.test(ve.textContent) && /01\/01\/2024/.test(ve.textContent) && /22\/01\/2024/.test(ve.textContent),
+      `S pregunta: «empieza un Replay nuevo», desde el 01/01 (inicio) o desde hoy (22/01) (${ve?.textContent.slice(0, 200)})`)
+    DF.pulsa(ve.busca(n => n.getAttribute('data-cambio-velas') === 'cancelar')); await DF.espera(20)
+    ok(!m.raiz.busca(n => n.hasAttribute('data-ventana-cambio-velas')) && nuevo === null, '«Cancelar» sigue con las velas de ahora')
+    DF.pulsa(m.raiz.busca(n => n.getAttribute('data-velas') === 'semanal')); await DF.espera(20)
+    DF.pulsa(m.raiz.busca(n => n.getAttribute('data-cambio-velas') === 'inicio')); await DF.espera(20)
+    ok(nuevo && nuevo.intervalo === 'semanal' && nuevo.fecha === '2024-01-01' && nuevo.valores.join() === 'A,B' && nuevo.capitalInicial === 20000 && nuevo.comision === 2 && nuevo.ejecucion === 'cierre',
+      `«Desde el mismo día de inicio»: Replay nuevo con los mismos valores, dinero, comisión y «a mercado», en semanales (${JSON.stringify(nuevo)})`)
+    const R2 = require(R + '/components/Replay.js'); let el = null
+    const w2 = DF.monta(React.createElement(R2.VentanaCambioVelas, { a: 'diario', desde: '2021-11-29', hoy: '2025-09-10', onElige: x => { el = x }, onCancelar() {} }), RDC); await DF.espera(10)
+    DF.pulsa(w2.raiz.busca(n => n.getAttribute('data-cambio-velas') === 'hoy'))
+    ok(el === 'hoy' && /Cambiar a velas diarias/.test(w2.raiz.textContent) && /mié 10\/09\/2025/.test(w2.raiz.textContent), '«Desde hoy en el replay» (mié 10/09/2025) también se puede elegir')
+  }
+
   // ── §262: UNA sola ventana para empezar (VentanaReplay): «Solo X» o una lista / varios a mano; las velas, las del gráfico ──
   {
     const React = require(R + '/node_modules/react'), RDC = require(R + '/node_modules/react-dom/client')

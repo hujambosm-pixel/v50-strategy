@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Ayuda from './BuilderAyuda'
 import CandleChart from './CandleChart'
-import { BarraReplay, VentanaSenal } from './Replay'
+import { BarraReplay, VentanaSenal, VentanaCambioVelas } from './Replay'
 import { PanelOperar, PanelGrafico, ResultadosReplay } from './PanelReplay'
 import { calcula, cifras, irA, VERSION } from '../lib/replay/motor'
 import { nuevaAccion, configAuto, marcasDe, tradesDe } from '../lib/replay/orden'
@@ -86,7 +86,8 @@ export function GraficoValor({ Grafico = CandleChart, simbolo: s, velas, estado,
 // inicial: { nuevo: { valores, fecha, capitalInicial, comision, ejecucion } } o uno guardado: { id, nombre, estado }.
 // cargaVelas(simbolo, intervalo = 'diario') → Promise<velas diarias o semanales>; estrategias: las de tarjetas [{ id, name, definition, params }]; ctx: para guardar.
 // indicadores / onIndicadores: los indicadores del gráfico de siempre (los mismos en todos los gráficos). Grafico: para las pruebas.
-export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], tickersDe = () => [], ctx = null, onSalir, indicadores = VACIO, onIndicadores = null, Grafico = CandleChart }) {
+// §263: onReiniciar(nuevo) = cambiar de velas (D / S) empieza un Replay nuevo con los mismos valores, dinero y comisión.
+export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], tickersDe = () => [], ctx = null, onSalir, onReiniciar = null, indicadores = VACIO, onIndicadores = null, Grafico = CandleChart }) {
   const [velas, setVelas] = useState(null)
   const [estado, setEstado] = useState(inicial?.estado || null)
   const [aviso, setAviso] = useState('')
@@ -106,6 +107,7 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
   // las filas de «quien: 'valor'» se miran en CADA valor, lib/replay/varios.js).
   const [senal, setSenal] = useState(null)
   const [ventanaSenal, setVentanaSenal] = useState(false)
+  const [cambioVelas, setCambioVelas] = useState(null)      // §263: 'diario' | 'semanal' mientras se pregunta
   const [guardado, setGuardado] = useState({ id: inicial?.id || null, nombre: inicial?.nombre || '', estado: inicial?.id ? 'guardado' : '' })
 
   // Las velas de todos (y del S&P 500), de 4 en 4, en el intervalo del Replay (§261). Las de las referencias de la señal y del minigráfico de
@@ -258,7 +260,10 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
     <div data-replay-varios="" style={{ position: 'fixed', inset: 0, zIndex: 9000, background: BZ.fondo, color: BZ.texto, font: `13px/1.45 ${LETRA}`, display: 'flex' }}>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: `1px solid ${BZ.borde}`, flexWrap: 'wrap' }}>
-          <b style={{ color: '#ffd166' }}>⏪ REPLAY · {estado.valores.length} valores{intervalo === 'semanal' ? ' · velas semanales' : ''}</b><Ayuda texto={AYUDA_VARIOS} etiqueta="Replay con varios valores" />
+          <b style={{ color: '#ffd166' }}>⏪ REPLAY · {estado.valores.length} valores</b><Ayuda texto={AYUDA_VARIOS} etiqueta="Replay con varios valores" />
+          {onReiniciar && <span data-velas-varios="" title="Velas del Replay. Cambiarlas empieza un Replay nuevo (el de ahora se queda guardado)." style={{ display: 'inline-flex', gap: 2 }}>
+            {[['diario', 'D'], ['semanal', 'S']].map(([k, t]) => <button key={k} data-velas={k} onClick={() => { if (k !== intervalo) setCambioVelas(k) }} style={{ ...btn(intervalo === k), padding: '1px 7px' }}>{t}</button>)}</span>}
+          {intervalo === 'semanal' && <span style={{ color: BZ.gris, fontSize: 12 }}>velas semanales</span>}
           {senales && <span style={{ color: BZ.morado, fontSize: 12 }}>{hoySen.size ? `▲ señal hoy en ${hoySen.size}` : 'hoy, ninguna señal'}</span>}
           <span style={{ marginLeft: 12 }} />
           {[['graficos', 'Gráficos'], ['ops', `Operaciones · ${r?.operaciones?.length || 0}`], ['valor', 'Por valor'], ['curva', 'Curva del capital']].map(([k, t]) =>
@@ -283,6 +288,8 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
           nombre={guardado.nombre || nombreDe(estado)} onNombre={nombra} guardado={guardado.estado} form={form} onForm={setForm} cfg={cfg} onCfg={setCfg} indice={indiceBH} aviso={aviso}
           auto={{ activo: autoActivo, puede: !!senalesMotor, esEstrategia: senalDef?.tipo === 'estrategia', onCambia: ponAuto, senal: textoSenal }} />
       </div>
+      {cambioVelas && <VentanaCambioVelas a={cambioVelas} desde={estado.desde} hoy={estado.hoy} onCancelar={() => setCambioVelas(null)}
+        onElige={m => { setCambioVelas(null); onReiniciar({ valores: estado.valores, fecha: m === 'inicio' ? estado.desde : estado.hoy, capitalInicial: estado.capitalInicial, comision: estado.comision, ejecucion: estado.ejecucion, intervalo: cambioVelas }) }} />}
       {ventanaSenal && <VentanaSenal simbolo={primero} senal={cond ? deCadaValor(senal, primero) : null} velas={motorVelas?.[primero] || VACIO} cargaVelas={cargaDiarias} simbolosAzar={estado.valores} hoy={estado.hoy}
         nota={`Con varios valores, lo que pongas en «${primero}» se mira en CADA valor de la lista (${estado.valores.length}), cada uno con sus velas. Un índice u «Otro símbolo…» es el mismo para todos.`}
         onAceptar={x => { setSenal(aCadaValor(x, primero)); setVentanaSenal(false); setAviso('') }} onCancelar={() => setVentanaSenal(false)} />}
