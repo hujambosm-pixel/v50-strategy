@@ -210,6 +210,30 @@ const VELAS = {
     ok(el === 'hoy' && /Cambiar a velas diarias/.test(w2.raiz.textContent) && /mié 10\/09\/2025/.test(w2.raiz.textContent), '«Desde hoy en el replay» (mié 10/09/2025) también se puede elegir')
   }
 
+  // ── §264: dinero inicial, comisión y «a mercado» en el panel (recalcula desde el principio) ──
+  {
+    const React = require(R + '/node_modules/react'), RDC = require(R + '/node_modules/react-dom/client')
+    const RV = require(R + '/components/ReplayVarios.js'), P = require(R + '/components/PanelReplay.js')
+    ok(P.textoAjuste({ capitalInicial: 20000 }) === '20.000 € de dinero inicial' && P.textoAjuste({ comision: 0.5 }) === 'una comisión de 0,5 € por orden' && /al cierre/.test(P.textoAjuste({ ejecucion: 'cierre' })), 'el texto de la línea amarilla dice qué cambió')
+    const ld = P.leeAjustesReplay()
+    ok(ld.capitalInicial === 10000 && ld.comision === 0.185 && ld.ejecucion === 'apertura', 'sin nada recordado: 10.000 €, 0,185 € por orden, a la apertura siguiente')
+    const m = DF.monta(React.createElement(RV.default, { inicial: { nuevo: { valores: ['A', 'B'], fecha: D[0], capitalInicial: 10000, comision: 1, ejecucion: 'apertura', intervalo: 'diario' } },
+      cargaVelas: async (s) => VELAS[s] || VELAS.A, onSalir() {}, Grafico: (p) => React.createElement('div', null, p.simbolo) }), RDC)
+    await DF.espera(80)
+    const cas = m.raiz.busca(n => n.getAttribute('data-def') === 'capitalInicial')
+    ok(!!cas && /Dinero inicial/.test(m.raiz.busca(n => n.hasAttribute('data-dinero-inicial'))?.textContent || ''), 'el panel lleva «Dinero inicial» con su casilla')
+    DF.escribe(cas, '30.000'); await DF.espera(10); DF.propsDe(cas).onBlur?.(); await DF.espera(30)
+    ok(/30\.000/.test(m.raiz.busca(n => n.hasAttribute('data-cifras-replay'))?.textContent || ''), `al cambiarlo, «Tu dinero» pasa a 30.000 € (${(m.raiz.busca(n => n.hasAttribute('data-cifras-replay'))?.textContent || '').slice(0, 40)})`)
+    let c = null
+    const t = DF.monta(React.createElement(P.TarjetaDefecto, { form: { modo: 'invertir', pct: '20' }, onForm() {}, estado: { comision: 1, ejecucion: 'apertura' }, onCerrar() {}, onAjustes: (x) => { c = x } }), RDC)
+    await DF.espera(10)
+    const co = t.raiz.busca(n => n.getAttribute('data-def') === 'comision')
+    DF.escribe(co, '0,5'); await DF.espera(10); DF.propsDe(co).onBlur?.(); await DF.espera(10)
+    ok(c && c.comision === 0.5, `en ⚙, la comisión de este Replay se cambia (${JSON.stringify(c)})`)
+    DF.escribe(t.raiz.busca(n => n.getAttribute('data-def') === 'ejecucion'), 'cierre'); await DF.espera(10)
+    ok(c && c.ejecucion === 'cierre', 'y «a mercado» también')
+  }
+
   // ── §262: UNA sola ventana para empezar (VentanaReplay): «Solo X» o una lista / varios a mano; las velas, las del gráfico ──
   {
     const React = require(R + '/node_modules/react'), RDC = require(R + '/node_modules/react-dom/client')

@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react'
 import { TIPOS_SALTO } from '../lib/replay/senales'
 import { MONO } from '../lib/utils'
 import Ayuda from './BuilderAyuda'
+import { leeAjustesReplay } from './PanelReplay'
 import { inicioHace, inicioAlAzar, velaDeInicio, posicion, anosCargados } from '../lib/replay/grafico'
 import FilasAlerta from './FilasAlerta'
 import EditorConPasos from './EditorConPasos'
@@ -88,12 +89,9 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
   const errorVarios = !varios ? '' : valoresVarios.length < 2 ? 'Elige al menos 2 valores.' : valoresVarios.length > MAX_VARIOS ? `Como mucho ${MAX_VARIOS} valores (tienes ${valoresVarios.length}).` : !fechaVarios || fechaVarios >= hoyISO ? 'Elige un día del pasado.' : ''
   const [fecha, setFecha] = useState(() => inicioHace(velas, 1))
   useEffect(() => { if (!fecha && Array.isArray(velas) && velas.length > 2) setFecha(inicioHace(velas, 1)) }, [velas])   // §233: las velas llegan después (valor al azar)
-  // Dinero, comisión y cuándo van las órdenes a mercado (se recuerdan en el navegador para la próxima vez).
-  const [aj, setAj] = useState(() => { try { return { capital: '10.000', comision: '0,185', ejecucion: 'apertura', ...JSON.parse(localStorage.getItem('replay.ajustes') || '{}') } } catch (_) { return { capital: '10.000', comision: '0,185', ejecucion: 'apertura' } } })
-  const numero = (s) => Number(String(s).replace(/\./g, '').replace(',', '.'))
-  const capital = numero(aj.capital), comision = Number(String(aj.comision).replace(',', '.'))
-  const ajustesBien = capital > 0 && comision >= 0
-  const empieza = () => { if (!puede) return; const a = { capitalInicial: capital, comision, ejecucion: aj.ejecucion }; try { localStorage.setItem('replay.ajustes', JSON.stringify({ capital: aj.capital, comision: aj.comision, ejecucion: aj.ejecucion })) } catch (_) {}
+  // §264: el dinero inicial, la comisión y «a mercado» ya no se eligen aquí: los últimos que usaste (se cambian en el panel del Replay).
+  const ajustesBien = true
+  const empieza = () => { if (!puede) return; const a = leeAjustesReplay()
     if (varios) onEmpezarVarios({ valores: valoresVarios, fecha: fechaVarios, ...a, intervalo: intervalo === 'semanal' ? 'semanal' : 'diario' }); else onEmpezar(elegida, a) }
   const vs = Array.isArray(velas) ? velas : []
   const min = vs.length > 2 ? vs[1].date : '', max = vs.length > 2 ? vs[vs.length - 2].date : ''
@@ -104,15 +102,6 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
   // §241: «Hace 1 / 5 / 10 años». El Replay usa las velas que tiene cargadas el gráfico (su periodo): si no llegan, el botón se apaga y lo dice.
   const hay = anosCargados(vs)
   const campo = { fontFamily: MONO, fontSize: 12, padding: '3px 6px', background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }
-  const ajustes = <>
-    <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 10px', alignItems: 'center', marginBottom: 14 }}>
-      <span>Dinero inicial</span><span><input data-capital-replay="" value={aj.capital} onChange={e => setAj(x => ({ ...x, capital: e.target.value }))} style={{ fontFamily: MONO, fontSize: 13, padding: '3px 6px', width: 110, background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }} /> €</span>
-      <span>Comisión por orden</span><span><input data-comision-replay="" value={aj.comision} onChange={e => setAj(x => ({ ...x, comision: e.target.value }))} style={{ fontFamily: MONO, fontSize: 13, padding: '3px 6px', width: 70, background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }} /> € (cada compra y cada venta)</span>
-      <span>A mercado</span><select value={aj.ejecucion} onChange={e => setAj(x => ({ ...x, ejecucion: e.target.value }))} data-ejecucion-replay="" style={{ fontFamily: MONO, fontSize: 12, padding: '3px 4px', width: 'auto', background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }}>
-        <option value="apertura">a la apertura de la vela siguiente</option><option value="cierre">al cierre de la vela que ves</option></select>
-    </div>
-    {!ajustesBien && <div style={{ color: '#f85149', marginBottom: 10 }}>El dinero tiene que ser mayor que 0 y la comisión no puede ser negativa.</div>}
-  </>
   const hace = (n) => rapido(`Hace ${n} ${n === 1 ? 'año' : 'años'}`, () => inicioHace(vs, n), hay >= n - 0.1 ? '' : `El gráfico solo tiene ${hay.toLocaleString('es-ES', { maximumFractionDigits: 1 })} años de velas cargados. Para empezar hace ${n} años, amplía el periodo del gráfico.`, hay >= n - 0.1)
   return (
     <div data-ventana-replay="" role="dialog" aria-modal="true" onMouseDown={e => { if (e.target === e.currentTarget) onCancelar() }}
@@ -146,7 +135,6 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
             {[1, 5, 10].map(n => <button key={n} onClick={() => setFechaVarios(haceAnosHoy(n))} style={boton()} data-hace={`Hace ${n}`}>Hace {n} {n === 1 ? 'año' : 'años'}</button>)}
           </div>
           <div style={{ color: '#7a9bc0', marginBottom: 14 }}>Un valor que aún no cotizaba ese día aparece el día que empieza.</div>
-          {ajustes}
           {errorVarios && <div data-error-replay="" style={{ color: '#f85149', marginBottom: 10 }}>{errorVarios}</div>}
         </> : cargando ? <div style={{ color: '#7a9bc0', marginBottom: 14 }} data-cargando-replay="">Cargando las velas de {simbolo}…</div>
           : vs.length < 3 ? <div style={{ color: '#f85149' }}>Este gráfico tiene muy pocas velas para un Replay.</div> : <>
@@ -159,7 +147,6 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
           <div style={{ color: '#7a9bc0', marginBottom: 14 }}>
             {elegida ? <>Empiezas el <b style={{ color: '#e2eaf5' }}>{diaSemana(elegida)} {fmt(elegida)}</b>: verás las velas hasta ese día y quedan <b style={{ color: '#e2eaf5' }}>{posicion(vs, elegida, elegida).quedan.toLocaleString('es-ES')}</b> por descubrir{vs.length ? <> (hay datos desde el {fmt(vs[0].date)})</> : null}.</> : 'Elige un día.'}
           </div>
-          {ajustes}
         </>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancelar} style={boton()}>Cancelar</button>

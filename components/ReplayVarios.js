@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Ayuda from './BuilderAyuda'
 import CandleChart from './CandleChart'
 import { BarraReplay, VentanaSenal, VentanaCambioVelas } from './Replay'
-import { PanelOperar, PanelGrafico, ResultadosReplay } from './PanelReplay'
+import { PanelOperar, PanelGrafico, ResultadosReplay, recuerdaAjustesReplay, textoAjuste } from './PanelReplay'
 import { calcula, cifras, irA, VERSION } from '../lib/replay/motor'
 import { nuevaAccion, configAuto, marcasDe, tradesDe } from '../lib/replay/orden'
 import { FORM_INICIAL, conClic, dobleClic, empiezaMarca, deMercado, redondea, accionMover, anade, ordenDeMarca, quitaOperacion, mueveBorrador, lineasDe, cajasDe } from '../lib/replay/borrador'
@@ -284,7 +284,7 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
         <BarraReplay velas={calendario} estado={estado} onIr={ir} onSalir={onSalir} onIndicadores={onIndicadores} ver={ver} onVer={setVer} senal={barraSenal} />
       </div>
       <div data-panel-derecho-varios="" style={{ width: 330, flexShrink: 0, borderLeft: `1px solid ${BZ.borde}`, background: BZ.panel, overflowY: 'auto' }}>
-        <PanelOperar estado={estado} simbolo={`${estado.valores.length} valores`} r={r} cif={cif} onTerminar={v => { limpia(); setEstado(e => ({ ...e, terminada: v })) }}
+        <PanelOperar onAjustes={c => { recuerdaAjustesReplay({ ...estado, ...c }); if ((estado.acciones || []).length) setAviso(`Recalculado desde el principio con ${textoAjuste(c)}.`); setEstado(e => ({ ...e, ...c })) }} estado={estado} simbolo={`${estado.valores.length} valores`} r={r} cif={cif} onTerminar={v => { limpia(); setEstado(e => ({ ...e, terminada: v })) }}
           nombre={guardado.nombre || nombreDe(estado)} onNombre={nombra} guardado={guardado.estado} form={form} onForm={setForm} cfg={cfg} onCfg={setCfg} indice={indiceBH} aviso={aviso}
           auto={{ activo: autoActivo, puede: !!senalesMotor, esEstrategia: senalDef?.tipo === 'estrategia', onCambia: ponAuto, senal: textoSenal }} />
       </div>

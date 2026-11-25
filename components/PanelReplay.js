@@ -41,6 +41,35 @@ function Cifra({ titulo, valor, col, tip }) {
   return <div title={tip} style={{ background: BZ.caja, borderRadius: 6, padding: '5px 7px' }}><small style={{ display: 'block', color: BZ.gris, fontSize: 11 }}>{titulo}</small><b style={{ fontSize: 14, color: col || BZ.texto }}>{valor}</b></div>
 }
 
+// §264 (boceto bocetos/replay-ventana-unica.html, pestaña 2): el dinero inicial, la comisión y «a mercado» del Replay se cambian en el
+// panel (ya no en la ventana de empezar). Cambiarlos recalcula todo desde el principio (el motor rehace la simulación con las acciones
+// guardadas). Lo último que pones se recuerda en el navegador (replay.ajustes) para el próximo Replay.
+const numeroEs = (s) => Number(String(s ?? '').trim().replace(/\./g, '').replace(',', '.'))
+export function leeAjustesReplay() {
+  let a = {}
+  try { a = JSON.parse(localStorage.getItem('replay.ajustes') || '{}') } catch (_) {}
+  const capital = numeroEs(a.capital ?? '10.000'), comision = numeroEs(a.comision ?? '0,185')
+  return { capitalInicial: capital > 0 ? capital : 10000, comision: comision >= 0 ? comision : 0.185, ejecucion: a.ejecucion === 'cierre' ? 'cierre' : 'apertura' }
+}
+export function recuerdaAjustesReplay(e) {
+  try { localStorage.setItem('replay.ajustes', JSON.stringify({ capital: Number(e.capitalInicial).toLocaleString('es-ES'), comision: String(e.comision).replace('.', ','), ejecucion: e.ejecucion === 'cierre' ? 'cierre' : 'apertura' })) } catch (_) {}
+}
+// El texto de la línea amarilla: «Recalculado desde el principio con 20.000 €».
+export function textoAjuste(c) {
+  if (c.capitalInicial != null) return `${Number(c.capitalInicial).toLocaleString('es-ES')} € de dinero inicial`
+  if (c.comision != null) return `una comisión de ${String(c.comision).replace('.', ',')} € por orden`
+  if (c.ejecucion != null) return c.ejecucion === 'cierre' ? 'las órdenes a mercado al cierre de la vela' : 'las órdenes a mercado a la apertura siguiente'
+  return ''
+}
+// Casilla de número que se fija con Enter o al salir (Esc deja la que había). vale(n) dice si el número sirve.
+function CasillaAjuste({ valor, onFija, dato, ancho = 80, vale = (n) => n >= 0 }) {
+  const ver = (x) => Number(x).toLocaleString('es-ES', { maximumFractionDigits: 3 })
+  const [txt, setTxt] = useState(null)
+  const fija = () => { if (txt == null) return; const n = numeroEs(txt); setTxt(null); if (Number.isFinite(n) && vale(n) && n !== valor) onFija(n) }
+  return <input data-def={dato} value={txt ?? ver(valor)} onChange={e => setTxt(e.target.value)} onBlur={fija}
+    onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key === 'Escape') setTxt(null) }} style={{ ...casilla, width: ancho, textAlign: 'right' }} />
+}
+
 // §230: casilla de precio de una orden ya enviada o de la posición. Muestra el precio de ahora (o el de la línea mientras se arrastra);
 // al escribir, se fija con Enter o al salir de la casilla (vacía = quitar). Esc deja el que había.
 function CasillaPrecio({ valor, onFija, dato, titulo, ancho = 80 }) {
@@ -82,7 +111,7 @@ export const AYUDA_SOLO = 'EJECUTAR SOLO: cada vela, al cierre, mira la señal e
 // §250: la tarjeta ⚙ «Valores por defecto» (en lugar de las cifras). Cambia el formulario (form / onForm), que la página recuerda en el
 // navegador (replay.orden) para cualquier Replay. Lo que ya está puesto (órdenes vivas, la posición) no cambia.
 // §252: auto = { activo, puede, senal (texto), esEstrategia, onCambia(bool) } para «Ejecutar solo».
-export function TarjetaDefecto({ form, onForm, estado, onCerrar, auto = null }) {
+export function TarjetaDefecto({ form, onForm, estado, onCerrar, auto = null, onAjustes = null }) {
   const f = form
   // Al elegir «A un %», «A X veces el ATR» o «Por R:R» con la casilla vacía, se rellena con 5 %, 2 veces y 1 : 2 (los de fábrica).
   const pon = (k, v) => onForm(x => ({ ...x, [k]: v, ...(k === 'stopModo' && v === 'pct' && (x.stopPct === '' || x.stopPct == null) ? { stopPct: '5' } : {}), ...(k === 'stopModo' && v === 'atr' && (x.stopAtr === '' || x.stopAtr == null) ? { stopAtr: '2' } : {}), ...(k === 'tpModo' && v === 'rr' && (x.rr === '' || x.rr == null) ? { rr: '2' } : {}) }))
@@ -122,15 +151,22 @@ export function TarjetaDefecto({ form, onForm, estado, onCerrar, auto = null }) 
           <input type="checkbox" data-def="solo" checked={!!auto.activo} disabled={!auto.puede} onChange={e => auto.onCambia(e.target.checked)} />
           <span>Compra solo al salir la señal{auto.senal ? <>: <b>{auto.senal}</b></> : ' (elige una en la barra)'}</span></label>}
         {auto && auto.esEstrategia && fila('Sale con', sel('sale', f.sale || 'panel', [['panel', 'El stop y el objetivo de aquí'], ['estrategia', 'Las salidas de la estrategia']]))}
-        {grupo('De este Replay (al empezar)')}
-        <div style={{ gridColumn: '1 / -1', color: BZ.gris }}>{estado.comision ? `${com(estado.comision)} € por orden` : 'Sin comisión'} · a mercado {estado.ejecucion === 'cierre' ? 'al cierre de hoy' : 'a la apertura siguiente'}</div>
+        {onAjustes ? <>
+          {grupo(<span title="Cambiarlos recalcula este Replay desde el principio, con tus mismas órdenes">De este Replay · recalcula desde el principio</span>)}
+          {fila('Comisión', <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><CasillaAjuste dato="comision" valor={estado.comision || 0} ancho={62} onFija={v => onAjustes({ comision: v })} />€ por orden</span>)}
+          {fila('A mercado', <select data-def="ejecucion" value={estado.ejecucion === 'cierre' ? 'cierre' : 'apertura'} onChange={e => onAjustes({ ejecucion: e.target.value })} style={{ ...casilla, width: '100%' }}>
+            <option value="apertura">a la apertura de la vela siguiente</option><option value="cierre">al cierre de la vela que ves</option></select>)}
+        </> : <>
+          {grupo('De este Replay (al empezar)')}
+          <div style={{ gridColumn: '1 / -1', color: BZ.gris }}>{estado.comision ? `${com(estado.comision)} € por orden` : 'Sin comisión'} · a mercado {estado.ejecucion === 'cierre' ? 'al cierre de hoy' : 'a la apertura siguiente'}</div>
+        </>}
       </div>
     </div>)
 }
 
 // §250: el panel de la DERECHA: el nombre, las cifras de tu cuenta (o, con ⚙, los valores por defecto), avisos y Terminar.
 // Operar (botones, órdenes vivas, la posición) va en el panel de dentro del gráfico (PanelGrafico).
-export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', nombre = null, onNombre, guardado = '', onMisReplays, cfg = false, form = null, onForm, onCfg, auto = null, indice = null }) {
+export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', nombre = null, onNombre, guardado = '', onMisReplays, cfg = false, form = null, onForm, onCfg, auto = null, indice = null, onAjustes = null }) {
   const terminada = !!estado.terminada
   const g = (x) => (x == null ? '—' : pc(x))
   const pf = cif.factorBeneficio == null ? '—' : cif.factorBeneficio === Infinity ? '∞' : loc(cif.factorBeneficio, 2)
@@ -142,7 +178,7 @@ export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', n
       </div>
       {nombre != null && <NombreReplay nombre={nombre} onNombre={onNombre} guardado={guardado} onMisReplays={onMisReplays} />}
       {cfg && form && onForm
-        ? <TarjetaDefecto form={form} onForm={onForm} estado={estado} auto={auto} onCerrar={() => onCfg && onCfg(false)} />
+        ? <TarjetaDefecto form={form} onForm={onForm} estado={estado} auto={auto} onAjustes={onAjustes} onCerrar={() => onCfg && onCfg(false)} />
         : <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8 }} data-cifras-replay="">
           <Cifra titulo="Tu dinero" valor={eur(cif.final)} tip={`Empezaste con ${eur(estado.capitalInicial)}`} />
           <Cifra titulo="Ganancia" valor={`${signo(cif.ganancia)}${eur(Math.abs(cif.ganancia))} · ${pc(cif.pct)}`} col={color(cif.ganancia)} />
@@ -159,6 +195,10 @@ export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', n
           {(auto?.activo || (cif.sinDinero || 0) > 0) && <Cifra titulo="Señales sin dinero" valor={cif.sinDinero || 0} col={cif.sinDinero ? BZ.ambar : BZ.texto} tip="Señales de «Ejecutar solo» que se saltaron porque no llegaba el dinero" />}
           <Cifra titulo="Tú, frente a él" valor={cif.buyHold ? `${signo(Math.round(cif.final - cif.buyHold.final))}${eur(Math.abs(cif.final - cif.buyHold.final))}` : '—'} col={cif.buyHold ? color(Math.round(cif.final - cif.buyHold.final)) : BZ.texto} />
         </div>}
+      {onAjustes && !cfg && <div data-dinero-inicial="" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, color: BZ.gris, fontSize: 12 }}>
+        <span>Dinero inicial</span><CasillaAjuste dato="capitalInicial" valor={estado.capitalInicial} ancho={90} vale={n => n > 0} onFija={v => onAjustes({ capitalInicial: v })} /><span>€</span>
+        <span style={{ marginLeft: 'auto' }}>{estado.comision ? `${com(estado.comision)} €/orden` : 'sin comisión'} · <span style={{ color: BZ.azul, cursor: 'pointer' }} onClick={() => onCfg && onCfg(true)} title="Cambiar la comisión y «a mercado» en ⚙">⚙</span></span>
+      </div>}
       {aviso && <div data-aviso-linea="" style={{ color: BZ.ambar, fontSize: 12, margin: '6px 0' }}>⚠ {aviso}</div>}
       {r.avisos.length > 0 && <div style={{ ...cajaSt, borderColor: BZ.ambar }} data-avisos-replay="">
         {r.avisos.slice(-4).map((a, i) => <div key={i} style={{ color: BZ.ambar, fontSize: 12 }}>{fmt(a.fecha)}: {a.texto}</div>)}

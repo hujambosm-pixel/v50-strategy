@@ -25,7 +25,7 @@ import { recortaVelas, desplazaRango, vecina, rangoVer, historiaReplay, velaDeIn
 import { irA as replayIrA, calcula as replayCalcula, cifras as replayCifras } from '../lib/replay/motor'
 import { marcasDe as replayMarcas, nuevaAccion as nuevaAccionReplay, tradesDe as tradesReplayDe, configAuto as configAutoReplay } from '../lib/replay/orden'
 import { atr as atrReplayDe } from '../lib/condiciones/indicadores'   // §252: el ATR (14) de hoy, para el stop por ATR del Replay
-import { PanelOperar, PanelGrafico, ResultadosReplay } from '../components/PanelReplay'   // §228: operar en el Replay · §250: panel dentro del gráfico
+import { PanelOperar, recuerdaAjustesReplay, textoAjuste as textoAjusteReplay, PanelGrafico, ResultadosReplay } from '../components/PanelReplay'   // §228: operar en el Replay · §250: panel dentro del gráfico
 import { FORM_INICIAL as FORM_REPLAY, hayBorrador as hayBorradorReplay, conClic as clicBorrador, dobleClic as dobleClicBorrador, empiezaMarca as empiezaMarcaReplay, enCasilla as enCasillaReplay, ladoDe as ladoBorrador, mueveBorrador as mueveBorradorReplay, deMercado as deMercadoReplay, redondea as redondeaReplay, lineasDe as lineasReplayDe, cajasDe as cajasReplayDe, accionMover as accionMoverReplay, anade as anadeAccionReplay, ordenDeMarca as ordenDeMarcaReplay, quitaOperacion as quitaOperacionReplay } from '../lib/replay/borrador'   // §229: marcar en el gráfico
 import { senalesCondicion, entradasYSalidasEstrategia, fechasDeSalto, siguienteSenal, anteriorSenal, marcasSenal, marcasSalida, simbolosSenal, graficoSenal } from '../lib/replay/senales'   // §231: saltar a la señal
 import { senalesConPasos } from '../lib/condiciones/conPasos'   // §244: la «Condición con pasos» como señal del Replay
@@ -50,7 +50,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1329'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1330'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -5963,7 +5963,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1329</title>
+        <title>Trading Simulator V9.1330</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6052,7 +6052,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1329
+            <span className="dot"/>Trading Simulator V9.1330
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -8589,7 +8589,7 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                       {hayResumenDer&&<button data-pestana-der="resumen" onClick={()=>setPestanaDer('resumen')} style={{background:'transparent',border:'none',borderBottom:pesDer==='resumen'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='resumen'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer'}}>RESUMEN · {displayedSimbolo||simbolo}</button>}
                       {replay?<span data-pestana-der="replay" style={{borderBottom:'2px solid #ffd166',color:'#ffd166',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px'}}>REPLAY</span>:(()=>{const n=(alertasN.alertas||[]).filter(a=>a.activa).length,sv=alertasN.sinVer;return <button data-pestana-der="alertas" title={`Tus alertas: ${n} encendida${n===1?'':'s'}${sv?` · ${sv} saltaron y no las has visto`:''}`} onClick={()=>setPestanaDer('alertas')} style={{background:'transparent',border:'none',borderBottom:pesDer==='alertas'?'2px solid var(--accent)':'2px solid transparent',color:pesDer==='alertas'?'#b8d8f0':'var(--text3)',fontFamily:MONO,fontSize:10,letterSpacing:'0.08em',fontWeight:600,padding:'7px 6px',cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>ALERTAS{n?` (${n})`:''}<style>{'@keyframes campanaAlerta{0%,60%,100%{transform:rotate(0)}10%{transform:rotate(16deg)}20%{transform:rotate(-14deg)}30%{transform:rotate(10deg)}40%{transform:rotate(-8deg)}50%{transform:rotate(4deg)}}'}</style><span data-campana-pestana style={{fontSize:12,lineHeight:1,display:'inline-block',transformOrigin:'50% 0',animation:sv?'campanaAlerta 1.6s ease-in-out infinite':'none'}}>🔔</span>{sv?<span style={{color:'#ff4d6d'}}>{sv} sin ver</span>:null}</button>})()}
                     </div>
-                    {pesDer==='replay'&&calcReplay&&<PanelOperar estado={replay} simbolo={replay.valores[0]} r={calcReplay} cif={cifReplay} onTerminar={v=>{ if(v) limpiaMarcaReplay(); terminaReplay(v) }}
+                    {pesDer==='replay'&&calcReplay&&<PanelOperar onAjustes={c=>{ recuerdaAjustesReplay({...replay,...c}); if((replay.acciones||[]).length) setAvisoLineaReplay(`Recalculado desde el principio con ${textoAjusteReplay(c)}.`); setReplay(r=>r?{...r,...c}:r) }} estado={replay} simbolo={replay.valores[0]} r={calcReplay} cif={cifReplay} onTerminar={v=>{ if(v) limpiaMarcaReplay(); terminaReplay(v) }}
                       form={formReplay} onForm={setFormReplay} cfg={cfgReplay} onCfg={setCfgReplay} auto={autoPanelReplay}
                       nombre={replayGuardado.nombre||nombreReplayDe(replay)} onNombre={nombraReplay} guardado={replayGuardado.estado} onMisReplays={abreMisReplays}/>}
                     {pesDer==='alertas'&&<PanelAlertas simbolo={simbolo} ahora={ultimoPrecio} estado={alertasN} onNueva={()=>abreNuevaAlerta(null)} onEditar={a=>setVentanaAlerta({inicial:a})} elegida={alertaElegida} estiloLineas={estiloLineas} onEstiloLineas={setEstiloLineas} onIrAValor={s=>setSimbolo(s)} onElegir={eligeAlertaLista}/>}
