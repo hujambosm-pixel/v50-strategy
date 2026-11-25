@@ -30,7 +30,7 @@ const INDICE = '^GSPC'
 const VACIO = []
 export const MAX_VALORES = 30
 // Gráficos por fila (como «Charts» del screener) y su alto.
-export const REJILLA = Object.freeze({ g2: { porFila: 2, alto: 400, escala: 1 }, g4: { porFila: 4, alto: 330, escala: 0.85 }, g6: { porFila: 6, alto: 250, escala: 0.72 } })
+export const REJILLA = Object.freeze({ g2: { porFila: 2, alto: 400 }, g4: { porFila: 4, alto: 330 }, g6: { porFila: 6, alto: 250 } })
 
 export const AYUDA_VARIOS = 'REPLAY CON VARIOS VALORES: todos los gráficos van en la MISMA fecha y operas con UNA sola cuenta (el mismo dinero para todos). ' +
   'Cada gráfico funciona igual que el Replay de un valor: «🎯 Compra» / «🎯 Venta» y un clic en el gráfico ponen la orden con los valores de ⚙; sus líneas se arrastran; las casillas, 🎯 y ✕ como siempre. ' +
@@ -146,6 +146,7 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
   const [tam, setTam] = useState('g4'), [orden, setOrden] = useState('importante')
   const [ver, setVer] = useState(120)
   const [ampliado, setAmpliado] = useState(null)
+  const [editando, setEditando] = useState({})            // §258: los minigráficos con Entrada / Stop / Objetivo desplegados (✎)
   const [senal, setSenal] = useState(null)                 // id de la estrategia elegida
   const [guardado, setGuardado] = useState({ id: inicial?.id || null, nombre: inicial?.nombre || '', estado: inicial?.id ? 'guardado' : '' })
 
@@ -255,21 +256,23 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
   const lista = ordenRejilla(estado.valores, r, hoySen, orden)
   const R = REJILLA[tam]
   const indiceBH = (velas[INDICE] || []).length ? (() => { const vs = velas[INDICE].filter(v => v.date >= estado.desde && v.date <= estado.hoy); if (!vs.length) return null; const q = Math.floor((estado.capitalInicial - (estado.comision || 0)) / vs[0].close); return q > 0 ? estado.capitalInicial - q * vs[0].close - 2 * (estado.comision || 0) + q * vs[vs.length - 1].close : null })() : null
+  // El panel de operar de un valor (§258: en la rejilla, en la cabecera; ampliado, encima del gráfico como en el de un valor).
+  const panel = (s, extra) => <PanelGrafico estado={estado} simbolo={s} r={r} ahora={ahoraDe(s)} total={cif?.final} form={form} captura={captura && captura.s === s ? captura.campo : null} capturaLinea={capturaLinea}
+    onMarcar={lado => marca(s, lado)} onMarcarLinea={id => { limpia(); setCapturaLinea(id) }} onCancelaMarca={limpia} onAccion={accion} formMercado={lado => deMercado({ ...form, atrHoy: atrHoyDe(s) }, lado, ahoraDe(s))}
+    onMover={mover} arrastre={arrastre} onCfg={v => setCfg(v)} cfgAbierta={cfg} autoActivo={autoActivo} {...extra} />
   const celda = (s, grande) => {
-    const sp = grande ? 1 : R.escala
     return <div key={s} data-celda-varios={s} style={{ position: 'relative', background: '#1b1e25', border: `${hoySen.has(s) ? 2 : 1}px solid ${hoySen.has(s) ? BZ.morado : BZ.borde}`, borderRadius: 6, minWidth: 0 }}>
-      <div onDoubleClick={() => setAmpliado(a => (a === s ? null : s))} title="Doble clic: ampliar / volver a la rejilla" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 6px', fontSize: 12, borderBottom: `1px solid ${BZ.borde}`, cursor: 'default' }}>
-        <b>{s}</b><span style={{ color: BZ.gris }}>{n2(ahoraDe(s))}</span>{hoySen.has(s) && <span style={{ color: BZ.morado, fontWeight: 700 }}>▲ señal hoy</span>}
-        <button data-ampliar-varios={s} onClick={() => setAmpliado(a => (a === s ? null : s))} title={grande ? 'Volver a la rejilla (Esc)' : 'Ampliar este gráfico'} style={{ ...btn(), padding: '0 6px', marginLeft: 'auto', fontSize: 12 }}>{grande ? '← Rejilla' : '⤢'}</button>
+      <div data-cabecera-varios={s} onDoubleClick={() => setAmpliado(a => (a === s ? null : s))} title="Doble clic: ampliar / volver a la rejilla" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 5px', fontSize: 12, borderBottom: `1px solid ${BZ.borde}`, cursor: 'default', minHeight: 24, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+        <b>{s}</b><span style={{ color: BZ.gris, fontSize: 11 }}>{n2(ahoraDe(s))}</span>{hoySen.has(s) && <span title="Señal hoy" style={{ color: BZ.morado, fontWeight: 700 }}>{grande ? '▲ señal hoy' : '▲'}</span>}
+        {!grande && panel(s, { cabecera: true, onEditar: v => setEditando(x => ({ ...x, [s]: v })), editando: !!editando[s], style: { marginLeft: 'auto' } })}
+        <button data-ampliar-varios={s} onClick={() => setAmpliado(a => (a === s ? null : s))} title={grande ? 'Volver a la rejilla (Esc)' : 'Ampliar este gráfico'} style={{ ...btn(), padding: grande ? '0 6px' : '0 5px', marginLeft: grande ? 'auto' : 0, fontSize: grande ? 12 : 11, lineHeight: grande ? undefined : '18px' }}>{grande ? '← Rejilla' : '⤢'}</button>
       </div>
+      {!grande && editando[s] && (r?.posiciones?.[s] || (r?.ordenesVivas || []).some(o => o.simbolo === s)) && panel(s, { sinBotones: true, style: { maxWidth: 'none', borderRadius: 0, border: 'none', borderBottom: `1px solid ${BZ.borde}`, boxShadow: 'none', background: '#232730' } })}
       <div style={{ position: 'relative' }}>
         <GraficoValor Grafico={Grafico} simbolo={s} velas={motorVelas[s]} estado={estado} r={r} form={form} captura={captura && captura.s === s ? captura.campo : null} campoLinea={capturaLinea ? String(capturaLinea).split(':')[2] : null}
           ahora={ahoraDe(s)} senalDef={senalDef} referencias={referencias} senalS={senales?.[s]} indicadores={indicadores} onIndicadores={onIndicadores} alto={grande ? 600 : R.alto} ver={ver} elegida={elegida}
           onClicPrecio={p => clic(s, p)} onDobleClic={grande ? (p => doble(s, p)) : (() => setAmpliado(s))} onLinea={linea(s)} mini={!grande} />
-        <PanelGrafico estado={estado} simbolo={s} r={r} ahora={ahoraDe(s)} total={cif?.final} form={form} captura={captura && captura.s === s ? captura.campo : null} capturaLinea={capturaLinea}
-          onMarcar={lado => marca(s, lado)} onMarcarLinea={id => { limpia(); setCapturaLinea(id) }} onCancelaMarca={limpia} onAccion={accion} formMercado={lado => deMercado({ ...form, atrHoy: atrHoyDe(s) }, lado, ahoraDe(s))}
-          onMover={mover} arrastre={arrastre} onCfg={v => setCfg(v)} cfgAbierta={cfg} autoActivo={autoActivo}
-          style={{ position: 'absolute', top: 6, right: grande ? 72 : 62, zIndex: 12, transform: `scale(${sp})`, transformOrigin: 'top right' }} />
+        {grande && panel(s, { style: { position: 'absolute', top: 6, right: 72, zIndex: 12 } })}
       </div>
     </div>
   }

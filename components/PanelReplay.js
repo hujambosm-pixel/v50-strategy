@@ -177,7 +177,9 @@ export function PanelOperar({ estado, simbolo, r, cif, onTerminar, aviso = '', n
 //   onMarcar(lado): empieza a marcar una orden nueva. onMarcarLinea(id): el próximo clic en el gráfico mueve esa línea (pos:… / viva:…).
 //   onMover(id, precio | null): cambia o quita un precio. onAccion: «cerrar», «cancelar» y las órdenes a mercado.
 // §254: compacto (gráficos pequeños de la rejilla con varios valores): solo los botones y una línea con lo que hay; las casillas, al ampliar.
-export function PanelGrafico({ estado, simbolo, r, ahora, total, form, captura = null, capturaLinea = null, onMarcar, onMarcarLinea, onCancelaMarca, onAccion, formMercado, onMover, arrastre = null, onCfg, cfgAbierta = false, aviso = '', style = null, autoActivo = false, compacto = false }) {
+// §258 (forma B, elegida por Sergi el 25/11): cabecera = lo mismo, en línea, sin caja, para la cabecera de cada minigráfico, con ✎
+// (onEditar / editando) que despliega debajo el panel entero sin su fila de botones (sinBotones).
+export function PanelGrafico({ estado, simbolo, r, ahora, total, form, captura = null, capturaLinea = null, onMarcar, onMarcarLinea, onCancelaMarca, onAccion, formMercado, onMover, arrastre = null, onCfg, cfgAbierta = false, aviso = '', style = null, autoActivo = false, compacto = false, cabecera = false, onEditar = null, editando = false, sinBotones = false }) {
   const [error, setError] = useState('')
   const f = form
   const pos = r.posiciones[simbolo]
@@ -204,6 +206,23 @@ export function PanelGrafico({ estado, simbolo, r, ahora, total, form, captura =
     <span data-marcar-linea={id} title="Marcar en el gráfico" onClick={() => onMarcarLinea && onMarcarLinea(capturaLinea === id ? null : id)} style={{ ...ic, background: capturaLinea === id ? BZ.azul : 'transparent' }}>🎯</span>
     <span data-quitar-linea={id} title={quitar} onClick={quitar ? () => onMover(id, null) : undefined} style={{ ...ic, color: BZ.rojo, visibility: quitar ? 'visible' : 'hidden' }}>✕</span>
   </div>
+  if (cabecera) {
+    const linea = captura ? `▶ marca ${QUE[captura]} · Esc` : pos ? `${pos.lado > 0 ? 'L' : 'C'} ${pos.acciones} · ${signo(pos.ganancia)}${eur(Math.abs(pos.ganancia))}` : vivas.length ? (vivas.length === 1 ? textoOrden(vivas[0]) : `${vivas.length} órdenes`) : ''
+    const titulo = pos ? `${pos.lado > 0 ? 'Largo' : 'Corto'} ${pos.acciones} acciones a ${pr(pos.precioMedio)} · ${signo(pos.ganancia)}${eur(Math.abs(pos.ganancia))}` : vivas.map(textoOrden).join(' · ')
+    const b = { ...btn(), padding: '0 6px', font: `11px/18px ${LETRA}`, fontWeight: 600 }
+    return (
+      <div data-panel-grafico="" data-cabecera-panel="" style={{ display: 'flex', gap: 3, alignItems: 'center', minWidth: 0, font: `11px/1.3 ${LETRA}`, color: BZ.texto, ...(style || {}) }}
+        onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+        {(linea || error) && <span data-linea-compacta="" title={error || titulo} style={{ color: error ? BZ.rojo : captura ? BZ.azul : BZ.gris, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{error ? `⚠ ${error}` : linea}{pos?.auto && !captura ? <span style={{ color: '#bc8cff' }}> · 🤖</span> : null}</span>}
+        {!terminada && !captura && !pos && !vivas.length && (mercado
+          ? <><button data-enviar-orden="1" style={{ ...b, background: 'rgba(63,185,80,0.25)', borderColor: BZ.verde }} onClick={() => envia(1)}>Compra</button><button data-enviar-orden="-1" style={{ ...b, background: 'rgba(248,81,73,0.25)', borderColor: BZ.rojo }} onClick={() => envia(-1)}>Venta</button></>
+          : <><button data-marcar-replay="1" style={{ ...b, background: 'rgba(63,185,80,0.25)', borderColor: BZ.verde }} onClick={() => onMarcar(1)}>🎯 Compra</button><button data-marcar-replay="-1" style={{ ...b, background: 'rgba(248,81,73,0.25)', borderColor: BZ.rojo }} onClick={() => onMarcar(-1)}>🎯 Venta</button></>)}
+        {(pos || vivas.length > 0) && !captura && onEditar && <button data-editar-cabecera="" title={editando ? 'Ocultar Entrada / Stop / Objetivo' : 'Ver y cambiar Entrada / Stop / Objetivo'} style={{ ...b, ...(editando ? { background: 'rgba(88,166,255,0.22)', borderColor: BZ.azul } : {}) }} onClick={() => onEditar(!editando)}>✎</button>}
+        {pos && !terminada && !captura && <button data-cerrar-replay="" title={`Cerrar ${cuando}`} style={b} onClick={() => onAccion({ fecha: estado.hoy, simbolo, tipo: 'cerrar' })}>✕</button>}
+        {captura && onCancelaMarca && <button onClick={onCancelaMarca} style={b}>Cancelar</button>}
+        {onCfg && <button data-cfg-replay="" title="Valores por defecto: tipo de orden, stop, objetivo y tamaño" style={{ ...b, ...(cfgAbierta ? { background: 'rgba(88,166,255,0.22)', borderColor: BZ.azul } : {}) }} onClick={() => onCfg(!cfgAbierta)}>⚙</button>}
+      </div>)
+  }
   if (compacto) {
     const linea = captura ? `▶ marca ${QUE[captura]} · Esc cancela` : pos ? `${pos.lado > 0 ? 'Largo' : 'Corto'} ${pos.acciones} · ${signo(pos.ganancia)}${eur(Math.abs(pos.ganancia))}${pos.auto ? ' · 🤖' : ''}` : vivas.length ? `${vivas.length} orden${vivas.length === 1 ? '' : 'es'} sin ejecutar` : ''
     const b = { ...btn(), padding: '1px 6px', font: `11px ${LETRA}`, fontWeight: 600 }
@@ -223,7 +242,7 @@ export function PanelGrafico({ estado, simbolo, r, ahora, total, form, captura =
   return (
     <div data-panel-grafico="" style={{ background: 'rgba(44,48,59,0.95)', border: `1px solid ${BZ.borde}`, borderRadius: 7, padding: '5px 6px', font: `12px/1.4 ${LETRA}`, color: BZ.texto, maxWidth: 300, boxShadow: '0 4px 14px rgba(0,0,0,0.45)', ...(style || {}) }}
       onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()} onWheel={e => e.stopPropagation()}>
-      <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+      {!sinBotones && <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
         {!terminada && !captura && (mercado
           ? <>
             <button data-enviar-orden="1" title={`Compra a mercado ${cuando}, con el stop y el objetivo de ⚙`} style={{ ...btn(), padding: '2px 8px', background: 'rgba(63,185,80,0.25)', borderColor: BZ.verde, fontWeight: 600 }} onClick={() => envia(1)}>Compra</button>
@@ -236,7 +255,7 @@ export function PanelGrafico({ estado, simbolo, r, ahora, total, form, captura =
         {pos && !terminada && !captura && <button data-cerrar-replay="" title={`Vende (o recompra el corto) ${cuando}`} style={{ ...btn(), padding: '2px 8px' }} onClick={() => onAccion({ fecha: estado.hoy, simbolo, tipo: 'cerrar' })}>Cerrar ✕</button>}
         {autoActivo && <span data-solo-activo="" title="«Ejecutar solo» está encendido: compra al salir la señal (se apaga en ⚙)" style={{ color: '#bc8cff', fontWeight: 700, fontSize: 11 }}>🤖 Solo</span>}
         {onCfg && <button data-cfg-replay="" title="Valores por defecto: tipo de orden, stop, objetivo y tamaño" style={{ ...btn(true, cfgAbierta), padding: '2px 7px', marginLeft: 'auto' }} onClick={() => onCfg(!cfgAbierta)}>⚙</button>}
-      </div>
+      </div>}
       {captura && <div data-guia-marca="" style={{ background: 'rgba(88,166,255,0.12)', border: `1px solid ${BZ.azul}`, borderRadius: 5, padding: '4px 7px', marginTop: 5 }}>
         <span data-marcando="" style={{ color: BZ.azul, fontWeight: 700 }}>MARCANDO </span>
         {f.ladoFijo && <b style={{ color: f.lado > 0 ? BZ.verde : BZ.rojo }}>{f.lado > 0 ? 'Compra' : 'Venta'} </b>}▶ marca <b>{QUE[captura]}</b>

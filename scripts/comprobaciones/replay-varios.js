@@ -90,6 +90,10 @@ const VELAS = {
     ok(!!m.raiz.busca(n => n.hasAttribute('data-rejilla-varios')), '«← Rejilla» vuelve a la rejilla')
     // §256: los minigráficos van con mini (rueda tras clic, ejes finos, sin leyenda); el doble clic en la rejilla solo amplía.
     ok(recibe.A.mini === true && recibe.B.mini === true, 'en la rejilla, cada gráfico va en modo mini')
+    // §258: forma B: el panel de operar va en la cabecera de cada minigráfico (una línea) y ✎ despliega las casillas.
+    const cabA = () => m.raiz.busca(n => n.getAttribute('data-cabecera-varios') === 'A')
+    ok(!!m.raiz.busca(n => n.hasAttribute('data-cabecera-panel')) && !!m.raiz.busca(n => n.hasAttribute('data-cfg-replay')), 'en la rejilla, Compra / Venta / ⚙ van en la cabecera del minigráfico')
+    ok(!m.raiz.busca(n => n.hasAttribute('data-precios-posicion') || n.hasAttribute('data-ordenes-vivas')), 'sin nada abierto, no hay casillas desplegadas')
     DF.pulsa(m.raiz.busca(n => n.getAttribute('data-tam-varios') === 'g2')); await DF.espera(20)
     ok(!!m.raiz.busca(n => n.getAttribute('data-rejilla-varios') === 'g2') && recibe.A.chartHeight === 400, '«Por fila: 2»: 2 gráficos por fila, más altos (400 px)')
     const accionesAntes = /0 operaciones|Operaciones · 0/.test(m.raiz.textContent)
@@ -98,6 +102,19 @@ const VELAS = {
     ok(!/Pulsa en el gráfico|Clic para marcar/.test(m.raiz.textContent) && accionesAntes === /0 operaciones|Operaciones · 0/.test(m.raiz.textContent), 'ese doble clic no pone ninguna orden ni empieza a marcar')
     DF.pulsa(m.raiz.busca(n => n.getAttribute('data-ampliar-varios') === 'A')); await DF.espera(20)
     m.quita()
+    // §258: con una posición abierta, la cabecera dice «L N · ±X €» con ✎ y ✕; ✎ despliega Stop / Objetivo debajo.
+    {
+      const eP = { version: 1, valores: ['A', 'B'], desde: D[0], hoy: D[2], capitalInicial: 10000, comision: 1, ejecucion: 'apertura', retrocesos: 0, terminada: false, intervalo: 'diario',
+        acciones: [{ fecha: D[0], simbolo: 'A', tipo: 'orden', id: 1, lado: 1, entrada: null, clase: null, stop: null, objetivo: null, tam: { modo: 'invertir', pct: 50 } }] }
+      const mm = DF.monta(React.createElement(RV.default, { inicial: { id: 'x', nombre: 'prueba', estado: eP }, cargaVelas: async (s) => VR[s] || [], onSalir() {}, Grafico: Falso }), RDC)
+      await DF.espera(80)
+      const cab = mm.raiz.busca(n => n.getAttribute('data-cabecera-varios') === 'A')
+      const tc = cab ? cab.textContent : ''
+      ok(/L 48 · −241 €/.test(tc) && !!mm.raiz.busca(n => n.hasAttribute('data-editar-cabecera')) && !mm.raiz.busca(n => n.hasAttribute('data-precios-posicion')), `cabecera de A con la posición en una línea, ✎ y ✕, sin casillas a la vista (${tc})`)
+      DF.pulsa(mm.raiz.busca(n => n.hasAttribute('data-editar-cabecera'))); await DF.espera(20)
+      ok(!!mm.raiz.busca(n => n.hasAttribute('data-precios-posicion')), '✎ despliega el Stop y el Objetivo de la posición debajo de la cabecera')
+      mm.quita()
+    }
     // El panel compacto: posición en una línea.
     const e = { version: 1, valores: ['A'], desde: D[0], hoy: D[2], capitalInicial: 10000, comision: 1, ejecucion: 'apertura', acciones: [{ fecha: D[0], simbolo: 'A', tipo: 'orden', id: 1, lado: 1, entrada: null, clase: null, stop: null, objetivo: null, tam: { modo: 'invertir', pct: 50 } }], retrocesos: 0 }
     const VA = { A: VR.A }, r0 = M.calcula(e, VA)
