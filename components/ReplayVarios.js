@@ -49,59 +49,7 @@ export function primerDia(velas, valores, fecha) {
   return m
 }
 
-// ── La ventana de empezar ──
-export function VentanaVarios({ listas = [], onEmpezar, onCancelar }) {
-  const [fuente, setFuente] = useState(() => { const i = listas.findIndex(l => l.simbolos.length >= 2 && l.simbolos.length <= MAX_VALORES); return i >= 0 ? `l:${i}` : 'mano' })   // la primera lista que cabe
-  const [mano, setMano] = useState('')
-  const hoyISO = new Date().toISOString().slice(0, 10)
-  const haceAnos = (n) => { const d = new Date(); d.setFullYear(d.getFullYear() - n); return d.toISOString().slice(0, 10) }
-  const [fecha, setFecha] = useState(haceAnos(1))
-  const [aj, setAj] = useState(() => { try { return { capital: '10.000', comision: '0,185', ejecucion: 'apertura', ...JSON.parse(localStorage.getItem('replay.ajustes') || '{}') } } catch (_) { return { capital: '10.000', comision: '0,185', ejecucion: 'apertura' } } })
-  const [intervalo, setIntervalo] = useState(() => { try { return localStorage.getItem('replay.varios.velas') === 'semanal' ? 'semanal' : 'diario' } catch (_) { return 'diario' } })
-  const numero = (s) => Number(String(s).replace(/\./g, '').replace(',', '.'))
-  const valores = fuente === 'mano' ? [...new Set(mano.toUpperCase().split(/[\s,;]+/).map(x => x.trim()).filter(x => /^[A-Z0-9.^=-]{1,20}$/.test(x)))] : (listas[Number(fuente.slice(2))]?.simbolos || [])
-  const capital = numero(aj.capital), comision = Number(String(aj.comision).replace(',', '.'))
-  const error = valores.length < 2 ? 'Elige al menos 2 valores.' : valores.length > MAX_VALORES ? `Como mucho ${MAX_VALORES} valores (tienes ${valores.length}).` : !(capital > 0 && comision >= 0) ? 'El dinero tiene que ser mayor que 0 y la comisión no puede ser negativa.' : !fecha || fecha >= hoyISO ? 'Elige un día del pasado.' : ''
-  useEffect(() => { const t = (e) => { if (e.key === 'Escape') onCancelar() }; window.addEventListener('keydown', t); return () => window.removeEventListener('keydown', t) }, [onCancelar])
-  const empieza = () => { if (error) return; try { localStorage.setItem('replay.ajustes', JSON.stringify({ capital: aj.capital, comision: aj.comision, ejecucion: aj.ejecucion })); localStorage.setItem('replay.varios.velas', intervalo) } catch (_) {} onEmpezar({ valores, fecha, capitalInicial: capital, comision, ejecucion: aj.ejecucion, intervalo }) }
-  return (
-    <div data-ventana-varios="" role="dialog" aria-modal="true" onMouseDown={e => { if (e.target === e.currentTarget) onCancelar() }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10060, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: BZ.panel, border: `1px solid ${BZ.borde}`, borderRadius: 8, padding: 18, width: 460, maxWidth: '100%', font: `13px/1.45 ${LETRA}`, color: BZ.texto }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <b style={{ fontSize: 15 }}>⏪ Replay con varios valores</b><Ayuda texto={AYUDA_VARIOS} etiqueta="Replay con varios valores" zIndice={10100} />
-          <span style={{ marginLeft: 'auto', cursor: 'pointer', color: BZ.gris }} onClick={onCancelar} title="Cerrar">✕</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: '8px 10px', alignItems: 'center' }}>
-          <span>Valores</span>
-          <select data-fuente-varios="" value={fuente} onChange={e => setFuente(e.target.value)} style={{ ...casilla, width: '100%' }}>
-            {listas.map((l, i) => <option key={i} value={`l:${i}`}>Lista «{l.nombre}» ({l.simbolos.length})</option>)}
-            <option value="mano">A mano…</option>
-          </select>
-          {fuente === 'mano' && <><span /><input data-mano-varios="" autoFocus placeholder="AAPL, MSFT, NVDA…" value={mano} onChange={e => setMano(e.target.value)} style={{ ...casilla, width: '100%' }} /></>}
-          <span /><span style={{ color: BZ.gris, fontSize: 12 }} data-valores-varios="">{valores.length ? valores.slice(0, 14).join(', ') + (valores.length > 14 ? ` y ${valores.length - 14} más` : '') : 'Ninguno todavía.'}</span>
-          <span>Empiezas el día</span>
-          <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input type="date" data-fecha-varios="" value={fecha} max={hoyISO} onChange={e => setFecha(e.target.value)} style={{ ...casilla, colorScheme: 'dark' }} />
-            {[1, 5, 10].map(n => <button key={n} onClick={() => setFecha(haceAnos(n))} style={{ ...btn(), padding: '2px 7px' }}>Hace {n} {n === 1 ? 'año' : 'años'}</button>)}
-          </span>
-          <span>Velas</span><select data-velas-varios="" value={intervalo} onChange={e => setIntervalo(e.target.value)} style={{ ...casilla, width: 'auto' }}>
-            <option value="diario">Diarias</option><option value="semanal">Semanales (cada vela, una semana)</option></select>
-          <span>Dinero inicial</span><span><input value={aj.capital} onChange={e => setAj(x => ({ ...x, capital: e.target.value }))} style={{ ...casilla, width: 110 }} /> €</span>
-          <span>Comisión</span><span><input value={aj.comision} onChange={e => setAj(x => ({ ...x, comision: e.target.value }))} style={{ ...casilla, width: 70 }} /> € por orden</span>
-          <span>A mercado</span><select value={aj.ejecucion} onChange={e => setAj(x => ({ ...x, ejecucion: e.target.value }))} style={{ ...casilla, width: 'auto' }}>
-            <option value="apertura">a la apertura de la vela siguiente</option><option value="cierre">al cierre de la vela que ves</option></select>
-        </div>
-        <div style={{ color: BZ.gris, fontSize: 12, marginTop: 10 }}>Un valor que aún no cotizaba ese día aparece el día que empieza.{intervalo === 'semanal' ? ' Con semanales, la semana que va en curso no sale.' : ''}</div>
-        {error && <div data-error-varios="" style={{ color: BZ.ambar, marginTop: 8 }}>{error}</div>}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
-          <button onClick={onCancelar} style={btn()}>Cancelar</button>
-          <button data-empezar-varios="" onClick={empieza} disabled={!!error} style={{ ...btn(false, !error), background: error ? BZ.caja : 'rgba(255,209,102,0.18)', borderColor: 'rgba(255,209,102,0.6)', color: error ? BZ.gris : '#ffd166' }}>Empezar</button>
-        </div>
-      </div>
-    </div>)
-}
-
+// §262: la ventana de empezar es la única del Replay (VentanaReplay de components/Replay.js).
 
 // ── Un gráfico: el mismo del Replay de un valor (CandleChart con las props del Replay) ──
 const CAPTURA = { entrada: 'capture_entry', stop: 'capture_stop', objetivo: 'capture_tp' }

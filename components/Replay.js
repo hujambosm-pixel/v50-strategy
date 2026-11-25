@@ -72,7 +72,20 @@ function SeguirGuardado({ simbolo, guardados, onAbrir }) {
     </div>)
 }
 
-export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAzar = null, cargando = false, guardados = undefined, onAbrir = null, onVarios = null }) {
+// §262 (pedido por Sergi el 25/11): UNA sola ventana para empezar, con un valor o con varios. «Valores»: «Solo X (el del gráfico)» → el
+// Replay de siempre en el gráfico grande; una lista de la Watchlist o varios a mano → la rejilla (onEmpezarVarios). Las velas no se
+// preguntan: las del gráfico que estás viendo (intervalo), como el valor.
+export const MAX_VARIOS = 30
+const haceAnosHoy = (n) => { const d = new Date(); d.setFullYear(d.getFullYear() - n); return d.toISOString().slice(0, 10) }
+export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAzar = null, cargando = false, guardados = undefined, onAbrir = null,
+  listas = [], intervalo = 'diario', onEmpezarVarios = null, fuenteInicial = 'uno' }) {
+  const [fuente, setFuente] = useState(() => { if (fuenteInicial !== 'lista') return 'uno'; const i = listas.findIndex(l => l.simbolos.length >= 2 && l.simbolos.length <= MAX_VARIOS); return i >= 0 ? `l:${i}` : 'mano' })
+  const [mano, setMano] = useState('')
+  const varios = fuente !== 'uno' && !!onEmpezarVarios
+  const valoresVarios = fuente === 'mano' ? [...new Set(mano.toUpperCase().split(/[\s,;]+/).map(x => x.trim()).filter(x => /^[A-Z0-9.^=-]{1,20}$/.test(x)))] : (listas[Number(String(fuente).slice(2))]?.simbolos || [])
+  const hoyISO = new Date().toISOString().slice(0, 10)
+  const [fechaVarios, setFechaVarios] = useState(haceAnosHoy(1))
+  const errorVarios = !varios ? '' : valoresVarios.length < 2 ? 'Elige al menos 2 valores.' : valoresVarios.length > MAX_VARIOS ? `Como mucho ${MAX_VARIOS} valores (tienes ${valoresVarios.length}).` : !fechaVarios || fechaVarios >= hoyISO ? 'Elige un día del pasado.' : ''
   const [fecha, setFecha] = useState(() => inicioHace(velas, 1))
   useEffect(() => { if (!fecha && Array.isArray(velas) && velas.length > 2) setFecha(inicioHace(velas, 1)) }, [velas])   // §233: las velas llegan después (valor al azar)
   // Dinero, comisión y cuándo van las órdenes a mercado (se recuerdan en el navegador para la próxima vez).
@@ -80,30 +93,63 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
   const numero = (s) => Number(String(s).replace(/\./g, '').replace(',', '.'))
   const capital = numero(aj.capital), comision = Number(String(aj.comision).replace(',', '.'))
   const ajustesBien = capital > 0 && comision >= 0
-  const empieza = () => { if (!elegida || !ajustesBien) return; const a = { capitalInicial: capital, comision, ejecucion: aj.ejecucion }; try { localStorage.setItem('replay.ajustes', JSON.stringify({ capital: aj.capital, comision: aj.comision, ejecucion: aj.ejecucion })) } catch (_) {} onEmpezar(elegida, a) }
+  const empieza = () => { if (!puede) return; const a = { capitalInicial: capital, comision, ejecucion: aj.ejecucion }; try { localStorage.setItem('replay.ajustes', JSON.stringify({ capital: aj.capital, comision: aj.comision, ejecucion: aj.ejecucion })) } catch (_) {}
+    if (varios) onEmpezarVarios({ valores: valoresVarios, fecha: fechaVarios, ...a, intervalo: intervalo === 'semanal' ? 'semanal' : 'diario' }); else onEmpezar(elegida, a) }
   const vs = Array.isArray(velas) ? velas : []
   const min = vs.length > 2 ? vs[1].date : '', max = vs.length > 2 ? vs[vs.length - 2].date : ''
   const elegida = fecha ? velaDeInicio(vs, fecha) : null
+  const puede = ajustesBien && (varios ? !errorVarios : !!elegida)
   useEffect(() => { const t = (e) => { if (e.key === 'Escape') onCancelar() }; window.addEventListener('keydown', t); return () => window.removeEventListener('keydown', t) }, [onCancelar])
   const rapido = (txt, f, titulo = '', activo = true) => <button key={txt} onClick={() => { if (activo) setFecha(f()) }} disabled={!activo} title={titulo} style={{ ...boton(), opacity: activo ? 1 : 0.4, cursor: activo ? 'pointer' : 'default' }} data-hace={txt}>{txt}</button>
   // §241: «Hace 1 / 5 / 10 años». El Replay usa las velas que tiene cargadas el gráfico (su periodo): si no llegan, el botón se apaga y lo dice.
   const hay = anosCargados(vs)
+  const campo = { fontFamily: MONO, fontSize: 12, padding: '3px 6px', background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }
+  const ajustes = <>
+    <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 10px', alignItems: 'center', marginBottom: 14 }}>
+      <span>Dinero inicial</span><span><input data-capital-replay="" value={aj.capital} onChange={e => setAj(x => ({ ...x, capital: e.target.value }))} style={{ fontFamily: MONO, fontSize: 13, padding: '3px 6px', width: 110, background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }} /> €</span>
+      <span>Comisión por orden</span><span><input data-comision-replay="" value={aj.comision} onChange={e => setAj(x => ({ ...x, comision: e.target.value }))} style={{ fontFamily: MONO, fontSize: 13, padding: '3px 6px', width: 70, background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }} /> € (cada compra y cada venta)</span>
+      <span>A mercado</span><select value={aj.ejecucion} onChange={e => setAj(x => ({ ...x, ejecucion: e.target.value }))} data-ejecucion-replay="" style={{ fontFamily: MONO, fontSize: 12, padding: '3px 4px', width: 'auto', background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }}>
+        <option value="apertura">a la apertura de la vela siguiente</option><option value="cierre">al cierre de la vela que ves</option></select>
+    </div>
+    {!ajustesBien && <div style={{ color: '#f85149', marginBottom: 10 }}>El dinero tiene que ser mayor que 0 y la comisión no puede ser negativa.</div>}
+  </>
   const hace = (n) => rapido(`Hace ${n} ${n === 1 ? 'año' : 'años'}`, () => inicioHace(vs, n), hay >= n - 0.1 ? '' : `El gráfico solo tiene ${hay.toLocaleString('es-ES', { maximumFractionDigits: 1 })} años de velas cargados. Para empezar hace ${n} años, amplía el periodo del gráfico.`, hay >= n - 0.1)
   return (
     <div data-ventana-replay="" role="dialog" aria-modal="true" onMouseDown={e => { if (e.target === e.currentTarget) onCancelar() }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10050, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ background: '#0d1520', border: '1px solid #2f5b85', borderRadius: 6, padding: 18, width: 420, maxWidth: '100%', fontFamily: MONO, fontSize: 12, color: '#c9d6e3' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <b style={{ color: '#e2eaf5', fontSize: 14 }}>⏪ Replay de {simbolo}</b>
+          <b style={{ color: '#e2eaf5', fontSize: 14 }}>⏪ Replay</b>
           <Ayuda texto={AYUDA_REPLAY} etiqueta="Qué es el Replay" zIndice={10100} />
-          {onValorAzar && <button onClick={onValorAzar} data-valor-azar="" title="Cambiar a un valor al azar de tu Watchlist" style={{ ...boton(), marginLeft: 8 }}>🎲 Valor al azar</button>}
-          {onVarios && <button onClick={onVarios} data-varios-replay="" title="Un Replay con varios valores a la vez, en la misma fecha y con una sola cuenta" style={boton()}>Varios valores…</button>}
           <span style={{ marginLeft: 'auto', cursor: 'pointer', color: '#7a9bc0' }} onClick={onCancelar} title="Cerrar">✕</span>
         </div>
         <SeguirGuardado simbolo={simbolo} guardados={guardados} onAbrir={onAbrir} />
-        {cargando ? <div style={{ color: '#7a9bc0', marginBottom: 14 }} data-cargando-replay="">Cargando las velas de {simbolo}…</div>
+        {onAbrir && guardados?.length > 0 && <div style={{ marginBottom: 6 }}><b style={{ color: '#e2eaf5' }}>Empezar uno nuevo</b></div>}
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 10px', alignItems: 'center', marginBottom: 10 }}>
+          <span>Valores</span>
+          <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <select data-fuente-replay="" value={fuente} onChange={e => setFuente(e.target.value)} style={{ ...campo, flex: 1, width: 'auto', minWidth: 0 }}>
+              <option value="uno">Solo {simbolo} (el del gráfico)</option>
+              {onEmpezarVarios && listas.map((l, i) => <option key={i} value={`l:${i}`}>Lista «{l.nombre}» ({l.simbolos.length})</option>)}
+              {onEmpezarVarios && <option value="mano">Varios a mano…</option>}
+            </select>
+            {onValorAzar && !varios && <button onClick={onValorAzar} data-valor-azar="" title="Cambiar a un valor al azar de tu Watchlist" style={boton()}>🎲</button>}
+          </span>
+          {varios && fuente === 'mano' && <><span /><input data-mano-replay="" autoFocus placeholder="AAPL, MSFT, NVDA…" value={mano} onChange={e => setMano(e.target.value)} style={{ ...campo, width: '100%' }} /></>}
+          {varios && <><span /><span style={{ color: '#7a9bc0' }} data-valores-replay="">{valoresVarios.length ? valoresVarios.slice(0, 14).join(', ') + (valoresVarios.length > 14 ? ` y ${valoresVarios.length - 14} más` : '') + '. Todos en la misma fecha y con una sola cuenta.' : 'Ninguno todavía.'}</span></>}
+          <span>Velas</span><span data-velas-replay="" style={{ color: '#7a9bc0' }}><b style={{ color: '#e2eaf5' }}>{intervalo === 'semanal' ? 'Semanales' : 'Diarias'}</b> (las del gráfico; para otras, cámbialas en el gráfico antes de empezar)</span>
+        </div>
+        {varios ? <>
+          <div style={{ marginBottom: 6 }}>Empiezas el día:</div>
+          <input type="date" value={fechaVarios} max={hoyISO} onChange={e => setFechaVarios(e.target.value)} data-fecha-replay="" style={{ ...campo, fontSize: 13, padding: '4px 6px', colorScheme: 'dark' }} />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '10px 0' }}>
+            {[1, 5, 10].map(n => <button key={n} onClick={() => setFechaVarios(haceAnosHoy(n))} style={boton()} data-hace={`Hace ${n}`}>Hace {n} {n === 1 ? 'año' : 'años'}</button>)}
+          </div>
+          <div style={{ color: '#7a9bc0', marginBottom: 14 }}>Un valor que aún no cotizaba ese día aparece el día que empieza.</div>
+          {ajustes}
+          {errorVarios && <div data-error-replay="" style={{ color: '#f85149', marginBottom: 10 }}>{errorVarios}</div>}
+        </> : cargando ? <div style={{ color: '#7a9bc0', marginBottom: 14 }} data-cargando-replay="">Cargando las velas de {simbolo}…</div>
           : vs.length < 3 ? <div style={{ color: '#f85149' }}>Este gráfico tiene muy pocas velas para un Replay.</div> : <>
-          {onAbrir && guardados?.length > 0 && <div style={{ marginBottom: 6 }}><b style={{ color: '#e2eaf5' }}>Empezar uno nuevo</b></div>}
           <div style={{ marginBottom: 6 }}>Empiezas el día:</div>
           <input type="date" value={fecha || ''} min={min} max={max} onChange={e => setFecha(e.target.value)} data-fecha-replay=""
             style={{ fontFamily: MONO, fontSize: 13, padding: '4px 6px', background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3, colorScheme: 'dark' }} />
@@ -113,18 +159,12 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
           <div style={{ color: '#7a9bc0', marginBottom: 14 }}>
             {elegida ? <>Empiezas el <b style={{ color: '#e2eaf5' }}>{diaSemana(elegida)} {fmt(elegida)}</b>: verás las velas hasta ese día y quedan <b style={{ color: '#e2eaf5' }}>{posicion(vs, elegida, elegida).quedan.toLocaleString('es-ES')}</b> por descubrir{vs.length ? <> (hay datos desde el {fmt(vs[0].date)})</> : null}.</> : 'Elige un día.'}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 10px', alignItems: 'center', marginBottom: 14 }}>
-            <span>Dinero inicial</span><span><input data-capital-replay="" value={aj.capital} onChange={e => setAj(x => ({ ...x, capital: e.target.value }))} style={{ fontFamily: MONO, fontSize: 13, padding: '3px 6px', width: 110, background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }} /> €</span>
-            <span>Comisión por orden</span><span><input data-comision-replay="" value={aj.comision} onChange={e => setAj(x => ({ ...x, comision: e.target.value }))} style={{ fontFamily: MONO, fontSize: 13, padding: '3px 6px', width: 70, background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }} /> € (cada compra y cada venta)</span>
-            <span>A mercado</span><select value={aj.ejecucion} onChange={e => setAj(x => ({ ...x, ejecucion: e.target.value }))} data-ejecucion-replay="" style={{ fontFamily: MONO, fontSize: 12, padding: '3px 4px', width: 'auto', background: '#08101a', color: '#e2eaf5', border: '1px solid #2f5b85', borderRadius: 3 }}>
-              <option value="apertura">a la apertura de la vela siguiente</option><option value="cierre">al cierre de la vela que ves</option></select>
-          </div>
-          {!ajustesBien && <div style={{ color: '#f85149', marginBottom: 10 }}>El dinero tiene que ser mayor que 0 y la comisión no puede ser negativa.</div>}
+          {ajustes}
         </>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancelar} style={boton()}>Cancelar</button>
-          <button onClick={empieza} disabled={!elegida || !ajustesBien} data-empezar-replay=""
-            style={{ ...boton(!!elegida), background: elegida ? 'rgba(255,209,102,0.18)' : 'transparent', borderColor: 'rgba(255,209,102,0.6)', color: elegida ? '#ffd166' : '#4a6380' }}>Empezar</button>
+          <button onClick={empieza} disabled={!puede} data-empezar-replay=""
+            style={{ ...boton(puede), background: puede ? 'rgba(255,209,102,0.18)' : 'transparent', borderColor: 'rgba(255,209,102,0.6)', color: puede ? '#ffd166' : '#4a6380' }}>Empezar</button>
         </div>
       </div>
     </div>)

@@ -180,9 +180,34 @@ const VELAS = {
     await DF.espera(80)
     ok(pedidas.length === 3 && pedidas.every(x => x.endsWith(':semanal')), `con «Semanales», las velas de A, B y el S&P 500 se piden semanales (${pedidas.join(' ')})`)
     ok(/velas semanales/.test(m.raiz.textContent) && /01\/01\/2024/.test(m.raiz.busca(n => n.hasAttribute('data-hoy-replay'))?.textContent || ''), 'la cabecera dice «velas semanales» y empieza el lunes 01/01/2024')
-    const w = DF.monta(React.createElement(RV.VentanaVarios, { listas: [{ nombre: 'L', simbolos: ['A', 'B'] }], onEmpezar() {}, onCancelar() {} }), RDC)
+  }
+
+  // ── §262: UNA sola ventana para empezar (VentanaReplay): «Solo X» o una lista / varios a mano; las velas, las del gráfico ──
+  {
+    const React = require(R + '/node_modules/react'), RDC = require(R + '/node_modules/react-dom/client')
+    const RP = require(R + '/components/Replay.js')
+    let uno = null, varios = null
+    const VU = Array.from({ length: 400 }, (_, k) => v(new Date(Date.UTC(2020, 0, 1) + k * 864e5 * 2).toISOString().slice(0, 10), 100))
+    const w = DF.monta(React.createElement(RP.VentanaReplay, { simbolo: 'AMD', velas: VU, intervalo: 'semanal', listas: [{ nombre: 'L', simbolos: ['A', 'B', 'C'] }],
+      onEmpezar: (f) => { uno = f }, onEmpezarVarios: (n) => { varios = n }, onCancelar() {} }), RDC)
     await DF.espera(20)
-    ok(/Semanales/.test(w.raiz.busca(n => n.hasAttribute('data-velas-varios'))?.textContent || ''), 'la ventana de empezar ofrece «Velas: Diarias / Semanales»')
+    const txt = () => w.raiz.busca(n => n.hasAttribute('data-ventana-replay')).textContent
+    const fu = w.raiz.busca(n => n.hasAttribute('data-fuente-replay'))
+    ok(/Solo AMD \(el del gráfico\)/.test(fu.textContent) && /Lista «L» \(3\)/.test(fu.textContent) && /Varios a mano/.test(fu.textContent) && !w.raiz.busca(n => n.hasAttribute('data-varios-replay')),
+      'una sola ventana: «Valores» con «Solo AMD (el del gráfico)», las listas y «Varios a mano…» (sin el botón «Varios valores…»)')
+    ok(/Semanales \(las del gráfico/.test(txt()) && !w.raiz.busca(n => n.tagName === 'SELECT' && /Diarias/.test(n.textContent)), 'las velas no se preguntan: las del gráfico (aquí, semanales)')
+    DF.escribe(fu, 'l:0'); await DF.espera(20)
+    ok(/A, B, C\. Todos en la misma fecha/.test(txt()) && !w.raiz.busca(n => n.hasAttribute('data-valor-azar')), 'con una lista: dice sus valores y se va el 🎲')
+    DF.pulsa(w.raiz.busca(n => n.getAttribute('data-hace') === 'Hace 5')); await DF.espera(10)
+    DF.pulsa(w.raiz.busca(n => n.hasAttribute('data-empezar-replay'))); await DF.espera(10)
+    ok(uno === null && varios && varios.valores.join() === 'A,B,C' && varios.intervalo === 'semanal' && varios.capitalInicial > 0 && /^\d{4}-\d\d-\d\d$/.test(varios.fecha),
+      `«Empezar» con una lista abre la rejilla con sus valores y las velas del gráfico (${JSON.stringify(varios)})`)
+    DF.escribe(fu, 'mano'); await DF.espera(20)
+    DF.escribe(w.raiz.busca(n => n.hasAttribute('data-mano-replay')), 'nvda'); await DF.espera(20)
+    ok(/al menos 2 valores/.test(w.raiz.busca(n => n.hasAttribute('data-error-replay'))?.textContent || ''), 'a mano con un solo valor: «Elige al menos 2 valores»')
+    DF.escribe(fu, 'uno'); await DF.espera(20)
+    DF.pulsa(w.raiz.busca(n => n.hasAttribute('data-empezar-replay'))); await DF.espera(10)
+    ok(typeof uno === 'string', `«Solo AMD»: «Empezar» abre el Replay de siempre (${uno})`)
   }
 
   // ── §260: la señal con varios valores (condición del catálogo o con pasos), lib/replay/varios.js ──

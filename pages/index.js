@@ -34,7 +34,7 @@ import { fraseFilasRegla as fraseFilasReplay } from '../lib/builder/reglasPesos'
 import { tickersDe as tickersDeReplay } from '../lib/pruebaAzar'
 import { nombreDe as nombreReplayDe, hayQueGuardar as hayQueGuardarReplay, paraGuardar as paraGuardarReplay, deGuardado as deGuardadoReplay, leerSimulaciones, crearSimulacion, guardarSimulacion, borrarSimulacion } from '../lib/replay/guardados'   // §232: guardar y abrir
 import MisReplays from '../components/MisReplays'
-import ReplayVarios, { VentanaVarios } from '../components/ReplayVarios'   // §254: el Replay con varios valores
+import ReplayVarios from '../components/ReplayVarios'   // §254: el Replay con varios valores
 const VACIO_REPLAY=[]   // siempre la MISMA lista vacía: una nueva en cada pintado rehace el gráfico entero (trades está en sus dependencias)
 import FundamentalsPanel from '../components/FundamentalsPanel'
 import EquityChart from '../components/EquityChart'
@@ -50,7 +50,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1327'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1328'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -2082,17 +2082,17 @@ export default function Home() {
   // «Mis replays» (components/MisReplays.js): desde el panel del Replay y desde el menú Seguir › Simulaciones.
   const [misReplays,setMisReplays]=useState(null)   // null = cerrada; { filas, cargando, error }
   // §254: el Replay con varios valores (pantalla propia, components/ReplayVarios.js): la ventana de empezar y el que está abierto.
-  const [ventanaVarios,setVentanaVarios]=useState(false)
+  const [fuenteVentanaReplay,setFuenteVentanaReplay]=useState('uno')   // §262: con qué valores se abre la ventana única ('uno' | 'lista')
   const [replayVarios,setReplayVarios]=useState(null)   // { nuevo } | { id, nombre, estado }
   const listasVarios=useMemo(()=>{ const de=ids=>watchlist.filter(w=>ids==null||(w.list_ids||[]).includes(ids)).map(w=>w.symbol).filter(Boolean)
     return [{nombre:'Toda la Watchlist',simbolos:[...new Set(de(null))]},...(wlLists||[]).map(l=>({nombre:l.name,simbolos:[...new Set(de(l.id))]}))].filter(l=>l.simbolos.length>=2) },[watchlist,wlLists])
   const cargaVelasVarios=useCallback((s,iv='diario')=>apiFetch(`/api/velas?simbolo=${encodeURIComponent(s)}`).then(r=>r.ok?r.json():null).then(j=>j?.velas?.length?historiaReplay(j.velas,iv==='semanal'?'semanal':'diario',j.semanaAbierta):[]).catch(()=>[]),[])   // §261: también semanales
-  const abreVarios=()=>{ setVentanaReplay(false); setMisReplays(null); setVentanaVarios(true) }
+  const abreVarios=()=>{ setMisReplays(null); abreVentanaReplay('lista') }   // §262: «＋ Con varios valores» abre la ventana única con una lista
   const [pendienteReplay,setPendienteReplay]=useState(null)   // el guardado que se abre cuando llegue el gráfico de su valor
   const abreMisReplays=async()=>{ if(!ctxReplay){ setMisReplays({filas:[],cargando:false,error:'Sin conexión con la base.'}); return }
     setMisReplays({filas:[],cargando:true,error:''})
     try{ const f=await leerSimulaciones(ctxReplay); setMisReplays({filas:f,cargando:false,error:''}) }catch(e){ setMisReplays({filas:[],cargando:false,error:e.message}) } }
-  const abreVentanaReplay=()=>{ setVentanaReplay(true); setGuardadosReplay(null); if(ctxReplay) leerSimulaciones(ctxReplay).then(f=>setGuardadosReplay(f)).catch(()=>setGuardadosReplay([])) }
+  const abreVentanaReplay=(fuente='uno')=>{ setFuenteVentanaReplay(fuente==='lista'?'lista':'uno'); setVentanaReplay(true); setGuardadosReplay(null); if(ctxReplay) leerSimulaciones(ctxReplay).then(f=>setGuardadosReplay(f)).catch(()=>setGuardadosReplay([])) }
   const borraReplayGuardado=async(id)=>{ try{ await borrarSimulacion(ctxReplay,id); setMisReplays(m=>m?{...m,filas:m.filas.filter(x=>x.id!==id)}:m) }catch(e){ setMisReplays(m=>m?{...m,error:e.message}:m) } }
   const aplicaReplayGuardado=(fila)=>{ const e=deGuardadoReplay(fila.estado); reiniciaMarcaReplay(); nuevaSesionReplay(fila.id,fila.nombre)
     const _r=rangoVer(baseReplay,e.hoy,replayVer); if(_r){ savedRangeRef.current=_r; isNewResultRef.current=false } else isNewResultRef.current=true
@@ -5951,7 +5951,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1327</title>
+        <title>Trading Simulator V9.1328</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6040,7 +6040,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1327
+            <span className="dot"/>Trading Simulator V9.1328
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -11108,9 +11108,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
         onAceptar={x=>{ setSenalReplay(x); setVentanaSenalReplay(false); setAvisoSenalReplay('') }} onCancelar={()=>setVentanaSenalReplay(false)}/>}
       {misReplays&&<MisReplays filas={misReplays.filas} cargando={misReplays.cargando} error={misReplays.error} abiertoId={replay?replayGuardado.id:null}
         onAbrir={abreReplayGuardado} onBorrar={borraReplayGuardado} onCerrar={()=>setMisReplays(null)} onVarios={abreVarios}/>}
-      {ventanaVarios&&<VentanaVarios listas={listasVarios} onEmpezar={n=>{ setVentanaVarios(false); setReplayVarios({nuevo:n}) }} onCancelar={()=>setVentanaVarios(false)}/>}
       {replayVarios&&<ReplayVarios key={replayVarios.id||'nuevo'} inicial={replayVarios} cargaVelas={cargaVelasVarios} estrategias={estrategiasSenalReplay} tickersDe={tickersDeReplay} ctx={ctxReplay} onSalir={()=>setReplayVarios(null)} indicadores={indicadores} onIndicadores={()=>setVentanaInd(true)}/>}
-      {ventanaReplay&&<VentanaReplay key={simbolo} onVarios={abreVarios} simbolo={simbolo} velas={historiaRepLista&&(historiaRep.velas.length>2||displayedSimbolo===simbolo)?baseReplay:[]} cargando={!historiaRepLista||(historiaRep.velas.length<=2&&(displayedSimbolo!==simbolo||!result?.chartData))}
+      {ventanaReplay&&<VentanaReplay key={simbolo} listas={listasVarios} intervalo={estrategiaIntervalo} fuenteInicial={fuenteVentanaReplay} onEmpezarVarios={n=>{ setVentanaReplay(false); setReplayVarios({nuevo:n}) }} simbolo={simbolo} velas={historiaRepLista&&(historiaRep.velas.length>2||displayedSimbolo===simbolo)?baseReplay:[]} cargando={!historiaRepLista||(historiaRep.velas.length<=2&&(displayedSimbolo!==simbolo||!result?.chartData))}
         onValorAzar={()=>{ const l=[...new Set((watchlist||[]).map(w=>w?.symbol).filter(x=>x&&x!==simbolo))]; if(l.length) setSimbolo(l[Math.floor(Math.random()*l.length)]) }} onEmpezar={empiezaReplay} onCancelar={()=>setVentanaReplay(false)}
         guardados={ctxReplay?guardadosReplay:[]} onAbrir={ctxReplay?(f=>{ setVentanaReplay(false); abreReplayGuardado(f) }):null}/>}
       {ventanaInd&&<VentanaIndicadores zIndice={replayVarios?9500:1200} enGrafico={indicadores} onCerrar={()=>setVentanaInd(false)}

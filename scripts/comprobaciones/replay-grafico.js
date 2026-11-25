@@ -93,7 +93,7 @@ const VELAS = F.map((date, i) => ({ date, open: 10 + i, high: 11 + i, low: 9 + i
   let empezo = null, cancelo = 0
   m = D.monta(React.createElement(RP.VentanaReplay, { simbolo: 'AAPL', velas: VELAS, onEmpezar: f => { empezo = f }, onCancelar: () => { cancelo++ } }), RDC); await D.espera(20)
   const v = () => m.raiz.busca(n => n.hasAttribute('data-ventana-replay')).textContent
-  ok(/Replay de AAPL/.test(v()) && /Empiezas el mar 03\/01\/2023: verás las velas hasta ese día y quedan 8 por descubrir \(hay datos desde el 02\/01\/2023\)/.test(v()), `propone «hace 1 año» (aquí, la 2.ª vela, mar 03/01) y dice cuántas quedan (${v().slice(0, 160)})`)
+  ok(/Solo AAPL \(el del gráfico\)/.test(v()) && /Diarias \(las del gráfico/.test(v()) && /Empiezas el mar 03\/01\/2023: verás las velas hasta ese día y quedan 8 por descubrir \(hay datos desde el 02\/01\/2023\)/.test(v()), `propone «hace 1 año» (aquí, la 2.ª vela, mar 03/01) y dice cuántas quedan (${v().slice(0, 160)})`)
   D.escribe(m.raiz.busca(n => n.hasAttribute('data-fecha-replay')), '2023-01-08'); await D.espera(10)
   ok(/Empiezas el vie 06\/01\/2023: verás las velas hasta ese día y quedan 5 por descubrir/.test(v()), 'eligiendo el dom 08/01: empieza el vie 06/01, quedan 5')
   D.pulsa(m.raiz.busca(n => n.hasAttribute('data-empezar-replay')))
