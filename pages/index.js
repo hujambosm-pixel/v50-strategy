@@ -50,7 +50,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1330'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1331'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -1942,7 +1942,8 @@ export default function Home() {
   useEffect(()=>{ if(replay&&replay.valores[0]!==simbolo){ guardaReplay(replay,calcReplay); setReplay(null); isNewResultRef.current=true } },[simbolo])   // eslint-disable-line
   // §242: el Replay usa TODA la historia guardada del valor (/api/velas), no solo el periodo del gráfico; mientras llega, la del gráfico.
   const [historiaRep,setHistoriaRep]=useState(null)   // { sym, intervalo, velas }
-  const symHistRep=replay?replay.valores[0]:(ventanaReplay?simbolo:null)
+  const [nuevoTrasCambioVelas,setNuevoTrasCambioVelas]=useState(null)   // §263: { fecha, aj, intervalo } mientras llegan las velas nuevas
+  const symHistRep=replay?replay.valores[0]:((ventanaReplay||nuevoTrasCambioVelas)?simbolo:null)
   useEffect(()=>{ if(!symHistRep||(historiaRep?.sym===symHistRep&&historiaRep?.intervalo===estrategiaIntervalo)) return; let vivo=true
     apiFetch(`/api/velas?simbolo=${encodeURIComponent(symHistRep)}`).then(r=>r.ok?r.json():null).then(j=>{ if(vivo) setHistoriaRep({sym:symHistRep,intervalo:estrategiaIntervalo,velas:j?.velas?.length?historiaReplay(j.velas,estrategiaIntervalo,j.semanaAbierta):[]}) }).catch(()=>{ if(vivo) setHistoriaRep({sym:symHistRep,intervalo:estrategiaIntervalo,velas:[]}) })   // sin historia: la del gráfico
     return ()=>{ vivo=false } },[symHistRep,estrategiaIntervalo])   // eslint-disable-line
@@ -2021,7 +2022,6 @@ export default function Home() {
   // §263: cambiar de velas dentro del Replay. Se guarda y se cierra el de ahora (con sus velas), se cambian las velas y, cuando llegan,
   // empieza uno nuevo con el mismo dinero, comisión y «a mercado», desde el mismo día de inicio o desde hoy en el replay.
   const [cambioVelasReplay,setCambioVelasReplay]=useState(null)   // 'diario' | 'semanal' mientras se pregunta
-  const [nuevoTrasCambioVelas,setNuevoTrasCambioVelas]=useState(null)   // { fecha, aj, intervalo }
   const eligeCambioVelasReplay=(modo)=>{ const a=cambioVelasReplay; setCambioVelasReplay(null); if(!replay||!a) return
     setNuevoTrasCambioVelas({fecha:modo==='inicio'?replay.desde:replay.hoy,aj:{capitalInicial:replay.capitalInicial,comision:replay.comision,ejecucion:replay.ejecucion},intervalo:a})
     saleReplay(); setEstrategiaIntervalo(a) }
@@ -5963,7 +5963,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1330</title>
+        <title>Trading Simulator V9.1331</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6052,7 +6052,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1330
+            <span className="dot"/>Trading Simulator V9.1331
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
