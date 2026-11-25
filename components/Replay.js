@@ -151,8 +151,9 @@ export const AYUDA_SENAL = 'SEÑAL ⏭ salta hasta la próxima vela con la seña
 // §244: arriba se elige «Una condición» (filas del catálogo, §231/§240) o «Condición con pasos» (components/EditorConPasos.js).
 // onAceptar recibe la señal entera: { tipo: 'condicion', filas } o { tipo: 'pasos', def }.
 // §245: velas (las del valor del Replay, toda su historia), cargaVelas(símbolo), simbolosAzar, compras y hoy: para el minigráfico.
+// §260: nota = una línea arriba (con varios valores: que lo puesto en el primero se mira en cada valor).
 const SIN = Object.freeze([])
-export function VentanaSenal({ simbolo, senal = null, onAceptar, onCancelar, velas = SIN, cargaVelas = null, simbolosAzar = SIN, compras = SIN, hoy = null }) {
+export function VentanaSenal({ simbolo, senal = null, onAceptar, onCancelar, velas = SIN, cargaVelas = null, simbolosAzar = SIN, compras = SIN, hoy = null, nota = '' }) {
   const [modo, setModo] = useState(senal?.tipo === 'pasos' ? 'pasos' : 'condicion')
   const [filas, setFilas] = useState(senal?.tipo === 'condicion' ? senal.filas || [] : [])
   const [def, setDef] = useState(senal?.tipo === 'pasos' && senal.def ? senal.def : conPasosNueva(String(simbolo || '').toUpperCase()))
@@ -172,6 +173,7 @@ export function VentanaSenal({ simbolo, senal = null, onAceptar, onCancelar, vel
           <Ayuda texto={AYUDA_SENAL} etiqueta="Saltar a la señal" zIndice={10100} />
           <span style={{ marginLeft: 'auto', cursor: 'pointer', color: BZ.gris }} onClick={onCancelar} title="Cerrar">✕</span>
         </div>
+        {nota && <div data-nota-senal="" style={{ color: BZ.gris, fontSize: 12, marginBottom: 8 }}>{nota}</div>}
         {modo === 'pasos' ? <><EditorConPasos simbolo={simbolo} def={def} onCambia={setDef}/>
           <MiniGraficoPasos def={def} simbolo={simbolo} velas={velas} cargaVelas={cargaVelas} simbolosAzar={simbolosAzar} compras={compras} hoy={hoy}/></> : <><FilasAlerta simbolo={simbolo} filas={filas} onCambia={setFilas} para="señal" conO />
           <MiniGraficoPasos senal={{ tipo: 'condicion', filas }} simbolo={simbolo} velas={velas} cargaVelas={cargaVelas} simbolosAzar={simbolosAzar} hoy={hoy}/></>}

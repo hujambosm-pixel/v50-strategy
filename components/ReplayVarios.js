@@ -8,13 +8,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Ayuda from './BuilderAyuda'
 import CandleChart from './CandleChart'
-import { BarraReplay } from './Replay'
+import { BarraReplay, VentanaSenal } from './Replay'
 import { PanelOperar, PanelGrafico, ResultadosReplay } from './PanelReplay'
 import { calcula, cifras, irA, VERSION } from '../lib/replay/motor'
 import { nuevaAccion, configAuto, marcasDe, tradesDe } from '../lib/replay/orden'
 import { FORM_INICIAL, conClic, dobleClic, empiezaMarca, deMercado, redondea, accionMover, anade, ordenDeMarca, quitaOperacion, mueveBorrador, lineasDe, cajasDe } from '../lib/replay/borrador'
-import { ordenRejilla, conSenalHoy, siguienteSenalVarios, anteriorSenalVarios } from '../lib/replay/varios'
-import { entradasYSalidasEstrategia, graficoSenal, marcasSenal, marcasSalida } from '../lib/replay/senales'
+import { ordenRejilla, conSenalHoy, siguienteSenalVarios, anteriorSenalVarios, aCadaValor, deCadaValor, simbolosSenalVarios, senalesVarios } from '../lib/replay/varios'
+import { entradasYSalidasEstrategia, senalesCondicion, graficoSenal, marcasSenal, marcasSalida } from '../lib/replay/senales'
+import { senalesConPasos } from '../lib/condiciones/conPasos'
+import { textoCortoConPasos } from '../lib/replay/conPasosPantalla'
+import { fraseFilasRegla } from '../lib/builder/reglasPesos'
 import { recortaVelas, vecina } from '../lib/replay/grafico'
 import { paraGuardar, hayQueGuardar, nombreDe, crearSimulacion, guardarSimulacion } from '../lib/replay/guardados'
 import { atr as atrDe } from '../lib/condiciones/indicadores'
@@ -148,7 +151,10 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
   const [ver, setVer] = useState(120)
   const [ampliado, setAmpliado] = useState(null)
   const [editando, setEditando] = useState({})            // §258: los minigráficos con Entrada / Stop / Objetivo desplegados (✎)
-  const [senal, setSenal] = useState(null)                 // id de la estrategia elegida
+  // §260: la señal: null | { tipo: 'estrategia', id } | { tipo: 'condicion', filas } | { tipo: 'pasos', def } (en las dos últimas,
+  // las filas de «quien: 'valor'» se miran en CADA valor, lib/replay/varios.js).
+  const [senal, setSenal] = useState(null)
+  const [ventanaSenal, setVentanaSenal] = useState(false)
   const [guardado, setGuardado] = useState({ id: inicial?.id || null, nombre: inicial?.nombre || '', estado: inicial?.id ? 'guardado' : '' })
 
   // Las velas de todos (y del S&P 500), de 4 en 4.
@@ -175,17 +181,24 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
   const motorVelas = useMemo(() => velas && estado ? Object.fromEntries(estado.valores.map(s => [s, velas[s] || []])) : null, [velas, estado?.valores])   // eslint-disable-line
   // El calendario común (todas las velas de todos), para la barra: «vela N de M» y avanzar / retroceder.
   const calendario = useMemo(() => motorVelas ? [...new Set(Object.values(motorVelas).flatMap(v => v.map(x => x.date)))].sort().map(date => ({ date })) : VACIO, [motorVelas])
-  // Las señales de la estrategia elegida, valor a valor (con las velas de sus referencias).
-  const est = estrategias.find(x => String(x.id) === String(senal))
-  const senalDef = useMemo(() => (est ? { tipo: 'estrategia', id: est.id, def: est.definition, params: est.params || {} } : null), [est])
+  // Las señales de la señal elegida, valor a valor (con las velas de sus referencias: índices, «Otro símbolo…»).
+  const est = senal?.tipo === 'estrategia' ? estrategias.find(x => String(x.id) === String(senal.id)) : null
+  const senalDef = useMemo(() => (senal?.tipo === 'estrategia' ? (est ? { tipo: 'estrategia', id: est.id, def: est.definition, params: est.params || {} } : null) : senal), [senal, est])
   const [refs, setRefs] = useState({})
-  useEffect(() => { if (!est) return; const faltan = tickersDe(est.definition).filter(t => !refs[t] && !(velas || {})[t]); if (!faltan.length) return
-    Promise.all(faltan.map(t => cargaVelas(t).then(v => [t, v || []]).catch(() => [t, []]))).then(l => setRefs(x => ({ ...x, ...Object.fromEntries(l) }))) }, [senal, velas])   // eslint-disable-line
-  const referencias = useMemo(() => (est ? Object.fromEntries(tickersDe(est.definition).map(t => [t, refs[t] || (velas || {})[t] || []])) : {}), [est, refs, velas])   // eslint-disable-line
-  const senales = useMemo(() => { if (!est || !motorVelas) return null; const out = {}
-    for (const s of estado.valores) { try { out[s] = entradasYSalidasEstrategia({ def: est.definition, params: est.params || {}, velas: motorVelas[s], referencias }) } catch (_) { out[s] = { entradas: [], salidas: [] } } }
-    return out }, [est, motorVelas, referencias])   // eslint-disable-line
-  const r = useMemo(() => estado && motorVelas ? calcula(estado, motorVelas, senales ? { senales } : {}) : null, [estado, motorVelas, senales])
+  const faltanRefs = useMemo(() => (senalDef && velas && estado ? simbolosSenalVarios(senalDef, estado.valores, tickersDe).filter(t => !refs[t] && !velas[t]) : VACIO), [senalDef, velas, refs, estado?.valores])   // eslint-disable-line
+  useEffect(() => { if (!faltanRefs.length) return
+    Promise.all(faltanRefs.map(t => cargaVelas(t).then(v => [t, (v || []).filter(x => x && !x.enCurso)]).catch(() => [t, []]))).then(l => setRefs(x => ({ ...x, ...Object.fromEntries(l) }))) }, [faltanRefs.join(',')])   // eslint-disable-line
+  const velasDe = useMemo(() => (q) => (motorVelas?.[q] || refs[q] || (velas || {})[q] || VACIO), [motorVelas, refs, velas])
+  const referencias = useMemo(() => (est ? Object.fromEntries(tickersDe(est.definition).map(t => [t, velasDe(t)])) : {}), [est, velasDe])   // eslint-disable-line
+  const motores = { tickersDe, deCondicion: senalesCondicion, deEstrategia: entradasYSalidasEstrategia, dePasos: senalesConPasos }
+  // Para el motor (y «Ejecutar solo»), la condición con pasos va sin «tu última compra», como en el de un valor.
+  const senalesMotor = useMemo(() => (!senalDef || !motorVelas || faltanRefs.length ? null : senalesVarios(senalDef, estado.valores, velasDe, motores)), [senalDef, motorVelas, velasDe, faltanRefs.length])   // eslint-disable-line
+  const r = useMemo(() => estado && motorVelas ? calcula(estado, motorVelas, senalesMotor ? { senales: senalesMotor } : {}) : null, [estado, motorVelas, senalesMotor])
+  // Las que se ven (▲, «Señal ⏭»): con pasos, con tus compras de cada valor (por si la condición mira «tu última compra»).
+  const firmaCompras = senalDef?.tipo === 'pasos' && r ? JSON.stringify((r.marcas || []).filter(m => m.tipo === 'compra').map(m => [m.simbolo, m.fecha, m.precio])) : ''
+  const senales = useMemo(() => { if (!senalesMotor || senalDef?.tipo !== 'pasos' || firmaCompras === '[]') return senalesMotor
+    const compras = {}; for (const [s, fecha, precio] of JSON.parse(firmaCompras)) (compras[s] ||= []).push({ fecha, precio })
+    return senalesVarios(senalDef, estado.valores, velasDe, { ...motores, compras }) }, [senalesMotor, firmaCompras])   // eslint-disable-line
   const cif = useMemo(() => r ? cifras(estado, motorVelas, r) : null, [r])   // eslint-disable-line
   const ahoraDe = (s) => { const v = (motorVelas?.[s] || []).filter(x => x.date <= estado.hoy); return v.length ? v[v.length - 1].close : null }
   const atrHoyDe = (s) => { const v = (motorVelas?.[s] || []).filter(x => x.date <= estado.hoy); if (v.length < 15) return null; const a = atrDe(v, 14); return a[a.length - 1] ?? null }
@@ -209,7 +222,7 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
   const ponAuto = (on) => setEstado(e => ({ ...e, auto: on ? [...cierraTramos(e), tramo(e, form)] : cierraTramos(e) }))
   const firmaCfg = JSON.stringify([configAuto(form), form.sale])
   useEffect(() => { if (!autoActivo) return; setEstado(e => { const ab = (e.auto || []).find(x => x.hasta == null), nu = tramo(e, form); if (ab && JSON.stringify([ab.orden, ab.sale]) === JSON.stringify([nu.orden, nu.sale])) return e; return { ...e, auto: [...cierraTramos(e), nu] } }) }, [firmaCfg])   // eslint-disable-line
-  useEffect(() => { if (autoActivo && !est) ponAuto(false) }, [senal])   // eslint-disable-line
+  useEffect(() => { if (autoActivo && !senalDef) ponAuto(false) }, [senalDef])   // eslint-disable-line
 
   // Operar (como en el de un valor): marcar con 🎯 o doble clic, lo marcado ES la orden; mover líneas y casillas.
   const limpia = () => { setCaptura(null); setCapturaLinea(null); setForm(f => ({ ...f, mercado: true, entrada: '', stop: '', objetivo: '' })) }
@@ -246,8 +259,18 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
   const saltaSenal = (dir) => { const d = dir > 0 ? siguienteSenalVarios(senales, estado.hoy) : anteriorSenalVarios(senales, estado.hoy, estado.desde)
     if (!d) { setAviso(dir > 0 ? 'No hay más señales desde aquí hasta el final de los datos.' : 'Desde que empezó el Replay no se dio esa señal.'); return } setAviso(''); limpia(); setEstado(e => irA(e, d)) }
   const nSen = senales ? Object.values(senales).reduce((a, x) => a + (x.entradas || []).length, 0) : 0
-  const barraSenal = { elegida: senal ? `e:${senal}` : '', onElige: (v) => setSenal(v && v.startsWith('e:') ? v.slice(2) : null), onSiguiente: () => saltaSenal(1), onAnterior: () => saltaSenal(-1),
-    opciones: estrategias.map(x => ({ valor: `e:${x.id}`, texto: `Estrategia «${x.name}»` })), estado: !senal ? 'sin' : senales ? 'lista' : 'cargando', n: nSen, textoN: `${nSen} entradas en ${estado?.valores?.length || 0} valores`, aviso: '' }
+  // §260: como en el de un valor: «Una condición (del catálogo o con pasos)…» abre la ventana; luego sale su frase y «Cambiar la condición…».
+  const cond = senal?.tipo === 'condicion' || senal?.tipo === 'pasos'
+  const primero = estado?.valores?.[0] || ''
+  const eligeSenal = (v) => { setAviso('')
+    if (!v) { setSenal(null); return }
+    if (v === 'cond-nueva' || (v === 'cond' && !cond)) { setVentanaSenal(true); return }
+    if (v.startsWith('e:')) setSenal({ tipo: 'estrategia', id: v.slice(2) }) }
+  const textoSenal = !senal ? '' : senal.tipo === 'estrategia' ? `estrategia «${est?.name || ''}» en cualquier valor` : senal.tipo === 'pasos' ? 'tu condición con pasos en cualquier valor' : `la condición «${fraseFilasRegla(senal.filas || [])}» en cualquier valor`
+  const barraSenal = { elegida: senal ? (cond ? 'cond' : `e:${senal.id}`) : '', onElige: eligeSenal, onSiguiente: () => saltaSenal(1), onAnterior: () => saltaSenal(-1),
+    opciones: [...(cond ? [{ valor: 'cond', texto: senal.tipo === 'pasos' ? `Con pasos: ${textoCortoConPasos(senal.def)}` : `Condición: ${fraseFilasRegla(senal.filas || [])}` }, { valor: 'cond-nueva', texto: 'Cambiar la condición…' }]
+      : [{ valor: 'cond', texto: 'Una condición (del catálogo o con pasos)…' }]), ...estrategias.map(x => ({ valor: `e:${x.id}`, texto: `Estrategia «${x.name}»` }))],
+    estado: !senal ? 'sin' : senales ? 'lista' : 'cargando', n: nSen, textoN: `${nSen} entradas en ${estado?.valores?.length || 0} valores`, aviso: '' }
 
   if (!estado || !velas) return (
     <div data-replay-varios="" style={{ position: 'fixed', inset: 0, zIndex: 9000, background: BZ.fondo, color: BZ.texto, font: `14px ${LETRA}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
@@ -304,7 +327,10 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
       <div data-panel-derecho-varios="" style={{ width: 330, flexShrink: 0, borderLeft: `1px solid ${BZ.borde}`, background: BZ.panel, overflowY: 'auto' }}>
         <PanelOperar estado={estado} simbolo={`${estado.valores.length} valores`} r={r} cif={cif} onTerminar={v => { limpia(); setEstado(e => ({ ...e, terminada: v })) }}
           nombre={guardado.nombre || nombreDe(estado)} onNombre={nombra} guardado={guardado.estado} form={form} onForm={setForm} cfg={cfg} onCfg={setCfg} indice={indiceBH} aviso={aviso}
-          auto={{ activo: autoActivo, puede: !!est, esEstrategia: !!est, onCambia: ponAuto, senal: est ? `estrategia «${est.name}» en cualquier valor` : '' }} />
+          auto={{ activo: autoActivo, puede: !!senalesMotor, esEstrategia: senalDef?.tipo === 'estrategia', onCambia: ponAuto, senal: textoSenal }} />
       </div>
+      {ventanaSenal && <VentanaSenal simbolo={primero} senal={cond ? deCadaValor(senal, primero) : null} velas={motorVelas?.[primero] || VACIO} cargaVelas={cargaVelas} simbolosAzar={estado.valores} hoy={estado.hoy}
+        nota={`Con varios valores, lo que pongas en «${primero}» se mira en CADA valor de la lista (${estado.valores.length}), cada uno con sus velas. Un índice u «Otro símbolo…» es el mismo para todos.`}
+        onAceptar={x => { setSenal(aCadaValor(x, primero)); setVentanaSenal(false); setAviso('') }} onCancelar={() => setVentanaSenal(false)} />}
     </div>)
 }

@@ -82,6 +82,13 @@ const VELAS = {
     ok(/09\/01\/2024/.test(txt('data-hoy-replay')) && recibe.A.data.length === 6, `«▶▶ 5» avanza cinco velas del calendario común: al 09/01, y A ya ve sus 6 velas (${txt('data-hoy-replay')})`)
     DF.pulsa(m.raiz.busca(n => n.hasAttribute('data-atras'))); await DF.espera(30)
     ok(/08\/01\/2024/.test(txt('data-hoy-replay')) && /1 retroceso/.test(m.raiz.textContent), '«|◀» vuelve una vela y cuenta el retroceso')
+    // §260: la señal puede ser también una condición (del catálogo o con pasos): la misma ventana del de un valor, con una nota.
+    const sel = m.raiz.busca(n => n.hasAttribute('data-elige-senal'))
+    ok(/Una condición \(del catálogo o con pasos\)/.test(sel?.textContent || ''), 'el selector de la señal ofrece «Una condición (del catálogo o con pasos)…» además de las estrategias')
+    DF.escribe(sel, 'cond'); await DF.espera(30)
+    ok(!!m.raiz.busca(n => n.hasAttribute('data-ventana-senal')) && /lo que pongas en «A» se mira en CADA valor de la lista \(3\)/.test(txt('data-nota-senal')), `abre la ventana de la señal con la nota de «cada valor» (${txt('data-nota-senal')})`)
+    DF.pulsa(m.raiz.busca(n => n.hasAttribute('data-ventana-senal')).busca(n => n.tagName === 'BUTTON' && n.textContent === 'Cancelar')); await DF.espera(20)
+    ok(!m.raiz.busca(n => n.hasAttribute('data-ventana-senal')), '«Cancelar» la cierra sin elegir nada')
     DF.pulsa(m.raiz.busca(n => n.getAttribute('data-tam-varios') === 'g6')); await DF.espera(20)
     ok(!!m.raiz.busca(n => n.getAttribute('data-rejilla-varios') === 'g6'), '«Por fila: 6»: 6 gráficos por fila (todos los valores, sin páginas)')
     DF.pulsa(m.raiz.busca(n => n.getAttribute('data-ampliar-varios') === 'A')); await DF.espera(20)
@@ -159,6 +166,32 @@ const VELAS = {
     const CC = require(R + '/components/CandleChart.js').default
     const h = RDS.renderToString(React.createElement(CC, { data: VC, mini: true, onIndicadores: () => {}, indicadoresUsuario: [{ id: 'x', tipo: 'ema', periodo: 20 }] }))
     ok(/data-mini="quieto"/.test(h) && /display:none/.test(h.slice(h.indexOf('position:absolute'), h.indexOf('position:absolute') + 400)) && !/top:38px/.test(h), 'con «mini»: la rueda apagada al empezar, sin leyenda y sin la lista de indicadores')
+  }
+
+  // ── §260: la señal con varios valores (condición del catálogo o con pasos), lib/replay/varios.js ──
+  {
+    const S = require(R + '/lib/replay/senales.js'), CP = require(R + '/lib/condiciones/conPasos.js')
+    const sma = { quien: 'A', velas: 'diarias', si: { c: 'precioVsMedia', p: { lado: 'encima', tipo: 'SMA', periodo: 2 } } }
+    const dada = { tipo: 'condicion', filas: [sma, { ...sma, quien: '^GSPC', union: 'Y' }] }
+    const cv = V.aCadaValor(dada, 'a')
+    ok(cv.filas[0].quien === 'valor' && cv.filas[1].quien === '^GSPC', 'al aceptar la ventana, lo puesto en el primer valor pasa a «cada valor»; el índice se queda')
+    ok(JSON.stringify(V.deCadaValor(cv, 'A')) === JSON.stringify(dada), 'al volver a abrirla, «cada valor» vuelve a ser el primer valor (ida y vuelta idéntica)')
+    ok(JSON.stringify(V.simbolosSenalVarios(cv, ['A', 'B'])) === '["^GSPC"]', 'velas aparte: solo las del índice (los de la lista ya están)')
+    const pas = V.aCadaValor({ tipo: 'pasos', def: { version: 1, mientras: { filas: [sma] }, paso1: { filas: [{ mov: 'cae', pct: 10, desde: 'maxHist', quien: 'A' }], daSenal: true }, paso2: null, anula: null, veces: 'cada', empieza: 'nunca' } }, 'A')
+    ok(pas.def.mientras.filas[0].quien === 'valor' && pas.def.paso1.filas[0].quien === 'valor', 'con pasos: también en «Mientras…» y en cada paso')
+    // A a mano: SMA 2 el d2 102 (104 encima), d3 101,5 (99 no), d4 97,5 (96 no), d5 102 (108 sí), d6 109,5 (111 sí) → pasa a cumplirse el d2 y el d5.
+    // B con SUS velas (no cotiza el d3): d2 51 (52 sí) y sigue encima → solo el d2. C: d5 20,5 (21 sí) → el d5.
+    const solo = V.aCadaValor({ tipo: 'condicion', filas: [sma] }, 'A')
+    const mot = { deCondicion: S.senalesCondicion, dePasos: CP.senalesConPasos, deEstrategia: S.entradasYSalidasEstrategia }
+    const sv = V.senalesVarios(solo, ['A', 'B', 'C'], q => VELAS[q] || [], mot)
+    ok(JSON.stringify(sv.A.entradas) === JSON.stringify([D[1], D[4]]) && JSON.stringify(sv.B.entradas) === JSON.stringify([D[1]]) && JSON.stringify(sv.C.entradas) === JSON.stringify([D[4]]),
+      `cada valor con sus velas: A el 03/01 y 08/01, B el 03/01, C el 08/01 (${JSON.stringify(sv)})`)
+    ok(V.siguienteSenalVarios(sv, D[1]) === D[4] && V.conSenalHoy(sv, D[4]).size === 2, '«Señal ⏭» desde el 03/01 va al 08/01, donde la dan A y C')
+    // Una fila FIJA en A (puesta a mano, no «cada valor»): la misma para todos → B y C la dan los días que A pasa a cumplirla (en sus fechas).
+    const fija = V.senalesVarios({ tipo: 'condicion', filas: [{ ...sma, quien: 'A' }] }, ['B'], q => VELAS[q] || [], mot)
+    ok(JSON.stringify(fija.B.entradas) === JSON.stringify([D[1], D[4]]), `una fila de otro símbolo es la misma para todos: B salta cuando A (${JSON.stringify(fija.B.entradas)})`)
+    const mal = V.senalesVarios(solo, ['A', 'Z'], q => VELAS[q] || [], { ...mot, deCondicion: (fs, vd, fe) => { if (!fe.length) throw new Error('x'); return S.senalesCondicion(fs, vd, fe) } })
+    ok(mal.Z.entradas.length === 0 && mal.A.entradas.length === 2, 'un valor que falla se queda sin señales y los demás siguen')
   }
 
   console.log(fallos ? `replay-varios: ${fallos} fallos` : 'replay-varios: todas bien')
