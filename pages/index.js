@@ -50,7 +50,7 @@ import { nDeUniverso, reglaDeUniverso, nombreUniverso, FRASE_REGLA, cargaUnivers
 import AvisoUniverso from '../components/AvisoUniverso'
 import { leeRespuestaMc, resumenCurva } from '../lib/respuestaMc'
 // La versión de la app para el texto copiado: la actualiza scripts/bump-version.js con las demás «Trading Simulator V…».
-const VERSION_APP='Trading Simulator V9.1322'.replace('Trading Simulator ','')
+const VERSION_APP='Trading Simulator V9.1323'.replace('Trading Simulator ','')
 // memo: una vez montada, la pantalla 🎯 se queda montada (oculta) al cambiar de sección; así no se vuelve a pintar
 // con cada render de la página mientras sus props no cambien (todas son estables: estado, apiFetch y onProbarOptimiza).
 const OptimizacionPanelMemo = memo(OptimizacionPanel)
@@ -2016,6 +2016,8 @@ export default function Home() {
   const reiniciaMarcaReplay=()=>{ if(replayVer>0) anchoReplayRef.current=replayVer; setFormReplay(f=>({...FORM_REPLAY,...AJUSTES_ORDEN_REPLAY.reduce((o,k)=>({...o,[k]:f[k]}),{})})); setCapturaReplay(null); setCapturaLineaReplay(null); setLineaElegidaReplay(null); setAvisoLineaReplay(''); setAvisoSenalReplay('') }
   const empiezaReplay=(desde,aj={})=>{ reiniciaMarcaReplay(); nuevaSesionReplay(null,nombreReplayDe({valores:[simbolo],desde})); setVentanaReplay(false); const _r=rangoVer(baseReplay,desde,replayVer); if(_r){ savedRangeRef.current=_r; isNewResultRef.current=false } else isNewResultRef.current=true; setReplay({version:1,valores:[simbolo],desde,hoy:desde,capitalInicial:10000,comision:0,ejecucion:'apertura',...aj,acciones:[],retrocesos:0,terminada:false}) }
   const saleReplay=()=>{ guardaReplay(replay,calcReplay); reiniciaMarcaReplay(); setReplay(null); isNewResultRef.current=true }
+  // §257: el Replay es de la Watchlist (pedido por Sergi el 25/11): sus botones solo salen allí y, al ir a otra sección (Risk Mgmt, Fundamentals…), se guarda y se cierra.
+  useEffect(()=>{ if(replay&&sidePanel!=='watchlist') saleReplay(); if(sidePanel!=='watchlist') setVentanaReplay(false) },[sidePanel])   // eslint-disable-line
   // Avanzar o retroceder n velas: la ventana visible se mueve con ella (misma anchura). Devuelve false si no se movió (▶ deja de reproducir).
   const irAFechaReplay=(est,f)=>{ if(!f||f===est.hoy) return false
     const _r=replayVer?rangoVer(baseReplay,f,replayVer):null
@@ -5949,7 +5951,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
   return (
     <>
       <Head>
-        <title>Trading Simulator V9.1322</title>
+        <title>Trading Simulator V9.1323</title>
         <meta name="viewport" content="width=device-width, initial-scale=1"/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
@@ -6038,7 +6040,7 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
               setSidePanel('watchlist')
               if(watchlist.some(w=>w.symbol===SIMBOLO_INICIO)) setSimbolo(SIMBOLO_INICIO)
             })} style={{display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0,cursor:'pointer',position:'relative',zIndex:1000}}>
-            <span className="dot"/>Trading Simulator V9.1322
+            <span className="dot"/>Trading Simulator V9.1323
           </div>
 
           {/* SP500 bar — misma altura que tabs, inline en header */}
@@ -7997,8 +7999,8 @@ Si ocurre frecuentemente, reduce el texto pegado o actualiza tu plan en console.
                             fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',lineHeight:1,flexShrink:0,height:18}}>
                           📈 Indicadores
                         </button>
-                        <BotonReplay activo={!!replay} onClick={()=>replay?saleReplay():abreVentanaReplay()}/>
-                        {replay&&!replay.terminada&&<BotonDiana activo={!!capturaReplay} onClick={()=>capturaReplay?limpiaMarcaReplay():marcaReplay()}/>}
+                        {sidePanel==='watchlist'&&<BotonReplay activo={!!replay} onClick={()=>replay?saleReplay():abreVentanaReplay()}/>}
+                        {sidePanel==='watchlist'&&replay&&!replay.terminada&&<BotonDiana activo={!!capturaReplay} onClick={()=>capturaReplay?limpiaMarcaReplay():marcaReplay()}/>}
                         {/* OHLC dinámico — CandleChart escribe aquí via externalLegendRef */}
                         <span ref={chartLegendRef} style={{flex:1,minWidth:0,overflow:'hidden',
                           whiteSpace:'nowrap',textOverflow:'ellipsis'}}/>
@@ -8234,8 +8236,8 @@ const _aport=(contributions||[]).filter(c=>c.type==='aportacion').reduce((s,c)=>
                             fontFamily:MONO,fontSize:10,padding:'2px 7px',borderRadius:3,cursor:'pointer',lineHeight:1,flexShrink:0,height:18}}>
                           📈 Indicadores
                         </button>
-                        <BotonReplay activo={!!replay} onClick={()=>replay?saleReplay():abreVentanaReplay()}/>
-                        {replay&&!replay.terminada&&<BotonDiana activo={!!capturaReplay} onClick={()=>capturaReplay?limpiaMarcaReplay():marcaReplay()}/>}
+                        {sidePanel==='watchlist'&&<BotonReplay activo={!!replay} onClick={()=>replay?saleReplay():abreVentanaReplay()}/>}
+                        {sidePanel==='watchlist'&&replay&&!replay.terminada&&<BotonDiana activo={!!capturaReplay} onClick={()=>capturaReplay?limpiaMarcaReplay():marcaReplay()}/>}
                         <span ref={chartLegendRef} style={{flex:1,minWidth:0,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}/>
                         {stratName&&(
                           <span style={{flexShrink:0,fontSize:9,color:'#7a9bc0',background:'rgba(13,21,32,0.85)',

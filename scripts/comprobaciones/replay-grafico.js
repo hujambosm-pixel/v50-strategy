@@ -125,6 +125,13 @@ const VELAS = F.map((date, i) => ({ date, open: 10 + i, high: 11 + i, low: 9 + i
   const RDS = require(R + '/node_modules/react-dom/server')
   ok(/⏪ Replay/.test(RDS.renderToString(React.createElement(RP.BotonReplay, { activo: false, onClick() {} }))) && /Salir del Replay/.test(RDS.renderToString(React.createElement(RP.BotonReplay, { activo: true, onClick() {} }))), 'botón «⏪ Replay»; encendido, su ayuda dice «Salir del Replay»')
 
+  // §257: el Replay es de la Watchlist: sus botones solo allí (las dos barras del gráfico) y se cierra al ir a otra sección.
+  {
+    const idx = require('fs').readFileSync(R + '/pages/index.js', 'utf8')
+    ok(idx.split("{sidePanel==='watchlist'&&<BotonReplay").length - 1 === 2 && idx.split("{sidePanel==='watchlist'&&replay&&!replay.terminada&&<BotonDiana").length - 1 === 2 && !/[^']&&<BotonReplay|^\s*<BotonReplay/m.test(idx.replace(/sidePanel==='watchlist'&&<BotonReplay/g, '')),
+      'los botones «⏪ Replay» y 🎯 solo salen en la Watchlist (no en Risk Mgmt ni Fundamentals)')
+    ok(/useEffect\(\(\)=>\{ if\(replay&&sidePanel!=='watchlist'\) saleReplay\(\)/.test(idx), 'al ir a otra sección con un Replay abierto, se guarda y se cierra')
+  }
   console.log(fallos ? `\n${fallos} FALLOS` : '\nTodo en verde')
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(1) })
