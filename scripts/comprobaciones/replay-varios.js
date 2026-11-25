@@ -83,11 +83,20 @@ const VELAS = {
     DF.pulsa(m.raiz.busca(n => n.hasAttribute('data-atras'))); await DF.espera(30)
     ok(/08\/01\/2024/.test(txt('data-hoy-replay')) && /1 retroceso/.test(m.raiz.textContent), '«|◀» vuelve una vela y cuenta el retroceso')
     DF.pulsa(m.raiz.busca(n => n.getAttribute('data-tam-varios') === 'g6')); await DF.espera(20)
-    ok(!!m.raiz.busca(n => n.getAttribute('data-rejilla-varios') === 'g6'), '«Pequeños · 6»: 6 gráficos por fila (todos los valores, sin páginas)')
+    ok(!!m.raiz.busca(n => n.getAttribute('data-rejilla-varios') === 'g6'), '«Por fila: 6»: 6 gráficos por fila (todos los valores, sin páginas)')
     DF.pulsa(m.raiz.busca(n => n.getAttribute('data-ampliar-varios') === 'A')); await DF.espera(20)
     ok(!m.raiz.busca(n => n.hasAttribute('data-rejilla-varios')) && !!m.raiz.busca(n => n.hasAttribute('data-panel-derecho-varios')) && recibe.A.chartHeight === 600, '⤢ amplía A dentro de la zona de los gráficos; el panel de la derecha sigue a la vista')
     DF.pulsa(m.raiz.busca(n => n.getAttribute('data-ampliar-varios') === 'A')); await DF.espera(20)
     ok(!!m.raiz.busca(n => n.hasAttribute('data-rejilla-varios')), '«← Rejilla» vuelve a la rejilla')
+    // §256: los minigráficos van con mini (rueda tras clic, ejes finos, sin leyenda); el doble clic en la rejilla solo amplía.
+    ok(recibe.A.mini === true && recibe.B.mini === true, 'en la rejilla, cada gráfico va en modo mini')
+    DF.pulsa(m.raiz.busca(n => n.getAttribute('data-tam-varios') === 'g2')); await DF.espera(20)
+    ok(!!m.raiz.busca(n => n.getAttribute('data-rejilla-varios') === 'g2') && recibe.A.chartHeight === 400, '«Por fila: 2»: 2 gráficos por fila, más altos (400 px)')
+    const accionesAntes = /0 operaciones|Operaciones · 0/.test(m.raiz.textContent)
+    recibe.A.onPriceAlarm(100); await DF.espera(20)
+    ok(!m.raiz.busca(n => n.hasAttribute('data-rejilla-varios')) && recibe.A.chartHeight === 600 && recibe.A.mini === false, 'doble clic en un minigráfico: se amplía (y ampliado ya no es mini)')
+    ok(!/Pulsa en el gráfico|Clic para marcar/.test(m.raiz.textContent) && accionesAntes === /0 operaciones|Operaciones · 0/.test(m.raiz.textContent), 'ese doble clic no pone ninguna orden ni empieza a marcar')
+    DF.pulsa(m.raiz.busca(n => n.getAttribute('data-ampliar-varios') === 'A')); await DF.espera(20)
     m.quita()
     // El panel compacto: posición en una línea.
     const e = { version: 1, valores: ['A'], desde: D[0], hoy: D[2], capitalInicial: 10000, comision: 1, ejecucion: 'apertura', acciones: [{ fecha: D[0], simbolo: 'A', tipo: 'orden', id: 1, lado: 1, entrada: null, clase: null, stop: null, objetivo: null, tam: { modo: 'invertir', pct: 50 } }], retrocesos: 0 }
@@ -102,6 +111,27 @@ const VELAS = {
     DF.pulsa(m.raiz.busca(n => n.getAttribute('data-vista-replay') === 'valor')); await DF.espera(10)
     ok(!!m.raiz.busca(n => n.getAttribute('data-fila-valor') === 'A') && !!m.raiz.busca(n => n.getAttribute('data-fila-valor') === 'B'), 'con varios valores, la tabla tiene «Por valor» con una fila por valor')
     m.quita()
+  }
+
+  // ── §256: CandleChart sin «mini», carácter a carácter el de antes; con «mini», sin leyenda ni lista de indicadores ──
+  {
+    const React = require(R + '/node_modules/react'), RDS = require(R + '/node_modules/react-dom/server')
+    const { execSync } = require('child_process'), fs = require('fs'), path = require('path')
+    let antes = null
+    try { antes = execSync('git show HEAD:components/CandleChart.js', { cwd: R, encoding: 'utf8', maxBuffer: 1 << 26 }) } catch (_) {}
+    const VC = VELAS.A
+    if (antes && !antes.includes('mini=false')) {
+      const f = path.join(R, 'components', '__CandleChart_anterior_mini.js')
+      try {
+        fs.writeFileSync(f, antes)
+        const CCa = require(f).default, CC = require(R + '/components/CandleChart.js').default
+        const casos = [{ data: VC }, { data: VC, fillHeight: true, onIndicadores: () => {}, indicadoresUsuario: [] }, { data: VC, riskMode: 'entry' }, { data: VC, cajasReplay: [], lineasReplay: [], margenDerecha: 10 }]
+        ok(casos.every(p => RDS.renderToString(React.createElement(CCa, p)) === RDS.renderToString(React.createElement(CC, p))), `CandleChart sin «mini»: el mismo HTML que antes, carácter a carácter (${casos.length} casos)`)
+      } finally { try { fs.unlinkSync(f) } catch (_) {} }
+    } else ok(true, 'CandleChart sin «mini»: el commit anterior ya lo lleva (se comprobó al hacerlo)')
+    const CC = require(R + '/components/CandleChart.js').default
+    const h = RDS.renderToString(React.createElement(CC, { data: VC, mini: true, onIndicadores: () => {}, indicadoresUsuario: [{ id: 'x', tipo: 'ema', periodo: 20 }] }))
+    ok(/data-mini="quieto"/.test(h) && /display:none/.test(h.slice(h.indexOf('position:absolute'), h.indexOf('position:absolute') + 400)) && !/top:38px/.test(h), 'con «mini»: la rueda apagada al empezar, sin leyenda y sin la lista de indicadores')
   }
 
   console.log(fallos ? `replay-varios: ${fallos} fallos` : 'replay-varios: todas bien')

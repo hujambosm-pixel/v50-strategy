@@ -555,7 +555,7 @@ export function propsDelGrafico(props,sinEstrategia,ponSin){
   if(sinEstrategia&&!props.lineasReplay) Object.assign(p,{trades:VACIO,customMarkers:VACIO,slopeChanges:VACIO,filterZones:VACIO,razonamiento:false})
   return p
 }
-function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null, sinEstrategia=false, onSinEstrategia=null, onAlarmaElegida=null, estiloAlertas=null, alarmaElegidaId, onAlarmaBorrar=null, lineasReplay=null, onLineaReplay=null, textoCaptura=null, margenDerecha=0, anchoReplayRef=null, onAnchoReplay=null, cajasReplay=null }) {
+function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rulerActive, onChartReady, onPriceAlarm, onAlarmPriceDrag, syncRef, savedRangeRef, isNewResultRef=null, chartHeight=480, priceAlarms=[], tlOpenTrades=[], ackedAlarms, externalLegendRef, riskMode=null, onRiskPrice, riskLevels=null, riskLineActive=null, onRiskLevelChange, fillHeight=false, definition=null, isBareChart=false, visuals=null, filterZones=[], slopeChanges=[], customMarkers=[], pendingOrders=[], simbolo=null, riskPanelOpen=false, onRiskLineFocus=null, indicadoresUsuario=[], onIndicadores=null, onConfigurarIndicador=null, nombresIndicadores=null, grafico=null, razonamiento=true, dibujar=false, dibujarArriba=0, onAlertaPrecio=null, arriesgoDefecto=null, sinEstrategia=false, onSinEstrategia=null, onAlarmaElegida=null, estiloAlertas=null, alarmaElegidaId, onAlarmaBorrar=null, lineasReplay=null, onLineaReplay=null, textoCaptura=null, margenDerecha=0, anchoReplayRef=null, onAnchoReplay=null, cajasReplay=null, mini=false }) {
   const containerRef=useRef(null), svgRef=useRef(null), legendRef=useRef(null), tooltipRef=useRef(null)
   // Dibujar (§208): el contenedor de las velas (para los clics) y el hueco de la izquierda donde va su barra lateral.
   const wrapRef=useRef(null), barraDibujosRef=useRef(null)
@@ -733,6 +733,12 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
   // Lista de indicadores sobre el gráfico: fila con el cursor encima, y menú de añadir abierto.
   const [indHover,setIndHover]=useState(null)
   const indClicRef=useRef(null)   // temporizador del clic simple, para que el doble clic pueda cancelarlo
+  // §256 (mini, minigráficos del Replay con varios valores): la rueda no acerca ni mueve el gráfico hasta hacer clic en él (así se baja por
+  // la página con la rueda); al salir del gráfico se vuelve a apagar, como ruedaTrasClic de AssetSignalChart (§167). Sin mini, como siempre.
+  const [ruedaActiva,setRuedaActiva]=useState(false)
+  const ruedaRef=useRef(false), miniRef=useRef(mini); miniRef.current=mini
+  const opcRueda=(si)=>({handleScroll:{mouseWheel:si,pressedMouseMove:true,horzTouchDrag:true,vertTouchDrag:true},handleScale:{mouseWheel:si,pinch:true,axisPressedMouseMove:true,axisDoubleClickReset:true}})
+  const ponRueda=(si)=>{ ruedaRef.current=si; setRuedaActiva(si); try{chartRef.current?.applyOptions(opcRueda(si))}catch(_){} }
   const [chartReadyTick,setChartReadyTick]=useState(0)  // nonce: se incrementa al recrear el chart → re-dibuja pendientes con candlesRef fresco
   const dragRef=useRef(null)             // {lineObj} while dragging
   const priceAlarmTimersRef=useRef([])   // setInterval IDs for blinking
@@ -795,11 +801,12 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
       if(!containerRef.current||containerRef.current.clientWidth<=0) return
       const chart=createChart(containerRef.current,{
         width:containerRef.current.clientWidth,height:chartHeight,
-        layout:{background:{color:visuals?.chartBg||'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif'},
+        layout:{background:{color:visuals?.chartBg||'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif',...(mini?{fontSize:10}:{})},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
         crosshair:{mode:CrosshairMode.Normal},
-        rightPriceScale:{borderColor:'#1a2d45',minimumWidth:70},
+        rightPriceScale:{borderColor:'#1a2d45',minimumWidth:mini?40:70},
         timeScale:{borderColor:'#1a2d45',timeVisible:true},
+        ...(mini?opcRueda(ruedaRef.current):{}),
         // Coma decimal en el eje, en el cursor y en las etiquetas de las líneas de precio.
         localization:{priceFormatter:p=>coma(p,2)},
       })
@@ -1051,9 +1058,9 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
       // ── Paneles secundarios (RSI / MACD / VOLUME) ─────────────────────
       const _panelOpts=(h)=>({
         width:containerRef.current?.clientWidth||400, height:h,
-        layout:{background:{color:'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system,BlinkMacSystemFont,Trebuchet MS,Roboto,Ubuntu,sans-serif'},
+        layout:{background:{color:'#080c14'},textColor:'#7a9bc0',fontFamily:'-apple-system,BlinkMacSystemFont,Trebuchet MS,Roboto,Ubuntu,sans-serif',...(mini?{fontSize:10}:{})},
         grid:{vertLines:{color:'#0d1520'},horzLines:{color:'#0d1520'}},
-        rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.1,bottom:0.1},minimumWidth:70},
+        rightPriceScale:{borderColor:'#1a2d45',scaleMargins:{top:0.1,bottom:0.1},minimumWidth:mini?40:70},
         leftPriceScale:{visible:false},
         timeScale:{borderColor:'#1a2d45',timeVisible:true,visible:false},
         crosshair:{mode:CrosshairMode.Normal},
@@ -1596,7 +1603,7 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
       }
       const onMouseUp=()=>{
         // Siempre restaurar scroll (safety net aunque no haya drag activo)
-        try{chart.applyOptions({handleScroll:true,handleScale:true})}catch(_){}
+        try{chart.applyOptions(miniRef.current?opcRueda(ruedaRef.current):{handleScroll:true,handleScale:true})}catch(_){}
         if(dragRef.current){
           const{lineObj}=dragRef.current
           const _arrastra=alarmaCbRef.current.drag   // §219: la de ahora, no la del montaje
@@ -2477,15 +2484,17 @@ function CandleChartBase({ data, emaRPeriod, emaLPeriod, trades, labelMode, rule
   )
   return envuelve(
     <div style={{display:'flex',flexDirection:'column',...(fillHeight?{flex:1,minHeight:0}:{})}}>
-    <div ref={wrapRef} style={{position:'relative',...(fillHeight?{flex:1,minHeight:0}:{})}}>
-      <div ref={legendRef} style={{position:'absolute',top:8,left:8,zIndex:10,fontFamily:MONO,fontSize:12,color:'#7a9bc0',background:'rgba(8,12,20,0.82)',padding:'4px 10px',borderRadius:4,pointerEvents:'none',whiteSpace:'nowrap',display:externalLegendRef?'none':'block'}}/>
+    <div ref={wrapRef} style={{position:'relative',...(fillHeight?{flex:1,minHeight:0}:{})}} data-mini={mini?(ruedaActiva?'rueda':'quieto'):undefined}
+      onMouseDown={mini?()=>{ if(!ruedaRef.current) ponRueda(true) }:undefined} onMouseLeave={mini?()=>{ if(ruedaRef.current) ponRueda(false) }:undefined}>
+      <div ref={legendRef} style={{position:'absolute',top:8,left:8,zIndex:10,fontFamily:MONO,fontSize:12,color:'#7a9bc0',background:'rgba(8,12,20,0.82)',padding:'4px 10px',borderRadius:4,pointerEvents:'none',whiteSpace:'nowrap',display:(externalLegendRef||mini)?'none':'block'}}/>
+      {mini&&ruedaActiva&&<span data-rueda-mini="" style={{position:'absolute',left:6,bottom:30,zIndex:6,pointerEvents:'none',fontSize:10,padding:'1px 5px',borderRadius:4,background:'rgba(0,229,160,0.15)',color:'#00e5a0',border:'1px solid #1a2d45'}}>rueda: acercar</span>}
       {/* ── Lista de indicadores del usuario, al estilo de TradingView ──────────────
           Va DEBAJO de la leyenda de OHLC, que ocupa la esquina de arriba del todo. Solo se monta si
           quien usa el componente pasa onIndicadores: sin ese callback no hay nada que configurar y el
           gráfico queda exactamente como estaba, sin un píxel de diferencia.
           fontSize 10: el mismo de las filas de la estrategia, que van más abajo. Antes iban a 11 y las
           dos listas no se leían como una sola cosa. */}
-      {onIndicadores&&(
+      {onIndicadores&&!mini&&(
         <div style={{position:'absolute',top:38,left:8,zIndex:11,fontFamily:MONO,fontSize:10,
           display:'flex',flexDirection:'column',gap:2,alignItems:'flex-start',userSelect:'none'}}>
           {/* Se filtra lo que no sea un indicador reconocible ANTES de pintar: una entrada corrupta en

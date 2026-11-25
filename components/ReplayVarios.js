@@ -30,11 +30,12 @@ const INDICE = '^GSPC'
 const VACIO = []
 export const MAX_VALORES = 30
 // Gráficos por fila (como «Charts» del screener) y su alto.
-export const REJILLA = Object.freeze({ g4: { porFila: 4, alto: 330, escala: 0.85 }, g6: { porFila: 6, alto: 250, escala: 0.72 } })
+export const REJILLA = Object.freeze({ g2: { porFila: 2, alto: 400, escala: 1 }, g4: { porFila: 4, alto: 330, escala: 0.85 }, g6: { porFila: 6, alto: 250, escala: 0.72 } })
 
 export const AYUDA_VARIOS = 'REPLAY CON VARIOS VALORES: todos los gráficos van en la MISMA fecha y operas con UNA sola cuenta (el mismo dinero para todos). ' +
-  'Cada gráfico funciona igual que el Replay de un valor: «🎯 Compra» / «🎯 Venta» y un clic (o doble clic) en el gráfico ponen la orden con los valores de ⚙; sus líneas se arrastran; las casillas, 🎯 y ✕ como siempre. ' +
-  '«Señal ⏭» salta a la próxima vela en que CUALQUIER valor da la señal elegida (los que la dan llevan el borde morado). ⤢ amplía un gráfico (Esc vuelve a la rejilla). ' +
+  'Cada gráfico funciona igual que el Replay de un valor: «🎯 Compra» / «🎯 Venta» y un clic en el gráfico ponen la orden con los valores de ⚙; sus líneas se arrastran; las casillas, 🎯 y ✕ como siempre. ' +
+  '«Señal ⏭» salta a la próxima vela en que CUALQUIER valor da la señal elegida (los que la dan llevan el borde morado). Doble clic o ⤢ amplía un gráfico (Esc vuelve a la rejilla); ampliado, el doble clic pone la orden. ' +
+  'En la rejilla, la rueda baja por la página; para acercar o alejar un gráfico con la rueda, haz antes clic en él (al salir del gráfico, la rueda vuelve a bajar la página). ' +
   'Con «Ejecutar solo» (en ⚙), las señales de todos los valores compran solas; si no llega el dinero para todas, entran por orden alfabético y las demás se cuentan en «Señales sin dinero».\n\n' +
   'Se compara con el Buy&Hold de la lista (el mismo dinero a partes iguales el primer día; un valor que aún no cotiza entra el día que empieza) y con el S&P 500.'
 
@@ -101,7 +102,7 @@ const CAPTURA = { entrada: 'capture_entry', stop: 'capture_stop', objetivo: 'cap
 const TEXTO_MARCA = { entrada: '▶ Clic en el gráfico para marcar la ENTRADA · Esc cancela', stop: '▶ Clic para marcar el STOP · Enter: sin stop ni objetivo · Esc cancela', objetivo: '▶ Clic para marcar el OBJETIVO (la orden se pone sola) · Enter: sin objetivo · Esc cancela' }
 const VACIA = { ...FORM_INICIAL }
 export function GraficoValor({ Grafico = CandleChart, simbolo: s, velas, estado, r, form, captura = null, campoLinea = null, ahora, senalDef = null, referencias = {}, senalS = null, indicadores = VACIO, onIndicadores = null,
-  alto = 330, ver = 120, elegida = null, onClicPrecio, onDobleClic, onLinea }) {
+  alto = 330, ver = 120, elegida = null, onClicPrecio, onDobleClic, onLinea, mini = false }) {
   const hoy = estado.hoy, terminada = !!estado.terminada
   const data = useMemo(() => recortaVelas(velas || [], hoy), [velas, hoy])
   const savedRangeRef = useRef(null), isNewResultRef = useRef(true), anchoRef = useRef(ver > 0 ? ver : 120), apiRef = useRef(null)
@@ -122,9 +123,9 @@ export function GraficoValor({ Grafico = CandleChart, simbolo: s, velas, estado,
   return <Grafico data={data} emaRPeriod={null} emaLPeriod={null} definition={null} trades={trades} labelMode={1} visuals={null} slopeChanges={VACIO} grafico={grafico} razonamiento={false}
     customMarkers={marcas} pendingOrders={VACIO} simbolo={s} chartHeight={alto} fillHeight={false} indicadoresUsuario={indicadores} onIndicadores={onIndicadores}
     savedRangeRef={savedRangeRef} isNewResultRef={isNewResultRef} onChartReady={api => { apiRef.current = api }} syncRef={null} priceAlarms={VACIO} tlOpenTrades={VACIO} filterZones={VACIO}
-    margenDerecha={10} anchoReplayRef={anchoRef} onAnchoReplay={null} onPriceAlarm={terminada ? null : onDobleClic} onAlertaPrecio={null}
+    margenDerecha={10} anchoReplayRef={anchoRef} onAnchoReplay={null} onPriceAlarm={terminada && !mini ? null : onDobleClic} onAlertaPrecio={null}
     riskMode={modo ? CAPTURA[modo] || null : null} onRiskPrice={onClicPrecio} textoCaptura={captura ? TEXTO_MARCA[captura] : campoLinea ? '▶ Clic en el gráfico: precio nuevo · Esc cancela' : null}
-    riskLevels={null} onRiskLevelChange={null} riskLineActive={null} lineasReplay={lineas} onLineaReplay={onLinea} cajasReplay={cajas} />
+    riskLevels={null} onRiskLevelChange={null} riskLineActive={null} lineasReplay={lineas} onLineaReplay={onLinea} cajasReplay={cajas} mini={mini} />
 }
 
 // ── La pantalla ──
@@ -264,7 +265,7 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
       <div style={{ position: 'relative' }}>
         <GraficoValor Grafico={Grafico} simbolo={s} velas={motorVelas[s]} estado={estado} r={r} form={form} captura={captura && captura.s === s ? captura.campo : null} campoLinea={capturaLinea ? String(capturaLinea).split(':')[2] : null}
           ahora={ahoraDe(s)} senalDef={senalDef} referencias={referencias} senalS={senales?.[s]} indicadores={indicadores} onIndicadores={onIndicadores} alto={grande ? 600 : R.alto} ver={ver} elegida={elegida}
-          onClicPrecio={p => clic(s, p)} onDobleClic={p => doble(s, p)} onLinea={linea(s)} />
+          onClicPrecio={p => clic(s, p)} onDobleClic={grande ? (p => doble(s, p)) : (() => setAmpliado(s))} onLinea={linea(s)} mini={!grande} />
         <PanelGrafico estado={estado} simbolo={s} r={r} ahora={ahoraDe(s)} total={cif?.final} form={form} captura={captura && captura.s === s ? captura.campo : null} capturaLinea={capturaLinea}
           onMarcar={lado => marca(s, lado)} onMarcarLinea={id => { limpia(); setCapturaLinea(id) }} onCancelaMarca={limpia} onAccion={accion} formMercado={lado => deMercado({ ...form, atrHoy: atrHoyDe(s) }, lado, ahoraDe(s))}
           onMover={mover} arrastre={arrastre} onCfg={v => setCfg(v)} cfgAbierta={cfg} autoActivo={autoActivo}
@@ -279,8 +280,8 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
           <b style={{ color: '#ffd166' }}>⏪ REPLAY · {estado.valores.length} valores</b><Ayuda texto={AYUDA_VARIOS} etiqueta="Replay con varios valores" />
           {senales && <span style={{ color: BZ.morado, fontSize: 12 }}>{hoySen.size ? `▲ señal hoy en ${hoySen.size}` : 'hoy, ninguna señal'}</span>}
           <span style={{ marginLeft: 12 }} />
-          <button data-tam-varios="g4" onClick={() => setTam('g4')} style={btn(tam === 'g4')}>Grandes · 4</button>
-          <button data-tam-varios="g6" onClick={() => setTam('g6')} style={btn(tam === 'g6')}>Pequeños · 6</button>
+          <span style={{ color: BZ.gris }}>Por fila:</span>
+          {['g2', 'g4', 'g6'].map(k => <button key={k} data-tam-varios={k} onClick={() => setTam(k)} title={`${REJILLA[k].porFila} gráficos por fila`} style={btn(tam === k)}>{REJILLA[k].porFila}</button>)}
           <select value={orden} onChange={e => setOrden(e.target.value)} style={casilla}><option value="importante">Primero con señal, posición u orden</option><option value="alfa">Alfabético</option></select>
         </div>
         {aviso && <div data-aviso-varios="" style={{ color: BZ.ambar, padding: '4px 10px' }}>⚠ {aviso}</div>}
