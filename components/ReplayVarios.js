@@ -144,6 +144,7 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
   const [arrastre, setArrastre] = useState(null)
   const [cfg, setCfg] = useState(false)
   const [tam, setTam] = useState('g4'), [orden, setOrden] = useState('importante')
+  const [vista, setVista] = useState('graficos')          // §259: pestañas arriba: los gráficos o «Operaciones», «Por valor», «Curva del capital»
   const [ver, setVer] = useState(120)
   const [ampliado, setAmpliado] = useState(null)
   const [editando, setEditando] = useState({})            // §258: los minigráficos con Entrada / Stop / Objetivo desplegados (✎)
@@ -283,15 +284,20 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
           <b style={{ color: '#ffd166' }}>⏪ REPLAY · {estado.valores.length} valores</b><Ayuda texto={AYUDA_VARIOS} etiqueta="Replay con varios valores" />
           {senales && <span style={{ color: BZ.morado, fontSize: 12 }}>{hoySen.size ? `▲ señal hoy en ${hoySen.size}` : 'hoy, ninguna señal'}</span>}
           <span style={{ marginLeft: 12 }} />
-          <span style={{ color: BZ.gris }}>Por fila:</span>
-          {['g2', 'g4', 'g6'].map(k => <button key={k} data-tam-varios={k} onClick={() => setTam(k)} title={`${REJILLA[k].porFila} gráficos por fila`} style={btn(tam === k)}>{REJILLA[k].porFila}</button>)}
-          <select value={orden} onChange={e => setOrden(e.target.value)} style={casilla}><option value="importante">Primero con señal, posición u orden</option><option value="alfa">Alfabético</option></select>
+          {[['graficos', 'Gráficos'], ['ops', `Operaciones · ${r?.operaciones?.length || 0}`], ['valor', 'Por valor'], ['curva', 'Curva del capital']].map(([k, t]) =>
+            <button key={k} data-vista-varios={k} onClick={() => setVista(k)} style={btn(vista === k)}>{t}</button>)}
+          {vista === 'graficos' && <>
+            <span style={{ marginLeft: 12, color: BZ.gris }}>Por fila:</span>
+            {['g2', 'g4', 'g6'].map(k => <button key={k} data-tam-varios={k} onClick={() => setTam(k)} title={`${REJILLA[k].porFila} gráficos por fila`} style={btn(tam === k)}>{REJILLA[k].porFila}</button>)}
+            <select data-orden-varios="" value={orden} onChange={e => setOrden(e.target.value)} style={{ ...casilla, width: 'auto' }}><option value="importante">Primero con señal, posición u orden</option><option value="alfa">Alfabético</option></select>
+          </>}
         </div>
         {aviso && <div data-aviso-varios="" style={{ color: BZ.ambar, padding: '4px 10px' }}>⚠ {aviso}</div>}
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 6 }}>
-          {ampliado ? celda(ampliado, true)
+          {vista !== 'graficos'
+            ? <ResultadosReplay estado={estado} r={r} cif={cif} velas={null} simbolo={null} varios onQuitar={op => { const n = quitaOperacion(estado, op); if (n) setEstado(n) }} indice={indiceBH} vista={vista} onVista={setVista} sinPestanas />
+            : ampliado ? celda(ampliado, true)
             : <div data-rejilla-varios={tam} style={{ display: 'grid', gridTemplateColumns: `repeat(${R.porFila}, minmax(0, 1fr))`, gap: 6 }}>{lista.map(s => celda(s, false))}</div>}
-          <ResultadosReplay estado={estado} r={r} cif={cif} velas={null} simbolo={null} varios onQuitar={op => { const n = quitaOperacion(estado, op); if (n) setEstado(n) }} indice={indiceBH} />
         </div>
         <BarraReplay velas={calendario} estado={estado} onIr={ir} onSalir={onSalir} onIndicadores={onIndicadores} ver={ver} onVer={setVer} senal={barraSenal} />
       </div>

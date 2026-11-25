@@ -329,8 +329,10 @@ export function ordenaOps(ops, orden) {
   return [...ops].sort((a, b) => { const x = c.v(a), y = c.v(b); const d = x == null ? (y == null ? 0 : 1) : y == null ? -1 : typeof x === 'string' ? x.localeCompare(y, 'es') : x - y; return d * s || (b.num - a.num) })
 }
 // §254: varios = Replay con varios valores: todas las posiciones abiertas, pestaña «Por valor» y la curva del Buy&Hold de la lista (cif.buyHold.curva).
-export function ResultadosReplay({ estado, r, cif, velas, simbolo, onQuitar = null, varios = false, indice = null }) {
-  const [vista, setVista] = useState('ops')
+// §259: vista / onVista / sinPestanas: la pestaña la puede llevar quien lo usa (el Replay con varios valores pone las pestañas arriba).
+export function ResultadosReplay({ estado, r, cif, velas, simbolo, onQuitar = null, varios = false, indice = null, vista: vistaFuera = null, onVista = null, sinPestanas = false }) {
+  const [vista0, setVista0] = useState('ops')
+  const vista = vistaFuera || vista0, setVista = onVista || setVista0
   const [orden, setOrden] = useState({ col: 'num', dir: 'desc' })
   const pulsaCol = (id) => setOrden(o => o.col === id ? { col: id, dir: o.dir === 'desc' ? 'asc' : 'desc' } : { col: id, dir: ['simbolo', 'motivo', 'lado'].includes(id) ? 'asc' : 'desc' })
   const [quitando, setQuitando] = useState(null)
@@ -350,8 +352,8 @@ export function ResultadosReplay({ estado, r, cif, velas, simbolo, onQuitar = nu
   const resumen = varios ? porValor(r, estado.valores) : []
   return (
     <div data-resultados-replay="" style={{ background: BZ.fondo, padding: '8px 10px', font: `13px/1.45 ${LETRA}`, color: BZ.texto }}>
-      <div style={{ display: 'flex', gap: 4 }}>{tab('ops', `Operaciones · ${r.operaciones.length}`)}{varios && tab('valor', 'Por valor')}{tab('curva', 'Curva del capital')}</div>
-      <div style={{ ...cajaSt }}>
+      {!sinPestanas && <div style={{ display: 'flex', gap: 4 }}>{tab('ops', `Operaciones · ${r.operaciones.length}`)}{varios && tab('valor', 'Por valor')}{tab('curva', 'Curva del capital')}</div>}
+      <div style={{ ...cajaSt, ...(sinPestanas ? { marginTop: 0 } : {}) }}>
         {vista === 'ops' ? <>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>{COLUMNAS_OPS.map(c => <th key={c.id} data-col-ops={c.id} onClick={() => pulsaCol(c.id)} title="Pulsa para ordenar por esta columna (otra vez, al revés)" style={{ ...th, textAlign: 'center', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', color: orden.col === c.id ? BZ.azul : BZ.gris }}>{c.t}{orden.col === c.id ? (orden.dir === 'desc' ? ' ▼' : ' ▲') : ''}</th>)}<th style={th} /></tr></thead>

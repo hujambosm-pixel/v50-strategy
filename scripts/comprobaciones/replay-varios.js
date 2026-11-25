@@ -90,6 +90,16 @@ const VELAS = {
     ok(!!m.raiz.busca(n => n.hasAttribute('data-rejilla-varios')), '«← Rejilla» vuelve a la rejilla')
     // §256: los minigráficos van con mini (rueda tras clic, ejes finos, sin leyenda); el doble clic en la rejilla solo amplía.
     ok(recibe.A.mini === true && recibe.B.mini === true, 'en la rejilla, cada gráfico va en modo mini')
+    // §259: pestañas arriba: «Gráficos» o «Operaciones · N» / «Por valor» / «Curva del capital»; el selector de orden en la misma línea.
+    ok(!m.raiz.busca(n => n.hasAttribute('data-resultados-replay')) && !!m.raiz.busca(n => n.hasAttribute('data-orden-varios')),
+      'con «Gráficos», solo la rejilla (las tablas ya no van debajo)')
+    DF.pulsa(m.raiz.busca(n => n.getAttribute('data-vista-varios') === 'ops')); await DF.espera(20)
+    ok(!m.raiz.busca(n => n.hasAttribute('data-rejilla-varios')) && !!m.raiz.busca(n => n.hasAttribute('data-resultados-replay')) && !m.raiz.busca(n => n.hasAttribute('data-vista-replay')) && !m.raiz.busca(n => n.hasAttribute('data-orden-varios')),
+      '«Operaciones»: la tabla en lugar de los gráficos, sin pestañas repetidas ni el selector de orden')
+    DF.pulsa(m.raiz.busca(n => n.getAttribute('data-vista-varios') === 'valor')); await DF.espera(20)
+    ok(!!m.raiz.busca(n => n.hasAttribute('data-fila-valor')), '«Por valor»: una fila por valor')
+    DF.pulsa(m.raiz.busca(n => n.getAttribute('data-vista-varios') === 'graficos')); await DF.espera(20)
+    ok(!!m.raiz.busca(n => n.hasAttribute('data-rejilla-varios')) && !!m.raiz.busca(n => n.hasAttribute('data-orden-varios')), '«Gráficos» vuelve a la rejilla con «Por fila» y el orden')
     // §258: forma B: el panel de operar va en la cabecera de cada minigráfico (una línea) y ✎ despliega las casillas.
     const cabA = () => m.raiz.busca(n => n.getAttribute('data-cabecera-varios') === 'A')
     ok(!!m.raiz.busca(n => n.hasAttribute('data-cabecera-panel')) && !!m.raiz.busca(n => n.hasAttribute('data-cfg-replay')), 'en la rejilla, Compra / Venta / ⚙ van en la cabecera del minigráfico')
