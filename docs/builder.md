@@ -3960,3 +3960,6 @@ Boceto bocetos/condiciones-con-pasos.html aceptado por Sergi el 24/11 («sí, a 
 ## §266 · Screener: acciones de la SEC en miles o en millones, pasadas a acciones sueltas (decidido con Sergi el 26/11, antes del paso 2 de «la lista del screener de cada día»)
 - lib/screener/escala.js (factorEscala, corrigeEscalaAcciones): referencia = beneficio ÷ BPA del mismo periodo o la mediana de la empresa; se corrige solo un salto de ×1.000 o ×1.000.000. Se aplica en lib/screener/edgar.js (filasDeEmpresa); scripts/cargaScreener.js cuenta las corregidas. Recargadas el 26/11 las 44 empresas afectadas (100 filas). Detalle en docs/screener.md §26.
 - CIFRAS QUE CAMBIAN (acordado con Sergi): MCD capitalización 0 → 200.803 M$ y PER 0,0 → 22,3; NVMI 11 → 9.680 M$, PER 37,3; VPG 1 → 598 M$. Prueba nueva escala.js en comunes.sh.
+## §267 · Screener: los 12 meses (TTM) de cada trimestre (paso 2 de «la lista del screener de cada día»)
+- lib/screener/edgar.js: doceMesesDe da un TTM por cada trimestre presentado (antes solo el último). Recargado el screener entero el 26/11: 497.838 filas, 101 MB. Detalle en docs/screener.md §27.
+- CIFRAS QUE CAMBIAN: unas 50 empresas, solo cuando el último trimestre no se podía calcular (ahora se usa el anterior, más reciente que el anual). Prueba nueva ttm.js en comunes.sh.

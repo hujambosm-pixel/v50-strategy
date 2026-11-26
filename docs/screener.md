@@ -339,6 +339,13 @@ Pedido por Sergi el 11/11.
 - Los importes (ventas, activos…) NO tienen este problema: los saltos grandes que quedan son de empresas muy pequeñas al principio (CLSK, ONDS…) o de beneficios cercanos a 0 (META 2012).
 - Comprobación: scripts/comprobaciones/escala.js (en comunes.sh, cifras a mano con las de MCD, NVMI y NTRS).
 
+## 27. Los 12 meses (TTM) de CADA trimestre (paso 2 de «la lista del screener de cada día»)
+- POR QUÉ. Para saber las cifras de una empresa un día del pasado hacen falta sus 12 meses de entonces, no solo los de hoy. Antes se guardaba el TTM SOLO del último trimestre; desde el 26/11/2026, el de cada trimestre presentado en un 10-Q.
+- REGLA (lib/screener/edgar.js, doceMesesDe / doceMesesEn): para cada fin de trimestre, la base es el último ejercicio anual que acaba antes. FLUJO = ejercicio de base + lo que va de año − lo mismo del año anterior (sin base a menos de 380 días, sin TTM ese trimestre). SALDO y acciones = los del propio trimestre (no necesitan base reciente). `conocido_desde` de un flujo = el día en que se conocen sus tres piezas (casi siempre, el del 10-Q). Ejemplo a mano (scripts/comprobaciones/ttm.js): ventas 2025 = 120, lo que va de 2026 a septiembre = 100, el mismo tramo de 2025 = 85 → 120 + 100 − 85 = 135; y así cada trimestre (103, 105, 107, 125, 131, 135).
+- HOY (la pantalla): metricasDe sigue usando de cada concepto la cifra más reciente (el último TTM si es posterior al último anual). Cambia solo cuando el último trimestre no se podía calcular (le faltaba una pieza): antes se usaba el anual y ahora el trimestre anterior, que es más reciente. Medido el 26/11: en 7 de 80 empresas sueltas cambia alguna cifra por esto, unas 50 de las 599 (p. ej. CLX y FERG pasan de «sin dato» a tener ROCE y PER; NVDA, deuda neta 10.923 → −38.199 M$ con la caja del último trimestre). Caso raro visto: VISN (Vistance) corrigió en 2026 «lo que va de 2025» a 0 (vendió negocios) y su TTM de 2025-09 mezcla cifras corregidas y sin corregir.
+- CARGA del 26/11/2026 (entera): 598 empresas, 497.838 filas (132.081 anuales y 365.757 TTM), 101 MB (antes 139.026 y 25 MB). En la misma carga, 320 filas de acciones pasadas de miles o millones a acciones sueltas (§26) en 82 empresas: la SEC también tiene esos saltos en los trimestres.
+- Comprobación: scripts/comprobaciones/ttm.js (en comunes.sh, cifras a mano).
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:
