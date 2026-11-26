@@ -44,5 +44,13 @@ const prueba = async (nombre, sql, espera) => {
   await prueba('§25: con sesión no escribe splits', `${como(A)} UPDATE public.precios_splits SET splits = '[]' WHERE simbolo = 'AAPL';`, 'error')
   await prueba('§25: con sesión no crea splits', `${como(A)} INSERT INTO public.precios_splits (simbolo) VALUES ('ZZZZ9');`, 'error')
   await prueba('§25: lista que no es una lista, rechazada', `INSERT INTO public.precios_splits (simbolo, splits) VALUES ('ZZZZ9', '{}');`, 'error')
+  // §29 (sql/screener_fotos.sql): las fotos semanales, solo lectura con sesión; un lunes y su cierre de antes.
+  await prueba('§29: anon no lee fotos', `SET LOCAL ROLE anon; SELECT count(*) FROM public.screener_fotos;`, 'error')
+  await prueba('§29: con sesión lee fotos', `${como(A)} SELECT count(*) AS fotos FROM public.screener_fotos;`)
+  await prueba('§29: con sesión no crea fotos', `${como(A)} INSERT INTO public.screener_fotos (fecha, cierre, campos, datos) VALUES ('2030-01-07', '2030-01-04', '{}', '{}');`, 'error')
+  await prueba('§29: con sesión no borra fotos', `${como(A)} DELETE FROM public.screener_fotos WHERE true;`, 'error')
+  await prueba('§29: un martes, rechazado', `INSERT INTO public.screener_fotos (fecha, cierre, campos, datos) VALUES ('2030-01-08', '2030-01-04', '{}', '{}');`, 'error')
+  await prueba('§29: cierre después del lunes, rechazado', `INSERT INTO public.screener_fotos (fecha, cierre, campos, datos) VALUES ('2030-01-07', '2030-01-08', '{}', '{}');`, 'error')
+  await prueba('§29: el script (postgres) sí escribe', `INSERT INTO public.screener_fotos (fecha, cierre, campos, datos) VALUES ('2030-01-07', '2030-01-04', '{per}', '{"AAA":[1]}');`)
   console.log(`screenerSeguridad: ${fallos ? fallos + ' fallos' : 'todo bien'}`); process.exit(fallos ? 1 : 0)
 })()

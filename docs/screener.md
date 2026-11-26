@@ -353,6 +353,14 @@ Pedido por Sergi el 11/11.
 - COMPROBADO CON LOS DATOS REALES (26/11): la foto del lunes 23/11/2026 (cierre del 20/11), frente a la pantalla con el mismo precio: 581 empresas con los fundamentales idénticos, 15 distintas por un documento de la SEC posterior al 20/11 y 0 sin motivo (node scripts/fotosScreener.js --compara-hoy --ensayo).
 - Comprobación: scripts/comprobaciones/en-fecha.js (en comunes.sh, cifras a mano: PER 50 → 25 el día en que se conoce el ejercicio nuevo, split 2:1 con PER igual, mediana del sector 7,5, PEG esperado «no se aplica»).
 
+## 29. Las fotos semanales del screener (paso 4 de «la lista del screener de cada día»)
+- BASE: tabla nueva public.screener_fotos (sql/screener_fotos.sql, con REVERSIÓN; aplicada en LOCAL el 26/11/2026 con el OK de Sergi del 25/11). Una fila por LUNES: `cierre` (el último día con mercado antes del lunes, normalmente el viernes), `campos` (CAMPOS_FOTO) y `datos` = { símbolo: [valor de cada filtro] } (§28). Solo lectura con sesión; la escribe el script (postgres). Seguridad: screenerSeguridad.js (7 nuevas, §29).
+- SCRIPT: `node scripts/fotosScreener.js` (las que faltan, desde el 03/01/2011; --todas tras cambiar una fórmula; --desde/--hasta; --ensayo; --compara-hoy). Una empresa cada vez (sus cuentas, splits y velas de la caché); después, la mediana del P/S del sector y la fuerza del sector de cada día. HACE FALTA la caché de precios al día antes (node scripts/llenaCachePrecios.js --screener): si no, la empresa sale sin precio esa semana.
+- HECHO el 26/11/2026: caché puesta al día (610 símbolos, hasta el 25/11) y 830 fotos (del 03/01/2011 al 23/11/2026) en 155 s; 67 MB de texto, 50 MB en la base. Empresas por foto: 467 en 2011, 515 en 2016, 560 en 2021, 599 hoy (las demás aún no cotizaban o no tenían cuentas).
+- CON LAS VISTAS DE SERGI: «Rentabilidad y poca deuda» = 30 en la foto del 23/11 y 30 en la pantalla de hoy; 22 en 2016, 13 en 2021. En 5 años pasan entre 24 y 34 cada semana, 85 distintas en total; en 10 años, 107. Las vistas con el PEG esperado («Crecer a buen precio», «Alerta de precio caro») dejan pasar muchas más en el pasado, porque ese filtro no se aplica allí (se avisa).
+- SESGO (dicho a Sergi): el universo son las 599 empresas de HOY (las que desaparecieron no están), con su sector y su pertenencia a índices de hoy.
+- CADA SEMANA (pendiente de automatizar con las Alertas): tras la carga semanal, `node scripts/llenaCachePrecios.js --screener` y `node scripts/fotosScreener.js` (solo hace la del lunes nuevo).
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:
