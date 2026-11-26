@@ -23,7 +23,7 @@
 // QUÉ HACE:
 //   1. Universo (lib/screener/universo.js): S&P 500 de Wikipedia (si la tabla no trae al menos 480 filas, PARA), miembros
 //      actuales del Nasdaq-100 (universo_miembros) y los valores de las listas de la Watchlist que la SEC conoce.
-//   2. Por empresa: companyfacts → filas (lib/screener/edgar.js); submissions → código SIC (sector si no es del S&P 500,
+//   2. Por empresa: companyfacts → filas (lib/screener/edgar.js, con las acciones en miles o millones ya corregidas: lib/screener/escala.js); submissions → código SIC (sector si no es del S&P 500,
 //      lib/screener/sectores.js); Yahoo → último cierre (chart v8) y PEG esperado (trailingPegRatio, «solo hoy»).
 //      Un fallo en una empresa no para la carga: se anota en su columna `aviso` y se sigue.
 //   3. Escribe por tandas de 20 empresas, cada tanda en UNA transacción: upsert de las empresas y, de sus CIK, se borran
@@ -237,7 +237,8 @@ if (require.main === module) (async () => {
   if (SOLO) console.log(`--solo: ${empresas.length} de ${SOLO.length} pedidas`)
 
   // 2 y 3. Descarga y escritura por tandas.
-  let n = 0, conAviso = 0, filasTot = 0
+  let n = 0, conAviso = 0, filasTot = 0, escaladas = 0
+  const conEscala = []
   const cachePorCik = new Map()
   for (let i = 0; i < empresas.length; i += TANDA) {
     const lote = empresas.slice(i, i + TANDA)
@@ -266,6 +267,8 @@ if (require.main === module) (async () => {
       e.aviso = avisos.length ? avisos.join(' · ') : null
       if (e.aviso) conAviso++
       filasTot += e.filas ? e.filas.length : 0
+      const esc = e.filas ? e.filas.filter(f => f.escala).length : 0
+      if (esc) { escaladas += esc; conEscala.push(e.simbolo) }
       n++
     }
     const r = await consulta(sqlTanda(lote))
@@ -288,7 +291,7 @@ if (require.main === module) (async () => {
     console.log(`Splits: ${r.total - r.fallan.length} de ${r.total} revisadas (${r.conSplits} con algún split).${r.fallan.length ? ` Fallan: ${r.fallan.join(', ')}.` : ''}`)
   }
   const tot = await consulta(`SELECT (SELECT count(*) FROM public.screener_empresas) AS empresas, (SELECT count(*) FROM public.screener_cuentas) AS cuentas, pg_size_pretty(pg_total_relation_size('public.screener_cuentas')) AS tamano;`)
-  console.log(`Hecho en ${Math.round((Date.now() - t0) / 1000)} s: ${n} empresas (${conAviso} con aviso), ${filasTot} filas de cuentas descargadas${ENSAYO ? ' · ENSAYO: no se ha escrito nada' : ''}. En la base: ${JSON.stringify(tot[0])}`)
+  console.log(`Hecho en ${Math.round((Date.now() - t0) / 1000)} s: ${n} empresas (${conAviso} con aviso), ${filasTot} filas de cuentas descargadas (${escaladas} de acciones pasadas de miles o millones a acciones sueltas${conEscala.length ? ': ' + conEscala.join(', ') : ''})${ENSAYO ? ' · ENSAYO: no se ha escrito nada' : ''}. En la base: ${JSON.stringify(tot[0])}`)
 })().catch(e => { console.error('La carga del screener ha fallado:', e.message); process.exit(1) })
 
 module.exports = { sqlTanda }
