@@ -346,6 +346,13 @@ Pedido por Sergi el 11/11.
 - CARGA del 26/11/2026 (entera): 598 empresas, 497.838 filas (132.081 anuales y 365.757 TTM), 101 MB (antes 139.026 y 25 MB). En la misma carga, 320 filas de acciones pasadas de miles o millones a acciones sueltas (§26) en 82 empresas: la SEC también tiene esos saltos en los trimestres.
 - Comprobación: scripts/comprobaciones/ttm.js (en comunes.sh, cifras a mano).
 
+## 28. Las cifras del screener en una fecha del pasado (paso 3 de «la lista del screener de cada día»)
+- QUÉ (lib/screener/enFecha.js, lógica pura): las cifras de cada empresa como las enseñaría la pantalla un día del pasado, con lo que se sabía ese día. Cuentas: solo las filas con `conocido_desde` ≤ ese día (cuentasEnFecha). Precio: el cierre de ese día de la caché (ajustado por splits; las acciones se pasan a la escala de hoy con todos los splits posteriores a su documento). PEG esperado: no existe en el pasado. Técnico: las velas de los 5 años anteriores hasta ese día (velasHasta, tecnicoDe). P/S del sector: la mediana entre las empresas de ese día. Si la última vela tiene más de 7 días, sin precio (dejó de cotizar).
+- FUGA PEQUEÑA (aceptada, decidido con Sergi el 25/11): si un documento posterior corrigió una cifra, se usa la corregida.
+- FOTO (para guardar, §29): valoresDe(e) = el valor de cada filtro en el orden de CAMPOS_FOTO (todos menos el PEG esperado y «Da señal de compra con…»), redondeado a 6 cifras significativas; «sd» = sin dato pero pasa (sin deuda a corto, no paga intereses). evaluaFoto(foto, fichas, vista) = evaluaVista de lib/screener/filtros.js con esos valores (universo y sectores de cada empresa de HOY) y dice qué filtros encendidos no se aplican (el PEG esperado).
+- COMPROBADO CON LOS DATOS REALES (26/11): la foto del lunes 23/11/2026 (cierre del 20/11), frente a la pantalla con el mismo precio: 581 empresas con los fundamentales idénticos, 15 distintas por un documento de la SEC posterior al 20/11 y 0 sin motivo (node scripts/fotosScreener.js --compara-hoy --ensayo).
+- Comprobación: scripts/comprobaciones/en-fecha.js (en comunes.sh, cifras a mano: PER 50 → 25 el día en que se conoce el ejercicio nuevo, split 2:1 con PER igual, mediana del sector 7,5, PEG esperado «no se aplica»).
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:

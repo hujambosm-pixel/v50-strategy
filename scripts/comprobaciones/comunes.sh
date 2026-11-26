@@ -72,6 +72,7 @@ paso screener node "$DIR/screener.js" < /dev/null
 paso splits node "$DIR/splits.js" < /dev/null
 paso escala node "$DIR/escala.js" < /dev/null
 paso ttm node "$DIR/ttm.js" < /dev/null
+paso en-fecha node "$DIR/en-fecha.js" < /dev/null
 tail -1 "$SAL/screener.txt"
 paso screener-senales node "$DIR/screener-senales.js" < /dev/null
 tail -1 "$SAL/screener-senales.txt"
