@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Ayuda from './BuilderAyuda'
 import CandleChart from './CandleChart'
-import { BarraReplay, VentanaSenal, VentanaCambioVelas } from './Replay'
+import { BarraReplay, VentanaSenal, VentanaCambioVelas, AYUDA_VISTA_REPLAY } from './Replay'
 import { PanelOperar, PanelGrafico, ResultadosReplay, recuerdaAjustesReplay, textoAjuste } from './PanelReplay'
 import { calcula, cifras, irA, VERSION } from '../lib/replay/motor'
 import { nuevaAccion, configAuto, marcasDe, tradesDe } from '../lib/replay/orden'
@@ -21,6 +21,7 @@ import { fraseFilasRegla } from '../lib/builder/reglasPesos'
 import { recortaVelas, vecina } from '../lib/replay/grafico'
 import { paraGuardar, hayQueGuardar, nombreDe, crearSimulacion, guardarSimulacion } from '../lib/replay/guardados'
 import { atr as atrDe } from '../lib/condiciones/indicadores'
+import { filtraSenalesVista, visiblesVista, textoVista } from '../lib/replay/vistaReplay'
 
 const BZ = { fondo: '#22262f', panel: '#2c303b', caja: '#353945', borde: '#4c5263', texto: '#f3f3f5', gris: '#a9adb8', verde: '#3fb950', rojo: '#f85149', ambar: '#d29922', azul: '#58a6ff', morado: '#bc8cff' }
 const LETRA = 'system-ui, "Segoe UI", sans-serif'
@@ -128,7 +129,7 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
         const n = inicial.nuevo, ok = n.valores.filter(s => (out[s] || []).length)
         const desde = primerDia(out, ok, n.fecha)
         if (!desde) { setAviso('No hay velas desde ese día.'); return }
-        setEstado({ version: VERSION, valores: ok, desde, hoy: desde, capitalInicial: n.capitalInicial, comision: n.comision, ejecucion: n.ejecucion, acciones: [], retrocesos: 0, terminada: false, intervalo })
+        setEstado({ version: VERSION, valores: ok, desde, hoy: desde, capitalInicial: n.capitalInicial, comision: n.comision, ejecucion: n.ejecucion, acciones: [], retrocesos: 0, terminada: false, intervalo, ...(n.fuente ? { fuente: n.fuente } : {}) })
         setGuardado(g => ({ ...g, nombre: nombreDe({ valores: ok, desde }) }))
       }
     })()
@@ -148,13 +149,14 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
   const referencias = useMemo(() => (est ? Object.fromEntries(tickersDe(est.definition).map(t => [t, velasDe(t)])) : {}), [est, velasDe])   // eslint-disable-line
   const motores = { tickersDe, deCondicion: senalesCondicion, deEstrategia: entradasYSalidasEstrategia, dePasos: senalesConPasos }
   // Para el motor (y «Ejecutar solo»), la condición con pasos va sin «tu última compra», como en el de un valor.
-  const senalesMotor = useMemo(() => (!senalDef || !motorVelas || faltanRefs.length ? null : senalesVarios(senalDef, estado.valores, velasDe, motores)), [senalDef, motorVelas, velasDe, faltanRefs.length])   // eslint-disable-line
+  // §270: con una vista del screener, solo las señales de un valor en los días en que está en la lista de esa semana.
+  const senalesMotor = useMemo(() => (!senalDef || !motorVelas || faltanRefs.length ? null : filtraSenalesVista(senalesVarios(senalDef, estado.valores, velasDe, motores), estado.fuente)), [senalDef, motorVelas, velasDe, faltanRefs.length])   // eslint-disable-line
   const r = useMemo(() => estado && motorVelas ? calcula(estado, motorVelas, senalesMotor ? { senales: senalesMotor } : {}) : null, [estado, motorVelas, senalesMotor])
   // Las que se ven (▲, «Señal ⏭»): con pasos, con tus compras de cada valor (por si la condición mira «tu última compra»).
   const firmaCompras = senalDef?.tipo === 'pasos' && r ? JSON.stringify((r.marcas || []).filter(m => m.tipo === 'compra').map(m => [m.simbolo, m.fecha, m.precio])) : ''
   const senales = useMemo(() => { if (!senalesMotor || senalDef?.tipo !== 'pasos' || firmaCompras === '[]') return senalesMotor
     const compras = {}; for (const [s, fecha, precio] of JSON.parse(firmaCompras)) (compras[s] ||= []).push({ fecha, precio })
-    return senalesVarios(senalDef, estado.valores, velasDe, { ...motores, compras }) }, [senalesMotor, firmaCompras])   // eslint-disable-line
+    return filtraSenalesVista(senalesVarios(senalDef, estado.valores, velasDe, { ...motores, compras }), estado.fuente) }, [senalesMotor, firmaCompras])   // eslint-disable-line
   const cif = useMemo(() => r ? cifras(estado, motorVelas, r) : null, [r])   // eslint-disable-line
   const ahoraDe = (s) => { const v = (motorVelas?.[s] || []).filter(x => x.date <= estado.hoy); return v.length ? v[v.length - 1].close : null }
   const atrHoyDe = (s) => { const v = (motorVelas?.[s] || []).filter(x => x.date <= estado.hoy); if (v.length < 15) return null; const a = atrDe(v, 14); return a[a.length - 1] ?? null }
@@ -233,7 +235,8 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
       <div>{aviso || 'Cargando las velas de los valores…'}</div><button onClick={onSalir} style={btn()}>Salir</button>
     </div>)
   const hoySen = conSenalHoy(senales, estado.hoy)
-  const lista = ordenRejilla(estado.valores, r, hoySen, orden)
+  const esVista = estado.fuente?.tipo === 'vista'
+  const lista = ordenRejilla(visiblesVista(estado.fuente, estado.hoy, r, estado.valores), r, hoySen, orden)
   const R = REJILLA[tam]
   const indiceBH = (velas[INDICE] || []).length ? (() => { const vs = velas[INDICE].filter(v => v.date >= estado.desde && v.date <= estado.hoy); if (!vs.length) return null; const q = Math.floor((estado.capitalInicial - (estado.comision || 0)) / vs[0].close); return q > 0 ? estado.capitalInicial - q * vs[0].close - 2 * (estado.comision || 0) + q * vs[vs.length - 1].close : null })() : null
   // El panel de operar de un valor (§258: en la rejilla, en la cabecera; ampliado, encima del gráfico como en el de un valor).
@@ -260,7 +263,8 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
     <div data-replay-varios="" style={{ position: 'fixed', inset: 0, zIndex: 9000, background: BZ.fondo, color: BZ.texto, font: `13px/1.45 ${LETRA}`, display: 'flex' }}>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: `1px solid ${BZ.borde}`, flexWrap: 'wrap' }}>
-          <b style={{ color: '#ffd166' }}>⏪ REPLAY · {estado.valores.length} valores</b><Ayuda texto={AYUDA_VARIOS} etiqueta="Replay con varios valores" />
+          <b style={{ color: '#ffd166' }}>⏪ REPLAY · {esVista ? `${lista.length} de ${estado.valores.length} valores` : `${estado.valores.length} valores`}</b><Ayuda texto={AYUDA_VARIOS} etiqueta="Replay con varios valores" />
+          {esVista && <span data-vista-varios-texto="" style={{ color: BZ.azul, fontSize: 12 }}>{textoVista(estado.fuente, estado.hoy)}{(estado.fuente.noSeAplican || []).length ? <span style={{ color: BZ.ambar }}> · ⚠ PEG esperado sin aplicar</span> : null} <Ayuda texto={AYUDA_VISTA_REPLAY} etiqueta="Vista del screener" /></span>}
           {onReiniciar && <span data-velas-varios="" title="Velas del Replay. Cambiarlas empieza un Replay nuevo (el de ahora se queda guardado)." style={{ display: 'inline-flex', gap: 2 }}>
             {[['diario', 'D'], ['semanal', 'S']].map(([k, t]) => <button key={k} data-velas={k} onClick={() => { if (k !== intervalo) setCambioVelas(k) }} style={{ ...btn(intervalo === k), padding: '1px 7px' }}>{t}</button>)}</span>}
           {intervalo === 'semanal' && <span style={{ color: BZ.gris, fontSize: 12 }}>velas semanales</span>}
@@ -289,7 +293,7 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
           auto={{ activo: autoActivo, puede: !!senalesMotor, esEstrategia: senalDef?.tipo === 'estrategia', onCambia: ponAuto, senal: textoSenal }} />
       </div>
       {cambioVelas && <VentanaCambioVelas a={cambioVelas} desde={estado.desde} hoy={estado.hoy} onCancelar={() => setCambioVelas(null)}
-        onElige={m => { setCambioVelas(null); onReiniciar({ valores: estado.valores, fecha: m === 'inicio' ? estado.desde : estado.hoy, capitalInicial: estado.capitalInicial, comision: estado.comision, ejecucion: estado.ejecucion, intervalo: cambioVelas }) }} />}
+        onElige={m => { setCambioVelas(null); onReiniciar({ valores: estado.valores, fecha: m === 'inicio' ? estado.desde : estado.hoy, capitalInicial: estado.capitalInicial, comision: estado.comision, ejecucion: estado.ejecucion, intervalo: cambioVelas, ...(estado.fuente ? { fuente: estado.fuente } : {}) }) }} />}
       {ventanaSenal && <VentanaSenal simbolo={primero} senal={cond ? deCadaValor(senal, primero) : null} velas={motorVelas?.[primero] || VACIO} cargaVelas={cargaDiarias} simbolosAzar={estado.valores} hoy={estado.hoy}
         nota={`Con varios valores, lo que pongas en «${primero}» se mira en CADA valor de la lista (${estado.valores.length}), cada uno con sus velas. Un índice u «Otro símbolo…» es el mismo para todos.`}
         onAceptar={x => { setSenal(aCadaValor(x, primero)); setVentanaSenal(false); setAviso('') }} onCancelar={() => setVentanaSenal(false)} />}

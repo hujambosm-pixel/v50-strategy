@@ -120,6 +120,7 @@ paso replay-marcar node "$DIR/replay-marcar.js" < /dev/null
 paso replay-senales node "$DIR/replay-senales.js" < /dev/null
 paso replay-guardar node "$DIR/replay-guardar.js" < /dev/null
 paso replay-varios node "$DIR/replay-varios.js" < /dev/null
+paso replay-vista node "$DIR/replay-vista.js" < /dev/null
 paso con-pasos node "$DIR/con-pasos.js" < /dev/null
 paso con-pasos-pantalla node "$DIR/con-pasos-pantalla.js" < /dev/null
 paso con-pasos-grafico node "$DIR/con-pasos-grafico.js" < /dev/null

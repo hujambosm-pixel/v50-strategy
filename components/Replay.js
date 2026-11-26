@@ -12,6 +12,8 @@ import EditorConPasos from './EditorConPasos'
 import MiniGraficoPasos from './MiniGraficoPasos'
 import { validaConPasos } from '../lib/condiciones/conPasos'
 import { conPasosNueva } from '../lib/replay/conPasosPantalla'
+import { unionSemanas, MAX_VALORES_VISTA } from '../lib/replay/vistaReplay'
+import { FILTRO } from '../lib/screener/filtros'
 
 const fmt = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}` : '—')
 const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
@@ -77,22 +79,39 @@ function SeguirGuardado({ simbolo, guardados, onAbrir }) {
 // Replay de siempre en el gráfico grande; una lista de la Watchlist o varios a mano → la rejilla (onEmpezarVarios). Las velas no se
 // preguntan: las del gráfico que estás viendo (intervalo), como el valor.
 export const MAX_VARIOS = 30
+// §270: con una VISTA DEL SCREENER como valores, la lista de cada lunes (lo que pasaba la vista con lo que se sabía el viernes antes).
+export const AYUDA_VISTA_REPLAY = 'VISTA DEL SCREENER: cada lunes del Replay, los valores son los que pasaban tu vista ESE lunes, con lo que se sabía al cierre del viernes anterior ' +
+  '(sus cuentas publicadas hasta entonces y su precio de ese día). Las fotos de cada semana están guardadas desde enero de 2011.\n\n' +
+  'En la rejilla ves los de la lista de esa semana y, además, los que tengan una posición o una orden abierta (aunque hayan salido). «Ejecutar solo» y «Señal ⏭» solo cuentan las señales de un valor los días en que está en la lista.\n\n' +
+  'OJO: 1) el PEG esperado de Yahoo no existe en el pasado: ese filtro no se aplica (por eso pueden pasar más). 2) Las empresas son las ~600 del screener de HOY, con su sector y sus índices de hoy: las que desaparecieron no están (sesgo de supervivencia). 3) Si la SEC corrigió una cifra más tarde, se usa la corregida.\n\n' +
+  'Ejemplo: si la vista deja AAPL y MSFT el lunes 08/01/2024 y MSFT y NVDA el 15/01, el miércoles 10/01 ves AAPL y MSFT; el 16/01, MSFT y NVDA (entra NVDA, sale AAPL; si tenías AAPL comprada, sigue a la vista hasta que la vendas).'
 const haceAnosHoy = (n) => { const d = new Date(); d.setFullYear(d.getFullYear() - n); return d.toISOString().slice(0, 10) }
 export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAzar = null, cargando = false, guardados = undefined, onAbrir = null,
-  listas = [], intervalo = 'diario', onEmpezarVarios = null, fuenteInicial = 'uno' }) {
+  listas = [], intervalo = 'diario', onEmpezarVarios = null, fuenteInicial = 'uno', vistas = [], pideSemanas = null }) {
   const [fuente, setFuente] = useState(() => { if (fuenteInicial !== 'lista') return 'uno'; const i = listas.findIndex(l => l.simbolos.length >= 2 && l.simbolos.length <= MAX_VARIOS); return i >= 0 ? `l:${i}` : 'mano' })
   const [mano, setMano] = useState('')
   const varios = fuente !== 'uno' && !!onEmpezarVarios
-  const valoresVarios = fuente === 'mano' ? [...new Set(mano.toUpperCase().split(/[\s,;]+/).map(x => x.trim()).filter(x => /^[A-Z0-9.^=-]{1,20}$/.test(x)))] : (listas[Number(String(fuente).slice(2))]?.simbolos || [])
+  const esVista = String(fuente).startsWith('v:'), vistaElegida = esVista ? vistas.find(v => String(v.id) === String(fuente).slice(2)) : null
+  const [semVista, setSemVista] = useState(null)   // { cargando } | { semanas, noSeAplican, error }
+  let valoresVarios = esVista ? [] : fuente === 'mano' ? [...new Set(mano.toUpperCase().split(/[\s,;]+/).map(x => x.trim()).filter(x => /^[A-Z0-9.^=-]{1,20}$/.test(x)))] : (listas[Number(String(fuente).slice(2))]?.simbolos || [])
   const hoyISO = new Date().toISOString().slice(0, 10)
   const [fechaVarios, setFechaVarios] = useState(haceAnosHoy(1))
-  const errorVarios = !varios ? '' : valoresVarios.length < 2 ? 'Elige al menos 2 valores.' : valoresVarios.length > MAX_VARIOS ? `Como mucho ${MAX_VARIOS} valores (tienes ${valoresVarios.length}).` : !fechaVarios || fechaVarios >= hoyISO ? 'Elige un día del pasado.' : ''
+  useEffect(() => { if (!esVista || !vistaElegida || !pideSemanas || !fechaVarios || fechaVarios >= hoyISO) { setSemVista(null); return }
+    let vivo = true; setSemVista({ cargando: true })
+    const t = setTimeout(() => { pideSemanas(vistaElegida.vista, fechaVarios).then(x => { if (vivo) setSemVista(x || { error: 'Sin respuesta.' }) }).catch(e => { if (vivo) setSemVista({ error: String(e?.message || e) }) }) }, 300)
+    return () => { vivo = false; clearTimeout(t) } }, [fuente, fechaVarios, vistaElegida, pideSemanas])   // eslint-disable-line
+  const semanasDesde = esVista && semVista?.semanas ? semVista.semanas.filter((w, i, l) => w[0] >= fechaVarios || (l[i + 1] && l[i + 1][0] > fechaVarios)) : []
+  if (esVista) valoresVarios = unionSemanas(semanasDesde)
+  const errorVarios = !varios ? '' : esVista ? (!fechaVarios || fechaVarios >= hoyISO ? 'Elige un día del pasado.' : !semVista || semVista.cargando ? 'Calculando la lista de cada semana…' : semVista.error ? semVista.error
+      : !valoresVarios.length ? 'Ninguna empresa pasa la vista en ese tiempo.' : valoresVarios.length > MAX_VALORES_VISTA ? `La vista deja entrar ${valoresVarios.length} valores distintos en ese tiempo (como mucho ${MAX_VALORES_VISTA}): empieza más tarde o endurece la vista.` : '')
+    : valoresVarios.length < 2 ? 'Elige al menos 2 valores.' : valoresVarios.length > MAX_VARIOS ? `Como mucho ${MAX_VARIOS} valores (tienes ${valoresVarios.length}).` : !fechaVarios || fechaVarios >= hoyISO ? 'Elige un día del pasado.' : ''
   const [fecha, setFecha] = useState(() => inicioHace(velas, 1))
   useEffect(() => { if (!fecha && Array.isArray(velas) && velas.length > 2) setFecha(inicioHace(velas, 1)) }, [velas])   // §233: las velas llegan después (valor al azar)
   // §264: el dinero inicial, la comisión y «a mercado» ya no se eligen aquí: los últimos que usaste (se cambian en el panel del Replay).
   const ajustesBien = true
   const empieza = () => { if (!puede) return; const a = leeAjustesReplay()
-    if (varios) onEmpezarVarios({ valores: valoresVarios, fecha: fechaVarios, ...a, intervalo: intervalo === 'semanal' ? 'semanal' : 'diario' }); else onEmpezar(elegida, a) }
+    const fuenteVista = esVista ? { tipo: 'vista', id: vistaElegida.id, nombre: vistaElegida.nombre, vista: vistaElegida.vista, semanas: semanasDesde, noSeAplican: semVista.noSeAplican || [] } : null
+    if (varios) onEmpezarVarios({ valores: valoresVarios, fecha: fechaVarios, ...a, intervalo: intervalo === 'semanal' ? 'semanal' : 'diario', ...(fuenteVista ? { fuente: fuenteVista } : {}) }); else onEmpezar(elegida, a) }
   const vs = Array.isArray(velas) ? velas : []
   const min = vs.length > 2 ? vs[1].date : '', max = vs.length > 2 ? vs[vs.length - 2].date : ''
   const elegida = fecha ? velaDeInicio(vs, fecha) : null
@@ -121,11 +140,15 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
               <option value="uno">Solo {simbolo} (el del gráfico)</option>
               {onEmpezarVarios && listas.map((l, i) => <option key={i} value={`l:${i}`}>Lista «{l.nombre}» ({l.simbolos.length})</option>)}
               {onEmpezarVarios && <option value="mano">Varios a mano…</option>}
+              {onEmpezarVarios && pideSemanas && vistas.map(v => <option key={'v' + v.id} value={`v:${v.id}`}>Vista del screener «{v.nombre}» (la de cada semana)</option>)}
             </select>
             {onValorAzar && !varios && <button onClick={onValorAzar} data-valor-azar="" title="Cambiar a un valor al azar de tu Watchlist" style={boton()}>🎲</button>}
           </span>
           {varios && fuente === 'mano' && <><span /><input data-mano-replay="" autoFocus placeholder="AAPL, MSFT, NVDA…" value={mano} onChange={e => setMano(e.target.value)} style={{ ...campo, width: '100%' }} /></>}
-          {varios && <><span /><span style={{ color: '#7a9bc0' }} data-valores-replay="">{valoresVarios.length ? valoresVarios.slice(0, 14).join(', ') + (valoresVarios.length > 14 ? ` y ${valoresVarios.length - 14} más` : '') + '. Todos en la misma fecha y con una sola cuenta.' : 'Ninguno todavía.'}</span></>}
+          {varios && esVista && <><span /><span style={{ color: '#7a9bc0' }} data-vista-replay="">{semVista?.semanas && valoresVarios.length ? <>Cada semana, entre <b style={{ color: '#e2eaf5' }}>{Math.min(...semanasDesde.map(w => w[1].length))}</b> y <b style={{ color: '#e2eaf5' }}>{Math.max(...semanasDesde.map(w => w[1].length))}</b> valores; <b style={{ color: '#e2eaf5' }}>{valoresVarios.length}</b> distintos en {semanasDesde.length} semanas.</> : semVista?.cargando ? 'Calculando…' : ''}
+            {(semVista?.noSeAplican || []).length > 0 && <span style={{ color: '#d29922' }} data-no-se-aplica=""> ⚠ En el pasado no se aplica: {semVista.noSeAplican.map(id => FILTRO[id]?.nombre || id).join(', ')}.</span>}
+            {' '}<Ayuda texto={AYUDA_VISTA_REPLAY} etiqueta="Vista del screener en el Replay" zIndice={10100} /></span></>}
+          {varios && !esVista && <><span /><span style={{ color: '#7a9bc0' }} data-valores-replay="">{valoresVarios.length ? valoresVarios.slice(0, 14).join(', ') + (valoresVarios.length > 14 ? ` y ${valoresVarios.length - 14} más` : '') + '. Todos en la misma fecha y con una sola cuenta.' : 'Ninguno todavía.'}</span></>}
           <span>Velas</span><span data-velas-replay="" style={{ color: '#7a9bc0' }}><b style={{ color: '#e2eaf5' }}>{intervalo === 'semanal' ? 'Semanales' : 'Diarias'}</b> (las del gráfico; para otras, cámbialas en el gráfico antes de empezar)</span>
         </div>
         {varios ? <>
