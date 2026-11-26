@@ -361,6 +361,14 @@ Pedido por Sergi el 11/11.
 - SESGO (dicho a Sergi): el universo son las 599 empresas de HOY (las que desaparecieron no están), con su sector y su pertenencia a índices de hoy.
 - CADA SEMANA (pendiente de automatizar con las Alertas): tras la carga semanal, `node scripts/llenaCachePrecios.js --screener` y `node scripts/fotosScreener.js` (solo hace la del lunes nuevo).
 
+## 30. El PEG esperado en el pasado (historial de Yahoo)
+- BASE: tabla nueva public.screener_peg (sql/screener_peg.sql, con REVERSIÓN; aplicada en LOCAL el 27/11/2026 con el OK de Sergi del 26/11): una fila por símbolo y fecha con el PEG esperado (trailingPegRatio) de Yahoo. Solo lectura con sesión; la escribe el script (postgres). Seguridad: screenerSeguridad.js (7 nuevas, §30).
+- CARGA: la carga semanal pide ahora a Yahoo TODA la serie (desde 2010) y la guarda; `node scripts/cargaScreener.js --peg` hace solo eso (~3 min). La cifra de la pantalla de hoy sigue igual: el último PEG si es de los últimos 40 días. RESCATE HECHO el 27/11/2026: 599 empresas, 498 con algún PEG, 3.965 puntos (376 kB). Yahoo guarda muy poco: un punto en 2015, unas 100 empresas sueltas en 2021–2023 y, desde el 10/06/2024, ~400–450 (para AAPL, 11 puntos, con un hueco del 19/09/2024 al 02/10/2025).
+- EN UNA FECHA (lib/screener/enFecha.js): pegEnFecha = el último con fecha ≤ ese cierre y como mucho 400 días antes (PEG_DIAS_MAX; decisión de Sergi del 27/11: con 120 días, el filtro se encendería y apagaría por los huecos). Una empresa sin ninguno no pasa. En las fotos en que MENOS DE LA MITAD de las empresas tienen PEG (MIN_CON_DATO, quitaCamposVacios) no se guarda la columna y el filtro «no se aplica» (si no, entre 2021 y 2023 dejaría fuera a las ~500 sin ninguno). Resultado: el PEG esperado se aplica desde la foto del lunes 17/06/2024 (128 semanas seguidas).
+- REPLAY: pages/api/replay-vista.js da también seAplicaDesde (resumenNoSeAplican); la ventana dice «⚠ PEG esperado: solo desde el 17/06/2024 (antes no se aplica)» y la cabecera del Replay lo dice solo mientras el día del Replay es anterior (avisoNoSeAplica de lib/replay/vistaReplay.js).
+- CON LAS VISTAS DE SERGI: «Crecer a buen precio» = 57 el 03/01/2022 y 70 el 10/06/2024 (sin PEG) → 6 el 17/06/2024 y el 10/03/2025, 33 el 23/11/2026; «Alerta de precio caro» = 178 → 36, 25 hoy. Fotos rehechas (--todas, 201 s; 51 MB tras VACUUM FULL); --compara-hoy: 584 iguales, 15 por documentos posteriores, 0 sin motivo.
+- Ninguna cifra de la pantalla del screener de hoy cambia.
+
 ## 10. Comprobación
 
 `scripts/comprobaciones/screener.js` (en `comunes.sh`) usa empresas inventadas y cuentas hechas a mano. Cubre:

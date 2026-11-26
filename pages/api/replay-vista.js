@@ -3,7 +3,9 @@
 // POST { vista: { filtros, sectoresFuera, universo }, desde: 'aaaa-mm-dd' }, con sesión (x-supa-jwt). Lee con el JWT del usuario las
 // fotos semanales (public.screener_fotos, sql/screener_fotos.sql) desde el lunes que vale `desde` hasta la última, y las fichas de las
 // empresas (sector, en_sp500, en_ndx, en_listas: las de HOY), y evalúa la vista en cada foto (evaluaFoto de lib/screener/enFecha.js).
-// Responde { semanas: [[lunes, [símbolos]], …], noSeAplican: [ids], primera, ultima } o { error }.
+// Responde { semanas: [[lunes, [símbolos]], …], noSeAplican: [ids], seAplicaDesde: { id: lunes }, primera, ultima } o { error }.
+//   noSeAplican = los filtros encendidos que faltan en ALGUNA foto del tramo (el PEG esperado antes de junio de 2024);
+//   seAplicaDesde[id] = el lunes desde el que sí se aplica hasta el final (sin él: no se aplica en ninguna semana del final).
 import { exigeAuth } from '../../lib/verificaJwt'
 import { evaluaFoto } from '../../lib/screener/enFecha'
 import { normalizaVista } from '../../lib/screener/vista'
@@ -27,6 +29,18 @@ export function lunesDe(f) {
   return new Date(d.getTime() - dia * 86400000).toISOString().slice(0, 10)
 }
 
+// Junta lo que dice evaluaFoto de cada semana: ids que faltan alguna vez y, de cada uno, desde cuándo se aplica sin cortes.
+export function resumenNoSeAplican(porSemana) {
+  const ids = [...new Set(porSemana.flatMap(s => s.noSeAplican))]
+  const seAplicaDesde = {}
+  for (const id of ids) {
+    let desde = null
+    for (let i = porSemana.length - 1; i >= 0 && !porSemana[i].noSeAplican.includes(id); i--) desde = porSemana[i].fecha
+    if (desde) seAplicaDesde[id] = desde
+  }
+  return { noSeAplican: ids, seAplicaDesde }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const auth = await exigeAuth('replay-vista', req, null)
@@ -48,13 +62,13 @@ export default async function handler(req, res) {
     // La vista completada como la pantalla del screener (las vistas viejas guardan menos campos).
     const vista = normalizaVista(req.body.vista)
     const semanas = []
-    let noSeAplican = []
+    const porSemana = []
     for (let off = 0; ; off += PAGINA) {
       const filas = await lee(`screener_fotos?select=fecha,campos,datos&fecha=gte.${desde}&order=fecha.asc&limit=${PAGINA}&offset=${off}`)
-      for (const f of filas) { const r = evaluaFoto(f, fichas, vista); semanas.push([f.fecha, r.pasan]); noSeAplican = r.noSeAplican }
+      for (const f of filas) { const r = evaluaFoto(f, fichas, vista); semanas.push([f.fecha, r.pasan]); porSemana.push({ fecha: f.fecha, noSeAplican: r.noSeAplican }) }
       if (filas.length < PAGINA) break
     }
-    return res.status(200).json({ semanas, noSeAplican, primera, ultima })
+    return res.status(200).json({ semanas, ...resumenNoSeAplican(porSemana), primera, ultima })
   } catch (e) {
     return res.status(500).json({ error: `No se pudieron leer las fotos del screener (${e.message}).` })
   }

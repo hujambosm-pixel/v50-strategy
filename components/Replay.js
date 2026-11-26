@@ -12,7 +12,7 @@ import EditorConPasos from './EditorConPasos'
 import MiniGraficoPasos from './MiniGraficoPasos'
 import { validaConPasos } from '../lib/condiciones/conPasos'
 import { conPasosNueva } from '../lib/replay/conPasosPantalla'
-import { unionSemanas, MAX_VALORES_VISTA } from '../lib/replay/vistaReplay'
+import { unionSemanas, MAX_VALORES_VISTA, avisoNoSeAplica } from '../lib/replay/vistaReplay'
 import { FILTRO } from '../lib/screener/filtros'
 
 const fmt = (f) => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}` : '—')
@@ -83,7 +83,7 @@ export const MAX_VARIOS = 30
 export const AYUDA_VISTA_REPLAY = 'VISTA DEL SCREENER: cada lunes del Replay, los valores son los que pasaban tu vista ESE lunes, con lo que se sabía al cierre del viernes anterior ' +
   '(sus cuentas publicadas hasta entonces y su precio de ese día). Las fotos de cada semana están guardadas desde enero de 2011.\n\n' +
   'En la rejilla ves los de la lista de esa semana y, además, los que tengan una posición o una orden abierta (aunque hayan salido). «Ejecutar solo» y «Señal ⏭» solo cuentan las señales de un valor los días en que está en la lista.\n\n' +
-  'OJO: 1) el PEG esperado de Yahoo no existe en el pasado: ese filtro no se aplica (por eso pueden pasar más). 2) Las empresas son las ~600 del screener de HOY, con su sector y sus índices de hoy: las que desaparecieron no están (sesgo de supervivencia). 3) Si la SEC corrigió una cifra más tarde, se usa la corregida.\n\n' +
+  'OJO: 1) del PEG esperado de Yahoo solo hay puntos sueltos desde el 10/06/2024: antes, ese filtro no se aplica (por eso pueden pasar más); después, cada semana se usa el último que había, aunque tenga hasta 400 días (ej.: el lunes 10/03/2025 se usa el del 19/09/2024, porque Yahoo no guarda ninguno entre esas fechas). Una empresa sin ninguno en esos 400 días no pasa. 2) Las empresas son las ~600 del screener de HOY, con su sector y sus índices de hoy: las que desaparecieron no están (sesgo de supervivencia). 3) Si la SEC corrigió una cifra más tarde, se usa la corregida.\n\n' +
   'Ejemplo: si la vista deja AAPL y MSFT el lunes 08/01/2024 y MSFT y NVDA el 15/01, el miércoles 10/01 ves AAPL y MSFT; el 16/01, MSFT y NVDA (entra NVDA, sale AAPL; si tenías AAPL comprada, sigue a la vista hasta que la vendas).'
 const haceAnosHoy = (n) => { const d = new Date(); d.setFullYear(d.getFullYear() - n); return d.toISOString().slice(0, 10) }
 export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAzar = null, cargando = false, guardados = undefined, onAbrir = null,
@@ -110,7 +110,7 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
   // §264: el dinero inicial, la comisión y «a mercado» ya no se eligen aquí: los últimos que usaste (se cambian en el panel del Replay).
   const ajustesBien = true
   const empieza = () => { if (!puede) return; const a = leeAjustesReplay()
-    const fuenteVista = esVista ? { tipo: 'vista', id: vistaElegida.id, nombre: vistaElegida.nombre, vista: vistaElegida.vista, semanas: semanasDesde, noSeAplican: semVista.noSeAplican || [] } : null
+    const fuenteVista = esVista ? { tipo: 'vista', id: vistaElegida.id, nombre: vistaElegida.nombre, vista: vistaElegida.vista, semanas: semanasDesde, noSeAplican: semVista.noSeAplican || [], seAplicaDesde: semVista.seAplicaDesde || {} } : null
     if (varios) onEmpezarVarios({ valores: valoresVarios, fecha: fechaVarios, ...a, intervalo: intervalo === 'semanal' ? 'semanal' : 'diario', ...(fuenteVista ? { fuente: fuenteVista } : {}) }); else onEmpezar(elegida, a) }
   const vs = Array.isArray(velas) ? velas : []
   const min = vs.length > 2 ? vs[1].date : '', max = vs.length > 2 ? vs[vs.length - 2].date : ''
@@ -146,7 +146,7 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
           </span>
           {varios && fuente === 'mano' && <><span /><input data-mano-replay="" autoFocus placeholder="AAPL, MSFT, NVDA…" value={mano} onChange={e => setMano(e.target.value)} style={{ ...campo, width: '100%' }} /></>}
           {varios && esVista && <><span /><span style={{ color: '#7a9bc0' }} data-vista-replay="">{semVista?.semanas && valoresVarios.length ? <>Cada semana, entre <b style={{ color: '#e2eaf5' }}>{Math.min(...semanasDesde.map(w => w[1].length))}</b> y <b style={{ color: '#e2eaf5' }}>{Math.max(...semanasDesde.map(w => w[1].length))}</b> valores; <b style={{ color: '#e2eaf5' }}>{valoresVarios.length}</b> distintos en {semanasDesde.length} semanas.</> : semVista?.cargando ? 'Calculando…' : ''}
-            {(semVista?.noSeAplican || []).length > 0 && <span style={{ color: '#d29922' }} data-no-se-aplica=""> ⚠ En el pasado no se aplica: {semVista.noSeAplican.map(id => FILTRO[id]?.nombre || id).join(', ')}.</span>}
+            {(semVista?.noSeAplican || []).length > 0 && <span style={{ color: '#d29922' }} data-no-se-aplica=""> ⚠ {avisoNoSeAplica(semVista.noSeAplican, semVista.seAplicaDesde, id => FILTRO[id]?.nombre || id)}.</span>}
             {' '}<Ayuda texto={AYUDA_VISTA_REPLAY} etiqueta="Vista del screener en el Replay" zIndice={10100} /></span></>}
           {varios && !esVista && <><span /><span style={{ color: '#7a9bc0' }} data-valores-replay="">{valoresVarios.length ? valoresVarios.slice(0, 14).join(', ') + (valoresVarios.length > 14 ? ` y ${valoresVarios.length - 14} más` : '') + '. Todos en la misma fecha y con una sola cuenta.' : 'Ninguno todavía.'}</span></>}
           <span>Velas</span><span data-velas-replay="" style={{ color: '#7a9bc0' }}><b style={{ color: '#e2eaf5' }}>{intervalo === 'semanal' ? 'Semanales' : 'Diarias'}</b> (las del gráfico; para otras, cámbialas en el gráfico antes de empezar)</span>

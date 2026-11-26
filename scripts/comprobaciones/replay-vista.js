@@ -55,7 +55,7 @@ const J = JSON.stringify
   DF.escribe(w.raiz.busca(n => n.hasAttribute('data-fecha-replay')), '2024-01-10'); await DF.espera(450)
   const tv = w.raiz.busca(n => n.hasAttribute('data-vista-replay'))?.textContent || ''
   ok(pedidas >= 1 && /entre 1 y 2 valores; 3 distintos en 3 semanas/.test(tv), `pide la lista de cada lunes y dice cuántos (${tv.slice(0, 90)})`)
-  ok(/no se aplica: PEG esperado/.test(tv), 'avisa de que el PEG esperado no se aplica en el pasado')
+  ok(/PEG esperado: no se aplica/.test(tv), `avisa de que el PEG esperado no se aplica (${tv.slice(-80)})`)
   DF.pulsa(w.raiz.busca(n => n.hasAttribute('data-empezar-replay'))); await DF.espera(10)
   ok(varios && J(varios.valores) === '["A","B","C"]' && varios.fuente?.tipo === 'vista' && varios.fuente.id === 7 && varios.fuente.semanas.length === 3 && varios.fecha === '2024-01-10',
     `«Empezar» abre la rejilla con todos los que alguna semana pasan la vista y guarda las semanas (${J(varios && { valores: varios.valores, fuente: varios.fuente && { id: varios.fuente.id, n: varios.fuente.semanas.length } })})`)
@@ -76,6 +76,17 @@ const J = JSON.stringify
   ok(J(celdas()) === '["A","B"]', `el 10/01 en la rejilla solo A y B (C aún no está en la vista) (${J(celdas())})`)
   const cab = m.raiz.busca(n => n.hasAttribute('data-vista-varios-texto'))?.textContent || ''
   ok(/Vista «Rentables» · semana del 08\/01\/2024: 2 valores/.test(cab) && /2 de 3 valores/.test(m.raiz.textContent), `la cabecera dice la vista, la semana y «2 de 3 valores» (${cab.slice(0, 80)})`)
+
+  // ── 6 · Filtros que no se aplican en todo el tramo (§30: el PEG esperado, solo desde junio de 2024) ──
+  const ps = [{ fecha: '2024-01-08', noSeAplican: ['pegEsp'] }, { fecha: '2024-01-15', noSeAplican: [] }, { fecha: '2024-01-22', noSeAplican: [] }]
+  const rs = API.resumenNoSeAplican(ps)
+  ok(J(rs) === '{"noSeAplican":["pegEsp"],"seAplicaDesde":{"pegEsp":"2024-01-15"}}', `sin PEG la 1.ª semana: no se aplica, y sí desde el 15/01 (${J(rs)})`)
+  ok(J(API.resumenNoSeAplican(ps.map(s => ({ ...s, noSeAplican: [] })))) === '{"noSeAplican":[],"seAplicaDesde":{}}', 'con PEG todas las semanas: nada que avisar')
+  ok(J(API.resumenNoSeAplican(ps.map(s => ({ ...s, noSeAplican: ['pegEsp'] })))) === '{"noSeAplican":["pegEsp"],"seAplicaDesde":{}}', 'sin PEG en ninguna: no se aplica, sin fecha')
+  const nom = (id) => id === 'pegEsp' ? 'PEG esperado' : id
+  ok(V.avisoNoSeAplica(['pegEsp'], { pegEsp: '2024-06-10' }, nom) === 'PEG esperado: solo desde el 10/06/2024 (antes no se aplica)', 'aviso al empezar: desde cuándo se aplica')
+  ok(V.avisoNoSeAplica(['pegEsp'], {}, nom) === 'PEG esperado: no se aplica', 'aviso sin fecha: no se aplica')
+  ok(V.avisoNoSeAplica(['pegEsp'], { pegEsp: '2024-06-10' }, nom, '2024-06-10') === '' && V.avisoNoSeAplica(['pegEsp'], { pegEsp: '2024-06-10' }, nom, '2024-06-07') !== '', 'en la cabecera del Replay: el aviso se va el día en que ya se aplica')
 
   console.log(`replay-vista: ${fallos ? fallos + ' fallos' : 'todo bien'}`); process.exit(fallos ? 1 : 0)
 })()

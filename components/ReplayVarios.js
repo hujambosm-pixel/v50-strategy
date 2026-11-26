@@ -21,7 +21,8 @@ import { fraseFilasRegla } from '../lib/builder/reglasPesos'
 import { recortaVelas, vecina } from '../lib/replay/grafico'
 import { paraGuardar, hayQueGuardar, nombreDe, crearSimulacion, guardarSimulacion } from '../lib/replay/guardados'
 import { atr as atrDe } from '../lib/condiciones/indicadores'
-import { filtraSenalesVista, visiblesVista, textoVista } from '../lib/replay/vistaReplay'
+import { filtraSenalesVista, visiblesVista, textoVista, avisoNoSeAplica } from '../lib/replay/vistaReplay'
+import { FILTRO } from '../lib/screener/filtros'
 
 const BZ = { fondo: '#22262f', panel: '#2c303b', caja: '#353945', borde: '#4c5263', texto: '#f3f3f5', gris: '#a9adb8', verde: '#3fb950', rojo: '#f85149', ambar: '#d29922', azul: '#58a6ff', morado: '#bc8cff' }
 const LETRA = 'system-ui, "Segoe UI", sans-serif'
@@ -264,7 +265,7 @@ export default function ReplayVarios({ inicial, cargaVelas, estrategias = [], ti
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: `1px solid ${BZ.borde}`, flexWrap: 'wrap' }}>
           <b style={{ color: '#ffd166' }}>⏪ REPLAY · {esVista ? `${lista.length} de ${estado.valores.length} valores` : `${estado.valores.length} valores`}</b><Ayuda texto={AYUDA_VARIOS} etiqueta="Replay con varios valores" />
-          {esVista && <span data-vista-varios-texto="" style={{ color: BZ.azul, fontSize: 12 }}>{textoVista(estado.fuente, estado.hoy)}{(estado.fuente.noSeAplican || []).length ? <span style={{ color: BZ.ambar }}> · ⚠ PEG esperado sin aplicar</span> : null} <Ayuda texto={AYUDA_VISTA_REPLAY} etiqueta="Vista del screener" /></span>}
+          {esVista && <span data-vista-varios-texto="" style={{ color: BZ.azul, fontSize: 12 }}>{textoVista(estado.fuente, estado.hoy)}{avisoNoSeAplica(estado.fuente.noSeAplican, estado.fuente.seAplicaDesde, id => FILTRO[id]?.nombre || id, estado.hoy) ? <span style={{ color: BZ.ambar }} data-no-se-aplica-varios=""> · ⚠ {avisoNoSeAplica(estado.fuente.noSeAplican, estado.fuente.seAplicaDesde, id => FILTRO[id]?.nombre || id, estado.hoy)}</span> : null} <Ayuda texto={AYUDA_VISTA_REPLAY} etiqueta="Vista del screener" /></span>}
           {onReiniciar && <span data-velas-varios="" title="Velas del Replay. Cambiarlas empieza un Replay nuevo (el de ahora se queda guardado)." style={{ display: 'inline-flex', gap: 2 }}>
             {[['diario', 'D'], ['semanal', 'S']].map(([k, t]) => <button key={k} data-velas={k} onClick={() => { if (k !== intervalo) setCambioVelas(k) }} style={{ ...btn(intervalo === k), padding: '1px 7px' }}>{t}</button>)}</span>}
           {intervalo === 'semanal' && <span style={{ color: BZ.gris, fontSize: 12 }}>velas semanales</span>}

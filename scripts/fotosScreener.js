@@ -82,13 +82,14 @@ async function velasDe(simbolo, desde) {
     const cuentas = emp.cik == null ? [] : await consulta(`SELECT concepto, periodo, fin::text AS fin, valor::text AS valor, unidad,
       presentado::text AS presentado, conocido_desde::text AS conocido_desde FROM public.screener_cuentas WHERE cik = ${Number(emp.cik)};`)
     const velas = await velasDe(emp.simbolo, desdeVelas)
+    const pegs = await consulta(`SELECT fecha::text AS fecha, peg FROM public.screener_peg WHERE simbolo = ${lit(emp.simbolo)};`)
     for (let i = 0; i < fechas.length; i++) {
-      const e = F.empresaEnFecha(emp, cuentas, emp.splits || [], velas, cierres[i])
+      const e = F.empresaEnFecha(emp, cuentas, emp.splits || [], velas, cierres[i], pegs)
       if (e.precio == null && !e.cuentasHasta) continue
       e.m.psSector = null; e.t = { ...cifrasTecnicas(e.tecnico), sector: null }
       porFecha[i].push({ s: e.simbolo, sector: e.sector, ps: e.m.ps, vals: F.valoresDe(e) })
       if (COMPARA_HOY) {
-        const hoyM = metricasDe({ ...emp, precio: e.precio, precio_fecha: null, peg_esperado: null }, cuentas, emp.splits || [])
+        const hoyM = metricasDe({ ...emp, precio: e.precio, precio_fecha: null, peg_esperado: e.m.pegEsp }, cuentas, emp.splits || [])
         const h = F.valoresDe({ ...e, m: { ...hoyM.m, psSector: null }, piezas: hoyM.piezas }), f = F.valoresDe(e)
         const dif = FUND.filter(c => { const k = F.CAMPOS_FOTO.indexOf(c); return JSON.stringify(h[k]) !== JSON.stringify(f[k]) })
         if (!dif.length) comp.iguales++
@@ -122,7 +123,7 @@ async function velasDe(simbolo, desde) {
       x.vals[iSec] = F.redondea(fuerzaSector(x.sector, tr))
       datos[x.s] = x.vals
     }
-    const foto = { campos: F.CAMPOS_FOTO, datos }
+    const foto = F.quitaCamposVacios({ campos: F.CAMPOS_FOTO, datos })
     const txt = JSON.stringify(foto.datos)
     bytes += txt.length
     lote.push(`(${lit(fechas[i])}, ${lit(cierres[i])}, ARRAY[${foto.campos.map(lit).join(', ')}]::text[], ${lit(txt)}::jsonb)`)

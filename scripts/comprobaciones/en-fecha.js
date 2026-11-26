@@ -6,6 +6,9 @@
 //   = 12,5 %; P/S 500 ÷ 100 = 5.
 //   Con un split 2:1 el 01/06/2025 (y los precios ajustados, cierre 25 $): acciones 10 × 2 = 20 millones → 25 × 20 = 500 → PER 50 igual.
 //   Ejercicio 2025 conocido el 15/02/2026 con beneficio 20: PER del 20/02/2026 = 500 ÷ 20 = 25; el del 10/02/2026, aún 50.
+//   PEG esperado (§30): puntos del 10/06/2024 (2), 19/09/2024 (3) y 02/10/2025 (1). El 07/06/2024, ninguno; el 10/06/2024, 2 (el mismo
+//   día cuenta); el 06/06/2025, 3 (el del 19/09/2024, de hace 260 días); sin el de 2025: el 24/10/2025 aún 3 (400 días justos), el
+//   25/10/2025 ninguno (401). Crecimiento esperado del 06/06/2025 = PER 50 ÷ 3 = 16,67 % al año.
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://arnes.invalid'; process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'clave-falsa-del-arnes'
 const C0 = require('./cargador'), R = C0.RAIZ
 let fallos = 0
@@ -52,7 +55,7 @@ const cerca = (a, b) => a != null && b != null && Math.abs(a - b) < 1e-9 * Math.
   ok(cerca(de('AAA').m.psSector, 7.5) && cerca(de('CCC').m.psSector, 5), 'mediana del P/S del sector: Tecnología (5 y 10) = 7,5; Energía = 5')
   const foto = F.fotoDe(lista)
   const iPs = foto.campos.indexOf('psSector'), iPer = foto.campos.indexOf('per'), iCaja = foto.campos.indexOf('cajaCubre')
-  ok(!foto.campos.includes('pegEsp') && !foto.campos.includes('senal'), 'la foto no guarda el PEG esperado ni la señal de una estrategia')
+  ok(!foto.campos.includes('pegEsp') && !foto.campos.includes('senal'), 'sin ningún PEG ese día, la foto no lleva su columna (no se aplica); la señal de una estrategia nunca')
   ok(foto.datos.AAA[iPer] === 50 && foto.datos.AAA[iPs] === -33.3333 && foto.datos.BBB[iPs] === 33.3333, 'PER 50; P/S frente al sector: 5 ÷ 7,5 − 1 = −33,3333 % y 10 ÷ 7,5 − 1 = +33,3333 %')
   ok(foto.datos.AAA[iCaja] === null, 'caja ÷ deuda a corto sin caja declarada: sin dato')
   ok(F.redondea(1 / 3) === 0.333333 && F.redondea(null) === null, 'redondeo a 6 cifras')
@@ -69,6 +72,23 @@ const cerca = (a, b) => a != null && b != null && Math.abs(a - b) < 1e-9 * Math.
   ok(F.evaluaFoto(foto, fichas, vista({ cajaCubre: { on: true, op: '≥', valor: 1 } })).pasan.length === 0, 'un dato que falta no pasa')
   const sd = { campos: ['cajaCubre'], datos: { AAA: ['sd'] } }
   ok(F.evaluaFoto(sd, fichas, vista({ cajaCubre: { on: true, op: '≥', valor: 1 } })).pasan[0] === 'AAA', '«sd» (sin deuda a corto) pasa')
+
+  // ── 5 · PEG esperado en el pasado (§30) ──
+  const pegs = [{ fecha: '2024-06-10', peg: 2 }, { fecha: '2025-10-02', peg: 1 }, { fecha: '2024-09-19', peg: 3 }]   // desordenados a propósito
+  ok(F.pegEnFecha(pegs, '2024-06-07') == null && F.pegEnFecha(pegs, '2024-06-10').peg === 2, 'PEG: el 07/06/2024 ninguno; el 10/06/2024, 2 (el mismo día cuenta)')
+  ok(F.pegEnFecha(pegs, '2025-06-06').peg === 3 && F.pegEnFecha(pegs, '2025-06-06').fecha === '2024-09-19' && F.pegEnFecha(pegs, '2025-10-06').peg === 1, 'PEG: el 06/06/2025, el del 19/09/2024 (3); el 06/10/2025, el del 02/10/2025 (1)')
+  const viejos = pegs.slice(0, 1).concat(pegs.slice(2))
+  ok(F.pegEnFecha(viejos, '2025-10-24')?.peg === 3 && F.pegEnFecha(viejos, '2025-10-25') == null, 'PEG: 400 días justos vale; 401, no')
+  const ep = F.empresaEnFecha(emp, c24, [], v50, '2025-06-06', pegs)
+  ok(ep.m.pegEsp === 3 && ep.pegFecha === '2024-09-19' && cerca(ep.m.crecEsperado, 50 / 3), `empresa con PEG: 3 (del 19/09/2024) y crecimiento esperado 50 ÷ 3 = 16,67 % (sale ${ep.m.crecEsperado})`)
+  const lp = F.empresasEnFecha([{ empresa: emp, cuentas: c24, splits: [], velas: v50, pegs }, { empresa: bbb, cuentas: cB, splits: [], velas: v50 }], { SPY: v50 }, '2025-06-06')
+  const fp = F.fotoDe(lp), iPeg = fp.campos.indexOf('pegEsp')
+  ok(iPeg >= 0 && fp.datos.AAA[iPeg] === 3 && fp.datos.BBB[iPeg] === null, 'foto con PEG de 1 de 2 (la mitad): lleva la columna; AAA 3, BBB sin dato')
+  const lp3 = F.empresasEnFecha([{ empresa: emp, cuentas: c24, splits: [], velas: v50, pegs }, { empresa: bbb, cuentas: cB, splits: [], velas: v50 }, { empresa: ccc, cuentas: c24, splits: [], velas: v50 }], { SPY: v50 }, '2025-06-06')
+  ok(!F.fotoDe(lp3).campos.includes('pegEsp'), 'foto con PEG de 1 de 3 (menos de la mitad): sin la columna, el filtro no se aplica')
+  const ep2 = F.evaluaFoto(fp, fichas, vista({ pegEsp: { on: true, op: '≤', valor: 3.5 } }))
+  ok(JSON.stringify(ep2.pasan) === '["AAA"]' && ep2.noSeAplican.length === 0, 'PEG esperado ≤ 3,5: pasa AAA, BBB (sin PEG) no; ese día sí se aplica')
+  ok(F.quitaCamposVacios({ campos: ['per', 'pegEsp'], datos: { A: [1, null] } }).campos.join() === 'per' && F.quitaCamposVacios({ campos: ['per', 'pegEsp'], datos: { A: [null, null] } }).campos.join() === 'per', 'quitaCamposVacios: solo quita el PEG esperado vacío, nunca un campo de las cuentas')
 
   console.log(`en-fecha: ${fallos ? fallos + ' fallos' : 'todo bien'}`); process.exit(fallos ? 1 : 0)
 })()

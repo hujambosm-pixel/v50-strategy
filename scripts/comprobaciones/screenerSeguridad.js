@@ -52,5 +52,13 @@ const prueba = async (nombre, sql, espera) => {
   await prueba('§29: un martes, rechazado', `INSERT INTO public.screener_fotos (fecha, cierre, campos, datos) VALUES ('2030-01-08', '2030-01-04', '{}', '{}');`, 'error')
   await prueba('§29: cierre después del lunes, rechazado', `INSERT INTO public.screener_fotos (fecha, cierre, campos, datos) VALUES ('2030-01-07', '2030-01-08', '{}', '{}');`, 'error')
   await prueba('§29: el script (postgres) sí escribe', `INSERT INTO public.screener_fotos (fecha, cierre, campos, datos) VALUES ('2030-01-07', '2030-01-04', '{per}', '{"AAA":[1]}');`)
+  // §30 (sql/screener_peg.sql): el historial del PEG esperado, solo lectura con sesión.
+  await prueba('§30: anon no lee el PEG', `SET LOCAL ROLE anon; SELECT count(*) FROM public.screener_peg;`, 'error')
+  await prueba('§30: con sesión lee el PEG', `${como(A)} SELECT count(*) AS pegs FROM public.screener_peg;`)
+  await prueba('§30: con sesión no crea PEG', `${como(A)} INSERT INTO public.screener_peg (simbolo, fecha, peg) VALUES ('ZZZZ9', '2030-01-07', 1);`, 'error')
+  await prueba('§30: con sesión no cambia PEG', `${como(A)} UPDATE public.screener_peg SET peg = 9 WHERE true;`, 'error')
+  await prueba('§30: con sesión no borra PEG', `${como(A)} DELETE FROM public.screener_peg WHERE true;`, 'error')
+  await prueba('§30: símbolo raro, rechazado', `INSERT INTO public.screener_peg (simbolo, fecha, peg) VALUES ('a b', '2030-01-07', 1);`, 'error')
+  await prueba('§30: el script (postgres) sí escribe', `INSERT INTO public.screener_peg (simbolo, fecha, peg) VALUES ('ZZZZ9', '2030-01-07', 1.5);`)
   console.log(`screenerSeguridad: ${fallos ? fallos + ' fallos' : 'todo bien'}`); process.exit(fallos ? 1 : 0)
 })()

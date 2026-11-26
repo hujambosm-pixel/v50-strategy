@@ -15,6 +15,9 @@
 //   node scripts/cargaScreener.js --splits           solo pregunta a Yahoo los SPLITS de las empresas del screener y los guarda en
 //                                                    public.precios_splits (sql/precios_splits.sql; ~3 min). Admite --solo. La carga
 //                                                    entera también lo hace (paso 5).
+//   node scripts/cargaScreener.js --peg              solo pregunta a Yahoo el HISTORIAL del PEG esperado (desde 2010) de las empresas
+//                                                    del screener y lo guarda en public.screener_peg (sql/screener_peg.sql; ~3 min). Admite
+//                                                    --solo. La carga entera también lo hace (con el PEG de cada empresa, paso 2).
 //   opciones: --pausa-sec 150 (ms entre peticiones a la SEC; su límite es 10 por segundo) · --pausa-yahoo 250
 //
 // LA SEC EXIGE que cada petición diga quién la hace (nombre y correo de contacto). Se lee de SEC_UA en .env.local (no
@@ -44,6 +47,7 @@ const ENSAYO = args.includes('--ensayo')
 const SOLO_METRICAS = args.includes('--metricas')
 const SOLO_TECNICO = args.includes('--tecnico')
 const SOLO_SPLITS = args.includes('--splits')
+const SOLO_PEG = args.includes('--peg')
 const USUARIO = 'c006506d-084b-4c2e-a458-70c5caa35d3a'   // el de Sergi (guardar_tecnico_screener exige un usuario)
 const PAUSA_SEC = Number(opcion('--pausa-sec', 150))
 const PAUSA_YAHOO = Number(opcion('--pausa-yahoo', 250))
@@ -113,17 +117,43 @@ async function cargaSplits({ splitsDeYahoo }, simbolos = null) {
   await escribe()
   return { total: lista.length, conSplits, fallan }
 }
+// El PEG esperado de Yahoo: toda la serie que guarda (desde 2010; son pocos puntos sueltos) → { serie: [{ fecha, peg }] ordenada,
+// hoy: { peg, fecha } | null }. «hoy» = el último, si es de los últimos 40 días (la regla de siempre de la pantalla del screener).
+const PEG_DESDE = Math.floor(Date.UTC(2010, 0, 1) / 1000)
 async function yahooPeg(simbolo) {
   const ahora = Math.floor(Date.now() / 1000), e = encodeURIComponent(simbolo)
-  const t = await pide(`https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${e}?symbol=${e}&type=trailingPegRatio&period1=${ahora - 40 * 86400}&period2=${ahora}`, { 'User-Agent': UA_YAHOO, Accept: 'application/json' })
-  const serie = JSON.parse(t)?.timeseries?.result?.[0]?.trailingPegRatio || []
-  const u = serie.filter(x => x?.reportedValue?.raw != null).pop()
-  return u ? { peg: u.reportedValue.raw, fecha: u.asOfDate } : null
+  const t = await pide(`https://query1.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${e}?symbol=${e}&type=trailingPegRatio&period1=${PEG_DESDE}&period2=${ahora}`, { 'User-Agent': UA_YAHOO, Accept: 'application/json' })
+  const crudo = JSON.parse(t)?.timeseries?.result?.[0]?.trailingPegRatio || []
+  const serie = crudo.filter(x => x?.asOfDate && Number.isFinite(x?.reportedValue?.raw)).map(x => ({ fecha: x.asOfDate, peg: x.reportedValue.raw }))
+    .sort((a, b) => a.fecha < b.fecha ? -1 : 1)
+  const u = serie[serie.length - 1]
+  const hace40 = new Date((ahora - 40 * 86400) * 1000).toISOString().slice(0, 10)
+  return { serie, hoy: u && u.fecha >= hace40 ? { peg: u.peg, fecha: u.fecha } : null }
+}
+// Las filas de public.screener_peg de un símbolo (VALUES de un INSERT).
+const filasPeg = (simbolo, serie) => (serie || []).map(p => `(${lit(simbolo)}, ${lit(p.fecha)}, ${num(p.peg)}, now())`)
+const SQL_PEG = (filas) => `INSERT INTO public.screener_peg (simbolo, fecha, peg, leido) VALUES ${filas.join(', ')}
+ON CONFLICT (simbolo, fecha) DO UPDATE SET peg = EXCLUDED.peg, leido = EXCLUDED.leido;`
+// Solo el historial del PEG (--peg): todas las empresas del screener (o las de `simbolos`), de 50 en 50 filas.
+async function cargaPegs(simbolos = null) {
+  const lista = (await consulta(`SELECT simbolo FROM public.screener_empresas${simbolos ? ` WHERE simbolo IN (${simbolos.map(lit).join(', ')})` : ''} ORDER BY simbolo;`)).map(e => e.simbolo)
+  const fallan = [], filas = []
+  let conPeg = 0, puntos = 0
+  const escribe = async () => { if (filas.length && !ENSAYO) await consulta(SQL_PEG(filas)); filas.length = 0 }
+  for (const s of lista) {
+    try { const { serie } = await yahooPeg(s); if (serie.length) conPeg++; puntos += serie.length; filas.push(...filasPeg(s, serie)) }
+    catch (err) { fallan.push(s + ' (' + err.message + ')') }
+    await pausa(PAUSA_YAHOO)
+    if (filas.length >= 200) await escribe()
+  }
+  await escribe()
+  return { total: lista.length, conPeg, puntos, fallan }
 }
 
 function sqlTanda(lote) {
   const empresas = lote.map(e => `(${[lit(e.simbolo), num(e.cik), lit(e.nombre), num(e.sic), lit(e.sic_descripcion), lit(e.sector), lit(e.sector_fuente),
     e.en_sp500, e.en_ndx, e.en_listas, num(e.precio), lit(e.precio_fecha), num(e.peg_esperado), lit(e.peg_esperado_fecha), lit(e.aviso)].join(', ')}, now())`)
+  const pegs = lote.flatMap(e => filasPeg(e.simbolo, e.pegSerie))
   const ciks = [...new Set(lote.filter(e => e.filas).map(e => e.cik))]
   const vistos = new Set(), cuentas = []
   for (const e of lote) {
@@ -144,7 +174,8 @@ ON CONFLICT (simbolo) DO UPDATE SET cik = EXCLUDED.cik, nombre = EXCLUDED.nombre
   peg_esperado = EXCLUDED.peg_esperado, peg_esperado_fecha = EXCLUDED.peg_esperado_fecha, aviso = EXCLUDED.aviso, actualizada = now();
 ${ciks.length ? `DELETE FROM public.screener_cuentas WHERE cik IN (${ciks.join(', ')});` : ''}
 ${cuentas.length ? `INSERT INTO public.screener_cuentas (cik, concepto, periodo, fin, inicio, anio_fiscal, valor, unidad, etiqueta, presentado, conocido_desde) VALUES ${cuentas.join(',\n')};` : ''}
-SELECT ${lote.length} AS empresas, ${cuentas.length} AS cuentas;
+${pegs.length ? SQL_PEG(pegs) : ''}
+SELECT ${lote.length} AS empresas, ${cuentas.length} AS cuentas, ${pegs.length} AS pegs;
 ${ENSAYO ? 'ROLLBACK' : 'COMMIT'};`
 }
 
@@ -197,6 +228,12 @@ async function recalculaTecnico({ tecnicoDe, ANIOS_TECNICO }, simbolos = null) {
 }
 
 if (require.main === module) (async () => {
+  if (SOLO_PEG) {
+    const t0 = Date.now(), r = await cargaPegs(SOLO)
+    const tot = ENSAYO ? null : (await consulta(`SELECT count(*) AS filas, count(DISTINCT simbolo) AS simbolos, min(fecha)::text AS primera FROM public.screener_peg;`))[0]
+    console.log(`PEG esperado: ${r.total - r.fallan.length} de ${r.total} empresas revisadas (${r.conPeg} con algún PEG, ${r.puntos} puntos) en ${Math.round((Date.now() - t0) / 1000)} s${ENSAYO ? ' · ENSAYO: no se ha escrito nada' : ' · en la base: ' + JSON.stringify(tot)}.${r.fallan.length ? ` Fallan (${r.fallan.length}): ${r.fallan.join(', ')}.` : ''}`)
+    return
+  }
   if (SOLO_SPLITS) {
     await preparaEsm()
     const t0 = Date.now(), r = await cargaSplits(require('../lib/screener/splits'), SOLO)
@@ -261,7 +298,7 @@ if (require.main === module) (async () => {
       try { const y = await yahooCierre(e.simbolo); if (y) { e.precio = y.precio; e.precio_fecha = y.fecha } else avisos.push('Yahoo: sin cierre') }
       catch (err) { avisos.push('Yahoo cierre: ' + err.message) }
       await pausa(PAUSA_YAHOO)
-      try { const p = await yahooPeg(e.simbolo); if (p) { e.peg_esperado = p.peg; e.peg_esperado_fecha = p.fecha } }
+      try { const p = await yahooPeg(e.simbolo); e.pegSerie = p.serie; if (p.hoy) { e.peg_esperado = p.hoy.peg; e.peg_esperado_fecha = p.hoy.fecha } }
       catch (err) { avisos.push('Yahoo PEG: ' + err.message) }
       await pausa(PAUSA_YAHOO)
       e.aviso = avisos.length ? avisos.join(' · ') : null
@@ -274,7 +311,7 @@ if (require.main === module) (async () => {
     const r = await consulta(sqlTanda(lote))
     const res = Array.isArray(r) ? r[r.length - 1] || r[0] : r
     console.log(`  ${n}/${empresas.length} · ${Math.round((Date.now() - t0) / 1000)} s · tanda: ${JSON.stringify(res)}${ENSAYO ? ' (ensayo, sin escribir)' : ''}`)
-    for (const e of lote) e.filas = null   // libera memoria
+    for (const e of lote) { e.filas = null; e.pegSerie = null }   // libera memoria
   }
 
   // Las que ya no están en el universo: marcas a false (no se borran).
