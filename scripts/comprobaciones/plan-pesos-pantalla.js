@@ -34,7 +34,7 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     const pv = Pa.planDe(a1, FOTO)
     ok(P.validaPlan(pv).some(e => /Falta elegir el activo en «1 · Pesos de partida»/.test(e)) && !P.validaPlan(pv).some(e => /no es un símbolo válido/.test(e)), `en blanco no se calcula y lo dice en palabras (${P.validaPlan(pv).join(' ')})`)
     { const BPm = require(R + '/components/BuilderPlan.js')
-      ok(BPm.enBloques('Pieza b2: Falta algo.', pv) === 'Bloque 2: Falta algo.' && BPm.enBloques('Pieza zz: algo', pv) === 'Pieza zz: algo' && BPm.enBloques('Sin capital.', pv) === 'Sin capital.', '§201: en pantalla «Pieza b2:» pasa a «Bloque 2:» (un id que no está, o un texto sin pieza, igual)') }
+      ok(BPm.enBloques('Pieza b2: Falta algo.', pv) === 'Parte 2: Falta algo.' && BPm.enBloques('Pieza zz: algo', pv) === 'Pieza zz: algo' && BPm.enBloques('Sin capital.', pv) === 'Sin capital.', '§201: en pantalla «Pieza b2:» pasa a «Bloque 2:» (un id que no está, o un texto sin pieza, igual)') }
     ok(Pa.resumenPesos(b) === '100 % ¿?', `resumen en blanco: «${Pa.resumenPesos(b)}»`)
     const a2 = { ...a1, peso: 60, bloques: [{ ...b, peso: 40, pesos: [{ simbolo: 'SPY', peso: 80 }, { simbolo: 'TQQQ', peso: 20 }], volver: { cada: 'banda', puntos: 15 }, aportaciones: 'atras' }] }
     const p = Pa.planDe(a2, FOTO)
@@ -89,17 +89,15 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     {
       const m = D.monta(React.createElement(BP, props({ ajustes: { activo: 'AAPL', ocioso: 'LIQUIDEZ' } })), RDC); await D.espera(60)
       const boton = (id) => m.raiz.conAtributo('data-boton', id)[0]
-      ok(/Añadir bloque ▾/.test(boton('anadir-bloque')?.textContent || '') && !m.raiz.conAtributo('data-menu', 'anadir-bloque').length, '«+ Añadir bloque ▾», con el desplegable cerrado')
-      D.pulsa(boton('anadir-bloque')); await hasta(() => !!boton('anadir-bloque-pesos'))
-      ok(!!boton('anadir-bloque-estrategia') && !!boton('anadir-bloque-pesos') && /Con una estrategia/.test(m.raiz.conAtributo('data-menu', 'anadir-bloque')[0]?.textContent) && /Con pesos/.test(m.raiz.conAtributo('data-menu', 'anadir-bloque')[0]?.textContent), 'al pulsarlo: «Con una estrategia» y «Con pesos»')
-      D.pulsa(boton('anadir-bloque-pesos')); await hasta(() => m.raiz.conAtributo('data-tipo-bloque', 'pesos').length === 1)
+      ok(/Añadir otra parte/.test(boton('anadir-bloque')?.textContent || '') && !m.raiz.conAtributo('data-menu', 'anadir-bloque').length, '§283: «+ Añadir otra parte», sin desplegable')
+      D.pulsa(boton('anadir-bloque')); await hasta(() => m.raiz.conAtributo('data-tipo-bloque', 'pesos').length === 1)
       const bq = m.raiz.conAtributo('data-tipo-bloque', 'pesos')[0]
-      ok(!!bq && bq.getAttribute('data-bloque') === '2' && !m.raiz.conAtributo('data-menu', 'anadir-bloque').length && m.raiz.conAtributo('data-parte').map(z => z.textContent).join('|') === '50 %|50 %', 'añade el bloque 2 «Con pesos» al 50 % y cierra el desplegable')
-      ok(['1', '2', '3'].every(s => bq.conAtributo('data-seccion-pesos', s).length === 1) && /1 · Pesos de partida/.test(bq.textContent) && /2 · Volver a los pesos del bloque/.test(bq.textContent) && /3 · El dinero que le llega/.test(bq.textContent), 'con sus tres secciones')
-      ok(/Con pesos · 100 % ¿\?/.test(bq.textContent) && bq.conAtributo('data-suma-pesos', '100').length === 1, 'en blanco: «Con pesos · 100 % ¿?» y «Suman 100 % ✓»')
+      ok(!!bq && bq.getAttribute('data-bloque') === '2' && !m.raiz.conAtributo('data-menu', 'anadir-bloque').length && m.raiz.conAtributo('data-parte').map(z => z.getAttribute('data-parte')).join('|') === '50 %|50 %', 'añade la parte 2 «Buy&Hold» al 50 %')
+      ok(['1', '2', '3'].every(s => bq.conAtributo('data-seccion-pesos', s).length === 1) && /1 · Pesos de partida/.test(bq.textContent) && /2 · Volver a los pesos/.test(bq.textContent) && /3 · El dinero que le llega/.test(bq.textContent), 'con sus tres secciones')
+      ok(/Buy&Hold · 100 % ¿\?/.test(bq.textContent) && bq.conAtributo('data-suma-pesos', '100').length === 1, 'en blanco: «Buy&Hold · 100 % ¿?» y «Suman 100 % ✓»')
       await hasta(() => m.raiz.conAtributo('data-errores-plan').length > 0)
       { const tx = m.raiz.conAtributo('data-errores-plan')[0]?.textContent || ''
-        ok(/Bloque 2: Falta elegir el activo en «1 · Pesos de partida»/.test(tx) && !/Pieza|no es un símbolo válido/.test(tx), `sin activo elegido no se calcula y lo dice en palabras («${tx}»)`) }
+        ok(/Parte 2: Falta elegir el activo en «1 · Pesos de partida»/.test(tx) && !/Pieza|no es un símbolo válido/.test(tx), `sin activo elegido no se calcula y lo dice en palabras («${tx}»)`) }
       { const sr = m.raiz.conAtributo('data-sin-resultado').map(z => z.textContent).join('|')
         ok(sr === 'Tu plan se calculará cuando arregles lo que sale en rojo arriba.', `§202: a la derecha, que se calculará al arreglarlo (no «Calculando tu plan…» sin fin): «${sr}»`) }
       m.quita(); await D.espera(5)
@@ -111,7 +109,7 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
       const bq = () => m.raiz.conAtributo('data-tipo-bloque', 'pesos')[0]
       const pieza = () => pedidos[pedidos.length - 1]?.[0]?.piezas?.find(z => z.tipo === 'pesos')
       await hasta(() => pedidos.length > 0)
-      ok(/Con pesos · 80 % SPY \+ 20 % TQQQ/.test(bq().textContent) && /volver a los pesos: nunca · el dinero que llega: según los pesos de ahora/.test(bq().textContent), 'la fila resume el bloque')
+      ok(/Buy&Hold · 80 % SPY \+ 20 % TQQQ/.test(bq().textContent) && /volver a los pesos: nunca · el dinero que llega: según los pesos de ahora/.test(bq().textContent), 'la fila resume el bloque')
       ok(pieza()?.pesos?.map(q => `${q.simbolo}:${q.peso}`).join() === 'SPY:0.8,TQQQ:0.2' && pieza().peso === 0.4, 'lo que se calcula: la pieza «pesos» al 40 % con 80/20')
       const seg = (sec, texto) => bq().conAtributo('data-seccion-pesos', sec)[0].conAtributo('aria-pressed').find(z => z.textContent === texto)
       D.pulsa(seg('2', 'Si alguno se separa')); await hasta(() => bq().conAtributo('data-banda').length === 1)
@@ -127,7 +125,7 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
       D.pulsa(quitar0); await hasta(() => bq().conAtributo('data-fila-peso').length === 1)
       ok(bq().conAtributo('data-suma-pesos', '20').length === 1 && /Suman 20 %/.test(bq().textContent) && bq().conAtributo('data-boton', 'quitar-activo')[0].getAttribute('disabled') != null, 'quitando SPY quedan 20 %: lo dice en rojo; con un solo activo, la papelera se apaga')
       D.pulsa(m.raiz.conAtributo('data-boton', 'quitar-bloque')[0]); await hasta(() => !m.raiz.conAtributo('data-tipo-bloque', 'pesos').length)
-      ok(!m.raiz.conAtributo('data-tipo-bloque', 'pesos').length && m.raiz.conAtributo('data-parte')[0]?.textContent === '100 %', '«Quitar»: vuelve a un bloque al 100 %')
+      ok(!m.raiz.conAtributo('data-tipo-bloque', 'pesos').length && m.raiz.conAtributo('data-parte')[0]?.getAttribute('data-parte') === '100 %', '«Quitar»: vuelve a un bloque al 100 %')
       m.quita(); await D.espera(5)
     }
   }

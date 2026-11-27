@@ -95,21 +95,48 @@ const ok = (c, t) => { console.log(`${c ? 'OK  ' : 'MAL '} ${t}`); if (!c) fallo
     const hasta = async (cond, max = 20000) => { const t0 = Date.now(); do { await D.espera(5); try { if (cond()) { await D.espera(5); return true } } catch (_) {} } while (Date.now() - t0 < max); return false }
     const m = D.monta(React.createElement(BP, props), RDC); await D.espera(60)
     const boton = (id) => m.raiz.conAtributo('data-boton', id)[0]
+    const tipoBtn = (n, t) => (m.raiz.conAtributo('data-cabecera-parte', String(n))[0]?.conAtributo('aria-pressed') || []).find(z => z.textContent.includes(t === 'pesos' ? 'Buy&Hold' : 'Con una estrategia'))
     await hasta(() => !!boton('quitar-bloque-1'))
     ok(!!boton('quitar-bloque-1') && m.raiz.conAtributo('data-bloque', '1').length === 1, 'con dos bloques, el bloque 1 tiene «🗑 Quitar»')
     D.pulsa(boton('quitar-bloque-1')); await hasta(() => !m.raiz.conAtributo('data-bloque', '1').some(z => !z.hasAttribute('data-tipo-bloque')))
     const bq = m.raiz.conAtributo('data-tipo-bloque', 'pesos')[0]
-    ok(!!bq && bq.getAttribute('data-bloque') === '1' && m.raiz.conAtributo('data-parte').map(z => z.textContent).join('|') === '100 %', `sin el bloque 1: «Con pesos» pasa a ser el bloque 1, al 100 % (${m.raiz.conAtributo('data-parte').map(z => z.textContent).join('|')})`)
+    ok(!!bq && bq.getAttribute('data-bloque') === '1' && m.raiz.conAtributo('data-parte').map(z => z.getAttribute('data-parte')).join('|') === '100 %', `sin el bloque 1: «Con pesos» pasa a ser el bloque 1, al 100 % (${m.raiz.conAtributo('data-parte').map(z => z.getAttribute('data-parte')).join('|')})`)
     ok(!boton('quitar-bloque') && !m.raiz.conAtributo('data-reparto-bloques').length && !/Parte de tu dinero/.test(bq.textContent), 'con un solo bloque: sin «Quitar», sin «Parte de tu dinero» ni «Reparto entre bloques»')
     await hasta(() => pedidos.some(p => p?.piezas?.length === 1))
     const ult = pedidos[pedidos.length - 1]
     ok(ult && ult.piezas.length === 1 && ult.piezas[0].tipo === 'pesos' && ult.piezas[0].peso === 1, `y se calcula el plan de un solo bloque «Con pesos» (${JSON.stringify(ult && ult.piezas.map(p => [p.tipo, p.peso]))})`)
     await hasta(() => m.raiz.conAtributo('data-fila', 'PLAN').length > 0)
     ok(m.raiz.conAtributo('data-fila', 'PLAN').length === 1 && m.raiz.conAtributo('data-fila', 'SPY').length === 1 && !m.raiz.conAtributo('data-sin-resultado').length, 'y sus cifras se ven a la derecha (no se queda en «Calculando tu plan…»)')
-    D.pulsa(boton('anadir-bloque')); await hasta(() => !!boton('anadir-bloque-estrategia'))
-    D.pulsa(boton('anadir-bloque-estrategia')); await hasta(() => m.raiz.conAtributo('data-bloque', '1').some(z => !z.hasAttribute('data-tipo-bloque')))
-    ok(m.raiz.conAtributo('data-parte').map(z => z.textContent).join('|') === '50 %|50 %' && m.raiz.conAtributo('data-tipo-bloque', 'pesos')[0]?.getAttribute('data-bloque') === '2', '«+ Añadir bloque ▾» → «Con una estrategia»: vuelve el bloque 1 (50 % y 50 %)')
+    // §283: la parte 1 pasa a «Con una estrategia» (vuelve el bloque 1, al 100 %) y, de vuelta a «Buy&Hold», recupera SPY 100 %
+    D.pulsa(tipoBtn(1, 'estrategia')); await hasta(() => !m.raiz.conAtributo('data-tipo-bloque', 'pesos').length)
+    ok(!m.raiz.conAtributo('data-tipo-bloque', 'pesos').length && m.raiz.conAtributo('data-bloque', '1').length === 1 && m.raiz.conAtributo('data-parte').map(z => z.getAttribute('data-parte')).join('|') === '100 %' && tipoBtn(1, 'estrategia')?.getAttribute('aria-pressed') === 'true', '§283: «⚙ Con una estrategia» en la parte 1: vuelve el bloque 1 de estrategia, al 100 %')
+    D.pulsa(tipoBtn(1, 'pesos')); await hasta(() => m.raiz.conAtributo('data-tipo-bloque', 'pesos').length === 1)
+    ok(/100 % SPY/.test(m.raiz.conAtributo('data-tipo-bloque', 'pesos')[0]?.textContent || ''), '§283: y de vuelta a «📦 Buy&Hold» recupera lo que tenía (SPY 100 %)')
+    D.pulsa(boton('anadir-bloque')); await hasta(() => m.raiz.conAtributo('data-tipo-bloque', 'pesos').length === 2)
+    ok(m.raiz.conAtributo('data-parte').map(z => z.getAttribute('data-parte')).join('|') === '50 %|50 %' && m.raiz.conAtributo('data-tipo-bloque', 'pesos').length === 2 && /Suman 100 % ✓/.test(m.raiz.conAtributo('data-suma-partes')[0]?.textContent || ''), '§283: «+ Añadir otra parte» añade un Buy&Hold con la mitad (50 % y 50 %)')
     m.quita(); await D.espera(5)
+  }
+
+  // ── §283 · Cambiar el tipo de una parte (cambiaTipoParte, partesDe), a mano ──
+  {
+    const uno = { ...Pa.AJUSTES_PLAN, activo: 'AAPL', ocioso: 'LIQUIDEZ' }
+    const a1 = Pa.cambiaTipoParte(uno, 'e', 'pesos')
+    ok(a1.sinBloque1 === true && a1.bloques.length === 1 && Pa.esBloquePesos(a1.bloques[0]) && a1.bloques[0].peso === 100 && a1.activo === 'AAPL' && Pa.partesDe(a1).map(p => p.tipo).join() === 'pesos',
+      'una parte con estrategia → Buy&Hold: un solo bloque «Con pesos» al 100 % (los ajustes de la estrategia se quedan)')
+    const a2 = Pa.cambiaTipoParte(a1, a1.bloques[0].id, 'estrategia')
+    ok(JSON.stringify(a2) === JSON.stringify(uno), 'y de vuelta a «Con una estrategia»: los ajustes de antes, idénticos')
+    const dos = { ...uno, peso: 60, dineroLibre: 'prioridad', bloques: [Pa.bloqueNuevo('b2', 40, 'MSFT', 'x')] }
+    const b1 = Pa.cambiaTipoParte(dos, 'e', 'pesos')
+    ok(b1.sinBloque1 && b1.bloques.map(b => `${b.id}:${b.peso}:${Pa.esBloquePesos(b) ? 'p' : 'e'}`).join() === 'b3:60:p,b2:40:e' && b1.dineroLibre === 'prioridad', `60/40 con la parte 1 a Buy&Hold: «Con pesos» 60 % delante y la otra 40 % (${b1.bloques.map(b => b.id + ':' + b.peso).join()})`)
+    const b2 = Pa.cambiaTipoParte(b1, 'b3', 'estrategia')
+    ok(b2.peso === 60 && !b2.sinBloque1 && b2.bloques.length === 1 && b2.bloques[0].id === 'b2', 'y de vuelta: la parte 1 es otra vez el bloque 1 al 60 %')
+    const c1 = Pa.cambiaTipoParte(dos, 'b2', 'pesos'), c2 = Pa.cambiaTipoParte(c1, 'b2', 'estrategia', 'y', dos.bloques[0])
+    ok(Pa.esBloquePesos(c1.bloques[0]) && c1.bloques[0].id === 'b2' && c1.bloques[0].peso === 40 && c1.peso === 60, 'la parte 2 a Buy&Hold: mismo id y mismo 40 %')
+    ok(c2.bloques[0].activo === 'MSFT' && c2.bloques[0].estId === 'x' && c2.bloques[0].peso === 40, 'y de vuelta con lo que tenía: recupera MSFT y su estrategia')
+    ok(Pa.cambiaTipoParte(dos, 'e', 'estrategia') === dos && Pa.cambiaTipoParte(dos, 'zz', 'pesos') === dos, 'mismo tipo o parte que no existe: nada cambia')
+    // con un solo bloque «Con pesos» al 100 %: la pieza pesa 1, como un plan de un bloque
+    const p1 = Pa.planDe({ ...a1, bloques: [{ ...a1.bloques[0], pesos: [{ simbolo: 'SPY', peso: 100 }] }] }, est)
+    ok(p1.piezas.length === 1 && p1.piezas[0].tipo === 'pesos' && p1.piezas[0].peso === 1, 'el plan de la parte Buy&Hold sola: una pieza «pesos» con peso 1')
   }
 
   console.log(fallos ? `FALLOS: ${fallos}` : 'plan-solo-pesos: todo bien')

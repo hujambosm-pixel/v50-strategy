@@ -64,7 +64,7 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
       ok(/El bloque empieza con 80 % SPY \+ 20 % TQQQ; nunca vuelve a sus pesos/.test(bq().conAtributo('data-asi-se-lee')[0]?.textContent || ''), '«Así se lee» con la frase del bloque')
       D.pulsa(boton('anadir-regla')); await hasta(() => bq().conAtributo('data-regla').length === 1)
       const rg = () => bq().conAtributo('data-regla', '0')[0]
-      ok(rg().conAtributo('data-fila', 'caidaDesdeMaximoHistorico').length === 1 && /Con pesos · 80 % SPY \+ 20 % TQQQ · 1 regla/.test(bq().textContent), '«+ Añadir regla»: una regla con su condición; la fila del bloque dice «1 regla»')
+      ok(rg().conAtributo('data-fila', 'caidaDesdeMaximoHistorico').length === 1 && /Buy&Hold · 80 % SPY \+ 20 % TQQQ · 1 regla/.test(bq().textContent), '«+ Añadir regla»: una regla con su condición; la fila del bloque dice «1 regla»')
       await hasta(() => pieza()?.reglas?.length === 1)
       ok(pieza()?.reglas?.[0]?.filas?.[0]?.si?.c === 'caidaDesdeMaximoHistorico' && pieza().reglas[0].accion.tipo === 'pesos', 'lo que se calcula lleva la regla')
       ok(/Regla 1: si .*SPY/.test(bq().conAtributo('data-frase-pesos', '1')[0]?.textContent || ''), '«Así se lee» añade la regla')
@@ -98,8 +98,7 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     }
     {
       const m = D.monta(React.createElement(BP, props({ ajustes: { activo: 'AAPL', ocioso: 'LIQUIDEZ' } })), RDC); await D.espera(60)
-      D.pulsa(m.raiz.conAtributo('data-boton', 'anadir-bloque')[0]); await hasta(() => m.raiz.conAtributo('data-boton', 'anadir-bloque-pesos').length === 1)
-      D.pulsa(m.raiz.conAtributo('data-boton', 'anadir-bloque-pesos')[0]); await hasta(() => m.raiz.conAtributo('data-tipo-bloque', 'pesos').length === 1)
+      D.pulsa(m.raiz.conAtributo('data-boton', 'anadir-bloque')[0]); await hasta(() => m.raiz.conAtributo('data-tipo-bloque', 'pesos').length === 1)
       const bq = () => m.raiz.conAtributo('data-tipo-bloque', 'pesos')[0]
       D.pulsa(bq().conAtributo('data-ejemplo', 'caidas')[0]); await hasta(() => /80 % SPY \+ 20 % TQQQ · 1 regla/.test(bq().textContent))
       ok(/80 % SPY \+ 20 % TQQQ · 1 regla/.test(bq().textContent) && !m.raiz.conAtributo('data-boton', 'si-ejemplo').length, 'en un bloque en blanco, el ejemplo se carga sin preguntar')

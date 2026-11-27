@@ -73,7 +73,7 @@ import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_NO_EXISTE, avisoPrueba as textoAvisoPrueba, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
   ayudaCaida, avisoListaSimple, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, velasDeEstrategia, velasDelPlan, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS, resumenDinero, bloquesDe, estrategiaBloque, anadeBloque, quitaBloque, repartirResto, sumaPesos, AYUDA_BLOQUES,
-  esBloquePesos, sumaPesosBloque, resumenPesos, AYUDA_PESOS, VOLVER_OPCIONES, LLEGA_OPCIONES, PUNTOS_BANDA_DEFECTO, filaDeMedidas, sinBloque1, cuantosBloques, quitaBloque1 } from '../lib/builder/planPantalla'
+  esBloquePesos, sumaPesosBloque, resumenPesos, AYUDA_PESOS, VOLVER_OPCIONES, LLEGA_OPCIONES, PUNTOS_BANDA_DEFECTO, filaDeMedidas, sinBloque1, cuantosBloques, quitaBloque1, partesDe, cambiaTipoParte, AYUDA_PARTE } from '../lib/builder/planPantalla'
 import { MAX_SIMBOLOS_PESOS } from '../lib/planes/pesos'
 import ReglasPesos from './ReglasPesos'
 import OciosoRegla from './OciosoRegla'
@@ -100,11 +100,11 @@ const borde = (i, n) => ({ borderRadius: n === 1 ? 6 : i === 0 ? '6px 0 0 6px' :
 // Un grupo de botones (uno elegido). opciones: [[valor, texto, desactivado?]].
 // §202: con un aviso rojo arriba (el plan no es válido), el plan no se calcula: la columna derecha lo dice (antes, «Calculando tu plan…» sin fin).
 export const ESPERA_ERRORES = 'Tu plan se calculará cuando arregles lo que sale en rojo arriba.'
-// §201: el motor nombra cada bloque por su id interno («Pieza b2: …»); en pantalla, «Bloque 2: …» (el número de la columna izquierda).
+// §201: el motor nombra cada bloque por su id interno («Pieza b2: …»); en pantalla, «Parte 2: …» (§283; el número de la columna izquierda).
 export function enBloques(texto, plan) {
   return String(texto).replace(/^Pieza ([^:]+):/, (m, id) => {
     const k = (plan?.piezas || []).findIndex(x => x?.id === id)
-    return k >= 0 ? `Bloque ${k + 1}:` : m
+    return k >= 0 ? `Parte ${k + 1}:` : m
   })
 }
 
@@ -289,7 +289,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // §187: los bloques extra: { id: plegado (false) / abierto } (de entrada, abierto) y { id: su lista de valores abierta }.
   const [extraAbiertos, setExtraAbiertos] = useState({})
   const [valoresExtra, setValoresExtra] = useState({})
-  const [menuBloque, setMenuBloque] = useState(false)   // §197: el desplegable de «+ Añadir bloque ▾»
+  const previosParte = useRef({})   // §283: { 'clave:tipo': lo que tenía esa parte con ese tipo } (para recuperarlo al volver; solo en pantalla)
   const [ejemploPesos, setEjemploPesos] = useState(null)   // §199: { id del bloque, ejemplo } a la espera de «Sí, cargarlo»
   // §189: «Tu dinero», plegado en una línea en los planes guardados y abierto en los nuevos (por plan; solo en pantalla).
   const [dineroAb, setDineroAb] = useState({})
@@ -933,12 +933,48 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     return uno ? { ...b, lista: l, donde: 'accion', activo: l.simbolos[0] } : { ...b, lista: l, donde: 'lista' }
   })
   const ponListaB = (id, k) => (v) => ponBloque(id, b => ({ ...b, lista: { ...b.lista, [k]: typeof v === 'function' ? v(b.lista[k]) : v } }))
-  const campoPct = (valor, onCambia, etiqueta) => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero etiqueta={etiqueta} valor={valor} onCambia={onCambia} ancho={70}/> % de tu dinero</span>
   const sumaPct = multi ? sumaPesos(a) : 100
+  // §283: cambiar cómo se invierte una parte (boceto bocetos/plan-una-tarjeta.html). La parte 1 se recuerda como «e» (con estrategia es el
+  // bloque 1, cuyos ajustes no se pierden); al volver al otro tipo se recupera lo que tenía. La parte queda abierta.
+  const cambiaTipo = (id, tipo) => {
+    const ps = partesDe(a), k = ps.findIndex(p => p.id === id)
+    if (k < 0 || ps[k].tipo === tipo) return
+    const clave = k === 0 ? 'e' : id
+    if (ps[k].id !== 'e') previosParte.current[`${clave}:${ps[k].tipo}`] = ps[k].b
+    const nuevo = cambiaTipoParte(a, id, tipo, estId, previosParte.current[`${clave}:${tipo}`] || null)
+    setA(nuevo)
+    const p0 = partesDe(nuevo)[k]
+    if (p0?.id === 'e') setBloqueAbierto(true); else if (p0) setExtraAbiertos(x => ({ ...x, [p0.id]: true }))
+  }
+  // §283: la cabecera de una parte: «Parte N», su % (editable con varias), los € que le tocan del dinero inicial, «📦 Buy&Hold / ⚙ Con
+  // una estrategia», 🗑 (con varias) y, debajo, el resumen, que se pulsa para plegarla o abrirla.
+  const cabeceraParte = ({ n, color, id, tipo, pct, onPct, abierto, onPliega, resumen, tituloResumen, detalle, quitarId, onQuitar, ayudaQuitar }) => {
+    const pctV = nBloques > 1 ? pct : 100, eur = (Number(a.capital) || 0) * (Number(pctV) || 0) / 100
+    return (
+      <div data-cabecera-parte={n} style={{ background: fondoCabeceraBloque(color) }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 12px 2px' }}>
+          <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: color, flex: 'none' }}/>
+          <span data-nombre-parte style={{ fontWeight: 700, color: B.titulo }}>Parte {n}</span>
+          {nBloques > 1 ? <span data-parte={`${textoCampo(pct)} %`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><CampoNumero etiqueta={`Parte ${n}: % de tu dinero`} valor={pct} onCambia={onPct} ancho={58}/> %<Ayuda texto={AYUDA_BLOQUES.parte} etiqueta="% de tu dinero"/></span>
+            : <span data-parte="100 %" title="Con una sola parte, todo tu dinero: de 10.000 €, los 10.000 €." style={{ fontWeight: 700, color: B.titulo }}>100 %</span>}
+          <span data-euros-parte style={S.apagado}>{euros(eur, 0)}</span>
+          <span data-tipo-parte={tipo} style={{ display: 'inline-flex', alignItems: 'center' }}><Segmentos etiquetaGrupo={`Cómo se invierte la parte ${n}`} valor={tipo} onCambia={v => cambiaTipo(id, v)} opciones={[['pesos', '📦 Buy&Hold'], ['estrategia', '⚙ Con una estrategia']]}/><Ayuda texto={AYUDA_PARTE.tipo} etiqueta="Buy&Hold o con una estrategia"/></span>
+          {nBloques > 1 && <button type="button" data-boton={quitarId} title={ayudaQuitar} aria-label={`Quitar la parte ${n}`} onClick={onQuitar} style={{ ...S.boton, padding: '3px 9px', fontSize: 13, color: ROJO, borderColor: ROJO, marginLeft: 'auto' }}>🗑</button>}
+        </div>
+        <button type="button" data-fila-bloque aria-expanded={abierto} onClick={onPliega} title={abierto ? 'Plegar la parte' : 'Abrir la parte'} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '2px 12px 8px 30px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, textAlign: 'left' }}>
+          <span style={{ minWidth: 0, flex: '1 1 auto' }}>
+            <span data-resumen-bloque title={tituloResumen} style={{ display: 'block', color: B.titulo, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resumen}</span>
+            <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{detalle}</span>
+          </span>
+          <span aria-hidden="true" style={{ color: B.secundario, flex: 'none' }}>{abierto ? '▾' : '▸'}</span>
+        </button>
+      </div>
+    )
+  }
   // §197: un bloque «Con pesos» (boceto bocetos/bloque-con-pesos.html, pestaña 1): su %, los pesos de partida (símbolos con precios guardados
   // y «Liquidez»), volver a los pesos y el dinero que le llega. §199: sus reglas «si… entonces…» (components/ReglasPesos.js), «Así se lee»
   // y «Cargar un ejemplo» (si el bloque ya tiene algo, pregunta antes de cambiarlo).
-  const valoresPesos = useMemo(() => [{ simbolo: 'LIQUIDEZ', nombre: 'Liquidez del bloque · efectivo que no rinde' }, ...valoresLista], [valoresLista])
+  const valoresPesos = useMemo(() => [{ simbolo: 'LIQUIDEZ', nombre: 'Liquidez de la parte · efectivo que no rinde' }, ...valoresLista], [valoresLista])
   const bloquePesos = (b, k) => {
     const n = k + primerN, color = COLORES_BLOQUE[(n - 1) % COLORES_BLOQUE.length], abierto = extraAbiertos[b.id] !== false
     const ps = b.pesos || [], suma = sumaPesosBloque(b), cada = b.volver?.cada || 'nunca'
@@ -947,20 +983,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     const seccion = (num, titulo, ayuda, hijos) => <div data-seccion-pesos={num} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}><Etiqueta texto={`${num} · ${titulo}`} ayuda={ayuda}/>{hijos}</div>
     return (
       <div key={b.id} data-bloque={n} data-tipo-bloque="pesos" style={marcoBloque(color)}>
-        <button type="button" data-fila-bloque aria-expanded={abierto} onClick={() => setExtraAbiertos(x => ({ ...x, [b.id]: !abierto }))} title={abierto ? 'Plegar el bloque' : 'Abrir el bloque'} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: fondoCabeceraBloque(color), border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, textAlign: 'left' }}>
-          <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: color, flex: 'none' }}/>
-          <span data-parte style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>{nBloques > 1 ? textoCampo(b.peso) : 100} %</span>
-          <span style={{ minWidth: 0, flex: '1 1 auto' }}>
-            <span data-resumen-bloque title={resumenPesos(b)} style={{ display: 'block', color: B.titulo, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Con pesos · {resumenPesos(b)}</span>
-            <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>volver a los pesos: {cada === 'banda' ? `si alguno se separa más de ${textoCampo(b.volver?.puntos)} puntos` : textoVolver.toLowerCase()} · el dinero que llega: {textoLlega.toLowerCase()}</span>
-          </span>
-          <span aria-hidden="true" style={{ color: B.secundario, flex: 'none' }}>{abierto ? '▾' : '▸'}</span>
-        </button>
+        {cabeceraParte({ n, color, id: b.id, tipo: 'pesos', pct: b.peso, onPct: v => ponBloque(b.id, x => ({ ...x, peso: v })), abierto, onPliega: () => setExtraAbiertos(x => ({ ...x, [b.id]: !abierto })),
+          resumen: `Buy&Hold · ${resumenPesos(b)}`, tituloResumen: resumenPesos(b), quitarId: 'quitar-bloque', onQuitar: () => setA(x => quitaBloque(x, b.id)), ayudaQuitar: AYUDA_BLOQUES.quitar,
+          detalle: <>volver a los pesos: {cada === 'banda' ? `si alguno se separa más de ${textoCampo(b.volver?.puntos)} puntos` : textoVolver.toLowerCase()} · el dinero que llega: {textoLlega.toLowerCase()}</> })}
         {abierto && <div data-cuerpo-bloque style={{ borderTop: `1px solid ${B.borde}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
-            {nBloques > 1 && <div><Etiqueta texto="Parte de tu dinero" ayuda={AYUDA_BLOQUES.parte}/>{campoPct(b.peso, v => ponBloque(b.id, x => ({ ...x, peso: v })), `Parte del bloque ${n}`)}</div>}
-            <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }}><span style={{ ...S.apagado, marginRight: 10, display: 'inline-flex', alignItems: 'center' }}>Bloque con pesos<Ayuda texto={AYUDA_PESOS.bloque} etiqueta="Bloque con pesos"/></span>{nBloques > 1 && <button type="button" data-boton="quitar-bloque" title={`Quitar este bloque (su % pasa al ${sin1 ? 'primer bloque que quede' : 'bloque 1'})`} onClick={() => setA(x => quitaBloque(x, b.id))} style={{ ...S.boton, padding: '4px 10px', fontSize: 13, color: ROJO, borderColor: ROJO }}>🗑 Quitar</button>}<Ayuda texto={AYUDA_BLOQUES.quitar} etiqueta="Quitar el bloque"/></span>
-          </div>
           <div data-ejemplos-pesos style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span style={{ ...S.secundario, display: 'inline-flex', alignItems: 'center' }}>Cargar un ejemplo<Ayuda texto={AYUDA_REGLAS.ejemplos} etiqueta="Cargar un ejemplo"/>:</span>
             {EJEMPLOS_PESOS.map(e => <button key={e.id} type="button" data-ejemplo={e.id} onClick={() => { const vacio = !(b.pesos || []).some(p => p.simbolo) && !(b.reglas || []).length; if (vacio) ponBloque(b.id, x => ({ ...x, ...e.bloque() })); else setEjemploPesos({ id: b.id, n, e }) }} style={{ ...S.boton, padding: '3px 9px', fontSize: 13 }}>{e.nombre}</button>)}
@@ -971,14 +997,14 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
                 <div style={{ flex: '1 1 220px', minWidth: 220 }}><BuscadorValor valores={valoresPesos} valor={p.simbolo || ''} onCambia={s => ponPesos(xs => xs.map((y, q) => q === j ? { ...y, simbolo: s } : y))} etiqueta={`Activo ${j + 1} del bloque ${n}`} anchoNombre={90}/></div>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><CampoNumero etiqueta={`Peso del activo ${j + 1} del bloque ${n}`} valor={p.peso} onCambia={v => ponPesos(xs => xs.map((y, q) => q === j ? { ...y, peso: v } : y))} ancho={62}/> %</span>
                 <div aria-hidden="true" style={{ width: 70, height: 6, borderRadius: 3, background: B.borde, overflow: 'hidden', flex: 'none' }}><div style={{ width: `${Math.min(100, Math.max(0, Number(p.peso) || 0))}%`, height: '100%', background: COLORES_BLOQUE[j % COLORES_BLOQUE.length] }}/></div>
-                <button type="button" data-boton="quitar-activo" disabled={ps.length <= 1} title={ps.length <= 1 ? 'El bloque necesita al menos un activo' : 'Quitar este activo del bloque'} onClick={() => ponPesos(xs => xs.filter((_, q) => q !== j))} style={{ ...S.boton, padding: '3px 8px', fontSize: 13, color: ps.length <= 1 ? B.apagado : ROJO, borderColor: ps.length <= 1 ? B.borde : ROJO }}>🗑</button>
+                <button type="button" data-boton="quitar-activo" disabled={ps.length <= 1} title={ps.length <= 1 ? 'La parte necesita al menos un activo' : 'Quitar este activo de la parte'} onClick={() => ponPesos(xs => xs.filter((_, q) => q !== j))} style={{ ...S.boton, padding: '3px 8px', fontSize: 13, color: ps.length <= 1 ? B.apagado : ROJO, borderColor: ps.length <= 1 ? B.borde : ROJO }}>🗑</button>
               </div>))}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <button type="button" data-boton="anadir-activo" disabled={ps.length >= MAX_SIMBOLOS_PESOS} title={ps.length >= MAX_SIMBOLOS_PESOS ? `Como mucho ${MAX_SIMBOLOS_PESOS} activos por bloque` : 'Otro símbolo en este bloque (con lo que falte para el 100 %)'} onClick={() => ponPesos(xs => [...xs, { simbolo: '', peso: Math.max(0, Math.round((100 - sumaPesosBloque({ pesos: xs })) * 100) / 100) }])} style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }}>+ Añadir activo</button>
+              <button type="button" data-boton="anadir-activo" disabled={ps.length >= MAX_SIMBOLOS_PESOS} title={ps.length >= MAX_SIMBOLOS_PESOS ? `Como mucho ${MAX_SIMBOLOS_PESOS} activos por parte` : 'Otro símbolo en esta parte (con lo que falte para el 100 %)'} onClick={() => ponPesos(xs => [...xs, { simbolo: '', peso: Math.max(0, Math.round((100 - sumaPesosBloque({ pesos: xs })) * 100) / 100) }])} style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }}>+ Añadir activo</button>
               <span data-suma-pesos={suma} style={{ color: Math.abs(suma - 100) < 1e-6 ? VERDE : ROJO }}>{Math.abs(suma - 100) < 1e-6 ? 'Suman 100 % ✓' : `✕ Suman ${textoCampo(suma)} %: tienen que sumar 100 %`}</span>
             </div>
           </>)}
-          {seccion(2, 'Volver a los pesos del bloque', AYUDA_PESOS.volver, <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {seccion(2, 'Volver a los pesos', AYUDA_PESOS.volver, <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <Segmentos etiquetaGrupo={`Volver a los pesos del bloque ${n}`} valor={cada} onCambia={v => ponBloque(b.id, x => ({ ...x, volver: { ...(x.volver || {}), cada: v, puntos: x.volver?.puntos ?? PUNTOS_BANDA_DEFECTO } }))} opciones={VOLVER_OPCIONES}/>
             {cada === 'banda' && <span data-banda style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>más de <CampoNumero etiqueta={`Puntos del bloque ${n}`} valor={b.volver?.puntos} onCambia={v => ponBloque(b.id, x => ({ ...x, volver: { ...x.volver, puntos: v } }))} ancho={50} minimo={1}/> puntos</span>}
           </div>)}
@@ -999,20 +1025,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     const vEst = velasDeEstrategia(est), vPlan = velasDelPlan(b, est)
     return (
       <div key={b.id} data-bloque={n} style={marcoBloque(color)}>
-        <button type="button" data-fila-bloque aria-expanded={abierto} onClick={() => setExtraAbiertos(x => ({ ...x, [b.id]: !abierto }))} title={abierto ? 'Plegar el bloque' : 'Abrir el bloque'} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: fondoCabeceraBloque(color), border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, textAlign: 'left' }}>
-          <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: color, flex: 'none' }}/>
-          <span data-parte style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>{nBloques > 1 ? textoCampo(b.peso) : 100} %</span>
-          <span style={{ minWidth: 0, flex: '1 1 auto' }}>
-            <span data-resumen-bloque style={{ display: 'block', color: B.titulo, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Estrategia · {est?.name || 'sin elegir'}</span>
-            <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>en {esUniversoVista(Lb.universo) ? `la vista «${nombreVistaDe(Lb.universo)}»` : uni ? 'el Nasdaq-100' : marc.length === 1 ? marc[0] : `${marc.length} valores`} · velas {vPlan}</span>
-          </span>
-          <span aria-hidden="true" style={{ color: B.secundario, flex: 'none' }}>{abierto ? '▾' : '▸'}</span>
-        </button>
+        {cabeceraParte({ n, color, id: b.id, tipo: 'estrategia', pct: b.peso, onPct: v => ponBloque(b.id, x => ({ ...x, peso: v })), abierto, onPliega: () => setExtraAbiertos(x => ({ ...x, [b.id]: !abierto })),
+          resumen: `Estrategia · ${est?.name || 'sin elegir'}`, quitarId: 'quitar-bloque', onQuitar: () => setA(x => quitaBloque(x, b.id)), ayudaQuitar: AYUDA_BLOQUES.quitar,
+          detalle: <>en {esUniversoVista(Lb.universo) ? `la vista «${nombreVistaDe(Lb.universo)}»` : uni ? 'el Nasdaq-100' : marc.length === 1 ? marc[0] : `${marc.length} valores`} · velas {vPlan}</> })}
         {abierto && <div data-cuerpo-bloque style={{ borderTop: `1px solid ${B.borde}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
-            {nBloques > 1 && <div><Etiqueta texto="Parte de tu dinero" ayuda={AYUDA_BLOQUES.parte}/>{campoPct(b.peso, v => ponBloque(b.id, x => ({ ...x, peso: v })), `Parte del bloque ${n}`)}</div>}
-            <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }}>{nBloques > 1 && <button type="button" data-boton="quitar-bloque" title={`Quitar este bloque (su % pasa al ${sin1 ? 'primer bloque que quede' : 'bloque 1'})`} onClick={() => setA(x => quitaBloque(x, b.id))} style={{ ...S.boton, padding: '4px 10px', fontSize: 13, color: ROJO, borderColor: ROJO }}>🗑 Quitar</button>}<Ayuda texto={AYUDA_BLOQUES.quitar} etiqueta="Quitar el bloque"/></span>
-          </div>
           <div>
             <Etiqueta texto="Estrategia" ayuda={AYUDA_PLAN.estrategia}/>
             <SelectorEstrategia valor={b.estId} onElige={id => ponBloque(b.id, x => ({ ...x, estId: String(id), foto: null }))} estiloBoton={{ ...campo, maxWidth: '100%' }}
@@ -1021,7 +1037,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
                 return { id: s.id, name: s.name, etiqueta: ps.join(' · ') || null, colorEtiqueta: ep === 'pasa' ? VERDE : ep === 'noPasa' ? ROJO : undefined } })}/>
           </div>
           <div data-velas-plan={vPlan}>
-            <Etiqueta texto="Velas en este bloque" ayuda={AYUDA_PLAN.velas}/>
+            <Etiqueta texto="Velas en esta parte" ayuda={AYUDA_PLAN.velas}/>
             <Segmentos etiquetaGrupo={`Velas del bloque ${n}`} valor={vPlan} onCambia={v => ponBloque(b.id, x => ({ ...x, velas: v === vEst ? null : v }))} opciones={[['diarias', vEst === 'diarias' ? 'Diarias · las de la estrategia' : 'Diarias'], ['semanales', vEst === 'semanales' ? 'Semanales · las de la estrategia' : 'Semanales']]}/>
           </div>
           <div>
@@ -1039,7 +1055,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             </div>}
           </div>
           {varios && <div>
-            <Etiqueta texto="Reparto entre los valores del bloque" ayuda={AYUDA_PLAN.reparto}/>
+            <Etiqueta texto="Reparto entre los valores de esta parte" ayuda={AYUDA_PLAN.reparto}/>
             <div data-lista="reparto" className="bp-mc">
               <PanelAsignacion unSoloModo mcStratSelected={[b.estId]} mcUniverso={Lb.universo} selectedModos={[Lb.modo]} setSelectedModos={() => {}} mcMode={Lb.modo} setMcMode={ponListaB(b.id, 'modo')} mcSectionOpen={vistaLista.seccion} setMcSectionOpen={ponVista('seccion')}
                 mcAssumedStopPct={Lb.assumedStopPct} setMcAssumedStopPct={ponListaB(b.id, 'assumedStopPct')} mcCalculoPrioridad={Lb.calculoPrioridad} setMcCalculoPrioridad={ponListaB(b.id, 'calculoPrioridad')} mcCriterioUso={Lb.criterioUso} setMcCriterioUso={ponListaB(b.id, 'criterioUso')}
@@ -1072,24 +1088,16 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     <div data-tarjeta="bloques" style={{ ...S.tarjeta, marginTop: 16, overflow: 'visible' }}>
       <div style={{ ...S.cabeceraTarjeta, borderRadius: `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0`, display: 'flex', alignItems: 'center', gap: 2 }}>Cartera<Ayuda texto={AYUDA_PLAN.cartera} etiqueta="Cartera"/><span data-subtitulo style={{ ...S.apagado, fontWeight: 400, marginLeft: 8 }}>en qué se invierte</span></div>
       <div style={{ ...S.cuerpo, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {!multi ? <div data-barra-cartera aria-hidden="true" title="Todo el dinero del plan está en este bloque" style={{ height: 8, borderRadius: 4, background: AZUL }}/>
-          : <div data-barra-cartera="bloques" title={`Cómo se reparte tu dinero entre los bloques${sumaPct !== 100 ? ` (suman ${textoCampo(sumaPct)} %, no 100 %)` : ''}`} style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: B.borde }}>
+        {!multi ? <div data-barra-cartera aria-hidden="true" title="Todo el dinero del plan está en esta parte" style={{ height: 8, borderRadius: 4, background: AZUL }}/>
+          : <div data-barra-cartera="bloques" title={`Cómo se reparte tu dinero entre las partes${sumaPct !== 100 ? ` (suman ${textoCampo(sumaPct)} %, no 100 %)` : ''}`} style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: B.borde }}>
             {[...(sin1 ? [] : [Number(a.peso) || 0]), ...extra.map(b => Number(b.peso) || 0)].map((p, k) => <div key={k} style={{ width: `${Math.max(0, p) / Math.max(100, sumaPct) * 100}%`, background: COLORES_BLOQUE[k % COLORES_BLOQUE.length] }}/>)}
           </div>}
-        {multi && sumaPct !== 100 && <div data-aviso="suma-bloques" style={{ color: ROJO, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>✕ Los bloques suman {textoCampo(sumaPct)} %: tienen que sumar 100 %.<button type="button" data-boton="repartir-resto" title="Ajusta los % en proporción para que sumen 100 %" onClick={() => setA(repartirResto)} style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }}>Repartir el resto</button></div>}
+        {multi && sumaPct !== 100 && <div data-aviso="suma-bloques" style={{ color: ROJO, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>✕ Las partes suman {textoCampo(sumaPct)} %: tienen que sumar 100 %.<button type="button" data-boton="repartir-resto" title="Ajusta los % en proporción para que sumen 100 %" onClick={() => setA(repartirResto)} style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }}>Repartir el resto</button></div>}
         {!sin1 && <div data-bloque="1" style={marcoBloque(AZUL)}>
-          <button type="button" data-fila-bloque aria-expanded={bloqueAbierto} onClick={() => setBloqueAbierto(x => !x)} title={bloqueAbierto ? 'Plegar el bloque' : 'Abrir el bloque'} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: fondoCabeceraBloque(AZUL), border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, textAlign: 'left' }}>
-            <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: AZUL, flex: 'none' }}/>
-            <span data-parte title={multi ? 'Qué parte del dinero del plan va a este bloque.' : 'Qué parte del dinero del plan va a este bloque. Con un solo bloque, todo: de 10.000 €, los 10.000 €.'} style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>{multi ? textoCampo(a.peso) : 100} %</span>
-            <span style={{ minWidth: 0, flex: '1 1 auto' }}>
-              <span data-resumen-bloque style={{ display: 'block', color: B.titulo, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Estrategia · {estrategia?.name || 'sin elegir'}</span>
-              <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>en {enLista ? (esVista ? `la vista «${nombreVistaDe(L.universo)}»` : L.universo && L.universo !== 'manual' ? 'el Nasdaq-100' : (L.simbolos || []).length === 1 ? L.simbolos[0] : `${(L.simbolos || []).length} valores`) : a.activo}{multi ? ` · velas ${velasPlan}` : <> · ocioso en {(OCIOSOS_FIJOS.find(([k]) => k === a.ocioso)?.[1] || a.ocioso || '—')}</>}</span>
-            </span>
-            <span aria-hidden="true" style={{ color: B.secundario, flex: 'none' }}>{bloqueAbierto ? '▾' : '▸'}</span>
-          </button>
+          {cabeceraParte({ n: 1, color: AZUL, id: 'e', tipo: 'estrategia', pct: a.peso, onPct: v => cambia('peso', v), abierto: bloqueAbierto, onPliega: () => setBloqueAbierto(x => !x),
+            resumen: `Estrategia · ${estrategia?.name || 'sin elegir'}`, quitarId: 'quitar-bloque-1', onQuitar: () => setA(x => quitaBloque1(x)), ayudaQuitar: AYUDA_BLOQUES.quitar1,
+            detalle: <>en {enLista ? (esVista ? `la vista «${nombreVistaDe(L.universo)}»` : L.universo && L.universo !== 'manual' ? 'el Nasdaq-100' : (L.simbolos || []).length === 1 ? L.simbolos[0] : `${(L.simbolos || []).length} valores`) : a.activo}{multi ? ` · velas ${velasPlan}` : <> · ocioso en {(OCIOSOS_FIJOS.find(([k]) => k === a.ocioso)?.[1] || a.ocioso || '—')}</>}</> })}
           {bloqueAbierto && <div data-cuerpo-bloque style={{ borderTop: `1px solid ${B.borde}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {multi && <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}><div><Etiqueta texto="Parte de tu dinero" ayuda={AYUDA_BLOQUES.parte}/>{campoPct(a.peso, v => cambia('peso', v), 'Parte del bloque 1')}</div>
-            <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }}><button type="button" data-boton="quitar-bloque-1" title="Quitar el bloque 1 (su % pasa al bloque siguiente)" onClick={() => setA(x => quitaBloque1(x))} style={{ ...S.boton, padding: '4px 10px', fontSize: 13, color: ROJO, borderColor: ROJO }}>🗑 Quitar</button><Ayuda texto={AYUDA_BLOQUES.quitar1} etiqueta="Quitar el bloque 1"/></span></div>}
           <div>
             <Etiqueta texto="Estrategia" ayuda={AYUDA_PLAN.estrategia}/>
             {/* §175: como el selector de valores: botón con la elegida y lista con buscador (antes, un <select>). Las semanales ya se
@@ -1166,31 +1174,22 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             <Segmentos etiquetaGrupo="Si llega una aportación con la operación abierta" valor={a.aportacionDentro} onCambia={v => cambia('aportacionDentro', v)} opciones={[['espera', 'Espera en el ocioso hasta la siguiente compra'], ['compra', 'Compra más acción']]}/>
           </div>}
             {!multi && <div><Etiqueta texto="Apalancamiento" ayuda={AYUDA_PLAN.apalancamiento}/><Segmentos etiquetaGrupo="Apalancamiento" valor={a.apalancamiento} onCambia={v => cambia('apalancamiento', v)} opciones={[[1, 'No'], [2, '×2'], [3, '×3']]}/></div>}
-            {multi && <div data-aviso="todavia-bloques" style={{ ...S.apagado, display: 'flex', alignItems: 'center', gap: 2 }}>Con varios bloques, de momento sin «Compra más acción» ni apalancamiento.<Ayuda texto={AYUDA_BLOQUES.todavia} etiqueta="Lo que aún no hay con varios bloques"/></div>}
+            {multi && <div data-aviso="todavia-bloques" style={{ ...S.apagado, display: 'flex', alignItems: 'center', gap: 2 }}>Con varias partes, de momento sin «Compra más acción» ni apalancamiento.<Ayuda texto={AYUDA_BLOQUES.todavia} etiqueta="Lo que aún no hay con varias partes"/></div>}
           </div>}
         </div>}
         {extra.map((b, k) => esBloquePesos(b) ? bloquePesos(b, k) : bloqueExtra(b, k))}
-        {/* §187: «+ Añadir bloque» y, con varios, cómo se reparte el dinero entre ellos. §197: un desplegable, «Con una estrategia» o «Con pesos». */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
-          <button type="button" data-boton="anadir-bloque" aria-expanded={menuBloque} disabled={!estrategia && !sin1} title="Otra parte de tu dinero, que funciona a la vez que las demás" onClick={() => setMenuBloque(x => !x)} style={{ ...S.boton, padding: '6px 12px', fontSize: 13 }}>+ Añadir bloque ▾</button>
-          <Ayuda texto={`${AYUDA_BLOQUES.anadir} ${AYUDA_PESOS.menu}`} etiqueta="Añadir bloque"/>
-          {menuBloque && <>
-            <div aria-hidden="true" onClick={() => setMenuBloque(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }}/>
-            <div data-menu="anadir-bloque" role="menu" style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: 4, zIndex: 41, minWidth: 300, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, boxShadow: '0 6px 18px rgba(0,0,0,.35)', padding: 4 }}>
-              {[['estrategia', 'Con una estrategia', 'Una estrategia de tarjetas en un valor o en varios.'], ['pesos', 'Con pesos', 'Un reparto fijo entre símbolos (con o sin reglas que lo cambian).']].map(([t, titulo, sub]) =>
-                <button key={t} type="button" role="menuitem" data-boton={`anadir-bloque-${t}`} onClick={() => { setMenuBloque(false); setA(x => anadeBloque(x, estId, t)) }}
-                  style={{ display: 'block', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', borderRadius: 4, padding: '7px 10px', cursor: 'pointer', fontFamily: B.letra, color: B.texto }}
-                  onMouseEnter={e => { e.currentTarget.style.background = B.fondo }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
-                  <div style={{ fontWeight: 700, color: B.titulo }}>{titulo}</div><div style={{ ...S.apagado, fontSize: 12 }}>{sub}</div></button>)}
-            </div>
-          </>}
+        {/* §283: «+ Añadir otra parte» (empieza como Buy&Hold, con la mitad de la parte más grande) y, con varias, cómo se reparte el dinero entre ellas. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          <button type="button" data-boton="anadir-bloque" title="Otra parte de tu dinero, que funciona a la vez que las demás" onClick={() => setA(x => anadeBloque(x, estId, 'pesos'))} style={{ ...S.boton, padding: '6px 12px', fontSize: 13 }}>+ Añadir otra parte</button>
+          <Ayuda texto={AYUDA_BLOQUES.anadir} etiqueta="Añadir otra parte"/>
+          {nBloques > 1 && sumaPct === 100 && <span data-suma-partes style={{ color: VERDE, marginLeft: 10 }}>Suman 100 % ✓</span>}
         </div>
         {nBloques > 1 && <div data-reparto-bloques style={{ borderTop: `1px solid ${B.borde}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ fontWeight: 700, color: B.titulo }}>Reparto entre bloques</div>
-          <div><Etiqueta texto="El dinero libre y las aportaciones van…" ayuda={AYUDA_BLOQUES.dineroLibre}/>
-            <Segmentos etiquetaGrupo="El dinero libre entre bloques" valor={a.dineroLibre === 'prioridad' ? 'prioridad' : 'tope'} onCambia={v => cambia('dineroLibre', v)} opciones={[['tope', 'Con tope'], ['prioridad', 'Solo prioridad']]}/></div>
-          <div><Etiqueta texto="Vender para volver al reparto" ayuda={AYUDA_BLOQUES.vender}/>
-            <Segmentos etiquetaGrupo="Vender para volver al reparto" valor="nunca" onCambia={() => {}} opciones={[['nunca', 'Nunca'], ['anual', 'Cada año', 'Llegará más adelante'], ['desvio', 'Si se desvía', 'Llegará más adelante']]}/></div>
+          <div style={{ fontWeight: 700, color: B.titulo }}>Con varias partes</div>
+          <div><Etiqueta texto="El dinero nuevo" ayuda={AYUDA_BLOQUES.dineroLibre}/>
+            <Segmentos etiquetaGrupo="El dinero nuevo entre las partes" valor={a.dineroLibre === 'prioridad' ? 'prioridad' : 'tope'} onCambia={v => cambia('dineroLibre', v)} opciones={[['tope', 'Cada parte, como mucho hasta su %'], ['prioridad', 'Primero la que más se ha quedado atrás, sin tope']]}/></div>
+          <div><Etiqueta texto="Volver al reparto" ayuda={AYUDA_BLOQUES.vender}/>
+            <Segmentos etiquetaGrupo="Vender para volver al reparto" valor="nunca" onCambia={() => {}} opciones={[['nunca', 'Nunca (no se vende para volver)'], ['anual', 'Cada año', 'Llegará más adelante'], ['desvio', 'Si se desvía', 'Llegará más adelante']]}/></div>
         </div>}
       </div>
     </div>

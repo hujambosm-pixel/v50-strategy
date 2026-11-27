@@ -203,19 +203,20 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     const hasta = async (cond, max = 20000) => { const t0 = Date.now(); do { await D.espera(5); try { if (cond()) { await D.espera(5); return true } } catch (_) {} } while (Date.now() - t0 < max); return false }
     const m = D.monta(React.createElement(BP, props({ ajustes: a2 })), RDC); await D.espera(60)
     const tarjeta = (id) => m.raiz.conAtributo('data-tarjeta', id)[0], boton = (id) => m.raiz.conAtributo('data-boton', id)[0]
+    const tipoBtn = (n, t) => (m.raiz.conAtributo('data-cabecera-parte', String(n))[0]?.conAtributo('aria-pressed') || []).find(z => z.textContent.includes(t === 'pesos' ? 'Buy&Hold' : 'Con una estrategia'))
     ok(m.raiz.conAtributo('data-bloque', '1').length === 1 && m.raiz.conAtributo('data-bloque', '2').length === 1 && m.raiz.conAtributo('data-barra-cartera', 'bloques').length === 1, 'dos bloques en filas y la barra con los dos')
-    ok(m.raiz.conAtributo('data-parte').map(x => x.textContent).join('|') === '60 %|40 %', `cada fila con su % (${m.raiz.conAtributo('data-parte').map(x => x.textContent).join('|')})`)
+    ok(m.raiz.conAtributo('data-parte').map(x => x.getAttribute('data-parte')).join('|') === '60 %|40 %', `cada fila con su % (${m.raiz.conAtributo('data-parte').map(x => x.getAttribute('data-parte')).join('|')})`)
     ok(/Sigue la tendencia/.test(m.raiz.conAtributo('data-bloque', '2')[0].textContent) && /en MSFT/.test(m.raiz.conAtributo('data-bloque', '2')[0].textContent), 'el bloque 2 con su estrategia y su valor')
-    ok(m.raiz.conAtributo('data-reparto-bloques').length === 1 && /Con tope/.test(m.raiz.conAtributo('data-reparto-bloques')[0].textContent), '«Reparto entre bloques», con «Con tope»')
+    ok(m.raiz.conAtributo('data-reparto-bloques').length === 1 && /Con varias partes/.test(m.raiz.conAtributo('data-reparto-bloques')[0].textContent) && /Cada parte, como mucho hasta su %/.test(m.raiz.conAtributo('data-reparto-bloques')[0].textContent), '§283: «Con varias partes», con «Cada parte, como mucho hasta su %»')
     ok(tarjeta('tu-dinero').conAtributo('data-ocioso-de', 'cuenta').length === 1 && !m.raiz.conAtributo('data-bloque', '1')[0].conAtributo('data-ocioso-de').length, 'el dinero ocioso, de la cuenta: en «Tu dinero» y no en el bloque')
     ok(!/Apalancamiento/.test(m.raiz.conAtributo('data-bloque', '1')[0].textContent) && m.raiz.conAtributo('data-aviso', 'todavia-bloques').length === 1, 'sin apalancamiento ni «Compra más acción» con varios bloques (y lo dice)')
     await hasta(() => pedidos.length > 0)
     const pp = pedidos[pedidos.length - 1]?.[0]
     ok(pp?.piezas?.length === 2 && pp.piezas[1].activo === 'MSFT' && pp.piezas[1].peso === 0.4 && !pedidos[pedidos.length - 1][2], `lo que se calcula: el plan de dos bloques (sin listas, sin peticiones de candidatos)`)
     D.pulsa(m.raiz.conAtributo('data-bloque', '2')[0].conAtributo('data-boton', 'quitar-bloque')[0]); await hasta(() => !m.raiz.conAtributo('data-bloque', '2').length)
-    ok(!m.raiz.conAtributo('data-bloque', '2').length && m.raiz.conAtributo('data-parte')[0]?.textContent === '100 %' && !m.raiz.conAtributo('data-reparto-bloques').length && m.raiz.conAtributo('data-bloque', '1')[0].conAtributo('data-ocioso-de', 'bloque').length === 1, '«Quitar»: vuelve a un bloque al 100 %, con el ocioso en el bloque')
-    D.pulsa(boton('anadir-bloque')); await hasta(() => !!boton('anadir-bloque-estrategia')); D.pulsa(boton('anadir-bloque-estrategia')); await hasta(() => m.raiz.conAtributo('data-bloque', '2').length === 1)
-    ok(m.raiz.conAtributo('data-parte').map(x => x.textContent).join('|') === '50 %|50 %', '«+ Añadir bloque ▾» → «Con una estrategia»: 50 % y 50 %')
+    ok(!m.raiz.conAtributo('data-bloque', '2').length && m.raiz.conAtributo('data-parte')[0]?.getAttribute('data-parte') === '100 %' && !m.raiz.conAtributo('data-reparto-bloques').length && m.raiz.conAtributo('data-bloque', '1')[0].conAtributo('data-ocioso-de', 'bloque').length === 1, '«Quitar»: vuelve a un bloque al 100 %, con el ocioso en el bloque')
+    D.pulsa(boton('anadir-bloque')); await hasta(() => m.raiz.conAtributo('data-bloque', '2').length === 1); D.pulsa(tipoBtn(2, 'estrategia')); await hasta(() => m.raiz.conAtributo('data-bloque', '2').length === 1 && !m.raiz.conAtributo('data-tipo-bloque', 'pesos').length)
+    ok(m.raiz.conAtributo('data-parte').map(x => x.getAttribute('data-parte')).join('|') === '50 %|50 %', '«+ Añadir otra parte» y «⚙ Con una estrategia»: 50 % y 50 %')
     m.quita(); await D.espera(5)
     // Con lista en el bloque 2: se pide una petición de candidatos para él (cuerposLista), con su parte del dinero inicial.
     pedidos = []
