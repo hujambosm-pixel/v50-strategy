@@ -73,7 +73,7 @@ import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_NO_EXISTE, avisoPrueba as textoAvisoPrueba, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
   ayudaCaida, avisoListaSimple, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, velasDeEstrategia, velasDelPlan, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS, resumenDinero, bloquesDe, estrategiaBloque, anadeBloque, quitaBloque, repartirResto, sumaPesos, AYUDA_BLOQUES,
-  esBloquePesos, sumaPesosBloque, resumenPesos, AYUDA_PESOS, VOLVER_OPCIONES, LLEGA_OPCIONES, PUNTOS_BANDA_DEFECTO, filaDeMedidas } from '../lib/builder/planPantalla'
+  esBloquePesos, sumaPesosBloque, resumenPesos, AYUDA_PESOS, VOLVER_OPCIONES, LLEGA_OPCIONES, PUNTOS_BANDA_DEFECTO, filaDeMedidas, sinBloque1, cuantosBloques, quitaBloque1 } from '../lib/builder/planPantalla'
 import { MAX_SIMBOLOS_PESOS } from '../lib/planes/pesos'
 import ReglasPesos from './ReglasPesos'
 import OciosoRegla from './OciosoRegla'
@@ -380,10 +380,12 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // El plan de los ajustes de ahora; sus errores (los del motor) y, sin errores, la clave que dispara el cálculo.
   // §187: varios bloques. extra: los bloques 2, 3… (a.bloques); multi: hay más de uno. estrategiaDe: la estrategia de ahora de un bloque extra.
   const extra = bloquesDe(a), multi = extra.length > 0
+  // §279: sin el bloque 1 de estrategia (solo bloques «Con pesos» u otros): sin1; cuántos bloques hay y el número del primero de «extra».
+  const sin1 = sinBloque1(a), nBloques = cuantosBloques(a), primerN = sin1 ? 1 : 2
   const estrategiaDe = useCallback((id) => diarias.find(s => String(s.id) === String(id)) || null, [diarias])
-  const plan = useMemo(() => estrategia ? planDe(a, estrategia, null, estrategiaDe) : null, [a, estrategia, estrategiaDe])
+  const plan = useMemo(() => estrategia || sin1 ? planDe(a, estrategia, null, estrategiaDe) : null, [a, estrategia, estrategiaDe, sin1])
   const errores = useMemo(() => plan ? validaPlan(plan) : [], [plan])
-  const enLista = a.donde === 'lista'
+  const enLista = !sin1 && a.donde === 'lista'
   // §84: el motor del Backtesting calcula con la estrategia de AHORA (por su id). Con la versión guardada de un plan, solo si su regla
   // sigue igual que la de ahora; si no, se dice por qué no se calcula.
   const estPorDentro = !estrategia ? null : !usaGuardada ? estrategia : (estrategiaActual && cambio && !cambio.cambiada && !cambio.borrada ? estrategiaActual : null)
@@ -439,12 +441,12 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const motivoLista = !enLista ? null : (motivoEstPorDentro || (calcLista && motivoListaNoCalculable(calcLista.plan, cuerpoLista?.symbols || null)) || (!cuerpoLista ? motivoSinPeticion({ a, estrategia: estPorDentro, universoDatos }) : null))
   // §187: con varios bloques, una petición de candidatos por cada bloque con lista (la de ese bloque solo: su parte del dinero inicial), en
   // cuerposLista; si alguno no se puede pedir, el motivo (motivoMulti).
-  const bloquesConLista = useMemo(() => !multi || !plan ? [] : [{ id: 'e', b: a, est: estPorDentro }, ...extra.map(b => ({ id: b.id, b, est: estrategiaBloque(b, estrategiaDe) }))]
+  const bloquesConLista = useMemo(() => !multi || !plan ? [] : [...(sin1 ? [] : [{ id: 'e', b: a, est: estPorDentro }]), ...extra.map(b => ({ id: b.id, b, est: estrategiaBloque(b, estrategiaDe) }))]
     .filter(x => x.b.donde === 'lista').map(x => ({ ...x, ab: { ...a, activo: x.b.activo, donde: 'lista', lista: x.b.lista, velas: x.b.velas, filtros: x.b.filtros, capital: plan.dinero.capitalInicial * (plan.piezas.find(p => p.id === x.id)?.peso || 0) } })), [multi, plan, a, extra, estPorDentro, estrategiaDe])
   const cuerposLista = useMemo(() => !multi ? null : Object.fromEntries(bloquesConLista.map(x => [x.id, x.est ? peticionPorDentro({ a: x.ab, estrategia: x.est, wlData: datosLista?.wlData || {}, universoDatos }) : null])), [multi, bloquesConLista, datosLista?.wlData, universoDatos])
   const motivoMulti = !multi ? null : (() => {
     for (const x of bloquesConLista) {
-      const nombreB = x.id === 'e' ? 'el bloque 1' : `el bloque ${extra.findIndex(b => b.id === x.id) + 2}`
+      const nombreB = x.id === 'e' ? 'el bloque 1' : `el bloque ${extra.findIndex(b => b.id === x.id) + primerN}`
       if (!x.est) return x.id === 'e' && motivoEstPorDentro ? motivoEstPorDentro : `Elige la estrategia de ${nombreB}.`
       if (!cuerposLista[x.id]) return `En ${nombreB}: ${motivoSinPeticion({ a: x.ab, estrategia: x.est, universoDatos }) || 'falta algo para pedir sus valores.'}`
       const m = motivoListaNoCalculable(plan, cuerposLista[x.id].symbols || null, plan.piezas.find(p => p.id === x.id)); if (m) return `En ${nombreB}: ${m}`
@@ -938,7 +940,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // y «Cargar un ejemplo» (si el bloque ya tiene algo, pregunta antes de cambiarlo).
   const valoresPesos = useMemo(() => [{ simbolo: 'LIQUIDEZ', nombre: 'Liquidez del bloque · efectivo que no rinde' }, ...valoresLista], [valoresLista])
   const bloquePesos = (b, k) => {
-    const n = k + 2, color = COLORES_BLOQUE[(k + 1) % COLORES_BLOQUE.length], abierto = extraAbiertos[b.id] !== false
+    const n = k + primerN, color = COLORES_BLOQUE[(n - 1) % COLORES_BLOQUE.length], abierto = extraAbiertos[b.id] !== false
     const ps = b.pesos || [], suma = sumaPesosBloque(b), cada = b.volver?.cada || 'nunca'
     const ponPesos = (f) => ponBloque(b.id, x => ({ ...x, pesos: f(x.pesos || []) }))
     const textoVolver = VOLVER_OPCIONES.find(([v]) => v === cada)?.[1] || 'Nunca', textoLlega = LLEGA_OPCIONES.find(([v]) => v === b.aportaciones)?.[1] || ''
@@ -947,7 +949,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       <div key={b.id} data-bloque={n} data-tipo-bloque="pesos" style={marcoBloque(color)}>
         <button type="button" data-fila-bloque aria-expanded={abierto} onClick={() => setExtraAbiertos(x => ({ ...x, [b.id]: !abierto }))} title={abierto ? 'Plegar el bloque' : 'Abrir el bloque'} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: fondoCabeceraBloque(color), border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, textAlign: 'left' }}>
           <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: color, flex: 'none' }}/>
-          <span data-parte style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>{textoCampo(b.peso)} %</span>
+          <span data-parte style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>{nBloques > 1 ? textoCampo(b.peso) : 100} %</span>
           <span style={{ minWidth: 0, flex: '1 1 auto' }}>
             <span data-resumen-bloque title={resumenPesos(b)} style={{ display: 'block', color: B.titulo, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Con pesos · {resumenPesos(b)}</span>
             <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>volver a los pesos: {cada === 'banda' ? `si alguno se separa más de ${textoCampo(b.volver?.puntos)} puntos` : textoVolver.toLowerCase()} · el dinero que llega: {textoLlega.toLowerCase()}</span>
@@ -956,8 +958,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
         </button>
         {abierto && <div data-cuerpo-bloque style={{ borderTop: `1px solid ${B.borde}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
-            <div><Etiqueta texto="Parte de tu dinero" ayuda={AYUDA_BLOQUES.parte}/>{campoPct(b.peso, v => ponBloque(b.id, x => ({ ...x, peso: v })), `Parte del bloque ${n}`)}</div>
-            <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }}><span style={{ ...S.apagado, marginRight: 10, display: 'inline-flex', alignItems: 'center' }}>Bloque con pesos<Ayuda texto={AYUDA_PESOS.bloque} etiqueta="Bloque con pesos"/></span><button type="button" data-boton="quitar-bloque" title="Quitar este bloque (su % pasa al bloque 1)" onClick={() => setA(x => quitaBloque(x, b.id))} style={{ ...S.boton, padding: '4px 10px', fontSize: 13, color: ROJO, borderColor: ROJO }}>🗑 Quitar</button><Ayuda texto={AYUDA_BLOQUES.quitar} etiqueta="Quitar el bloque"/></span>
+            {nBloques > 1 && <div><Etiqueta texto="Parte de tu dinero" ayuda={AYUDA_BLOQUES.parte}/>{campoPct(b.peso, v => ponBloque(b.id, x => ({ ...x, peso: v })), `Parte del bloque ${n}`)}</div>}
+            <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }}><span style={{ ...S.apagado, marginRight: 10, display: 'inline-flex', alignItems: 'center' }}>Bloque con pesos<Ayuda texto={AYUDA_PESOS.bloque} etiqueta="Bloque con pesos"/></span>{nBloques > 1 && <button type="button" data-boton="quitar-bloque" title={`Quitar este bloque (su % pasa al ${sin1 ? 'primer bloque que quede' : 'bloque 1'})`} onClick={() => setA(x => quitaBloque(x, b.id))} style={{ ...S.boton, padding: '4px 10px', fontSize: 13, color: ROJO, borderColor: ROJO }}>🗑 Quitar</button>}<Ayuda texto={AYUDA_BLOQUES.quitar} etiqueta="Quitar el bloque"/></span>
           </div>
           <div data-ejemplos-pesos style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span style={{ ...S.secundario, display: 'inline-flex', alignItems: 'center' }}>Cargar un ejemplo<Ayuda texto={AYUDA_REGLAS.ejemplos} etiqueta="Cargar un ejemplo"/>:</span>
@@ -991,7 +993,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     )
   }
   const bloqueExtra = (b, k) => {
-    const n = k + 2, color = COLORES_BLOQUE[(k + 1) % COLORES_BLOQUE.length], est = estrategiaBloque(b, estrategiaDe), abierto = extraAbiertos[b.id] !== false
+    const n = k + primerN, color = COLORES_BLOQUE[(n - 1) % COLORES_BLOQUE.length], est = estrategiaBloque(b, estrategiaDe), abierto = extraAbiertos[b.id] !== false
     const Lb = b.donde === 'lista' ? (b.lista || {}) : listaDeAccion(b), uni = !!Lb.universo && Lb.universo !== 'manual', marc = Lb.simbolos || [], varios = b.donde === 'lista' && (uni || marc.length >= 2)
     const abiertoV = valoresExtra[b.id] ?? (!uni && marc.length === 0)
     const vEst = velasDeEstrategia(est), vPlan = velasDelPlan(b, est)
@@ -999,7 +1001,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       <div key={b.id} data-bloque={n} style={marcoBloque(color)}>
         <button type="button" data-fila-bloque aria-expanded={abierto} onClick={() => setExtraAbiertos(x => ({ ...x, [b.id]: !abierto }))} title={abierto ? 'Plegar el bloque' : 'Abrir el bloque'} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: fondoCabeceraBloque(color), border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, textAlign: 'left' }}>
           <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: color, flex: 'none' }}/>
-          <span data-parte style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>{textoCampo(b.peso)} %</span>
+          <span data-parte style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>{nBloques > 1 ? textoCampo(b.peso) : 100} %</span>
           <span style={{ minWidth: 0, flex: '1 1 auto' }}>
             <span data-resumen-bloque style={{ display: 'block', color: B.titulo, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Estrategia · {est?.name || 'sin elegir'}</span>
             <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>en {esUniversoVista(Lb.universo) ? `la vista «${nombreVistaDe(Lb.universo)}»` : uni ? 'el Nasdaq-100' : marc.length === 1 ? marc[0] : `${marc.length} valores`} · velas {vPlan}</span>
@@ -1008,8 +1010,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
         </button>
         {abierto && <div data-cuerpo-bloque style={{ borderTop: `1px solid ${B.borde}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
-            <div><Etiqueta texto="Parte de tu dinero" ayuda={AYUDA_BLOQUES.parte}/>{campoPct(b.peso, v => ponBloque(b.id, x => ({ ...x, peso: v })), `Parte del bloque ${n}`)}</div>
-            <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }}><button type="button" data-boton="quitar-bloque" title="Quitar este bloque (su % pasa al bloque 1)" onClick={() => setA(x => quitaBloque(x, b.id))} style={{ ...S.boton, padding: '4px 10px', fontSize: 13, color: ROJO, borderColor: ROJO }}>🗑 Quitar</button><Ayuda texto={AYUDA_BLOQUES.quitar} etiqueta="Quitar el bloque"/></span>
+            {nBloques > 1 && <div><Etiqueta texto="Parte de tu dinero" ayuda={AYUDA_BLOQUES.parte}/>{campoPct(b.peso, v => ponBloque(b.id, x => ({ ...x, peso: v })), `Parte del bloque ${n}`)}</div>}
+            <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }}>{nBloques > 1 && <button type="button" data-boton="quitar-bloque" title={`Quitar este bloque (su % pasa al ${sin1 ? 'primer bloque que quede' : 'bloque 1'})`} onClick={() => setA(x => quitaBloque(x, b.id))} style={{ ...S.boton, padding: '4px 10px', fontSize: 13, color: ROJO, borderColor: ROJO }}>🗑 Quitar</button>}<Ayuda texto={AYUDA_BLOQUES.quitar} etiqueta="Quitar el bloque"/></span>
           </div>
           <div>
             <Etiqueta texto="Estrategia" ayuda={AYUDA_PLAN.estrategia}/>
@@ -1072,10 +1074,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       <div style={{ ...S.cuerpo, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {!multi ? <div data-barra-cartera aria-hidden="true" title="Todo el dinero del plan está en este bloque" style={{ height: 8, borderRadius: 4, background: AZUL }}/>
           : <div data-barra-cartera="bloques" title={`Cómo se reparte tu dinero entre los bloques${sumaPct !== 100 ? ` (suman ${textoCampo(sumaPct)} %, no 100 %)` : ''}`} style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: B.borde }}>
-            {[Number(a.peso) || 0, ...extra.map(b => Number(b.peso) || 0)].map((p, k) => <div key={k} style={{ width: `${Math.max(0, p) / Math.max(100, sumaPct) * 100}%`, background: COLORES_BLOQUE[k % COLORES_BLOQUE.length] }}/>)}
+            {[...(sin1 ? [] : [Number(a.peso) || 0]), ...extra.map(b => Number(b.peso) || 0)].map((p, k) => <div key={k} style={{ width: `${Math.max(0, p) / Math.max(100, sumaPct) * 100}%`, background: COLORES_BLOQUE[k % COLORES_BLOQUE.length] }}/>)}
           </div>}
         {multi && sumaPct !== 100 && <div data-aviso="suma-bloques" style={{ color: ROJO, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>✕ Los bloques suman {textoCampo(sumaPct)} %: tienen que sumar 100 %.<button type="button" data-boton="repartir-resto" title="Ajusta los % en proporción para que sumen 100 %" onClick={() => setA(repartirResto)} style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }}>Repartir el resto</button></div>}
-        <div data-bloque="1" style={marcoBloque(AZUL)}>
+        {!sin1 && <div data-bloque="1" style={marcoBloque(AZUL)}>
           <button type="button" data-fila-bloque aria-expanded={bloqueAbierto} onClick={() => setBloqueAbierto(x => !x)} title={bloqueAbierto ? 'Plegar el bloque' : 'Abrir el bloque'} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: fondoCabeceraBloque(AZUL), border: 'none', cursor: 'pointer', fontFamily: B.letra, fontSize: B.base, color: B.texto, textAlign: 'left' }}>
             <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: AZUL, flex: 'none' }}/>
             <span data-parte title={multi ? 'Qué parte del dinero del plan va a este bloque.' : 'Qué parte del dinero del plan va a este bloque. Con un solo bloque, todo: de 10.000 €, los 10.000 €.'} style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>{multi ? textoCampo(a.peso) : 100} %</span>
@@ -1086,7 +1088,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             <span aria-hidden="true" style={{ color: B.secundario, flex: 'none' }}>{bloqueAbierto ? '▾' : '▸'}</span>
           </button>
           {bloqueAbierto && <div data-cuerpo-bloque style={{ borderTop: `1px solid ${B.borde}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {multi && <div><Etiqueta texto="Parte de tu dinero" ayuda={AYUDA_BLOQUES.parte}/>{campoPct(a.peso, v => cambia('peso', v), 'Parte del bloque 1')}</div>}
+          {multi && <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}><div><Etiqueta texto="Parte de tu dinero" ayuda={AYUDA_BLOQUES.parte}/>{campoPct(a.peso, v => cambia('peso', v), 'Parte del bloque 1')}</div>
+            <span style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }}><button type="button" data-boton="quitar-bloque-1" title="Quitar el bloque 1 (su % pasa al bloque siguiente)" onClick={() => setA(x => quitaBloque1(x))} style={{ ...S.boton, padding: '4px 10px', fontSize: 13, color: ROJO, borderColor: ROJO }}>🗑 Quitar</button><Ayuda texto={AYUDA_BLOQUES.quitar1} etiqueta="Quitar el bloque 1"/></span></div>}
           <div>
             <Etiqueta texto="Estrategia" ayuda={AYUDA_PLAN.estrategia}/>
             {/* §175: como el selector de valores: botón con la elegida y lista con buscador (antes, un <select>). Las semanales ya se
@@ -1165,11 +1168,11 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             {!multi && <div><Etiqueta texto="Apalancamiento" ayuda={AYUDA_PLAN.apalancamiento}/><Segmentos etiquetaGrupo="Apalancamiento" valor={a.apalancamiento} onCambia={v => cambia('apalancamiento', v)} opciones={[[1, 'No'], [2, '×2'], [3, '×3']]}/></div>}
             {multi && <div data-aviso="todavia-bloques" style={{ ...S.apagado, display: 'flex', alignItems: 'center', gap: 2 }}>Con varios bloques, de momento sin «Compra más acción» ni apalancamiento.<Ayuda texto={AYUDA_BLOQUES.todavia} etiqueta="Lo que aún no hay con varios bloques"/></div>}
           </div>}
-        </div>
+        </div>}
         {extra.map((b, k) => esBloquePesos(b) ? bloquePesos(b, k) : bloqueExtra(b, k))}
         {/* §187: «+ Añadir bloque» y, con varios, cómo se reparte el dinero entre ellos. §197: un desplegable, «Con una estrategia» o «Con pesos». */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, position: 'relative' }}>
-          <button type="button" data-boton="anadir-bloque" aria-expanded={menuBloque} disabled={!estrategia} title="Otra parte de tu dinero, que funciona a la vez que las demás" onClick={() => setMenuBloque(x => !x)} style={{ ...S.boton, padding: '6px 12px', fontSize: 13 }}>+ Añadir bloque ▾</button>
+          <button type="button" data-boton="anadir-bloque" aria-expanded={menuBloque} disabled={!estrategia && !sin1} title="Otra parte de tu dinero, que funciona a la vez que las demás" onClick={() => setMenuBloque(x => !x)} style={{ ...S.boton, padding: '6px 12px', fontSize: 13 }}>+ Añadir bloque ▾</button>
           <Ayuda texto={`${AYUDA_BLOQUES.anadir} ${AYUDA_PESOS.menu}`} etiqueta="Añadir bloque"/>
           {menuBloque && <>
             <div aria-hidden="true" onClick={() => setMenuBloque(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }}/>
@@ -1182,7 +1185,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             </div>
           </>}
         </div>
-        {multi && <div data-reparto-bloques style={{ borderTop: `1px solid ${B.borde}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {nBloques > 1 && <div data-reparto-bloques style={{ borderTop: `1px solid ${B.borde}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ fontWeight: 700, color: B.titulo }}>Reparto entre bloques</div>
           <div><Etiqueta texto="El dinero libre y las aportaciones van…" ayuda={AYUDA_BLOQUES.dineroLibre}/>
             <Segmentos etiquetaGrupo="El dinero libre entre bloques" valor={a.dineroLibre === 'prioridad' ? 'prioridad' : 'tope'} onCambia={v => cambia('dineroLibre', v)} opciones={[['tope', 'Con tope'], ['prioridad', 'Solo prioridad']]}/></div>
@@ -1198,7 +1201,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       <button type="button" data-pliega-dinero aria-expanded={dineroAbierto} onClick={() => setDineroAb(x => ({ ...x, [actual]: !dineroAbierto }))} title={dineroAbierto ? 'Plegar «Tu dinero» en una línea' : 'Abrir «Tu dinero» para cambiarlo'}
         style={{ ...S.cabeceraTarjeta, borderRadius: dineroAbierto ? `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0` : B.radioTarjeta, display: 'flex', alignItems: 'baseline', gap: 8, width: '100%', boxSizing: 'border-box', cursor: 'pointer', textAlign: 'left', fontFamily: B.letra, ...(dineroAbierto ? {} : { borderBottom: 'none' }) }}>
         Tu dinero<span data-subtitulo style={{ ...S.apagado, fontWeight: 400 }}>cuánto, cuándo y costes</span><span aria-hidden="true" style={{ marginLeft: 'auto', color: B.secundario, fontWeight: 400 }}>{dineroAbierto ? '▾' : '▸'}</span></button>
-      {!dineroAbierto && <button type="button" data-resumen-dinero onClick={() => setDineroAb(x => ({ ...x, [actual]: true }))} title="Pulsa para cambiarlo" style={{ display: 'block', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 14px 11px', fontFamily: B.letra, fontSize: 13, color: B.texto, lineHeight: 1.5 }}>{resumenDinero(a, multi)}</button>}
+      {!dineroAbierto && <button type="button" data-resumen-dinero onClick={() => setDineroAb(x => ({ ...x, [actual]: true }))} title="Pulsa para cambiarlo" style={{ display: 'block', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 14px 11px', fontFamily: B.letra, fontSize: 13, color: B.texto, lineHeight: 1.5 }}>{resumenDinero(a, multi && (!sin1 || extra.some(b => !esBloquePesos(b))))}</button>}
       {dineroAbierto && <div style={{ ...S.cuerpo, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div>
           <Etiqueta texto="Periodo" ayuda={AYUDA_PLAN.periodo}/>
@@ -1230,7 +1233,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             {a.comisionTipo === 'fija' && <span title="Se cobra al comprar y otra vez al vender. Si tu bróker cobra 0,37 € solo al comprar, pon 0,185 € (0,185 + 0,185 = 0,37 €)." style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero enEuros etiqueta="Euros por orden" valor={a.comisionFija} onCambia={v => cambia('comisionFija', v)} ancho={70}/> € por orden</span>}
           </div>
         </div>
-        {multi && ociosoCampo}
+        {multi && (!sin1 || extra.some(b => !esBloquePesos(b))) && ociosoCampo}
       </div>}
     </div>
   )
@@ -1247,7 +1250,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // §89: el resultado de «Tu dinero» es de una lista solo si el plan calculado la tiene (al cambiar de «Una acción» a «Una lista», hasta
   // que llega el cálculo nuevo, no se enseña el de antes).
   // §187: con varios bloques, como con una lista (la parte del dinero en valores cada día, sin «Buy&Hold» de un valor).
-  const resMulti = (calc.resultado?.plan?.piezas || []).filter(p => p.tipo === 'estrategia' || p.tipo === 'pesos').length > 1   // §197: también los «Con pesos»
+  const resMulti = (calc.resultado?.plan?.piezas || []).filter(p => p.tipo === 'estrategia' || p.tipo === 'pesos').length > 1 || (calc.resultado?.plan?.piezas || []).some(p => p.tipo === 'pesos')   // §197: también los «Con pesos»; §279: y un solo bloque «Con pesos»
   const resLista = multi ? resMulti : ajustesDelResultado?.donde === 'lista' && !resMulti
   const motivoDer = multi ? motivoMulti : motivoLista
   const cifrasLista = (enLista || multi) && resLista && !motivoDer ? cifras : null

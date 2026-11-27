@@ -83,7 +83,7 @@ const txt = (x) => JSON.stringify(x)
     const a = r2({ tipo: 'moverBloque', pct: 20, de: 'S', a: 'T' }), b = r2({ tipo: 'moverActivo', pct: 50, de: 'S', a: 'T' }), c = r2({ tipo: 'vender', de: 'T' })
     ok(cerca(a.valorNeto, 4360 + (40 + 1640 / 55) * 60) && cerca(a.pesos.p.historial[0].movido, 1640), `mover el 20 % del bloque de S a T: 1.640 €, final 8.549,09 € (${a.valorNeto.toFixed(2)})`)
     ok(cerca(b.valorNeto, 3000 + (40 + 3000 / 55) * 60), `mover el 50 % de lo que hay en S: final 8.672,73 € (${b.valorNeto.toFixed(2)})`)
-    ok(cerca(c.valorNeto, 8200) && c.pesos.p.historial.length === 2 && c.pesos.p.historial[1].movido === 0, `vender todo T: final 8.200 €; el 22/04 se vuelve a cumplir (T marcó 101) y no hay T que vender: lo apunta con 0 € (${c.valorNeto.toFixed(2)})`)
+    ok(cerca(c.valorNeto, 8200) && c.pesos.p.historial.length === 1, `vender todo T: final 8.200 €; el 22/04 se vuelve a cumplir (T marcó 101) pero no hay T que vender: §279, no actúa ni se apunta (${c.valorNeto.toFixed(2)}, ${c.pesos.p.historial.length} apunte)`)
     ok(a.pesos.p.estados[F.indexOf('2021-03-08')] === 0, 'con mantener 0 y «quedarse», la regla no queda en curso')
     // «Quedarse» y «volver cada año»: el plan cruza un año solo en otra prueba; aquí, «cada mes» (el 01/04 y el 03/05) vuelve a los pesos QUE DEJÓ la regla.
     const m = P.ejecutaPlan(plan(bloque([['S', 0.6], ['T', 0.4]], [regla({ accion: { tipo: 'moverBloque', pct: 20, de: 'S', a: 'T' }, mantenerMeses: 0, despues: { tipo: 'quedarse' } })], { cada: 'mes' })), D, { libro: true })
