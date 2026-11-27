@@ -887,7 +887,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           <Segmentos etiquetaGrupo="Qué versión de la estrategia" valor={cualVersion} onCambia={setCualVersion} opciones={[['guardada', 'Usar la versión guardada'], ['actual', 'Usar la versión actual']]}/>
         </div>
       )}
-      {fila && cambio?.borrada && <div data-aviso="borrada" style={{ color: AMARILLO, marginTop: 8 }}>⚠ {AVISO_BORRADA}</div>}
+      {fila && cambio?.borrada && !sin1 && <div data-aviso="borrada" style={{ color: AMARILLO, marginTop: 8 }}>⚠ {AVISO_BORRADA}</div>}
     </div>
   )
 
@@ -1176,7 +1176,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           <Ayuda texto={`${AYUDA_BLOQUES.anadir} ${AYUDA_PESOS.menu}`} etiqueta="Añadir bloque"/>
           {menuBloque && <>
             <div aria-hidden="true" onClick={() => setMenuBloque(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }}/>
-            <div data-menu="anadir-bloque" role="menu" style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 41, minWidth: 300, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, boxShadow: '0 6px 18px rgba(0,0,0,.35)', padding: 4 }}>
+            <div data-menu="anadir-bloque" role="menu" style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: 4, zIndex: 41, minWidth: 300, background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, boxShadow: '0 6px 18px rgba(0,0,0,.35)', padding: 4 }}>
               {[['estrategia', 'Con una estrategia', 'Una estrategia de tarjetas en un valor o en varios.'], ['pesos', 'Con pesos', 'Un reparto fijo entre símbolos (con o sin reglas que lo cambian).']].map(([t, titulo, sub]) =>
                 <button key={t} type="button" role="menuitem" data-boton={`anadir-bloque-${t}`} onClick={() => { setMenuBloque(false); setA(x => anadeBloque(x, estId, t)) }}
                   style={{ display: 'block', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', borderRadius: 4, padding: '7px 10px', cursor: 'pointer', fontFamily: B.letra, color: B.texto }}
