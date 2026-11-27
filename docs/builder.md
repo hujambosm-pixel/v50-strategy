@@ -3976,3 +3976,6 @@ Boceto bocetos/condiciones-con-pasos.html aceptado por Sergi el 24/11 («sí, a 
 
 ## §271 · Screener y Replay: el PEG esperado en el pasado (historial de Yahoo)
 - Tabla nueva public.screener_peg (sql/screener_peg.sql, con REVERSIÓN; aplicada en LOCAL con OK de Sergi del 26/11) rellenada por scripts/cargaScreener.js (--peg y la carga semanal). En el pasado, el último PEG de como mucho 400 días (decisión de Sergi del 27/11); el filtro solo se aplica las semanas en que al menos la mitad de las empresas tienen PEG: desde el 17/06/2024. El Replay con una vista lo dice. Fotos rehechas. Pruebas: en-fecha.js (8 nuevas), replay-vista.js (6 nuevas), screenerSeguridad.js (7 nuevas). Detalle en docs/screener.md §30. Ninguna cifra de hoy cambia.
+
+## §272 · Replay: la ventana de empezar ya no se sale por la derecha
+- Captura de Sergi (27/11): con una vista del screener, el texto de la línea de resumen y el aviso del PEG salían fuera de la ventana. La rejilla de la ventana pasa de «auto 1fr» a «auto minmax(0, 1fr)» (la columna ya no crece hasta el texto más largo) y la ventana, de 420 a 480 px. Comprobado por mí en la app (vista «Crecer a buen precio», hace 5 años): nada sale por la derecha. Ninguna cifra cambia.

@@ -125,7 +125,7 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
   return (
     <div data-ventana-replay="" role="dialog" aria-modal="true" onMouseDown={e => { if (e.target === e.currentTarget) onCancelar() }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10050, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: '#0d1520', border: '1px solid #2f5b85', borderRadius: 6, padding: 18, width: 420, maxWidth: '100%', fontFamily: MONO, fontSize: 12, color: '#c9d6e3' }}>
+      <div style={{ background: '#0d1520', border: '1px solid #2f5b85', borderRadius: 6, padding: 18, width: 480, maxWidth: '100%', boxSizing: 'border-box', fontFamily: MONO, fontSize: 12, color: '#c9d6e3' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
           <b style={{ color: '#e2eaf5', fontSize: 14 }}>⏪ Replay</b>
           <Ayuda texto={AYUDA_REPLAY} etiqueta="Qué es el Replay" zIndice={10100} />
@@ -133,7 +133,7 @@ export function VentanaReplay({ simbolo, velas, onEmpezar, onCancelar, onValorAz
         </div>
         <SeguirGuardado simbolo={simbolo} guardados={guardados} onAbrir={onAbrir} />
         {onAbrir && guardados?.length > 0 && <div style={{ marginBottom: 6 }}><b style={{ color: '#e2eaf5' }}>Empezar uno nuevo</b></div>}
-        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 10px', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '6px 10px', alignItems: 'center', marginBottom: 10, overflowWrap: 'anywhere' }}>
           <span>Valores</span>
           <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <select data-fuente-replay="" value={fuente} onChange={e => setFuente(e.target.value)} style={{ ...campo, flex: 1, width: 'auto', minWidth: 0 }}>
