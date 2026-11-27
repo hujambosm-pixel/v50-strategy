@@ -65,8 +65,8 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   const pVacio = Pa.planDe({ ...aL, lista: { ...aL.lista, simbolos: [] } }, est)
   ok(Pl.validaPlan(pVacio).some(e => e.includes('al menos un valor')), 'sin valores, el plan no es válido (no se puede guardar)')
   ok(Pl.validaPlan({ ...pL, piezas: [{ ...pL.piezas[0], donde: 'otra' }] }).some(e => e.includes('una acción o una lista')), 'un `donde` desconocido no es válido')
-  let lanza = null; try { Pl.ejecutaPlan(pL, { fechas: ['2016-01-04'] }) } catch (e) { lanza = e.message }
-  ok(lanza === Pl.AVISO_LISTA_MODO, `§89: el motor aún no calcula una lista con «Slots iguales»: «${lanza}»`)
+  let lanza = null; try { Pl.ejecutaPlan({ ...pL, piezas: [{ ...pL.piezas[0], lista: { ...pL.piezas[0].lista, modo: 'positionsizing' } }] }, { fechas: ['2016-01-04'] }) } catch (e) { lanza = e.message }
+  ok(lanza === Pl.AVISO_LISTA_MODO, `§89/§282: el motor aún no calcula una lista con «Position Sizing»: «${lanza}»`)
   const textoL = Pa.textoParaClaudePlan({ ajustes: aL, estrategia: est, plan: pL, cifras: null, estado: null, resultadoPrueba: null, version: 'V' })
   ok(textoL.includes('Dónde: una lista, lista manual de 3 valores (AAPL, MSFT, NVDA) · reparto: Slots iguales · filtros: ninguno'), '«Copiar para Claude» dice la lista, el reparto y los filtros')
 
@@ -85,7 +85,7 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   const hOtro = html({ ajustes: { activo: 'ZZZZ' }, simbolos: ['AAPL', 'ZZZZ'] })
   ok(hOtro.includes('1 seleccionados') && hOtro.includes('>ZZZZ<'), '§144: un valor marcado que no está en la Watchlist se ve en el selector')
   const hL = html({ ajustes: aL })
-  ok(['data-lista="valores"', 'data-lista="reparto"', 'data-filtros-plan', 'Lista manual', 'MODO DE ASIGNACIÓN', 'data-sin-motor-lista'].every(t => hL.includes(t)) && !hL.includes('FILTROS DE MERCADO') && !hL.includes('data-lista="filtros"'), 'con lista: universo, selector, reparto, filtros y el aviso de «Tu dinero»')
+  ok(['data-lista="valores"', 'data-lista="reparto"', 'data-filtros-plan', 'Lista manual', 'MODO DE ASIGNACIÓN'].every(t => hL.includes(t)) && !hL.includes('data-sin-motor-lista') && !hL.includes('FILTROS DE MERCADO') && !hL.includes('data-lista="filtros"'), 'con lista: universo, selector, reparto y filtros; con «Slots iguales» (§282), sin el aviso de «todavía no»')
   ok(hL.includes('3 seleccionados') && hL.includes('Tecnológicas') && hL.includes('Nvidia'), 'el selector con la Watchlist: «3 seleccionados», sus listas y sus valores')
   ok(!hL.includes('prueba del paso 2') && !hL.includes('aún no tiene prueba'), '§273: con lista, tampoco la línea de la prueba del paso 2')
   ok(!hL.includes('data-aviso="a-mano"') && !hL.includes('Acción elegida a mano'), '§85: con lista, sin «⚠ Acción elegida a mano» (es de «Una acción»)')
@@ -123,9 +123,9 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   ok(m.raiz.textContent.includes('2 seleccionados') && donde() === 'lista' && m.raiz.conAtributo('data-lista', 'reparto').length === 1, 'marcar un segundo valor: 2 seleccionados, plan de lista y sale el reparto')
   ok(!m.raiz.conAtributo('data-aviso', 'a-mano').length, '§85: con varios se va «⚠ Acción elegida a mano»')
   const modo = m.raiz.busca(n => n.nodeName === 'DIV' && n.textContent === 'Slots iguales' && typeof D.propsDe(n).onClick === 'function')
-  D.pulsa(modo); await hasta(() => m.raiz.conAtributo('data-sin-motor-lista')[0]?.textContent === Pl.AVISO_LISTA_MODO && !m.raiz.conAtributo('data-calculando').length && !m.raiz.textContent.includes('Máx. activos simultáneos'))
+  D.pulsa(modo); await hasta(() => !m.raiz.conAtributo('data-sin-motor-lista').length && !m.raiz.conAtributo('data-calculando').length && !m.raiz.textContent.includes('Máx. activos simultáneos'))
   ok(m.raiz.textContent.includes('Slots iguales') && !m.raiz.textContent.includes('Máx. activos simultáneos'), 'elegir «Slots iguales» (sin «Máx. activos simultáneos», que es de concentrado)')
-  ok(m.raiz.conAtributo('data-sin-motor-lista')[0]?.textContent === Pl.AVISO_LISTA_MODO && !m.raiz.conAtributo('data-calculando').length, '§89: con «Slots iguales», «Tu dinero» aún no se calcula y lo dice')
+  ok(!m.raiz.conAtributo('data-sin-motor-lista').length, '§282: con «Slots iguales», «Tu dinero» ya se calcula (sin el aviso de «todavía no»)')
   const antes = calculos
   D.pulsa(fila('AAPL')); await hasta(() => donde() === 'accion' && !m.raiz.conAtributo('data-lista', 'reparto').length && calculos > antes)
   ok(donde() === 'accion' && m.raiz.textContent.includes('1 seleccionados') && !m.raiz.conAtributo('data-lista', 'reparto').length, 'desmarcar hasta dejar uno (MSFT): plan de una acción, sin reparto')

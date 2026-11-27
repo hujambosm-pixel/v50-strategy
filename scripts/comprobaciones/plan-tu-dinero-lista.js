@@ -58,6 +58,19 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
     ok(e.lista === true && e.operaciones.length === 1 && e.operaciones[0].symbol === 'A' && e.dentro.length === 4 && e.dentro[0] === 0 && cerca(e.dentro[1], 1), `la pieza devuelve sus operaciones (1, de A) y la parte del dinero dentro cada día (${e.dentro.map(x => x.toFixed(3)).join(' · ')})`)
   }
 
+  {
+    // §282 · Slots iguales, n = 2: cada valor con su hucha de 500 €. A entra el día 1 a 10 con 500 € (499 / 10 = 49,9) y sale el día 2 a 12:
+    // 49,9 × 12 − 1 = 597,80 € vuelven a SU hucha. B entra el día 2 a 20 con su hucha de 500 € (24,95). A vuelve a entrar el día 3 a 11 con
+    // TODA su hucha, 597,80 € (596,80 / 11 = 54,2545…), y sale el día 4 a 12: 596,80 / 11 × 12 − 1 = 650,0545 €. B sale el día 4 a 18:
+    // 24,95 × 18 − 1 = 448,10 €. Final 1.098,1545 €, 6 órdenes.
+    const As = activo('A', [10, 12, 11, 12], [11, 12, 11.5, 12], [{ symbol: 'A', entryDate: F[0], entryPx: 10, exitDate: F[1], exitPx: 12, pasaPuerta: true }, { symbol: 'A', entryDate: F[2], entryPx: 11, exitDate: F[3], exitPx: 12, pasaPuerta: true }])
+    const Bs = activo('B', [20, 20, 18, 18], [20, 19, 18, 18], [{ symbol: 'B', entryDate: F[1], entryPx: 20, exitDate: F[3], exitPx: 18, pasaPuerta: true }])
+    const d = datosA('slots'); d.lista.activos = [As, Bs]
+    const r = Pl.ejecutaPlan(planA('slots'), d)
+    ok(cerca(r.valorNeto, 596.8 / 11 * 12 - 1 + 448.1, 1e-9) && r.costes.ordenes === 6, `§282 slots a mano: 1.098,15 € con 6 órdenes (${r.valorNeto}, ${r.costes.ordenes})`)
+    ok(r.estrategias.e.operaciones.map(o => o.capital.toFixed(2)).join() === '500.00,500.00,597.80', `cada compra se lleva toda su hucha: 500 · 500 · 597,80 € (${r.estrategias.e.operaciones.map(o => o.capital).join(', ')})`)
+  }
+
   // ── 1b · Aportaciones y ocioso (§91), a mano ──
   {
     const G = ['2020-01-30', '2020-01-31', '2020-02-03', '2020-02-04']
@@ -80,6 +93,13 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
     const r2 = Pl.ejecutaPlan(plan7('concentrado', { aporta: 50 }), datos7('concentrado', [A1]))
     ok(cerca(r2.valorNeto, 1365.28) && r2.costes.ordenes === 4, `50 € no se mueven al ocioso (la orden costaría el 2 %): 1.365,28 € con 4 órdenes (${r2.valorNeto}, ${r2.costes.ordenes})`)
     // Con el ocioso en liquidez y 300 €/mes: A con 1.000 € → 999 / 10 = 99,9; 99,9 × 12 − 1 = 1.197,80 € + 300 € = 1.497,80 €, 2 órdenes.
+    // §282: slots, 1.000 € + 300 €/mes, liquidez, n = 2 (A y B; B sin operaciones). Día 3: A entra con su hucha de 500 € (49,9) y luego
+    // llegan los 300 €: 150 € a cada hucha. Día 4: A sale a 12: 49,9 × 12 − 1 = 597,80 €; B sigue con 650 € y A con 150 €. Final 1.397,80 €.
+    const Bsin = act('B', [20, 20, 20, 20], [20, 20, 20, 20], [])
+    const rs = Pl.ejecutaPlan(plan7('slots', { aporta: 300, ocioso: 'LIQUIDEZ' }), datos7('slots', [A1, Bsin]))
+    ok(cerca(rs.valorNeto, 1397.8) && rs.costes.ordenes === 2 && cerca(rs.estrategias.e.operaciones[0].capital, 500), `§282 slots: la aportación va a partes iguales a las huchas; 1.397,80 € (${rs.valorNeto})`)
+    const rs2 = Pl.ejecutaPlan(plan7('slots', { aporta: 300, ocioso: 'LIQUIDEZ' }), { ...datos7('slots', [{ ...A1, candidatos: [{ ...A1.candidatos[0], entryDate: G[3], exitDate: G[3], entryPx: 12, exitPx: 12 }] }, Bsin]) })
+    ok(cerca(rs2.estrategias.e.operaciones[0].capital, 650), `§282 slots: una compra tras la aportación se lleva su hucha + 150 € = 650 € (${rs2.estrategias.e.operaciones[0]?.capital})`)
     const r3 = Pl.ejecutaPlan(plan7('concentrado', { aporta: 300, ocioso: 'LIQUIDEZ' }), datos7('concentrado', [A1]))
     ok(cerca(r3.valorNeto, 1497.8) && r3.costes.ordenes === 2, `con el ocioso en liquidez, la aportación espera en liquidez: 1.497,80 € (${r3.valorNeto})`)
     // Compartido n = 2, sin aportaciones. Día 1: 19,98 en el ocioso. Día 2: entra A; libre 999 €, mín(999 / 2, 999) = 499,50 €: se venden
@@ -128,6 +148,22 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
       `impuesto pagado vendiendo el 10 % del valor abierto: 1.710 € (${r2.valorNeto}; al cierre del 1/7, ${r2.serie[4].patrimonio})`)
   }
 
+  {
+    // §282 · Slots, impuestos en proporción a cada hucha. Huchas de 500 €. A entra el 30/12 a 10 (50 acciones) y sale el 31/12 a 20: su
+    // hucha, 1.000 € (ganancia de 500 € en 2020). B entra el 4/1 a 20 con 500 € (25 acciones). El 1/7/2021 (B abre a 20) se pagan
+    // 500 × 19 % = 95 €: A vale 1.000 € y B 500 €, así que A paga 95 × 1.000 / 1.500 = 63,33 € de lo que espera y B 31,67 € vendiendo
+    // 31,67 / 20 = 1,5833 acciones. El 2/7 sale B a 22: 23,4167 × 22 = 515,17 € (ganancia 2021: 23,4167 × 2 = 46,83 € → 8,90 € al final).
+    // Final 936,67 + 515,17 − 8,90 = 1.442,94 €.
+    const G = ['2020-12-30', '2020-12-31', '2021-01-04', '2021-06-30', '2021-07-01', '2021-07-02']
+    const act = (symbol, abre, cierra, candidatos) => ({ symbol, fechas: G, abre, cierra, candidatos })
+    const As = act('A', [10, 10, 20, 20, 20, 20], [10, 20, 20, 20, 20, 20], [{ symbol: 'A', entryDate: G[0], entryPx: 10, exitDate: G[1], exitPx: 20, pasaPuerta: true }])
+    const Bs = act('B', [20, 20, 20, 20, 20, 22], [20, 20, 20, 20, 20, 22], [{ symbol: 'B', entryDate: G[2], entryPx: 20, exitDate: G[5], exitPx: 22, pasaPuerta: true }])
+    const p = { ...planA('slots'), impuestos: { regimen: 'ES-ahorro', reglaDosMeses: true }, costes: { comisionPct: 0, comisionMinEur: 0, horquillaPct: { QQQ: 0, ETF: 0, SPY: 0 } }, periodo: { desde: G[0], hasta: G[5] } }
+    const r = Pl.ejecutaPlan(p, { fechas: G, qqq: G.map(() => null), etf: G.map(() => null), spy: G.map(() => null), lista: { opciones: { modo: 'slots', n: 2, prioridad: 'alfabetico' }, activos: [As, Bs] } })
+    const quedanB = 25 - 95 * 500 / 1500 / 20, esp = 1000 - 95 * 1000 / 1500 + quedanB * 22 - quedanB * 2 * 0.19
+    ok(cerca(r.valorNeto, esp, 1e-6) && cerca(r.impuestos.porAnio[0].impuesto, 95), `§282 slots: el impuesto de julio sale de cada hucha en proporción: ${esp.toFixed(4)} € (${r.valorNeto})`)
+  }
+
   ok(Pa.parteOciosaLista([1, 0.5, 0]) === 0.5 && Pa.parteOciosaLista([]) === null, 'parteOciosaLista: (0 + 0,5 + 1) / 3 = 50 %')
 
   // ── 2 · Qué se calcula ──
@@ -142,7 +178,8 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
     const c2 = Pl.planListaCalculable(Pa.planDe({ ...aBase, ocioso: 'GLD', apalancamiento: 2 }, est))
     ok(JSON.stringify(c2.ignorado) === '["apalancamiento"]' && c2.plan.piezas[0].ocioso === 'GLD' && c2.plan.piezas[0].apalancamiento === 1 && Pl.motivoListaNoCalculable(Pa.planDe({ ...aBase, apalancamiento: 2 }, est)) === Pl.AVISO_LISTA_SIMPLE,
       'con oro y ×2: el oro se queda; el apalancamiento, todavía no')
-    ok(Pl.motivoListaNoCalculable(Pl.planListaCalculable(Pa.planDe({ ...aBase, lista: { ...aBase.lista, modo: 'slots' } }, est)).plan) === Pl.AVISO_LISTA_MODO, 'con «Slots iguales»: todavía no, y lo dice')
+    ok(Pl.motivoListaNoCalculable(Pl.planListaCalculable(Pa.planDe({ ...aBase, lista: { ...aBase.lista, modo: 'slots' } }, est)).plan) === null, '§282: con «Slots iguales», ya se calcula')
+    ok(Pl.motivoListaNoCalculable(Pl.planListaCalculable(Pa.planDe({ ...aBase, lista: { ...aBase.lista, modo: 'positionsizing' } }, est)).plan) === Pl.AVISO_LISTA_MODO, 'con «Position Sizing»: todavía no, y lo dice')
     // §112: con el Nasdaq-100, sí; el ocioso no puede ser un valor del universo (los de la petición), aunque no esté entre los marcados.
     const pU = Pl.planListaCalculable(Pa.planDe({ ...aBase, ocioso: 'AAPL', lista: { ...aBase.lista, simbolos: ['MSFT'], universo: 'ndx_vol_10', modo: 'concentrado' } }, est)).plan
     ok(Pl.motivoListaNoCalculable(pU) === null && Pl.motivoListaNoCalculable(pU, ['AAPL', 'NVDA']) === Pl.AVISO_LISTA_OCIOSO_EN_LISTA && Pl.motivoListaNoCalculable(pU, ['NVDA']) === null,
@@ -164,7 +201,10 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
   const filtroMercado = [{ id: 'indiceEma@mercado', tipo: 'indiceEma', ambito: 'mercado', activo: true, params: { ticker: '^GSPC', periodo: 200, intervalo: 'diario' } }]
   const COMS = [{ comisionTipo: 'pct', comision: 0 }, { comisionTipo: 'pct', comision: 0.1 }, { comisionTipo: 'fija', comisionFija: 0.185 }, { comisionTipo: 'pctMin', comision: 0.1, comisionMin: 1 }]
   const CASOS = []
-  for (const modo of ['compartido', 'concentrado']) for (const com of COMS) CASOS.push({ modo, com, est })
+  for (const modo of ['slots', 'compartido', 'concentrado']) for (const com of COMS) CASOS.push({ modo, com, est })
+  CASOS.push({ modo: 'slots', com: COMS[2], est: ST })   // §282
+  CASOS.push({ modo: 'slots', com: COMS[3], est, periodo: 'p2' })
+  CASOS.push({ modo: 'slots', com: COMS[1], est, filtros: filtroMercado, simbolos: ['AAPL', 'MSFT', 'NVDA', 'TSLA'] })
   CASOS.push({ modo: 'concentrado', com: COMS[1], est, extra: { prioridad: 'momentum', criterioUso: 'desempate', maxPosiciones: 4 } })
   CASOS.push({ modo: 'concentrado', com: COMS[2], est, extra: { prioridad: 'momentum', criterioUso: 'filtro', maxPosiciones: 4 } })
   CASOS.push({ modo: 'concentrado', com: COMS[3], est, extra: { prioridad: 'fuerza_relativa', criterioUso: 'desempate', maxPosiciones: 2 } })
@@ -192,7 +232,7 @@ const cerca = (x, y, tol = 1e-9) => Math.abs(x - y) < tol
     console.log(`${bien ? 'OK  ' : 'MAL '}   caso ${k} · ${cs.est.name} · ${cs.modo}${cs.extra ? ' ' + JSON.stringify(cs.extra) : ''} · ${Pa.textoComision(a)}${cs.filtros ? ' · filtro de mercado' : ''}${cs.periodo ? ' · ' + cs.periodo : ''}: por dentro ${finalMc.toFixed(2)} € · tu dinero ${res.valorNeto.toFixed(2)} € · ${res.estrategias.e.operaciones.length} operaciones · ${res.costes.ordenes} órdenes`)
   }
   // §91: con comisión 0, un ocioso de precio fijo es como la liquidez: el plan con 300 €/mes acaba igual con los dos.
-  for (const [k, cs] of [{ modo: 'compartido' }, { modo: 'concentrado', extra: { maxPosiciones: 4 } }, { modo: 'concentrado', extra: { prioridad: 'momentum', maxPosiciones: 2 } }].entries()) {
+  for (const [k, cs] of [{ modo: 'slots' }, { modo: 'compartido' }, { modo: 'concentrado', extra: { maxPosiciones: 4 } }, { modo: 'concentrado', extra: { prioridad: 'momentum', maxPosiciones: 2 } }].entries()) {
     const a = { ...Pa.AJUSTES_PLAN, comisionTipo: 'pct', comision: 0, donde: 'lista', periodo: 'todo', capital: 10000, aportacion: 300, impuestos: 'ninguno', lista: Li.mergeLista({ simbolos: SIMB, modo: cs.modo, ...(cs.extra || {}) }) }
     const r = await E.llama(H, { ...PD.peticionPorDentro({ a, estrategia: est }), conCandidatos: true }), j = JSON.parse(r.cuerpo)
     const fechas = [...new Set(j.candidatosAzar.activos.flatMap(x => x.fechas))].sort()
