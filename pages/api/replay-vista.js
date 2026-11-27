@@ -3,6 +3,7 @@
 // POST { vista: { filtros, sectoresFuera, universo }, desde: 'aaaa-mm-dd' }, con sesión (x-supa-jwt). Lee con el JWT del usuario las
 // fotos semanales (public.screener_fotos, sql/screener_fotos.sql) desde el lunes que vale `desde` hasta la última, y las fichas de las
 // empresas (sector, en_sp500, en_ndx, en_listas: las de HOY), y evalúa la vista en cada foto (evaluaFoto de lib/screener/enFecha.js).
+// §278: con alReves = id de un filtro encendido, la lista de cada lunes con ese filtro al revés (evaluaFoto).
 // Responde { semanas: [[lunes, [símbolos]], …], noSeAplican: [ids], seAplicaDesde: { id: lunes }, primera, ultima } o { error }.
 //   noSeAplican = los filtros encendidos que faltan en ALGUNA foto del tramo (el PEG esperado antes de junio de 2024);
 //   seAplicaDesde[id] = el lunes desde el que sí se aplica hasta el final (sin él: no se aplica en ninguna semana del final).
@@ -19,6 +20,7 @@ export function erroresPeticion(b) {
   if (!b || typeof b !== 'object') return ['falta el cuerpo']
   if (!b.vista || typeof b.vista !== 'object' || typeof b.vista.filtros !== 'object') e.push('falta la vista')
   if (!FECHA.test(String(b.desde || ''))) e.push('fecha de inicio no válida')
+  if (b.alReves != null && (typeof b.alReves !== 'string' || !b.vista?.filtros?.[b.alReves]?.on)) e.push('el filtro «al revés» no está encendido en la vista')
   return e
 }
 
@@ -65,7 +67,7 @@ export default async function handler(req, res) {
     const porSemana = []
     for (let off = 0; ; off += PAGINA) {
       const filas = await lee(`screener_fotos?select=fecha,campos,datos&fecha=gte.${desde}&order=fecha.asc&limit=${PAGINA}&offset=${off}`)
-      for (const f of filas) { const r = evaluaFoto(f, fichas, vista); semanas.push([f.fecha, r.pasan]); porSemana.push({ fecha: f.fecha, noSeAplican: r.noSeAplican }) }
+      for (const f of filas) { const r = evaluaFoto(f, fichas, vista, { alReves: req.body.alReves || null }); semanas.push([f.fecha, r.pasan]); porSemana.push({ fecha: f.fecha, noSeAplican: r.noSeAplican }) }
       if (filas.length < PAGINA) break
     }
     return res.status(200).json({ semanas, ...resumenNoSeAplican(porSemana), primera, ultima })

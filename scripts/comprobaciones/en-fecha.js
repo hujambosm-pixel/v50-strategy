@@ -72,6 +72,18 @@ const cerca = (a, b) => a != null && b != null && Math.abs(a - b) < 1e-9 * Math.
   ok(F.evaluaFoto(foto, fichas, vista({ cajaCubre: { on: true, op: '≥', valor: 1 } })).pasan.length === 0, 'un dato que falta no pasa')
   const sd = { campos: ['cajaCubre'], datos: { AAA: ['sd'] } }
   ok(F.evaluaFoto(sd, fichas, vista({ cajaCubre: { on: true, op: '≥', valor: 1 } })).pasan[0] === 'AAA', '«sd» (sin deuda a corto) pasa')
+  // §278: un filtro AL REVÉS. Vista ROCE ≥ 25 y PER ≤ 60. A (30, 10) · B (20, 10) · C (sin ROCE, 10) · D (20, 80) · E (ROCE «sd», 10).
+  //   Normal: A y E. Con el ROCE al revés: cumplen el PER y NO el ROCE con su dato → solo B (C sin dato y E «sd» no entran; D falla el PER).
+  //   Con el PER al revés: cumplen el ROCE (A, E) y no el PER: ninguno. Con un filtro que la foto no tiene: esa semana, ninguno.
+  {
+    const fi = { sector: 'Tecnología', en_sp500: true }, fx = { A: fi, B: fi, C: fi, D: fi, E: fi }
+    const fo = { campos: ['roce', 'per'], datos: { A: [30, 10], B: [20, 10], C: [null, 10], D: [20, 80], E: ['sd', 10] } }
+    const vv = vista({ roce: { on: true, op: '≥', valor: 25 }, per: { on: true, op: '≤', valor: 60 } })
+    ok(JSON.stringify(F.evaluaFoto(fo, fx, vv).pasan) === '["A","E"]', '§278: la vista normal: A y E')
+    ok(JSON.stringify(F.evaluaFoto(fo, fx, vv, { alReves: 'roce' }).pasan) === '["B"]', '§278: ROCE al revés: solo B (sin dato o «sd», en ningún grupo)')
+    ok(F.evaluaFoto(fo, fx, vv, { alReves: 'per' }).pasan.length === 0, '§278: PER al revés: ninguno')
+    ok(F.evaluaFoto(fo, fx, vista({ roce: { on: true, op: '≥', valor: 25 }, roa: { on: true, op: '≥', valor: 10 } }), { alReves: 'roa' }).pasan.length === 0, '§278: al revés un filtro que la foto no tiene: ninguno')
+  }
 
   // ── 5 · PEG esperado en el pasado (§30) ──
   const pegs = [{ fecha: '2024-06-10', peg: 2 }, { fecha: '2025-10-02', peg: 1 }, { fecha: '2024-09-19', peg: 3 }]   // desordenados a propósito

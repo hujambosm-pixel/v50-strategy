@@ -131,6 +131,46 @@ const txt = (x) => JSON.stringify(x)
   ok(m2.raiz.textContent.includes('Esa vista del screener ya no existe') && pedidas.length === 2, 'una vista borrada: lo dice (sin pedir nada)')
   m2.quita(); await D.espera(5)
 
+  // ── 5b · Un filtro de la vista AL REVÉS (§278) ──
+  //   Precios planos y sin operaciones: tu plan y «al revés» acaban igual; lo que se comprueba es que se pide la lista al revés, que se
+  //   calcula con sus valores (3, otra petición) y que la fila sale con su nombre y su cuenta. Con más de 150 valores, lo dice.
+  {
+    const vistaR2 = Sv.vistaNueva({ on: ['roce', 'per'] }), vistas2 = [{ id: 5, nombre: 'Poca deuda', vista: vistaR2 }]
+    const op = VP.filtrosParaReves(vistaR2, { noSeAplican: [] })
+    ok(op.length === 2 && op[0].id === 'roce' && op[0].texto.startsWith('ROCE ≥ 25') && VP.nombreReves(op[0].texto) === `Tu plan con «${op[0].texto}» al revés`, `§278: los filtros que se pueden poner al revés (${op.map(o => o.texto).join(' · ')})`)
+    ok(VP.filtrosParaReves(vistaR2, { noSeAplican: ['per'] }).length === 1 && VP.filtrosParaReves(vistaR2, { noSeAplican: ['per'], seAplicaDesde: { per: '2024-06-17' } }).length === 2, '§278: uno que no se aplica nunca no se ofrece; uno que se aplica desde una fecha, sí')
+    const sem3 = semanas.map(([l]) => [l, ['R1', 'R2', 'R3']]), sem200 = semanas.map(([l], k) => [l, [`Z${k % 200}`]])
+    const datosRev = { semanas: sem3, noSeAplican: [], primera: semanas[0][0], ultima: semanas[semanas.length - 1][0] }
+    const datosNorm = { ...datosSem, noSeAplican: [] }
+    const Ev = require(R + '/lib/planes/evalua.js')
+    const datosDe = (p, cu) => { const F2 = ['2016-01-04', '2019-01-02', '2022-01-03', '2025-12-31'], plano = F2.map(() => ({ open: 100, close: 100 }))
+      return { fechas: F2, qqq: plano, etf: F2.map(() => null), spy: plano, lista: { opciones: {}, activos: cu.symbols.map(s => ({ symbol: s, fechas: F2, abre: F2.map(() => 50), cierra: F2.map(() => 50), candidatos: [] })), mascara: cu.universo.mascara } } }
+    const pedidas2 = [], cuerpos2 = []
+    let revesDe = datosRev
+    const props2 = () => ({ estrategias: [est], estrategiaId: est.id, datosLista: { watchlist: [], wlLists: [], rankingData: {} },
+      deps: { ctx: null, calcula: async (p, cu) => { cuerpos2.push(cu); return { evaluacion: Ev.evaluaPlan(p, datosDe(p, cu), { detalle: true }) } }, semanasVista: async (v, f) => { pedidas2.push(f || null); return f ? revesDe : datosNorm } },
+      inicial: { planes: [], pestana: 'n1', simbolos: ['AAPL'], pruebas: [], resultadoPrueba: { periodos: [] }, valoresAbiertos: true, ajustes: { ...aV, aportacion: 0 }, vistasScreener: vistas2 } })
+    const m3 = D.monta(React.createElement(BP, props2()), RDC)
+    const t3 = () => m3.raiz.textContent, selR = () => m3.raiz.busca(n => n.hasAttribute && n.hasAttribute('data-select-reves'))
+    await hasta(() => !!selR())
+    ok(!!selR() && t3().includes('Probar también con un filtro de la vista al revés') && !m3.raiz.busca(n => n.getAttribute && n.getAttribute('data-fila') === 'VISTA_REVES'), '§278: bajo la tabla, el desplegable (en «Ninguno», sin fila)')
+    D.escribe(selR(), 'roce')
+    const filaR = () => m3.raiz.busca(n => n.getAttribute && n.getAttribute('data-fila') === 'VISTA_REVES' && !n.hasAttribute('data-estado-reves'))
+    await hasta(() => !!filaR())
+    const cuR = cuerpos2[cuerpos2.length - 1]
+    ok(pedidas2.includes('roce') && !!filaR() && filaR().textContent.startsWith('Tu plan con «ROCE ≥ 25') && filaR().textContent.includes('10.000'), `§278: pide la lista con el ROCE al revés y sale la fila «Tu plan con «ROCE ≥ 25 %» al revés» con su final (${filaR() && filaR().textContent.slice(0, 80)})`)
+    ok(!!cuR && JSON.stringify(cuR.symbols) === '["R1","R2","R3"]' && cuR.universo?.regla === 'vista' && cuerpos2.length === 2, `§278: lo calcula con los 3 valores de la lista al revés, en otra petición (${cuerpos2.length} peticiones)`)
+    ok(t3().includes('Cada lunes, entre 3 y 3 valores · 3 distintos en el periodo'), '§278: junto al desplegable, cuántos valores tiene la lista al revés')
+    D.escribe(selR(), ''); await hasta(() => !filaR())
+    ok(!filaR(), '§278: «Ninguno»: fuera la fila')
+    revesDe = { ...datosRev, semanas: sem200 }
+    D.escribe(selR(), 'per')
+    const estR = () => m3.raiz.busca(n => n.hasAttribute && n.hasAttribute('data-estado-reves'))
+    await hasta(() => estR() && estR().textContent.includes('como mucho'))
+    ok(!!estR() && estR().textContent.includes('No se calcula: con ese filtro al revés pasan 200 valores distintos en el periodo y como mucho caben 150.') && cuerpos2.length === 2, `§278: con más de 150 valores, la fila lo dice y no calcula (${estR() && estR().textContent})`)
+    m3.quita(); await D.espera(5)
+  }
+
   // ── 6 · Los dos «comprar y mantener» de la vista (§277), a mano ──
   //   Lunes 06/01 [A, B] · 13/01 [A, C, D] (sale B, entran C y D) · 20/01 igual · 27/01 [A, C] (sale D, no entra nadie). 1.000 €, sin costes.
   //   A a 10 siempre; B 20 → 30 (desde el 13/01) → 40 (desde el 20/01); C 5 → 6 (desde el 20/01); D 10 → 12 (desde el 27/01).

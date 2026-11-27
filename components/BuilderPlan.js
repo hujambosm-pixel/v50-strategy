@@ -61,8 +61,8 @@ import MenuCompararEstrategias from './MenuCompararEstrategias'
 import { SelectorEstrategia } from './ListaEstrategias'
 import { cargaUniversoMc, nDeUniverso, nombreUniverso, reglaDeUniverso } from '../lib/universoMc'
 import { listarVistas as listarVistasScreener } from '../lib/screener/vistasBase'
-import { esUniversoVista, idDeVista, universoDeVista } from '../lib/planes/vistaUniverso'
-import { AYUDA_BH_VISTA, AYUDA_VISTA, DESDE_FOTOS, avisoVista, cuentaVista, lineaFiltros, textoCuenta } from '../lib/builder/vistaPlan'
+import { MAX_VALORES_PLAN_VISTA, esUniversoVista, idDeVista, universoDeVista } from '../lib/planes/vistaUniverso'
+import { AYUDA_BH_VISTA, AYUDA_REVES, AYUDA_VISTA, DESDE_FOTOS, avisoVista, cuentaVista, filtrosParaReves, lineaFiltros, nombreReves, textoCuenta } from '../lib/builder/vistaPlan'
 import FiltrosDelPlan from './FiltrosDelPlan'
 import { filtrosPropios, respetaPropios, usoDeLaEstrategia } from '../lib/builder/filtrosPlan'
 import { hayFiltrosActivos } from '../lib/filtros'
@@ -73,7 +73,7 @@ import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_NO_EXISTE, avisoPrueba as textoAvisoPrueba, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
   ayudaCaida, avisoListaSimple, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, velasDeEstrategia, velasDelPlan, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS, resumenDinero, bloquesDe, estrategiaBloque, anadeBloque, quitaBloque, repartirResto, sumaPesos, AYUDA_BLOQUES,
-  esBloquePesos, sumaPesosBloque, resumenPesos, AYUDA_PESOS, VOLVER_OPCIONES, LLEGA_OPCIONES, PUNTOS_BANDA_DEFECTO } from '../lib/builder/planPantalla'
+  esBloquePesos, sumaPesosBloque, resumenPesos, AYUDA_PESOS, VOLVER_OPCIONES, LLEGA_OPCIONES, PUNTOS_BANDA_DEFECTO, filaDeMedidas } from '../lib/builder/planPantalla'
 import { MAX_SIMBOLOS_PESOS } from '../lib/planes/pesos'
 import ReglasPesos from './ReglasPesos'
 import OciosoRegla from './OciosoRegla'
@@ -418,8 +418,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     return () => { v = false }
   }, [ctx, vistasScr])
   const pideSemanasVista = useRef(null)
-  if (!pideSemanasVista.current) pideSemanasVista.current = deps?.semanasVista || (async (vista) => {
-    const pide = async (desde) => { const r = await api.current('/api/replay-vista', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vista, desde }) }); const j = await r.json().catch(() => null); if (!j) throw new Error(`HTTP ${r.status}`); return j }
+  if (!pideSemanasVista.current) pideSemanasVista.current = deps?.semanasVista || (async (vista, alReves = null) => {   // §278: alReves = id de un filtro
+    const pide = async (desde) => { const r = await api.current('/api/replay-vista', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vista, desde, ...(alReves ? { alReves } : {}) }) }); const j = await r.json().catch(() => null); if (!j) throw new Error(`HTTP ${r.status}`); return j }
     const j = await pide(DESDE_FOTOS)
     return j.error && !(j.semanas || []).length && j.primera && j.primera > DESDE_FOTOS ? pide(j.primera) : j
   })
@@ -482,6 +482,57 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     if (ya) { calculador.current.cancela(); setCalc({ calculando: false, resultado: ya, error: null }) } else calculador.current.pide(JSON.parse(clave))
   }, [clave])
   useEffect(() => () => calculador.current?.cancela(), [])
+  // §278: «Tu plan con un filtro de la vista al revés»: con UNA vista en el bloque 1 (sin otros bloques), un filtro elegido en la tabla de
+  // «Tu dinero» (no se guarda). Se piden las listas de cada lunes con ese filtro al revés y se calcula el MISMO plan con ellas (la misma
+  // petición de la lista con otra máscara), cuando ha acabado el cálculo de tu plan.
+  const [reves, setReves] = useState(inicial?.reves || '')
+  const [revesDatos, setRevesDatos] = useState({})
+  const [revesRes, setRevesRes] = useState({ clave: null })
+  const revesHechos = useRef(new Map())
+  const datosVistaPlan = !multi && esUniversoVista(universoLista) ? universoDatos[universoLista] : null
+  const opcionesReves = useMemo(() => datosVistaPlan && !datosVistaPlan.error && datosVistaPlan.vista ? filtrosParaReves(datosVistaPlan.vista, datosVistaPlan) : [], [datosVistaPlan])
+  const revesOk = opcionesReves.some(o => o.id === reves) ? reves : ''
+  const claveRevesDatos = revesOk ? universoLista + '|' + revesOk : null
+  useEffect(() => {
+    if (!claveRevesDatos || revesDatos[claveRevesDatos]) return
+    const d = datosVistaPlan, k = claveRevesDatos, f = revesOk
+    const pon = (x) => { if (vivo.current) setRevesDatos(y => ({ ...y, [k]: x })) }
+    pideSemanasVista.current(d.vista, f).then(j => pon({ ...j, nombre: d.nombre, vista: d.vista })).catch(e => pon({ error: 'No se pudo leer la vista con el filtro al revés (' + e.message + ').' }))
+  }, [claveRevesDatos])
+  const datosRev = claveRevesDatos ? revesDatos[claveRevesDatos] : null
+  const udRev = useMemo(() => datosRev && !datosRev.error ? { ...universoDatos, [universoLista]: datosRev } : null, [datosRev, universoDatos, universoLista])
+  const cuerpoReves = useMemo(() => udRev && estPorDentro && calcLista ? peticionPorDentro({ a, estrategia: estPorDentro, wlData: datosLista?.wlData || {}, universoDatos: udRev }) : null, [udRev, estPorDentro, calcLista, a, datosLista?.wlData])
+  const distintosRev = datosRev && !datosRev.error && plan?.periodo ? cuentaVista(datosRev.semanas, plan.periodo.desde, plan.periodo.hasta).distintos : 0
+  const motivoReves = !revesOk ? null : !datosRev ? 'Leyendo la vista con el filtro al revés…' : datosRev.error
+    || (distintosRev > MAX_VALORES_PLAN_VISTA ? 'No se calcula: con ese filtro al revés pasan ' + distintosRev + ' valores distintos en el periodo y como mucho caben ' + MAX_VALORES_PLAN_VISTA + '.' : null)
+    || (!cuerpoReves ? String(motivoSinPeticion({ a, estrategia: estPorDentro, universoDatos: udRev || universoDatos }) || 'No se puede calcular.').replace('Con la vista del screener no se calcula: ', 'No se calcula: ') : motivoListaNoCalculable(calcLista.plan, cuerpoReves.symbols))
+  const claveReves = revesOk && cuerpoReves && !motivoReves && clave && !calc.calculando ? JSON.stringify({ plan: calcLista.plan, cuerpoLista: cuerpoReves }) : null
+  const pideReves = useRef(null)
+  if (!pideReves.current) pideReves.current = deps?.calcula || (async (p, cuerpoLista) => {
+    const r = await api.current('/api/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan: p, cuerpoLista }) })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status))
+    return j
+  })
+  useEffect(() => {
+    if (!claveReves) return
+    const ya = revesHechos.current.get(claveReves)
+    if (ya) { setRevesRes(ya); return }
+    let v = true
+    setRevesRes({ clave: claveReves, calculando: true })
+    const p = JSON.parse(claveReves)
+    pideReves.current(p.plan, p.cuerpoLista).then(j => { const r = { clave: claveReves, respuesta: j }; revesHechos.current.set(claveReves, r); if (revesHechos.current.size > 10) revesHechos.current.delete(revesHechos.current.keys().next().value); if (v && vivo.current) setRevesRes(r) })
+      .catch(e => { if (v && vivo.current) setRevesRes({ clave: claveReves, error: e.message }) })
+    return () => { v = false }
+  }, [claveReves])
+  const textoReves = opcionesReves.find(o => o.id === revesOk)?.texto || ''
+  const filaReves = (() => {
+    const ev = claveReves && revesRes.clave === claveReves ? revesRes.respuesta?.evaluacion : null
+    try { return ev ? filaDeMedidas('VISTA_REVES', nombreReves(textoReves), ev.plan.medidas, ev.plan.ejecucion?.costes?.ordenes) : null } catch (_) { return null }
+  })()
+  const estadoReves = !revesOk || filaReves ? null : motivoReves || (calc.calculando ? 'Esperando a que acabe el cálculo de tu plan…'
+    : revesRes.clave === claveReves && revesRes.error ? 'No se pudo calcular (' + revesRes.error + ').' : 'Calculando… (con muchos valores, medio minuto o más)')
+  const cuentaReves = datosRev && !datosRev.error && plan?.periodo ? textoCuenta(cuentaVista(datosRev.semanas, plan.periodo.desde, plan.periodo.hasta)) : ''
 
   // Los símbolos de la caché (para la acción y el ocioso) y la prueba del paso 2 de la estrategia (con su regla de ahora).
   useEffect(() => { if (!inicial?.simbolos && cargaSimbolos) cargaSimbolos().then(xs => { if (vivo.current && xs?.length) setSimbolos(xs) }).catch(() => {}) }, [])
@@ -1252,10 +1303,19 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     <Tarjeta id="alternativas" titulo={cifras.bloques ? 'Frente a cada bloque solo y a no tener estrategia' : TITULO_ALTERNATIVAS} ayuda={`${conLista ? `${AYUDA_PLAN.alternativas} ${AYUDA_PLAN.bhLista}` : AYUDA_PLAN.alternativas}${cifras.bloques ? ` ${AYUDA_BLOQUES.soloBloque}` : ''}${cifras.conSinReglas ? ` ${AYUDA_PESOS.sinReglas}` : ''}${cifras.ociosoRegla ? ` ${AYUDA_OCIOSO_SIEMPRE}` : ''}`}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="alternativas" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr>{['', 'Final', 'CAGR', ...(conTir ? ['TIR'] : []), 'Peor caída', 'Impuestos', 'Comisiones'].map(h => <th key={h} style={cab}>{h}</th>)}<th style={cab}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>Órdenes<Ayuda texto={AYUDA_PLAN.ordenes} etiqueta="Órdenes"/></span></th></tr></thead>
-        <tbody>{cifras.alternativas.filter(x => !(sinOcioso && x.id === 'OCIOSO_LIQUIDEZ')).map(x => <tr key={x.id} data-fila={x.id} style={x.id === 'PLAN' ? { fontWeight: 700, color: B.titulo } : undefined}>
-          <td style={celda}>{x.bloque ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: '50%', background: COLORES_BLOQUE[(x.bloque - 1) % COLORES_BLOQUE.length], flex: 'none' }}/>{x.nombre}</span> : cifras.vista && AYUDA_BH_VISTA[x.id] ? <span data-ayuda-fila={x.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{x.nombre}<Ayuda texto={AYUDA_BH_VISTA[x.id]} etiqueta={x.nombre}/></span> : x.nombre}</td><td style={{ ...celda, whiteSpace: 'nowrap', color: colorSigno(x.final - s.aportado) }}>{euros(x.final, 0)}</td><td style={{ ...celda, color: colorSigno(x.twr) }}>{pct(x.twr)}</td>{conTir && <td style={{ ...celda, color: colorSigno(x.tir) }}>{pct(x.tir)}</td>}<td style={{ ...celda, color: colorSigno(x.caida) }}>{pct(x.caida)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.impuestos, 0)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.costes, 0)}</td><td style={celda}>{x.ordenes}</td>
-        </tr>)}</tbody>
+        <tbody>{[...cifras.alternativas.filter(x => !(sinOcioso && x.id === 'OCIOSO_LIQUIDEZ')), ...(cifras.vista && filaReves ? [filaReves] : [])].map(x => <tr key={x.id} data-fila={x.id} style={x.id === 'PLAN' ? { fontWeight: 700, color: B.titulo } : undefined}>
+          <td style={celda}>{x.bloque ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: '50%', background: COLORES_BLOQUE[(x.bloque - 1) % COLORES_BLOQUE.length], flex: 'none' }}/>{x.nombre}</span> : cifras.vista && (AYUDA_BH_VISTA[x.id] || x.id === 'VISTA_REVES') ? <span data-ayuda-fila={x.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{x.nombre}<Ayuda texto={x.id === 'VISTA_REVES' ? AYUDA_REVES : AYUDA_BH_VISTA[x.id]} etiqueta={x.nombre}/></span> : x.nombre}</td><td style={{ ...celda, whiteSpace: 'nowrap', color: colorSigno(x.final - s.aportado) }}>{euros(x.final, 0)}</td><td style={{ ...celda, color: colorSigno(x.twr) }}>{pct(x.twr)}</td>{conTir && <td style={{ ...celda, color: colorSigno(x.tir) }}>{pct(x.tir)}</td>}<td style={{ ...celda, color: colorSigno(x.caida) }}>{pct(x.caida)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.impuestos, 0)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.costes, 0)}</td><td style={celda}>{x.ordenes}</td>
+        </tr>)}
+        {cifras.vista && estadoReves && <tr data-fila="VISTA_REVES" data-estado-reves><td style={celda}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{nombreReves(textoReves)}<Ayuda texto={AYUDA_REVES} etiqueta={nombreReves(textoReves)}/></span></td><td colSpan={conTir ? 7 : 6} style={{ ...celda, color: B.secundario }}>{estadoReves}</td></tr>}</tbody>
       </table></div>
+      {cifras.vista && opcionesReves.length > 0 && <div data-elige-reves style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13 }}>
+        <span style={{ color: B.secundario }}>Probar también con un filtro de la vista al revés:</span>
+        <select data-select-reves value={revesOk} onChange={e => setReves(e.target.value)} style={{ background: B.tarjeta, color: B.texto, border: '1px solid ' + B.borde, borderRadius: 6, padding: '3px 6px', fontSize: 13, width: 'auto', maxWidth: 340 }}>
+          <option value="">Ninguno</option>
+          {opcionesReves.map(o => <option key={o.id} value={o.id}>{o.texto}</option>)}
+        </select>
+        {cuentaReves && <span data-cuenta-reves style={{ color: B.secundario }}>{cuentaReves}</span>}
+      </div>}
     </Tarjeta>
     <Tarjeta id="tramos" titulo="¿Es estable? Por tramos" ayuda={AYUDA_PLAN.tramos}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="tramos" style={{ borderCollapse: 'collapse', width: '100%' }}>
