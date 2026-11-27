@@ -1436,7 +1436,7 @@ export function runCodeJsAsset(data, sp500Data, codeJs, slotCapital, years, cfg,
     // rsPercentil (V9.1005): solo si se pasa en `per` (la estrategia nombra el campo); alineado con `data`.
     const enrichedData = cerradas.map((d, i) => ({ ...d, sp500Close: sp500Map[d.date] ?? null, ...(per?.rsPercentil ? { rsPercentil: per.rsPercentil[i] ?? null } : {}) }))
     // Una estrategia del editor (V9.1014): su definición, con el intérprete; per.referencias, las velas de su filtro de mercado.
-    const runFn = esFuenteEditor(codeJs) ? runDeEditor(codeJs, { referencias: per?.referencias || {} })
+    const runFn = esFuenteEditor(codeJs) ? runDeEditor(codeJs, { referencias: per?.referencias || {}, ...(per?.puedeEntrar ? { puedeEntrar: per.puedeEntrar } : {}) })
       : new Function('calcEMA','calcSMA','calcRSI','calcATR','calcMACD', `"use strict";\n${codeJs}\nreturn run;`)(_libEMA, calcSMA, calcRSI, _libATR, calcMACD)
     const result = runFn(enrichedData, {
       ...(cfg || {}),
@@ -2182,6 +2182,9 @@ async function handlerMultibacktest(req, res) {
   if (!Array.isArray(symbols) || !symbols.length) return res.status(400).json({ error: 'symbols requerido' })
   const _univ = req.body?.universo != null ? _validaUniverso(req.body.universo, modoAsig) : null
   if (_univ?.error) return res.status(400).json({ error: _univ.error })
+  // §274: una vista del screener como valores (regla 'vista'): la lista de cada semana entra en la SEÑAL de las estrategias del editor
+  // (puedeEntrar); la máscara de después queda como seguro. Sin B&H del universo (sus «elegidos» van vacíos).
+  const _esVista = _univ?.universo?.regla === 'vista'
   let cfg = cfgInput
   if (!cfg && definition) {
     const entry = definition.entry || {}
@@ -2378,7 +2381,7 @@ async function handlerMultibacktest(req, res) {
       if (codeJs) {
         // Motor code_js: sandbox por activo con slotCapital = capital total / nº activos
         const { trades, heredadas } = runCodeJsAsset(dataCal, sp500Data, codeJs, slotCapital, cfg.years ?? 5, effectiveCfg,
-          { desde: per.desde, iDesde: descargas[sym].iDesde ?? 0, ...(_rsPor[sym] ? { rsPercentil: _rsPor[sym] } : {}), ...(_tsFm.length ? { referencias: _refsFm } : {}) }, _com)
+          { desde: per.desde, iDesde: descargas[sym].iDesde ?? 0, ...(_rsPor[sym] ? { rsPercentil: _rsPor[sym] } : {}), ...(_tsFm.length ? { referencias: _refsFm } : {}), ...(_esVista ? { puedeEntrar: (d) => admiteEntrada(_univ.universo.mascara, sym, d) } : {}) }, _com)
         const capitalReinv = trades.length ? trades[trades.length-1].capitalTras : slotCapital
         const gananciaSimple = trades.reduce((s,t) => s + t.pnlSimple, 0)
         return { symbol: sym, data, dataCal, _heredadas: heredadas ?? [], trades, capitalReinv, gananciaSimple, startDate, blockEvents: {} }
@@ -2566,7 +2569,7 @@ async function handlerMultibacktest(req, res) {
     // Prueba contra el azar de la cartera (V9.950): SOLO si la petición trae conCandidatos: true, una respuesta reducida
     // con los candidatos y lo justo para comprobar la recomposición y dibujar el B&H. Sin el campo, todo como siempre.
     // Universo dinámico: referencias (B&H de QQQ y del universo) y recuentos. Solo con el campo `universo`.
-    const _refsUniverso = _univ ? _referenciasUniverso({ universo: _univ.universo, assetResults, curves, qqqData, capitalIni: cfg.capitalIni, descartadas: _descartadasUniverso }) : null
+    const _refsUniverso = _univ && !_esVista ? _referenciasUniverso({ universo: _univ.universo, assetResults, curves, qqqData, capitalIni: cfg.capitalIni, descartadas: _descartadasUniverso }) : null
 
     if (req.body?.conCandidatos === true) {
       // candidatosDe (opcional): los candidatos solo de esos símbolos, para pedirlos por tandas (components/AzarCarteraPanel.js).

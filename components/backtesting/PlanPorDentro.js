@@ -24,6 +24,7 @@ import { cfgBaseMc, cuerpoMc, pesosNormalizadosMc } from '../../lib/peticionMc'
 import { leeRespuestaMc } from '../../lib/respuestaMc'
 import { mergeLista } from '../../lib/planes/lista'
 import { estadoUniversoMc, nDeUniverso, nombreUniverso, reglaDeUniverso } from '../../lib/universoMc'
+import { esUniversoVista, estadoUniversoVista, idDeVista } from '../../lib/planes/vistaUniverso'
 import { costesDe, creaCalculador, fechasDe, filtrosDelPlan, textoComision, velasDelPlan } from '../../lib/builder/planPantalla'
 import { fotoDe } from '../../lib/pruebaAzar'
 import { definicionEfectiva } from '../../lib/planes/estrategia'
@@ -38,6 +39,11 @@ const VACIO = Object.freeze([])
 // §111: con el Nasdaq-100, el estado del universo en el periodo del plan (estadoUniversoMc: activo, motivo, universo); null con «Lista manual».
 export function estadoUniversoPlan({ a, estrategia, universoDatos = {} }) {
   const l = mergeLista(a?.lista)
+  // §274: con una vista del screener, las listas de cada lunes (universoDatos['vista:<id>'] = lo de /api/replay-vista, con su nombre).
+  if (esUniversoVista(l.universo)) {
+    const per = fechasDe(a || {}), d = universoDatos?.[l.universo]
+    return estadoUniversoVista({ datos: d, nombre: d?.nombre || 'la vista', desde: per?.desde || null, hasta: per?.hasta || null, conEstrategia: !!estrategia?.id })
+  }
   if (!nDeUniverso(l.universo)) return null
   const per = fechasDe(a || {})
   return estadoUniversoMc({ universo: l.universo, datos: universoDatos?.[l.universo], fromDate: per?.desde || null, toDate: per?.hasta || null, estrategias: estrategia?.id ? [estrategia.id] : [] })
@@ -67,7 +73,8 @@ export function peticionPorDentro({ a, estrategia, wlData = {}, universoDatos = 
   if (estU) {   // §111: el cuerpo del universo dinámico de runBacktesting, con las claves en su orden
     const u = estU.universo
     return { ...conFiltros(cuerpoMc({ symbols: u.simbolos, modoAsig: 'concentrado', weights: {}, cfg, strategyId: estrategia.id, isNoStrategy, filtros: l.filtros, intervalo, comisiones })),
-      universo: { regla: reglaDeUniverso(l.universo), n: nDeUniverso(l.universo), mascara: u.mascara, elegidos: u.elegidos } }
+      universo: esUniversoVista(l.universo) ? { regla: 'vista', n: idDeVista(l.universo), mascara: u.mascara, elegidos: {} }
+        : { regla: reglaDeUniverso(l.universo), n: nDeUniverso(l.universo), mascara: u.mascara, elegidos: u.elegidos } }
   }
   return conFiltros(cuerpoMc({ symbols: l.simbolos, modoAsig: l.modo, weights: pesosNormalizadosMc(l.modo, l.simbolos, l.pesos), cfg, strategyId: estrategia.id,
     isNoStrategy, filtros: l.filtros, intervalo, comisiones }))
@@ -77,6 +84,7 @@ export function motivoSinPeticion({ a, estrategia, universoDatos = {} }) {
   const l = mergeLista(a?.lista), per = fechasDe(a || {})
   if (!estrategia?.id) return 'Elige una estrategia de tarjetas.'
   const estU = estadoUniversoPlan({ a, estrategia, universoDatos })
+  if (estU && !estU.activo && esUniversoVista(l.universo)) return /^[a-zñ]/.test(estU.motivo) ? `Con la vista del screener no se calcula: ${estU.motivo}` : estU.motivo
   if (estU && !estU.activo) {
     const datos = universoDatos?.[l.universo]
     if (datos?.error) return datos.error

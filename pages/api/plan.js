@@ -23,6 +23,7 @@ import { datosDeReferencia, evaluaPlan, iniciosRodantes, referenciasDe } from '.
 import { ejecutaPlan } from '../../lib/planes/plan'
 import { cargaDatosPlan, cargaDiarias } from '../../lib/planes/datosServidor'
 import { listaEnSuDia, cambiaFiltros, definicionEfectiva } from '../../lib/planes/estrategia'
+import { esUniversoVista, universoDeVista } from '../../lib/planes/vistaUniverso'
 
 export const config = { maxDuration: 60 }
 
@@ -38,7 +39,7 @@ export function errorCuerpoLista(plan, pieza, c) {
   if (!c || typeof c !== 'object' || !c.cfg) return 'Falta la petición de la lista (cuerpoLista).'
   const univ = pieza.lista?.universo && pieza.lista.universo !== 'manual' ? pieza.lista.universo : null
   const valores = univ
-    ? !!c.universo?.mascara && typeof c.universo.mascara === 'object' && `ndx_${c.universo.regla === 'momentum' ? 'mom' : 'vol'}_${c.universo.n}` === univ && Array.isArray(c.symbols) && JSON.stringify(c.symbols) === JSON.stringify(Object.keys(c.universo.mascara).sort())
+    ? !!c.universo?.mascara && typeof c.universo.mascara === 'object' && (esUniversoVista(univ) ? c.universo.regla === 'vista' && universoDeVista(c.universo.n) === univ : `ndx_${c.universo.regla === 'momentum' ? 'mom' : 'vol'}_${c.universo.n}` === univ) && Array.isArray(c.symbols) && JSON.stringify(c.symbols) === JSON.stringify(Object.keys(c.universo.mascara).sort())
     : c.universo == null && JSON.stringify(c.symbols) === JSON.stringify(pieza.lista?.simbolos)
   // §150: con filtros del plan, la petición lleva la estrategia efectiva (sin strategyId); sin ellos, el id de siempre.
   const pEst = (() => { try { const p = pieza.estrategia?.params; return typeof p === 'string' ? JSON.parse(p || '{}') : (p || {}) } catch (_) { return {} } })()
