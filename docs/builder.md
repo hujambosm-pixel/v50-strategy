@@ -3999,3 +3999,11 @@ Boceto bocetos/condiciones-con-pasos.html aceptado por Sergi el 24/11 («sí, a 
 
 ## §276 · Plan: el resumen del bloque nombra la vista
 - Visto por Sergi en su captura (27/11): con una vista del screener, la línea gris del bloque («en … · ocioso en …») decía «en el Nasdaq-100». Ahora dice «en la vista «nombre»» (bloque 1 y bloques extra). plan-vista.js lo comprueba. Ninguna cifra cambia.
+
+## §277 · Plan con una vista del screener: los dos «comprar y mantener» de la vista
+- Pedido por Sergi (27/11), para comparar la vista sin estrategia con SPY y QQQ. Con una vista, en la tabla «Sin estrategia: el mismo dinero en…» (y como líneas del gráfico) en lugar de «Buy&Hold de la lista (a partes iguales)»:
+  - «Buy&Hold de la vista (sigue la lista)» (id ACTIVO, línea «Buy&Hold de la vista»): el primer lunes, a partes iguales lo que pasa la vista; cada lunes vende lo que ha SALIDO y ese dinero va SOLO a los que han ENTRADO (a partes iguales); lo que sigue no se toca. Venta sin entrantes: espera en liquidez; entrantes sin dinero: no se compran.
+  - «Buy&Hold de la lista del primer día» (id VISTA_PRIMER, línea nueva «primerDia», verde azulado): la lista del primer lunes (con los datos de ese día) sin tocarla nunca.
+  - En las dos, cada aportación compra UN valor (el de la lista con menos dinero), regla del 1 % (valeOrden), comisiones e impuestos del plan y venta final. Cada fila con su «?» (AYUDA_BH_VISTA en lib/builder/vistaPlan.js).
+- Motor: pieza «cesta» con `vista: 'sigue' | 'primerDia'` (lib/planes/plan.js: listaVista, compraIguales, operaCestaVista a la apertura del día en que cambia la lista); /api/plan pasa la máscara de la petición (datos.lista.mascara) y devuelve la curva de VISTA_PRIMER. lib/planes/evalua.js (referencias), lib/builder/planPantalla.js (orden, curva, finales, LINEAS_DEFECTO.primerDia).
+- A mano (plan-vista.js, apartado 6): sigue la lista 1.400 €, la del primer día 1.500 €, 8 órdenes. En la app con precios reales (plan «Prueba editor EMA20» sin guardar + «Rentabilidad y poca deuda»): tu plan 23.827 € (9,08 %); B&H de la vista 26.322 € (10,17 %, −40,67 %, 409 órdenes); B&H de la lista del primer día 29.012 € (11,25 %, −31,51 %, 44 órdenes); QQQ 49.884 €; SPY 33.921 €. Tras «Descartar cambios», 64.625 €. Ninguna cifra de los planes guardados cambia.

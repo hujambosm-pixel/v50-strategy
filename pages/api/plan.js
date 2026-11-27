@@ -92,6 +92,7 @@ export default async function handler(req, res) {
       const r = await pideMultibacktest(req, { ...req.body.cuerpoLista, conCandidatos: true })
       if (r.status !== 200 || !r.json?.candidatosAzar) return res.status(r.status === 401 ? 401 : 500).json({ error: r.json?.error || `La lista no se pudo calcular (HTTP ${r.status}).` })
       c.datos.lista = r.json.candidatosAzar
+      if (req.body.cuerpoLista.universo?.regla === 'vista') c.datos.lista = { ...c.datos.lista, mascara: req.body.cuerpoLista.universo.mascara }   // §277
       if (pLista.velas === 'semanales') {   // §146
         const dd = await cargaDiarias(c.datos.lista.activos.map(ac => ac.symbol), { desde: plan.periodo.desde, hasta: plan.periodo.hasta, supaUrl: SUPA_URL, headers })
         if (dd.error) return res.status(500).json({ error: dd.error })
@@ -117,7 +118,7 @@ export default async function handler(req, res) {
     const t1 = Date.now()
     const evaluacion = evaluaPlan(plan, c.datos, { detalle: true, libro: libro === true })
     const ro = rodantes ? iniciosRodantes(plan, c.datos, { desde: rodantes.desde || plan.periodo.desde, hasta: rodantes.hasta || plan.periodo.hasta, duracion: rodantes.duracion ?? 10, hastaElFinal: !!rodantes.hastaElFinal }) : null
-    const ej = curvas && plan.piezas.some(x => x.tipo === 'estrategia' || x.tipo === 'pesos') ?referenciasDe(plan).filter(x => ['OCIOSO_SIEMPRE', 'OCIOSO_LIQUIDEZ', 'ACTIVO', 'QQQ', 'SPY'].includes(x.id) || x.id.startsWith('BLOQUE_') || x.id.startsWith('SINREGLAS_')).map(x => [x.id, ejecutaPlan(x.plan, datosDeReferencia(x, c.datos), { detalle: false })]) : null
+    const ej = curvas && plan.piezas.some(x => x.tipo === 'estrategia' || x.tipo === 'pesos') ?referenciasDe(plan).filter(x => ['OCIOSO_SIEMPRE', 'OCIOSO_LIQUIDEZ', 'ACTIVO', 'VISTA_PRIMER', 'QQQ', 'SPY'].includes(x.id) || x.id.startsWith('BLOQUE_') || x.id.startsWith('SINREGLAS_')).map(x => [x.id, ejecutaPlan(x.plan, datosDeReferencia(x, c.datos), { detalle: false })]) : null
     const cu = ej ? Object.fromEntries(ej.map(([id, r]) => [id, { patrimonio: r.serie.map(p => p.patrimonio), vl: r.serie.map(p => p.vl) }])) : null
     const ordenesReferencias = ej ? Object.fromEntries(ej.map(([id, r]) => [id, r.costes.ordenes])) : null
     return res.status(200).json({ evaluacion, ...(ro ? { rodantes: ro } : {}), ...(cu ? { curvas: cu, ordenesReferencias } : {}), ...(pLista ? { finalPorDentro } : {}), huella: await huellaPlan(plan), tiempos: { datosMs: t1 - t0, calculoMs: Date.now() - t1 } })

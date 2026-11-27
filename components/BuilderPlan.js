@@ -62,7 +62,7 @@ import { SelectorEstrategia } from './ListaEstrategias'
 import { cargaUniversoMc, nDeUniverso, nombreUniverso, reglaDeUniverso } from '../lib/universoMc'
 import { listarVistas as listarVistasScreener } from '../lib/screener/vistasBase'
 import { esUniversoVista, idDeVista, universoDeVista } from '../lib/planes/vistaUniverso'
-import { AYUDA_VISTA, DESDE_FOTOS, avisoVista, cuentaVista, lineaFiltros, textoCuenta } from '../lib/builder/vistaPlan'
+import { AYUDA_BH_VISTA, AYUDA_VISTA, DESDE_FOTOS, avisoVista, cuentaVista, lineaFiltros, textoCuenta } from '../lib/builder/vistaPlan'
 import FiltrosDelPlan from './FiltrosDelPlan'
 import { filtrosPropios, respetaPropios, usoDeLaEstrategia } from '../lib/builder/filtrosPlan'
 import { hayFiltrosActivos } from '../lib/filtros'
@@ -152,6 +152,7 @@ export function useAncho(defecto = 760) {
 export const LINEAS_PLAN = [
   { k: 'plan', t: 'Tu plan', color: AZUL, ancho: 2 },
   { k: 'activo', t: 'Buy&Hold', color: C.grisClaro, ancho: 1.5 },
+  { k: 'primerDia', t: 'Buy&Hold lista del primer día', color: C.verdeAzulado, ancho: 1.5 },   // §277
   { k: 'spy', t: 'Buy&Hold SPY', color: C.morado, ancho: 1.5 },
   { k: 'qqq', t: 'Buy&Hold QQQ', color: C.cian, ancho: 1.5 },
   { k: 'ociosoLiquidez', t: 'Ocioso en liquidez', color: C.naranja, ancho: 1.5 },
@@ -1206,8 +1207,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       : <>
         {!!calcLista?.ignorado.length && <div data-aviso-lista-simple style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>{avisoListaSimple(calcLista.ignorado, a.ocioso)}<Ayuda texto={AYUDA_PLAN.listaSimple} etiqueta="Lo que todavía no cuenta con una lista"/></div>}
         {vistaDer === 'detalle' ? <PlanDetalle detalle={detalle} cifras={cifrasLista} viejas={cifrasViejas} onIrAValor={onIrAValor} inicial={inicial?.detalle || null} nombre={nombreDe(actual) || null} version={version}
-          graficoPlan={<><GraficoPlan curva={sinOcioso ? { ...cifrasLista.curva, ociosoLiquidez: null } : cifrasLista.curva} activo="de la lista" finales={finalesDe(cifrasLista)} visibles={lineasVisibles} proporcion/>
-            <Leyenda curva={sinOcioso ? { ...cifrasLista.curva, ociosoLiquidez: null } : cifrasLista.curva} activo="de la lista" visibles={lineasVisibles} onMarca={marcaLinea} proporcion/></>}/>
+          graficoPlan={<><GraficoPlan curva={sinOcioso ? { ...cifrasLista.curva, ociosoLiquidez: null } : cifrasLista.curva} activo={cifrasLista.vista ? "de la vista" : "de la lista"} finales={finalesDe(cifrasLista)} visibles={lineasVisibles} proporcion/>
+            <Leyenda curva={sinOcioso ? { ...cifrasLista.curva, ociosoLiquidez: null } : cifrasLista.curva} activo={cifrasLista.vista ? "de la vista" : "de la lista"} visibles={lineasVisibles} onMarca={marcaLinea} proporcion/></>}/>
           : vistaDinero(cifrasLista, true)}
       </>)}
   </>) : !cifras ? (
@@ -1238,8 +1239,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
         <span data-impuestos>{euros(s.impuestos, 0)}</span> · <span data-comisiones>{euros(s.costes, 0)}</span></span>}/>
     </div>
     <Tarjeta id="grafico" titulo="Cómo crece tu dinero" ayuda={conLista ? `${AYUDA_PLAN.graficoLista} ${AYUDA_PLAN.franjaLista}` : `${AYUDA_PLAN.grafico} ${AYUDA_PLAN.franja}`}>
-      <Ampliable titulo="Cómo crece tu dinero"><GraficoPlan curva={conLista ? { ...cifras.curva, ...(sinOcioso ? { ociosoLiquidez: null } : {}) } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? 'de la lista' : activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles} proporcion={conLista}/></Ampliable>
-      <Leyenda curva={conLista ? { ...cifras.curva, ...(sinOcioso ? { ociosoLiquidez: null } : {}) } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? 'de la lista' : activoRes} visibles={lineasVisibles} onMarca={marcaLinea} proporcion={conLista}/>
+      <Ampliable titulo="Cómo crece tu dinero"><GraficoPlan curva={conLista ? { ...cifras.curva, ...(sinOcioso ? { ociosoLiquidez: null } : {}) } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? (cifras.vista ? 'de la vista' : 'de la lista') : activoRes} finales={finalesDe(cifras)} visibles={lineasVisibles} proporcion={conLista}/></Ampliable>
+      <Leyenda curva={conLista ? { ...cifras.curva, ...(sinOcioso ? { ociosoLiquidez: null } : {}) } : sinOcioso ? { ...cifras.curva, ociosoLiquidez: null } : cifras.curva} activo={conLista ? (cifras.vista ? 'de la vista' : 'de la lista') : activoRes} visibles={lineasVisibles} onMarca={marcaLinea} proporcion={conLista}/>
     </Tarjeta>
     <Tarjeta id="anios" titulo="Año a año" ayuda={AYUDA_PLAN.anios}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="anios" style={{ borderCollapse: 'collapse', width: '100%' }}>
@@ -1252,7 +1253,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       <div style={{ overflowX: 'auto' }}><table data-tabla="alternativas" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead><tr>{['', 'Final', 'CAGR', ...(conTir ? ['TIR'] : []), 'Peor caída', 'Impuestos', 'Comisiones'].map(h => <th key={h} style={cab}>{h}</th>)}<th style={cab}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>Órdenes<Ayuda texto={AYUDA_PLAN.ordenes} etiqueta="Órdenes"/></span></th></tr></thead>
         <tbody>{cifras.alternativas.filter(x => !(sinOcioso && x.id === 'OCIOSO_LIQUIDEZ')).map(x => <tr key={x.id} data-fila={x.id} style={x.id === 'PLAN' ? { fontWeight: 700, color: B.titulo } : undefined}>
-          <td style={celda}>{x.bloque ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: '50%', background: COLORES_BLOQUE[(x.bloque - 1) % COLORES_BLOQUE.length], flex: 'none' }}/>{x.nombre}</span> : x.nombre}</td><td style={{ ...celda, whiteSpace: 'nowrap', color: colorSigno(x.final - s.aportado) }}>{euros(x.final, 0)}</td><td style={{ ...celda, color: colorSigno(x.twr) }}>{pct(x.twr)}</td>{conTir && <td style={{ ...celda, color: colorSigno(x.tir) }}>{pct(x.tir)}</td>}<td style={{ ...celda, color: colorSigno(x.caida) }}>{pct(x.caida)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.impuestos, 0)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.costes, 0)}</td><td style={celda}>{x.ordenes}</td>
+          <td style={celda}>{x.bloque ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: '50%', background: COLORES_BLOQUE[(x.bloque - 1) % COLORES_BLOQUE.length], flex: 'none' }}/>{x.nombre}</span> : cifras.vista && AYUDA_BH_VISTA[x.id] ? <span data-ayuda-fila={x.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{x.nombre}<Ayuda texto={AYUDA_BH_VISTA[x.id]} etiqueta={x.nombre}/></span> : x.nombre}</td><td style={{ ...celda, whiteSpace: 'nowrap', color: colorSigno(x.final - s.aportado) }}>{euros(x.final, 0)}</td><td style={{ ...celda, color: colorSigno(x.twr) }}>{pct(x.twr)}</td>{conTir && <td style={{ ...celda, color: colorSigno(x.tir) }}>{pct(x.tir)}</td>}<td style={{ ...celda, color: colorSigno(x.caida) }}>{pct(x.caida)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.impuestos, 0)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{euros(x.costes, 0)}</td><td style={celda}>{x.ordenes}</td>
         </tr>)}</tbody>
       </table></div>
     </Tarjeta>

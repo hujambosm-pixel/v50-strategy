@@ -131,6 +131,34 @@ const txt = (x) => JSON.stringify(x)
   ok(m2.raiz.textContent.includes('Esa vista del screener ya no existe') && pedidas.length === 2, 'una vista borrada: lo dice (sin pedir nada)')
   m2.quita(); await D.espera(5)
 
+  // ── 6 · Los dos «comprar y mantener» de la vista (§277), a mano ──
+  //   Lunes 06/01 [A, B] · 13/01 [A, C, D] (sale B, entran C y D) · 20/01 igual · 27/01 [A, C] (sale D, no entra nadie). 1.000 €, sin costes.
+  //   A a 10 siempre; B 20 → 30 (desde el 13/01) → 40 (desde el 20/01); C 5 → 6 (desde el 20/01); D 10 → 12 (desde el 27/01).
+  //   Sigue la lista: el 06/01, 500 € en A (50) y 500 € en B (25). El 13/01 vende B a 30 = 750 € → 375 € en C (75) y 375 € en D (37,5); A no
+  //     se toca. El 27/01 vende D a 12 = 450 € y, sin nadie que entre, espera en liquidez. Final: 50 × 10 + 75 × 6 + 450 = 1.400 €.
+  //   La lista del primer día: A (50) y B (25), sin tocarla: 50 × 10 + 25 × 40 = 1.500 €.
+  {
+    const Ev = require(R + '/lib/planes/evalua.js'), Pl = require(R + '/lib/planes/plan.js')
+    const F = ['2020-01-06', '2020-01-07', '2020-01-13', '2020-01-14', '2020-01-20', '2020-01-27', '2020-01-28']
+    const act = (symbol, px) => ({ symbol, fechas: F, abre: px, cierra: px, candidatos: [] })
+    const activos = [act('A', [10, 10, 10, 10, 10, 10, 10]), act('B', [20, 20, 30, 30, 40, 40, 40]), act('C', [5, 5, 5, 5, 6, 6, 6]), act('D', [10, 10, 10, 10, 10, 12, 12])]
+    const mascara = V.universoDeSemanas([['2020-01-06', ['A', 'B']], ['2020-01-13', ['A', 'C', 'D']], ['2020-01-20', ['A', 'C', 'D']], ['2020-01-27', ['A', 'C']]], F[0], F[6]).mascara
+    const planV = { tipo: 'plan', formato: 1, calculo: 1, dinero: { capitalInicial: 1000, aportaciones: { frecuencia: 'ninguna' }, extraordinarias: [] },
+      piezas: [{ id: 'e', tipo: 'estrategia', donde: 'lista', lista: Li.mergeLista({ universo: 'vista:3', modo: 'concentrado' }), activo: 'A', ocioso: 'LIQUIDEZ', peso: 1, apalancamiento: 1, estrategia: { id: 'x', name: 'Inventada' } }],
+      reparto: { aportacionesA: 'pesos', rebalanceo: { calendario: 'nunca', banda: null } }, impuestos: { regimen: 'ninguno', reglaDosMeses: true },
+      costes: { comisionPct: 0, comisionMinEur: 0, horquillaPct: { QQQ: 0, ETF: 0, SPY: 0 } }, periodo: { desde: F[0], hasta: F[6] } }
+    const refs = Ev.referenciasDe(planV), rS = refs.find(x => x.id === 'ACTIVO'), rP = refs.find(x => x.id === 'VISTA_PRIMER')
+    ok(rS?.nombre === 'Buy&Hold de la vista (sigue la lista)' && rP?.nombre === 'Buy&Hold de la lista del primer día' && !refs.some(x => x.nombre === 'Lo mismo a la lista a partes iguales (comprar y mantener)'),
+      'con una vista: las dos filas (y no la de la lista a partes iguales)')
+    const datosV = { fechas: F, qqq: F.map(() => null), etf: F.map(() => null), spy: F.map(() => null), lista: { opciones: {}, activos, mascara } }
+    const eS = Pl.ejecutaPlan(rS.plan, datosV), eP = Pl.ejecutaPlan(rP.plan, datosV)
+    ok(Math.abs(eS.valorNeto - 1400) < 1e-9, `sigue la lista: vende lo que sale, compra solo lo que entra, lo demás no se toca → 1.400 € (${eS.valorNeto})`)
+    ok(Math.abs(eP.valorNeto - 1500) < 1e-9, `la lista del primer día, sin tocarla → 1.500 € (${eP.valorNeto})`)
+    ok(eS.costes.ordenes === 2 + 1 + 2 + 1 + 2, `órdenes de «sigue»: 2 compras, vende B, compra C y D, vende D y la venta final de A y C = 8 (${eS.costes.ordenes})`)
+    let falla = null; try { Pl.ejecutaPlan(rS.plan, { ...datosV, lista: { opciones: {}, activos } }) } catch (e) { falla = e.message }
+    ok(falla === 'Faltan las listas de cada lunes de la vista (la máscara).', 'sin la máscara: lo dice')
+  }
+
   console.log(fallos ? `FALLOS: ${fallos}` : 'plan-vista: todo bien')
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(1) })
