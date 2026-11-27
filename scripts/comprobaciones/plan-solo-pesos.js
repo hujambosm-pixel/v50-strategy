@@ -40,6 +40,18 @@ const ok = (c, t) => { console.log(`${c ? 'OK  ' : 'MAL '} ${t}`); if (!c) fallo
   const a5 = Pa.repartirResto({ ...a4, bloques: [{ ...a4.bloques[0], peso: 30 }, { ...a4.bloques[1], peso: 30 }] })
   ok(a5.bloques.map(b => b.peso).join() === '50,50' && a5.peso === a4.peso, '«Repartir el resto» sin el bloque 1: solo entre los que hay')
 
+  // §280: el ejemplo «SPY de reserva que compra en caídas» de «Cargar un ejemplo»: tres reglas, 100 % SPY, y es un plan válido.
+  {
+    const Rp = require(R + '/lib/builder/reglasPesos.js')
+    const ej = Rp.EJEMPLOS_PESOS.find(e => e.id === 'reserva')
+    const b = ej && ej.bloque()
+    const aE = { ...a, bloques: [{ ...a.bloques[0], ...b }] }
+    const pE = Pa.planDe(aE, est)
+    ok(!!ej && ej.nombre === 'SPY de reserva que compra en caídas' && b.reglas.length === 3 && b.reglas[2].filas[0].si.c === 'enMaximoHistorico' && b.reglas[0].accion.tipo === 'moverBloque' && b.reglas[0].filas.length === 2,
+      'el ejemplo «SPY de reserva…»: −10 % y EMA 20 → 20 % a QQQ; −20 % → 20 % a TQQQ; en máximo histórico → 100 % SPY')
+    ok(Pl.validaPlan(pE).length === 0, 'y con él el plan es válido (' + Pl.validaPlan(pE).join(' ') + ')')
+  }
+
   // ── 2 · El motor ──
   const F = ['2020-01-02', '2020-01-03', '2020-01-06']
   const v = (px) => F.map((_, k) => ({ open: px[k], close: px[k] }))

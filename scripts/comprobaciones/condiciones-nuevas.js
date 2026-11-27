@@ -36,6 +36,21 @@ const txt = (x) => JSON.stringify(x)
   ok(N.sinMirarAlFuturo(v => K.serie(v, { pct: 15 }), largo, [0, 5, 50, 120, 299]).length === 0, 'no mira al futuro')
   ok(txt(K.serie(V1, { pct: 40 })) === txt(s1), 'pedirla dos veces da lo mismo (la caché no se estropea)')
 
+  // ── 1b · §280: En su máximo histórico ──
+  //   Cierres 100, 120, 110, 120, 125, (falta), 124: sí, sí, no, sí (iguala), sí, sin dato, no. Con margen 10 %: el 110 sí (≥ 120 × 0,9 = 108)
+  //   y el 124 también (≥ 125 × 0,9 = 112,5).
+  {
+    const E = Cat.enMaximoHistorico
+    const V = velas(dias(7), [100, 120, 110, 120, 125, null, 124])
+    ok(txt(E.serie(V, { margen: 0 })) === txt([true, true, false, true, true, null, false]), '§280: en su máximo histórico, a mano (' + txt(E.serie(V, { margen: 0 })) + ')')
+    ok(txt(E.serie(V, { margen: 10 })) === txt([true, true, true, true, true, null, true]), '§280: con margen 10 %, también a menos de un 10 % del máximo')
+    ok(E.calentamiento({ margen: 0 }) === Cat.HISTORIA_COMPLETA && E.valida({ margen: 0 }).length === 0 && E.valida({ margen: 80 }).length === 1, '§280: pide toda la historia y valida el margen (0 a 50)')
+    const largo = velas(dias(300), Array.from({ length: 300 }, (_, i) => 100 + 30 * Math.sin(i / 9) + i / 5))
+    ok(N.sinMirarAlFuturo(v => E.serie(v, { margen: 2 }), largo, [0, 5, 50, 120, 299]).length === 0, '§280: no mira al futuro')
+    const f = Fi.FICHAS.enMaximoHistorico
+    ok(!!f && f.grupo === 'precio' && /toda su historia/.test(f.explicacion) && !!Fi.CATALOGO.find(e => e.clave === 'enMaximoHistorico'), '§280: su ficha y su sitio en el catálogo (grupo «Precio y medias»)')
+  }
+
   // ── 2 · Primera vela del mes, trimestre o año ──
   const P = Cat.primeraVelaPeriodo
   const fd = ['2023-12-28', '2023-12-29', '2024-01-02', '2024-01-03', '2024-03-28', '2024-04-01', '2024-04-02', '2024-07-01']
