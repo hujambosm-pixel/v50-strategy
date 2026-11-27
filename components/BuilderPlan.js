@@ -73,7 +73,7 @@ import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_NO_EXISTE, avisoPrueba as textoAvisoPrueba, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
   ayudaCaida, avisoListaSimple, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, velasDeEstrategia, velasDelPlan, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS, resumenDinero, bloquesDe, estrategiaBloque, anadeBloque, quitaBloque, repartirResto, sumaPesos, AYUDA_BLOQUES,
-  esBloquePesos, sumaPesosBloque, resumenPesos, AYUDA_PESOS, VOLVER_OPCIONES, LLEGA_OPCIONES, PUNTOS_BANDA_DEFECTO, filaDeMedidas, sinBloque1, cuantosBloques, quitaBloque1, partesDe, cambiaTipoParte, AYUDA_PARTE } from '../lib/builder/planPantalla'
+  esBloquePesos, sumaPesosBloque, resumenPesos, AYUDA_PESOS, VOLVER_OPCIONES, LLEGA_OPCIONES, PUNTOS_BANDA_DEFECTO, filaDeMedidas, sinBloque1, cuantosBloques, quitaBloque1, partesDe, cambiaTipoParte, AYUDA_PARTE, lineasPlan, hayParteEstrategia, AYUDA_ASI_SE_LEE } from '../lib/builder/planPantalla'
 import { MAX_SIMBOLOS_PESOS } from '../lib/planes/pesos'
 import ReglasPesos from './ReglasPesos'
 import OciosoRegla from './OciosoRegla'
@@ -87,6 +87,7 @@ const marcoBloque = (color) => ({ borderTop: `1px solid color-mix(in srgb, ${col
 const fondoCabeceraBloque = (color) => `color-mix(in srgb, ${color} 16%, transparent)`
 // §189: el ancho del panel de la izquierda, arrastrando su borde (se recuerda en este navegador; doble clic = el de siempre).
 const CLAVE_ANCHO = 'builder_plan_ancho_panel', ANCHO_MIN = 300, ANCHO_MAX = 760
+const CLAVE_ASI = 'builder_plan_asi_se_lee'   // §284: «Así se lee tu plan», plegado ('0') o abierto
 // §178: los colores con significado, como variables (cambian con el tono ☀/☾).
 const AMARILLO = C.amarillo, ROJO = C.rojo, VERDE = C.verde, AZUL = C.azul, GRIS_FRANJA = C.ejeCero
 const campo = { fontFamily: B.letra, fontSize: B.base, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '7px 10px' }
@@ -333,6 +334,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const [vistaDer, setVistaDer] = useState(inicial?.vistaDer || 'dinero')
   // §165: el panel de la izquierda plegado o no, recordado en este navegador.
   const [panelOculto, setPanelOculto] = useState(!!inicial?.panelOculto)
+  // §284: la clave del plan nuevo (de «+ Nuevo plan») que aún no ha elegido «📦 Buy&Hold» o «⚙ Con una estrategia».
+  const [eligeTipo, setEligeTipo] = useState(() => inicial?.eligeTipo !== undefined ? inicial.eligeTipo : nuevo && inicio.clave?.startsWith('n') ? inicio.clave : null)
+  const [asiAbierto, setAsiAbierto] = useState(() => { if (inicial?.asiAbierto != null) return inicial.asiAbierto; try { return localStorage.getItem(CLAVE_ASI) !== '0' } catch (_) { return true } })
+  const ponAsi = (v) => { setAsiAbierto(v); try { localStorage.setItem(CLAVE_ASI, v ? '1' : '0') } catch (_) {} }
   useEffect(() => { if (inicial?.panelOculto != null) return; try { if (window.localStorage.getItem(CLAVE_PANEL) === '1') setPanelOculto(true) } catch (_) {} }, [])
   const ponPanelOculto = (x) => { setPanelOculto(x); try { window.localStorage.setItem(CLAVE_PANEL, x ? '1' : '0') } catch (_) {} }
   // §128: «Comparar planes». comparando: se ve la comparación en lugar del plan abierto (que sigue con sus cambios). Lo elegido, recordado
@@ -453,7 +458,8 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     }
     return null
   })()
-  const clave = !actual || !plan || errores.length ? null : multi ? (motivoMulti ? null : bloquesConLista.length ? JSON.stringify({ plan, cuerposLista }) : JSON.stringify(plan))
+  const eligiendo = !!eligeTipo && eligeTipo === actual   // §284
+  const clave = eligiendo || !actual || !plan || errores.length ? null : multi ? (motivoMulti ? null : bloquesConLista.length ? JSON.stringify({ plan, cuerposLista }) : JSON.stringify(plan))
     : !enLista ? JSON.stringify(plan) : motivoLista || !cuerpoLista ? null : JSON.stringify({ plan: calcLista.plan, cuerpoLista })
   const api = useRef(apiFetch); api.current = apiFetch
   // Un plan ya calculado (p. ej., al volver a una pestaña) se enseña sin repetir el cálculo.
@@ -563,7 +569,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     const e = nuevo ? { nuevo: true } : eligeEntrada({ planes: xs, orden: o, estrategiaId, planId, fotoDe: fotoDelPlan })   // §140: nuevo: «+ Nuevo plan» de la portada
     setPlanes(xs)
     if (e.noExiste) setAvisoPlan(AVISO_NO_EXISTE)
-    if (e.nuevo) { const b = borrador(); setNuevas([{ clave: 'n1', nombre: 'Plan nuevo', base: base(b) }]); setOrden([...o, 'n1']); aplica(b); setActual('n1'); return }
+    if (e.nuevo) { const b = borrador(); setNuevas([{ clave: 'n1', nombre: 'Plan nuevo', base: base(b) }]); setOrden([...o, 'n1']); aplica(b); setActual('n1'); if (nuevo) setEligeTipo('n1'); return }   // §284: solo «+ Nuevo plan» pregunta («Usar en un plan» ya trae su estrategia)
     const r = e.clave && xs.find(p => claveDe(p.id) === e.clave)
     setOrden(r ? conPestana(o, e.clave) : o)
     if (r) { aplica(deFila(r)); setActual(e.clave) }
@@ -897,7 +903,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const variosValores = enLista && ((L.universo && L.universo !== 'manual') || (L.simbolos || []).length >= 2)
   // §152: «La estrategia, tal como la usa este plan», siempre a la vista: en azul, lo que el plan cambia respecto a la estrategia guardada.
   const dondeUso = enLista ? (esUniversoVista(L.universo) ? `en la vista «${nombreVistaDe(L.universo)}»` : L.universo && L.universo !== 'manual' ? 'en el Nasdaq-100' : (L.simbolos || []).length === 1 ? `en ${L.simbolos[0]}` : `en ${(L.simbolos || []).length} valores`) : `en ${a.activo}`
-  const uso = estrategia && actual && !multi ? (
+  const uso = estrategia && actual && !multi && !eligiendo ? (
     <div data-uso-estrategia title="En azul, lo que este plan cambia respecto a la estrategia guardada (la estrategia no se toca)" style={{ ...S.secundario, fontSize: 13 }}>
       La estrategia, tal como la usa este plan:{' '}
       {usoDeLaEstrategia({ nombre: estrategia.name, velasEst, velasPlan, donde: dondeUso, propios: filtrosPropios(estrategia), respeta: respetaPropios(a.filtros), nPlan: (a.filtros?.filas || []).length })
@@ -994,7 +1000,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           {seccion(1, 'Pesos de partida', AYUDA_PESOS.partida, <>
             {ps.map((p, j) => (
               <div key={j} data-fila-peso={j} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <div style={{ flex: '1 1 220px', minWidth: 220 }}><BuscadorValor valores={valoresPesos} valor={p.simbolo || ''} onCambia={s => ponPesos(xs => xs.map((y, q) => q === j ? { ...y, simbolo: s } : y))} etiqueta={`Activo ${j + 1} del bloque ${n}`} anchoNombre={90}/></div>
+                <div style={{ flex: '1 1 220px', minWidth: 220 }}><BuscadorValor valores={valoresPesos} valor={p.simbolo || ''} onCambia={s => ponPesos(xs => xs.map((y, q) => q === j ? { ...y, simbolo: s } : y))} etiqueta={`Activo ${j + 1} del bloque ${n}`} anchoNombre={90} anchoCampo="17ch"/></div>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><CampoNumero etiqueta={`Peso del activo ${j + 1} del bloque ${n}`} valor={p.peso} onCambia={v => ponPesos(xs => xs.map((y, q) => q === j ? { ...y, peso: v } : y))} ancho={62}/> %</span>
                 <div aria-hidden="true" style={{ width: 70, height: 6, borderRadius: 3, background: B.borde, overflow: 'hidden', flex: 'none' }}><div style={{ width: `${Math.min(100, Math.max(0, Number(p.peso) || 0))}%`, height: '100%', background: COLORES_BLOQUE[j % COLORES_BLOQUE.length] }}/></div>
                 <button type="button" data-boton="quitar-activo" disabled={ps.length <= 1} title={ps.length <= 1 ? 'La parte necesita al menos un activo' : 'Quitar este activo de la parte'} onClick={() => ponPesos(xs => xs.filter((_, q) => q !== j))} style={{ ...S.boton, padding: '3px 8px', fontSize: 13, color: ps.length <= 1 ? B.apagado : ROJO, borderColor: ps.length <= 1 ? B.borde : ROJO }}>🗑</button>
@@ -1070,10 +1076,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       </div>
     )
   }
-  // §187: el dinero ocioso: en el bloque con uno solo (como siempre); con varios, de la cuenta, en «Tu dinero».
+  // §187: el dinero ocioso. §284: siempre en «Tu dinero» (es de la cuenta), y solo si alguna parte va con una estrategia.
   const ociosoCampo = (
-    <div data-ocioso-de={multi ? 'cuenta' : 'bloque'}>
-      <Etiqueta texto={multi ? 'Dinero ocioso de la cuenta · mientras ningún bloque lo usa, espera en' : 'Dinero ocioso · mientras no hay señal, espera en'} ayuda={multi ? AYUDA_BLOQUES.ocioso : AYUDA_PLAN.ocioso}/>
+    <div data-ocioso-de={multi ? 'cuenta' : 'plan'}>
+      <Etiqueta texto={multi ? 'Dinero ocioso de la cuenta · mientras ninguna parte lo usa, espera en' : 'Dinero ocioso · mientras no hay señal, espera en'} ayuda={multi ? AYUDA_BLOQUES.ocioso : AYUDA_PLAN.ocioso}/>
       <Segmentos etiquetaGrupo="Dinero ocioso" valor={otroOcioso ? 'OTRO' : a.ocioso} onCambia={v => { if (v === 'OTRO') setOtroOcioso(true); else { setOtroOcioso(false); cambia('ocioso', v) } }} opciones={[...OCIOSOS_FIJOS, ['OTRO', 'Otro símbolo']]}/>
       {otroOcioso && <div style={{ marginTop: 10 }}><BuscadorValor valores={valoresLista} valor={OCIOSOS_FIJOS.some(([k]) => k === a.ocioso) ? '' : a.ocioso} onCambia={s => cambia('ocioso', s)} etiqueta="Símbolo del ocioso"/></div>}
       {/* §204: «Cuándo está dentro»: siempre (lo de siempre) o solo cuando lo diga una regla (lib/planes/ociosoRegla.js). Con liquidez, no hace falta. */}
@@ -1088,6 +1094,17 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     <div data-tarjeta="bloques" style={{ ...S.tarjeta, marginTop: 16, overflow: 'visible' }}>
       <div style={{ ...S.cabeceraTarjeta, borderRadius: `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0`, display: 'flex', alignItems: 'center', gap: 2 }}>Cartera<Ayuda texto={AYUDA_PLAN.cartera} etiqueta="Cartera"/><span data-subtitulo style={{ ...S.apagado, fontWeight: 400, marginLeft: 8 }}>en qué se invierte</span></div>
       <div style={{ ...S.cuerpo, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* §284: un plan nuevo («+ Nuevo plan») pregunta primero cómo se invierte (boceto, pestaña 3). */}
+        {eligiendo ? <div data-pregunta-parte style={{ textAlign: 'center', padding: '6px 0' }}>
+          <div style={{ fontWeight: 700, color: B.titulo, fontSize: 15, marginBottom: 10 }}>¿Cómo quieres invertir tu dinero?</div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {[['pesos', '📦 Buy&Hold', 'Compras uno o varios activos con su % y los mantienes. Ej.: 78 % SPY y 22 % TQQQ.'], ['estrategia', '⚙ Con una estrategia', 'Compras y vendes con las señales de una de tus estrategias, en un valor o en una lista.']].map(([tp, tit, sub]) =>
+              <button key={tp} type="button" data-empieza={tp} onClick={() => { if (tp === 'pesos') setA(x => cambiaTipoParte(x, 'e', 'pesos')); setEligeTipo(null) }}
+                style={{ width: 210, padding: 14, textAlign: 'left', border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, background: B.fondo, color: B.texto, cursor: 'pointer', fontFamily: B.letra, fontSize: B.base }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: B.titulo, marginBottom: 4 }}>{tit}</div><div style={S.apagado}>{sub}</div></button>)}
+          </div>
+          <div style={{ ...S.apagado, marginTop: 10 }}>Luego podrás añadir otra parte para repartir el dinero de otra forma.</div>
+        </div> : <>
         {!multi ? <div data-barra-cartera aria-hidden="true" title="Todo el dinero del plan está en esta parte" style={{ height: 8, borderRadius: 4, background: AZUL }}/>
           : <div data-barra-cartera="bloques" title={`Cómo se reparte tu dinero entre las partes${sumaPct !== 100 ? ` (suman ${textoCampo(sumaPct)} %, no 100 %)` : ''}`} style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: B.borde }}>
             {[...(sin1 ? [] : [Number(a.peso) || 0]), ...extra.map(b => Number(b.peso) || 0)].map((p, k) => <div key={k} style={{ width: `${Math.max(0, p) / Math.max(100, sumaPct) * 100}%`, background: COLORES_BLOQUE[k % COLORES_BLOQUE.length] }}/>)}
@@ -1096,7 +1113,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
         {!sin1 && <div data-bloque="1" style={marcoBloque(AZUL)}>
           {cabeceraParte({ n: 1, color: AZUL, id: 'e', tipo: 'estrategia', pct: a.peso, onPct: v => cambia('peso', v), abierto: bloqueAbierto, onPliega: () => setBloqueAbierto(x => !x),
             resumen: `Estrategia · ${estrategia?.name || 'sin elegir'}`, quitarId: 'quitar-bloque-1', onQuitar: () => setA(x => quitaBloque1(x)), ayudaQuitar: AYUDA_BLOQUES.quitar1,
-            detalle: <>en {enLista ? (esVista ? `la vista «${nombreVistaDe(L.universo)}»` : L.universo && L.universo !== 'manual' ? 'el Nasdaq-100' : (L.simbolos || []).length === 1 ? L.simbolos[0] : `${(L.simbolos || []).length} valores`) : a.activo}{multi ? ` · velas ${velasPlan}` : <> · ocioso en {(OCIOSOS_FIJOS.find(([k]) => k === a.ocioso)?.[1] || a.ocioso || '—')}</>}</> })}
+            detalle: <>en {enLista ? (esVista ? `la vista «${nombreVistaDe(L.universo)}»` : L.universo && L.universo !== 'manual' ? 'el Nasdaq-100' : (L.simbolos || []).length === 1 ? L.simbolos[0] : `${(L.simbolos || []).length} valores`) : a.activo}{` · velas ${velasPlan}`}</> })}
           {bloqueAbierto && <div data-cuerpo-bloque style={{ borderTop: `1px solid ${B.borde}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <Etiqueta texto="Estrategia" ayuda={AYUDA_PLAN.estrategia}/>
@@ -1166,8 +1183,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           {estrategia && <FiltrosDelPlan estrategia={estrategia} filtros={a.filtros} onCambia={v => cambia('filtros', v)} velasPlan={velasPlan} valores={valoresLista} inicial={inicial?.filtrosPlan || null}/>}
           {/* §153: fuera el panel de filtros del Backtesting: los filtros del plan son los de arriba (catálogo). Un plan que aún llevara encendido alguno de los antiguos lo dice y deja quitarlos. */}
           {hayFiltrosActivos(L.filtros || []) && <div data-aviso="filtros-antiguos" style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>⚠ Este plan lleva {(L.filtros || []).filter(f => f.activo).length === 1 ? 'un filtro' : 'filtros'} del panel antiguo, que ya no se edita aquí: se sigue aplicando.<button type="button" data-boton="quitar-filtros-antiguos" style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }} onClick={() => ponValores('filtros')([])}>Quitarlo</button></div>}
-          {/* §142: el dinero ocioso, «Si llega una aportación…» y el apalancamiento son de CÓMO se invierte este bloque (en el plan guardado ya eran de su pieza): van aquí, no en «Tu dinero». */}
-          {!multi && ociosoCampo}
+          {/* §142: «Si llega una aportación…» y el apalancamiento son de CÓMO se invierte este bloque: van aquí. §284: el dinero ocioso, en «Tu dinero». */}
           {/* §91: con una lista, la aportación siempre espera en el ocioso hasta la siguiente compra (no hay una sola operación abierta). */}
           {!enLista && !multi && <div>
             <Etiqueta texto="Si llega una aportación con la operación abierta" ayuda={AYUDA_PLAN.dentro}/>
@@ -1191,6 +1207,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           <div><Etiqueta texto="Volver al reparto" ayuda={AYUDA_BLOQUES.vender}/>
             <Segmentos etiquetaGrupo="Vender para volver al reparto" valor="nunca" onCambia={() => {}} opciones={[['nunca', 'Nunca (no se vende para volver)'], ['anual', 'Cada año', 'Llegará más adelante'], ['desvio', 'Si se desvía', 'Llegará más adelante']]}/></div>
         </div>}
+        </>}
       </div>
     </div>
   )
@@ -1200,7 +1217,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       <button type="button" data-pliega-dinero aria-expanded={dineroAbierto} onClick={() => setDineroAb(x => ({ ...x, [actual]: !dineroAbierto }))} title={dineroAbierto ? 'Plegar «Tu dinero» en una línea' : 'Abrir «Tu dinero» para cambiarlo'}
         style={{ ...S.cabeceraTarjeta, borderRadius: dineroAbierto ? `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0` : B.radioTarjeta, display: 'flex', alignItems: 'baseline', gap: 8, width: '100%', boxSizing: 'border-box', cursor: 'pointer', textAlign: 'left', fontFamily: B.letra, ...(dineroAbierto ? {} : { borderBottom: 'none' }) }}>
         Tu dinero<span data-subtitulo style={{ ...S.apagado, fontWeight: 400 }}>cuánto, cuándo y costes</span><span aria-hidden="true" style={{ marginLeft: 'auto', color: B.secundario, fontWeight: 400 }}>{dineroAbierto ? '▾' : '▸'}</span></button>
-      {!dineroAbierto && <button type="button" data-resumen-dinero onClick={() => setDineroAb(x => ({ ...x, [actual]: true }))} title="Pulsa para cambiarlo" style={{ display: 'block', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 14px 11px', fontFamily: B.letra, fontSize: 13, color: B.texto, lineHeight: 1.5 }}>{resumenDinero(a, multi && (!sin1 || extra.some(b => !esBloquePesos(b))))}</button>}
+      {!dineroAbierto && <button type="button" data-resumen-dinero onClick={() => setDineroAb(x => ({ ...x, [actual]: true }))} title="Pulsa para cambiarlo" style={{ display: 'block', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 14px 11px', fontFamily: B.letra, fontSize: 13, color: B.texto, lineHeight: 1.5 }}>{resumenDinero(a, hayParteEstrategia(a) && !eligiendo)}</button>}
       {dineroAbierto && <div style={{ ...S.cuerpo, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div>
           <Etiqueta texto="Periodo" ayuda={AYUDA_PLAN.periodo}/>
@@ -1232,12 +1249,27 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             {a.comisionTipo === 'fija' && <span title="Se cobra al comprar y otra vez al vender. Si tu bróker cobra 0,37 € solo al comprar, pon 0,185 € (0,185 + 0,185 = 0,37 €)." style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CampoNumero enEuros etiqueta="Euros por orden" valor={a.comisionFija} onCambia={v => cambia('comisionFija', v)} ancho={70}/> € por orden</span>}
           </div>
         </div>
-        {multi && (!sin1 || extra.some(b => !esBloquePesos(b))) && ociosoCampo}
+        {hayParteEstrategia(a) && !eligiendo && ociosoCampo}
       </div>}
     </div>
   )
 
   // ── Columna derecha ──
+  // §284: «Así se lee tu plan» (boceto, pestaña 1): una frase por parte, las aportaciones y la venta del último día. Se pliega (se recuerda).
+  const dondeDe = (x) => x === a ? (enLista ? resumenDe(L) : a.activo) : x.donde === 'lista' ? resumenDe(x.lista || {}) : x.activo
+  const lectura = lineasPlan(a, { nombreEst: estrategia?.name || null, estrategiaDe, dondeDe })
+  const asiSeLee = (
+    <div data-tarjeta="asi-se-lee" data-abierta={asiAbierto ? 'si' : 'no'} style={{ ...S.tarjeta, overflow: 'visible' }}>
+      <div style={{ ...S.cabeceraTarjeta, borderRadius: asiAbierto ? `${B.radioTarjeta}px ${B.radioTarjeta}px 0 0` : B.radioTarjeta, display: 'flex', alignItems: 'center', gap: 2, ...(asiAbierto ? {} : { borderBottom: 'none' }) }}>
+        Así se lee tu plan<Ayuda texto={AYUDA_ASI_SE_LEE} etiqueta="Así se lee tu plan"/>
+        <button type="button" data-pliega-asi aria-expanded={asiAbierto} onClick={() => ponAsi(!asiAbierto)} title={asiAbierto ? 'Plegarlo' : 'Verlo'} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: B.secundario, fontFamily: B.letra, fontSize: 13 }}>{asiAbierto ? '▴ Ocultar' : '▾ Ver'}</button>
+      </div>
+      {asiAbierto && <div style={{ ...S.cuerpo, lineHeight: 1.55 }}>
+        {lectura.partes.map(p => <div key={p.n} data-frase-parte={p.n} style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginBottom: 4 }}><span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: '50%', background: COLORES_BLOQUE[(p.n - 1) % COLORES_BLOQUE.length], flex: 'none', transform: 'translateY(-1px)' }}/><span>{p.texto}</span></div>)}
+        {lectura.resto.map((x, k) => <div key={k} data-frase-resto={k} style={{ ...S.secundario, marginTop: 4 }}>{x}</div>)}
+      </div>}
+    </div>
+  )
   const s = cifras?.seis, activoRes = ajustesDelResultado?.activo || a.activo, ociosoRes = ajustesDelResultado?.ocioso || a.ocioso
   // §49: con el ocioso en liquidez, el plan con el ocioso en liquidez es el mismo plan: ni su fila, ni su línea, ni «El ocioso añadió», ni caídas.
   const sinOcioso = ociosoRes === 'LIQUIDEZ'
@@ -1388,7 +1420,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
         {!panelOculto && <div data-borde-panel className="bp-borde" role="separator" aria-orientation="vertical" aria-label="Arrastra para cambiar el ancho del panel" onMouseDown={arrastraBorde} onDoubleClick={anchoNormal}
           title="Arrastra para estrechar o ensanchar el panel de la izquierda. Doble clic: el ancho de siempre." style={{ flex: '0 0 8px', alignSelf: 'stretch', cursor: 'col-resize', margin: '0 -12px 0 -8px', position: 'relative', zIndex: 5 }}/>}
         <div data-columna="derecha" className="bp-der" style={{ flex: '2 1 480px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {resultado}
+          {eligiendo ? <div data-sin-resultado="eligiendo" style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario }}>Elige a la izquierda cómo quieres invertir tu dinero.</div> : <>{asiSeLee}{resultado}</>}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
             <BotonCopiar obtenerTexto={texto} titulo="Copia en texto plano todos los ajustes, el plan y sus cifras"/>
           </div>

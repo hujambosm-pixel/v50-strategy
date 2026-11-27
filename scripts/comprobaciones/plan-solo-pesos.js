@@ -139,6 +139,30 @@ const ok = (c, t) => { console.log(`${c ? 'OK  ' : 'MAL '} ${t}`); if (!c) fallo
     ok(p1.piezas.length === 1 && p1.piezas[0].tipo === 'pesos' && p1.piezas[0].peso === 1, 'el plan de la parte Buy&Hold sola: una pieza «pesos» con peso 1')
   }
 
+  // ── §284 · «Así se lee tu plan» (lineasPlan), a mano ──
+  {
+    const x = { ...Pa.AJUSTES_PLAN, capital: 10000, aportacion: 300, sube: false, impuestos: 'ES-ahorro', sinBloque1: true, bloques: [{ id: 'b2', peso: 100, tipo: 'pesos', pesos: [{ simbolo: 'SPY', peso: 78 }, { simbolo: 'TQQQ', peso: 22 }], volver: { cada: 'nunca' } }] }
+    const l1 = Pa.lineasPlan(x)
+    ok(l1.partes.length === 1 && l1.partes[0].texto === 'El 100 % (10.000 €) compra el primer día SPY (7.800 €) y TQQQ (2.200 €) y los mantiene hasta el final.', `el plan del vídeo: «${l1.partes[0].texto}»`)
+    ok(l1.resto[0] === 'Cada mes llegan 300 €: se compran como dice «El dinero que llega».' && /impuestos pendientes/.test(l1.resto[1]) && !Pa.hayParteEstrategia(x), 'aportaciones de una parte Buy&Hold, la venta final y sin parte con estrategia (no hay ocioso)')
+    const y = { ...Pa.AJUSTES_PLAN, capital: 10000, aportacion: 0, activo: 'AAPL', ocioso: 'GLD', peso: 60, bloques: [{ id: 'b2', peso: 40, tipo: 'pesos', pesos: [{ simbolo: 'SPY', peso: 80 }, { simbolo: 'TQQQ', peso: 20 }], volver: { cada: 'anio' }, reglas: [{}] }] }
+    const l2 = Pa.lineasPlan(y, { nombreEst: 'Cruce de medias 50/200' })
+    ok(l2.partes[0].texto === 'El 60 % (6.000 €) opera «Cruce de medias 50/200» en AAPL: compra y vende con sus señales; mientras no hay señal, el dinero espera en oro (GLD).' && l2.partes[1].texto === 'El 40 % (4.000 €) compra el primer día SPY (3.200 €) y TQQQ (800 €) y vuelve a los pesos cada año; además, 1 regla «si… entonces…».' && l2.resto.length === 1 && Pa.hayParteEstrategia(y), `mixto 60/40: «${l2.partes[0].texto}» · «${l2.partes[1].texto}»`)
+  }
+  // ── §284 · la pregunta del plan nuevo: «📦 Buy&Hold» deja una parte Buy&Hold al 100 % ──
+  {
+    const D = require('./domFalso'); D.pon()
+    const path = require('path'), React = require(path.join(R, 'node_modules', 'react')), RDC = require(path.join(R, 'node_modules', 'react-dom', 'client'))
+    const BP = require(R + '/components/BuilderPlan.js').default
+    const props = { estrategias: [est], estrategiaId: 7, datosLista: { watchlist: [], wlLists: [], rankingData: {} }, deps: { ctx: null, calcula: async () => { throw new Error('sin motor en la prueba') } },
+      inicial: { planes: [], pestana: 'n1', eligeTipo: 'n1', simbolos: ['AAPL', 'SPY'], pruebas: [], resultadoPrueba: null, ajustes: { ...Pa.AJUSTES_PLAN, activo: 'AAPL' } } }
+    const m = D.monta(React.createElement(BP, props), RDC); await D.espera(60)
+    ok(m.raiz.conAtributo('data-pregunta-parte').length === 1, 'plan nuevo: la pregunta')
+    D.pulsa(m.raiz.conAtributo('data-empieza', 'pesos')[0]); await D.espera(30)
+    ok(!m.raiz.conAtributo('data-pregunta-parte').length && m.raiz.conAtributo('data-tipo-bloque', 'pesos').length === 1 && !m.raiz.conAtributo('data-bloque', '1').some(z => !z.hasAttribute('data-tipo-bloque')) && !m.raiz.conAtributo('data-ocioso-de').length, '«📦 Buy&Hold»: una parte Buy&Hold al 100 % y sin dinero ocioso')
+    m.quita(); await D.espera(5)
+  }
+
   console.log(fallos ? `FALLOS: ${fallos}` : 'plan-solo-pesos: todo bien')
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(1) })

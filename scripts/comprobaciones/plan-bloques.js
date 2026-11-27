@@ -214,7 +214,7 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     const pp = pedidos[pedidos.length - 1]?.[0]
     ok(pp?.piezas?.length === 2 && pp.piezas[1].activo === 'MSFT' && pp.piezas[1].peso === 0.4 && !pedidos[pedidos.length - 1][2], `lo que se calcula: el plan de dos bloques (sin listas, sin peticiones de candidatos)`)
     D.pulsa(m.raiz.conAtributo('data-bloque', '2')[0].conAtributo('data-boton', 'quitar-bloque')[0]); await hasta(() => !m.raiz.conAtributo('data-bloque', '2').length)
-    ok(!m.raiz.conAtributo('data-bloque', '2').length && m.raiz.conAtributo('data-parte')[0]?.getAttribute('data-parte') === '100 %' && !m.raiz.conAtributo('data-reparto-bloques').length && m.raiz.conAtributo('data-bloque', '1')[0].conAtributo('data-ocioso-de', 'bloque').length === 1, '«Quitar»: vuelve a un bloque al 100 %, con el ocioso en el bloque')
+    ok(!m.raiz.conAtributo('data-bloque', '2').length && m.raiz.conAtributo('data-parte')[0]?.getAttribute('data-parte') === '100 %' && !m.raiz.conAtributo('data-reparto-bloques').length && tarjeta('tu-dinero').conAtributo('data-ocioso-de', 'plan').length === 1 && !m.raiz.conAtributo('data-bloque', '1')[0].conAtributo('data-ocioso-de').length, '«Quitar»: vuelve a una parte al 100 %, con el ocioso en «Tu dinero» (§284)')
     D.pulsa(boton('anadir-bloque')); await hasta(() => m.raiz.conAtributo('data-bloque', '2').length === 1); D.pulsa(tipoBtn(2, 'estrategia')); await hasta(() => m.raiz.conAtributo('data-bloque', '2').length === 1 && !m.raiz.conAtributo('data-tipo-bloque', 'pesos').length)
     ok(m.raiz.conAtributo('data-parte').map(x => x.getAttribute('data-parte')).join('|') === '50 %|50 %', '«+ Añadir otra parte» y «⚙ Con una estrategia»: 50 % y 50 %')
     m.quita(); await D.espera(5)
