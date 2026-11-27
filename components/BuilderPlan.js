@@ -950,7 +950,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           <span data-parte style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>{textoCampo(b.peso)} %</span>
           <span style={{ minWidth: 0, flex: '1 1 auto' }}>
             <span data-resumen-bloque style={{ display: 'block', color: B.titulo, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Estrategia · {est?.name || 'sin elegir'}</span>
-            <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>en {uni ? 'el Nasdaq-100' : marc.length === 1 ? marc[0] : `${marc.length} valores`} · velas {vPlan}</span>
+            <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>en {esUniversoVista(Lb.universo) ? `la vista «${nombreVistaDe(Lb.universo)}»` : uni ? 'el Nasdaq-100' : marc.length === 1 ? marc[0] : `${marc.length} valores`} · velas {vPlan}</span>
           </span>
           <span aria-hidden="true" style={{ color: B.secundario, flex: 'none' }}>{abierto ? '▾' : '▸'}</span>
         </button>
@@ -1029,7 +1029,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             <span data-parte title={multi ? 'Qué parte del dinero del plan va a este bloque.' : 'Qué parte del dinero del plan va a este bloque. Con un solo bloque, todo: de 10.000 €, los 10.000 €.'} style={{ fontWeight: 700, color: B.titulo, flex: 'none' }}>{multi ? textoCampo(a.peso) : 100} %</span>
             <span style={{ minWidth: 0, flex: '1 1 auto' }}>
               <span data-resumen-bloque style={{ display: 'block', color: B.titulo, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Estrategia · {estrategia?.name || 'sin elegir'}</span>
-              <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>en {enLista ? (L.universo && L.universo !== 'manual' ? 'el Nasdaq-100' : (L.simbolos || []).length === 1 ? L.simbolos[0] : `${(L.simbolos || []).length} valores`) : a.activo}{multi ? ` · velas ${velasPlan}` : <> · ocioso en {(OCIOSOS_FIJOS.find(([k]) => k === a.ocioso)?.[1] || a.ocioso || '—')}</>}</span>
+              <span data-resumen-donde style={{ display: 'block', ...S.apagado, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>en {enLista ? (esVista ? `la vista «${nombreVistaDe(L.universo)}»` : L.universo && L.universo !== 'manual' ? 'el Nasdaq-100' : (L.simbolos || []).length === 1 ? L.simbolos[0] : `${(L.simbolos || []).length} valores`) : a.activo}{multi ? ` · velas ${velasPlan}` : <> · ocioso en {(OCIOSOS_FIJOS.find(([k]) => k === a.ocioso)?.[1] || a.ocioso || '—')}</>}</span>
             </span>
             <span aria-hidden="true" style={{ color: B.secundario, flex: 'none' }}>{bloqueAbierto ? '▾' : '▸'}</span>
           </button>

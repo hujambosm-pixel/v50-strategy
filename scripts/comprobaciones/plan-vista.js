@@ -114,6 +114,7 @@ const txt = (x) => JSON.stringify(x)
   const m = D.monta(React.createElement(BP, props()), RDC)
   const tx = () => m.raiz.textContent
   await hasta(() => tx().includes('Filtros: ROCE') && cuerpos.length > 0)
+  ok(!!m.raiz.busca(n => n.hasAttribute && n.hasAttribute('data-resumen-donde') && n.textContent.startsWith('en la vista «Poca deuda»')), '§276: el resumen del bloque dice «en la vista «Poca deuda»» (no «el Nasdaq-100»)')
   ok(pedidas.length === 1 && JSON.stringify(pedidas[0]) === JSON.stringify(vistaR), 'pide la lista de cada lunes con la vista tal como está en el screener (una vez)')
   ok(tx().includes('Filtros: ROCE ≥ 25') && tx().includes('Cada lunes, entre 2 y 2 valores') && tx().includes('PEG esperado: solo desde el 17/06/2024'), 'enseña los filtros, cuántos valores y el aviso del PEG')
   const cu = cuerpos[cuerpos.length - 1]
