@@ -60,6 +60,9 @@ import { CLAVE_COMPARAR, REFS_COMPARAR, TEXTO_SIN_PLANES, alterna, copiaDeAhora,
 import MenuCompararEstrategias from './MenuCompararEstrategias'
 import { SelectorEstrategia } from './ListaEstrategias'
 import { cargaUniversoMc, nDeUniverso, nombreUniverso, reglaDeUniverso } from '../lib/universoMc'
+import { listarVistas as listarVistasScreener } from '../lib/screener/vistasBase'
+import { esUniversoVista, idDeVista, universoDeVista } from '../lib/planes/vistaUniverso'
+import { AYUDA_VISTA, DESDE_FOTOS, avisoVista, cuentaVista, lineaFiltros, textoCuenta } from '../lib/builder/vistaPlan'
 import FiltrosDelPlan from './FiltrosDelPlan'
 import { filtrosPropios, respetaPropios, usoDeLaEstrategia } from '../lib/builder/filtrosPlan'
 import { hayFiltrosActivos } from '../lib/filtros'
@@ -404,6 +407,33 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       .catch(e => { if (v) setVistaLista(x => ({ ...x, universoDatos: { ...x.universoDatos, [u]: { error: e.message || 'No se pudo leer el universo.' } } })) })
     return () => { v = false }
   }, [universoPendiente, ctx])
+  // §275: las vistas del screener (para elegir una como valores) y, con una elegida, la lista de cada lunes (/api/replay-vista, como el
+  // Replay; desde la primera foto: el periodo del plan se recorta luego). Una vez por vista; también las de «Comparar planes».
+  const [vistasScr, setVistasScr] = useState(inicial?.vistasScreener ?? null)
+  useEffect(() => {
+    if (vistasScr || !ctx) return
+    let v = true
+    listarVistasScreener(ctx).then(f => { if (v) setVistasScr(f || []) }).catch(() => { if (v) setVistasScr([]) })
+    return () => { v = false }
+  }, [ctx, vistasScr])
+  const pideSemanasVista = useRef(null)
+  if (!pideSemanasVista.current) pideSemanasVista.current = deps?.semanasVista || (async (vista) => {
+    const pide = async (desde) => { const r = await api.current('/api/replay-vista', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vista, desde }) }); const j = await r.json().catch(() => null); if (!j) throw new Error(`HTTP ${r.status}`); return j }
+    const j = await pide(DESDE_FOTOS)
+    return j.error && !(j.semanas || []).length && j.primera && j.primera > DESDE_FOTOS ? pide(j.primera) : j
+  })
+  const cargandoVistas = useRef(new Set())
+  const cargaVista = (u) => {
+    if (!esUniversoVista(u) || !vistasScr || cargandoVistas.current.has(u)) return
+    const fila = vistasScr.find(x => String(x.id) === String(idDeVista(u)))
+    const pon = (d) => { cargandoVistas.current.delete(u); if (vivo.current) setVistaLista(x => ({ ...x, universoDatos: { ...x.universoDatos, [u]: d } })) }
+    if (!fila) { pon({ error: 'Esa vista del screener ya no existe: elige otra en «Valores · dónde se aplica».' }); return }
+    cargandoVistas.current.add(u)
+    pideSemanasVista.current(fila.vista).then(j => pon({ ...j, nombre: fila.nombre, vista: fila.vista })).catch(e => pon({ error: `No se pudo leer la vista «${fila.nombre}» (${e.message}).`, nombre: fila.nombre }))
+  }
+  const vistasPendientes = [universoLista, ...extra.filter(b => b.donde === 'lista').map(b => b.lista?.universo)].filter(u => esUniversoVista(u) && !universoDatos[u]).join(',')
+  useEffect(() => { if (vistasPendientes) vistasPendientes.split(',').forEach(cargaVista) }, [vistasPendientes, vistasScr])
+  const nombreVistaDe = (u) => universoDatos[u]?.nombre || vistasScr?.find(x => String(x.id) === String(idDeVista(u)))?.nombre || '…'
   const cuerpoLista = useMemo(() => enLista && estPorDentro ? peticionPorDentro({ a, estrategia: estPorDentro, wlData: datosLista?.wlData || {}, universoDatos }) : null, [enLista, a, estPorDentro, datosLista?.wlData, universoDatos])
   const motivoLista = !enLista ? null : (motivoEstPorDentro || (calcLista && motivoListaNoCalculable(calcLista.plan, cuerpoLista?.symbols || null)) || (!cuerpoLista ? motivoSinPeticion({ a, estrategia: estPorDentro, universoDatos }) : null))
   // §187: con varios bloques, una petición de candidatos por cada bloque con lista (la de ese bloque solo: su parte del dinero inicial), en
@@ -721,6 +751,9 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
       .then(d => { if (vivo.current) setVistaLista(x => ({ ...x, universoDatos: { ...x.universoDatos, [u]: d } })) })
       .catch(e => { if (vivo.current) setVistaLista(x => ({ ...x, universoDatos: { ...x.universoDatos, [u]: { error: e.message || 'No se pudo leer el universo.' } } })) }))
   }, [universosComp, ctx])
+  // §275: con una vista del screener, su lista de cada lunes (la misma carga que en la pestaña).
+  const vistasComp = [...new Set(filasComp.map(f => piezaDe(f.plan)).filter(x => x?.donde === 'lista' && esUniversoVista(x.lista?.universo)).map(x => x.lista.universo))].filter(u => !universoDatos[u]).join(',')
+  useEffect(() => { if (vistasComp) vistasComp.split(',').forEach(cargaVista) }, [vistasComp, vistasScr])
   const peticionesComp = useMemo(() => filasComp.map(f => ({ id: f.id, ...peticionComparar(f) })), [filasComp, estrategias, universoDatos, datosLista?.wlData])
   const clavesComp = JSON.stringify(peticionesComp.map(p => [p.id, p.clave || p.motivo]))
   // Cada plan, a la vez; lo ya calculado (aquí o en su pestaña con la misma petición) no se repite.
@@ -809,7 +842,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const velasEst = velasDeEstrategia(estrategia), velasPlan = velasDelPlan(a, estrategia)
   const variosValores = enLista && ((L.universo && L.universo !== 'manual') || (L.simbolos || []).length >= 2)
   // §152: «La estrategia, tal como la usa este plan», siempre a la vista: en azul, lo que el plan cambia respecto a la estrategia guardada.
-  const dondeUso = enLista ? (L.universo && L.universo !== 'manual' ? 'en el Nasdaq-100' : (L.simbolos || []).length === 1 ? `en ${L.simbolos[0]}` : `en ${(L.simbolos || []).length} valores`) : `en ${a.activo}`
+  const dondeUso = enLista ? (esUniversoVista(L.universo) ? `en la vista «${nombreVistaDe(L.universo)}»` : L.universo && L.universo !== 'manual' ? 'en el Nasdaq-100' : (L.simbolos || []).length === 1 ? `en ${L.simbolos[0]}` : `en ${(L.simbolos || []).length} valores`) : `en ${a.activo}`
   const uso = estrategia && actual && !multi ? (
     <div data-uso-estrategia title="En azul, lo que este plan cambia respecto a la estrategia guardada (la estrategia no se toca)" style={{ ...S.secundario, fontSize: 13 }}>
       La estrategia, tal como la usa este plan:{' '}
@@ -828,8 +861,13 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   }
   const watchlistPlan = watchlistDe(L)
   const resumenDe = (Lx) => { const u = !!Lx.universo && Lx.universo !== 'manual', m = Lx.simbolos || []
-    return u ? nombreUniverso(nDeUniverso(Lx.universo), reglaDeUniverso(Lx.universo)) : !m.length ? 'Ningún valor marcado' : m.length === 1 ? m[0] : `${m.length} valores · ${m.slice(0, 4).join(', ')}${m.length > 4 ? '…' : ''}` }
+    return esUniversoVista(Lx.universo) ? `Vista del screener «${nombreVistaDe(Lx.universo)}»` : u ? nombreUniverso(nDeUniverso(Lx.universo), reglaDeUniverso(Lx.universo)) : !m.length ? 'Ningún valor marcado' : m.length === 1 ? m[0] : `${m.length} valores · ${m.slice(0, 4).join(', ')}${m.length > 4 ? '…' : ''}` }
   const esUniverso = !!L.universo && L.universo !== 'manual', marcados = L.simbolos || []
+  // §275: elegir una vista del screener como valores (solo con «Capital concentrado», como el Nasdaq-100); «Ninguna» vuelve a los marcados.
+  const esVista = esUniversoVista(L.universo)
+  const eligeVista = (u) => { if (!u) { ponValores('universo')('manual'); return } ponValores('universo')(u); ponLista('modo')('concentrado') }
+  const datosVista = esVista ? universoDatos[L.universo] : null
+  const perVista = esVista ? fechasDe(a) : null, cuentaV = datosVista && !datosVista.error ? cuentaVista(datosVista.semanas, perVista?.desde || '', perVista?.hasta || '9999-12-31') : null, pegVista = avisoVista(datosVista)
   const abiertoValores = valoresAbiertos ?? (!esUniverso && marcados.length === 0)
   const resumenValores = resumenDe(L)
   // §187: los bloques 2, 3… Cada uno, en una fila plegable con lo mismo que el bloque 1 (estrategia, velas, valores, reparto entre sus
@@ -1024,12 +1062,29 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
               <span data-marcados title={esUniverso ? resumenValores : marcados.join(', ') || undefined} style={{ flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, color: esUniverso || marcados.length ? B.titulo : AMARILLO }}>{resumenValores}</span>
               <button type="button" data-boton="cambiar-valores" aria-expanded={abiertoValores} title={abiertoValores ? 'Plegar la lista de valores' : 'Abrir la lista para marcar o desmarcar valores'} style={{ ...S.boton, padding: '4px 10px', fontSize: 13, flex: 'none' }} onClick={() => { if (!abiertoValores) setPrimeros([...marcados]); setValoresAbiertos(!abiertoValores) }}>{abiertoValores ? 'Hecho ▴' : 'Cambiar ▾'}</button>
             </div>
+            {esVista && <div data-info-vista style={{ marginTop: 6, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {!datosVista ? <div style={S.secundario}>Leyendo la vista del screener…</div> : datosVista.error ? <div data-aviso-vista style={{ color: AMARILLO }}>{datosVista.error}</div> : <>
+                <div data-filtros-vista title={lineaFiltros(datosVista.vista)} style={{ ...S.secundario, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>Filtros: {lineaFiltros(datosVista.vista)}</span><Ayuda texto={AYUDA_VISTA} etiqueta="Una vista del screener como valores"/></div>
+                {cuentaV?.semanas ? <div data-cuenta-vista style={S.secundario}>{textoCuenta(cuentaV)}</div> : null}
+                {pegVista && <div data-aviso-vista style={{ color: AMARILLO }}>{pegVista}</div>}
+              </>}
+            </div>}
             {abiertoValores && <div data-lista="valores" data-donde={enLista ? 'lista' : 'accion'} className="bp-mc" style={{ marginTop: 6 }}>
+              <div data-vista-plan style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderBottom: `1px solid ${B.borde}` }}>
+                <span style={{ ...S.secundario, fontSize: 13, flex: 'none' }}>Vista del screener</span>
+                <select data-elige-vista aria-label="Vista del screener" value={esVista ? L.universo : ''} onChange={e => eligeVista(e.target.value)} style={{ ...campo, flex: '1 1 auto', minWidth: 0, padding: '4px 6px' }}>
+                  <option value="">Ninguna · los valores o el Nasdaq-100 de abajo</option>
+                  {(vistasScr || []).map(v => <option key={v.id} value={universoDeVista(v.id)}>{v.nombre}</option>)}
+                  {esVista && !(vistasScr || []).some(v => universoDeVista(v.id) === L.universo) && <option value={L.universo}>{nombreVistaDe(L.universo)}</option>}
+                </select>
+              </div>
+              {!esVista && <>
               <PanelUniverso mcUniverso={L.universo} mcUniversoDatos={vistaLista.universoDatos} setMcUniverso={ponValores('universo')} setMcUniversoDatos={ponVista('universoDatos')}/>
               <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 330 }}>
                 <SelectorValores mcListFilter={vistaLista.lista} mcOnlyFavs={vistaLista.favs} mcSearch={vistaLista.busca} mcSelected={L.simbolos} mcUniverso={L.universo} rankingData={datosLista?.rankingData || {}}
                   setMcListFilter={ponVista('lista')} setMcOnlyFavs={ponVista('favs')} setMcSearch={ponVista('busca')} setMcSelected={ponValores('simbolos')} watchlist={watchlistPlan} wlLists={datosLista?.wlLists || []} primero={primeros}/>
               </div>
+              </>}
             </div>}
           </div>
           {/* §80: el reparto dentro de la lista (elementos 5–10 y 12), con lo de este bloque. */}

@@ -94,6 +94,42 @@ const txt = (x) => JSON.stringify(x)
   const aN = { ...a, lista: Li.mergeLista({ universo: 'ndx_vol_10', modo: 'concentrado' }) }, pN = Pa.planDe(aN, est)
   ok(Api.errorCuerpoLista(pN, pN.piezas[0], c) !== null, 'un plan del Nasdaq-100 no acepta la petición de una vista')
 
+  // ── 5 · La pantalla (§275): elegir la vista, sus filtros en una línea, cuántos valores y el aviso del PEG ──
+  const path = require('path'), React = require(path.join(R, 'node_modules', 'react')), { renderToString } = require(path.join(R, 'node_modules', 'react-dom', 'server')), RDC = require(path.join(R, 'node_modules', 'react-dom', 'client'))
+  const BP = require(R + '/components/BuilderPlan.js').default, Sv = require(R + '/lib/screener/vista.js'), VP = require(R + '/lib/builder/vistaPlan.js')
+  const hasta = async (cond, max = 20000) => { const t0 = Date.now(); do { await D.espera(5); try { if (cond()) { await D.espera(5); return true } } catch (_) {} } while (Date.now() - t0 < max); return false }
+  const vistaR = Sv.vistaNueva({ on: ['roce'] }), vistas = [{ id: 5, nombre: 'Poca deuda', vista: vistaR }, { id: 6, nombre: 'Crecer barato', vista: Sv.vistaNueva({ on: ['roa'] }) }]
+  const datosSem = { semanas, noSeAplican: ['pegEsp'], seAplicaDesde: { pegEsp: '2024-06-17' }, primera: semanas[0][0], ultima: semanas[semanas.length - 1][0] }
+  ok(VP.lineaFiltros(vistaR).startsWith('ROCE ≥ 25') && VP.avisoVista(datosSem) === 'PEG esperado: solo desde el 17/06/2024 (antes no se aplica)', `la línea de filtros («${VP.lineaFiltros(vistaR)}») y el aviso del PEG`)
+  const cV = VP.cuentaVista(semanas, '2016-01-01', '2025-12-31')
+  ok(cV.min === 2 && cV.max === 2 && cV.distintos === 6 && VP.textoCuenta(cV) === 'Cada lunes, entre 2 y 2 valores · 6 distintos en el periodo', `cuántos valores (${VP.textoCuenta(cV)})`)
+  const pedidas = [], cuerpos = []
+  const aV = { ...Pa.AJUSTES_PLAN, activo: 'AAPL', ocioso: 'LIQUIDEZ', donde: 'lista', lista: Li.mergeLista({ universo: 'vista:5', modo: 'concentrado' }) }
+  const props = (ini = {}) => ({ estrategias: [est], estrategiaId: est.id, datosLista: { watchlist: [], wlLists: [], rankingData: {} },
+    deps: { ctx: null, calcula: async (p, cuerpoLista) => { cuerpos.push(cuerpoLista); throw new Error('no calcula') }, semanasVista: async (v) => { pedidas.push(v); return datosSem } },
+    inicial: { planes: [], pestana: 'n1', simbolos: ['AAPL'], pruebas: [], resultadoPrueba: { periodos: [] }, valoresAbiertos: true, ajustes: aV, vistasScreener: vistas, ...ini } })
+  const h = renderToString(React.createElement(BP, props())).split('<!-- -->').join('')
+  ok(h.includes('Vista del screener «Poca deuda»') && h.includes('data-elige-vista') && h.includes('>Poca deuda</option>') && h.includes('>Crecer barato</option>') && h.includes('Leyendo la vista del screener…') && !h.includes('seleccionados'),
+    'con una vista: el resumen la nombra, el desplegable lista tus vistas, se está leyendo y no sale el selector de valores')
+  const m = D.monta(React.createElement(BP, props()), RDC)
+  const tx = () => m.raiz.textContent
+  await hasta(() => tx().includes('Filtros: ROCE') && cuerpos.length > 0)
+  ok(pedidas.length === 1 && JSON.stringify(pedidas[0]) === JSON.stringify(vistaR), 'pide la lista de cada lunes con la vista tal como está en el screener (una vez)')
+  ok(tx().includes('Filtros: ROCE ≥ 25') && tx().includes('Cada lunes, entre 2 y 2 valores') && tx().includes('PEG esperado: solo desde el 17/06/2024'), 'enseña los filtros, cuántos valores y el aviso del PEG')
+  const cu = cuerpos[cuerpos.length - 1]
+  ok(!!cu && cu.universo?.regla === 'vista' && cu.universo.n === 5 && cu.modoAsig === 'concentrado' && cu.symbols.length === 6, `y calcula con la petición de la vista (${cu && JSON.stringify(cu.universo && { regla: cu.universo.regla, n: cu.universo.n })}, ${cu && cu.symbols.length} valores)`)
+  ok(m.raiz.textContent.includes('La estrategia, tal como la usa este plan') ? tx().includes('en la vista «Poca deuda»') : true, 'la línea de arriba dice «en la vista «Poca deuda»»')
+  const sel = () => m.raiz.busca(n => n.hasAttribute && n.hasAttribute('data-elige-vista'))
+  D.escribe(sel(), ''); await hasta(() => !tx().includes('Vista del screener «'))
+  ok(!tx().includes('Vista del screener «') && !m.raiz.busca(n => n.hasAttribute && n.hasAttribute('data-info-vista')), '«Ninguna»: vuelve a los valores de siempre')
+  D.escribe(sel(), 'vista:6'); await hasta(() => tx().includes('Vista del screener «Crecer barato»') && pedidas.length === 2)
+  ok(tx().includes('Vista del screener «Crecer barato»') && pedidas.length === 2 && JSON.stringify(pedidas[1]) === JSON.stringify(vistas[1].vista), 'elegir otra vista: la nombra y pide su lista')
+  m.quita(); await D.espera(5)
+  const m2 = D.monta(React.createElement(BP, props({ ajustes: { ...aV, lista: Li.mergeLista({ universo: 'vista:99', modo: 'concentrado' }) } })), RDC)
+  await hasta(() => m2.raiz.textContent.includes('ya no existe'))
+  ok(m2.raiz.textContent.includes('Esa vista del screener ya no existe') && pedidas.length === 2, 'una vista borrada: lo dice (sin pedir nada)')
+  m2.quita(); await D.espera(5)
+
   console.log(fallos ? `FALLOS: ${fallos}` : 'plan-vista: todo bien')
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(1) })
