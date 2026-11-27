@@ -87,10 +87,10 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA2', stops: [{ id
   const avisos = (x) => x.raiz.busca(n => n.getAttribute('data-avisos') != null)?.textContent || ''
   for (const [planId, esperado] of [[10, null], [11, '💡 Primera ›'], [12, '💡 Tesis (2) ▾']]) {
     b = base(); m = D.monta(h(BP, props({ abrir: { planId, n: 1 }, onAbrirTesis: () => {} })), RDC)
-    await hasta(() => b.leidas > 0 && avisos(m).includes(esperado || 'Probarla ahora') && avisos(m).includes('Probarla ahora')); if (!esperado) await D.espera(LARGO)
+    await hasta(() => b.leidas > 0 && (!esperado || avisos(m).includes(esperado))); if (!esperado) await D.espera(LARGO)
     ok(esperado ? avisos(m).includes(esperado) : !avisos(m).includes('Tesis'), `paso 3, plan ${planId}: ${esperado || 'sin enlace'}`)
     if (planId === 11) {
-      const antes = avisos(m); ok(antes.indexOf('💡 Primera') > antes.indexOf('Probarla ahora') && antes.includes('Probarla ahora'), 'va junto a «Sin prueba · Probarla ahora»')
+      ok(!avisos(m).includes('Probarla ahora') && !avisos(m).includes('prueba del paso 2'), '§273: sin la línea de la prueba del paso 2')
     }
     m.quita(); await D.espera(5)
   }

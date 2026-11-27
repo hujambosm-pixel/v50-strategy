@@ -18,7 +18,7 @@
 // continuas y finas y el importe final de cada una; «Buy&Hold X»; la línea gris de las estrategias de código en el desplegable.
 // §51: «CAGR del plan»; la tabla sin la fila de liquidez, con impuestos, comisiones y órdenes por separado; los puntos se ven como comas al teclear.
 //   estrategias: las filas de `strategies`; estrategiaId: la abierta. cargaSimbolos: los símbolos de la caché de precios (BuilderPanel).
-//   onVolver: a «Mi trabajo»; onPaso1(fila): la estrategia en el paso 1; onPaso2(id): el paso 2 con ella.
+//   onVolver: a «Mi trabajo»; onPaso1(fila): la estrategia en el paso 1; onPaso2: ya no se usa (§273: el plan no lleva a validar).
 //   deps (opcional, para las pruebas): { ctx, calcula(plan) } en lugar de la sesión y de /api/plan. inicial (opcional, para las pruebas
 //   de montaje): { ajustes, resultado ({ respuesta, plan }), error, calculando, pruebas, resultadoPrueba, simbolos, planes
 //   (las filas guardadas), pestana (la abierta: «g<id>» o «n1»), cambio ({ cambiada, borrada }), pideNombre, borrando,
@@ -67,8 +67,8 @@ import { sinTildes } from '../lib/builder/buscar'
 // §144: lo que enseña el selector de valores con un plan de «una acción»: la lista manual con su único valor.
 const listaDeAccion = (x) => ({ ...(x.lista || {}), universo: 'manual', simbolos: x.activo ? [x.activo] : [] })
 import { numeroEs } from '../lib/utils'
-import { AJUSTES_PLAN, AVISO_A_MANO, AVISO_NO_EXISTE, avisoPrueba as textoAvisoPrueba, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
-  ayudaCaida, ayudaPrueba, avisoListaSimple, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, velasDeEstrategia, velasDelPlan, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
+import { AJUSTES_PLAN, AVISO_NO_EXISTE, avisoPrueba as textoAvisoPrueba, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
+  ayudaCaida, avisoListaSimple, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, velasDeEstrategia, velasDelPlan, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS, resumenDinero, bloquesDe, estrategiaBloque, anadeBloque, quitaBloque, repartirResto, sumaPesos, AYUDA_BLOQUES,
   esBloquePesos, sumaPesosBloque, resumenPesos, AYUDA_PESOS, VOLVER_OPCIONES, LLEGA_OPCIONES, PUNTOS_BANDA_DEFECTO } from '../lib/builder/planPantalla'
 import { MAX_SIMBOLOS_PESOS } from '../lib/planes/pesos'
@@ -552,7 +552,6 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
     else if (d.tipo === 'cerrar') cierra(d.clave)
     else if (d.tipo === 'duplicar') duplica(d.clave)
     else if (d.tipo === 'paso1') onPaso1?.(estrategiaActual)
-    else if (d.tipo === 'paso2') onPaso2?.(estrategia?.id ?? null)
     else if (d.tipo === 'volver') onVolver?.(d.donde)
     else if (d.tipo === 'fuera') d.seguir?.()
   }
@@ -750,11 +749,6 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   const hayComparar = (planes || []).length >= 2
 
   // ── Avisos (una línea; el detalle, tras «?») ──
-  const avisoPrueba = estado && (
-    <div data-aviso="prueba" data-estado={estado.clave} data-lista={enLista ? '1' : undefined} style={{ color: estado.clave === 'pasa' ? VERDE : estado.clave === 'noPasa' ? ROJO : AMARILLO, fontWeight: estado.clave === 'noPasa' ? 700 : 400, display: 'flex', alignItems: 'center', gap: 2 }}>
-      {textoAvisoPrueba(estado)}<span style={S.apagado}>&nbsp;·&nbsp;</span>{!estBorrada && <button data-boton="ver-prueba" style={{ ...S.enlace, fontSize: 13 }} onClick={() => pide({ tipo: 'paso2' })}>{estado.clave === 'sinPrueba' ? 'Probarla ahora' : 'Ver la prueba'}</button>}<Ayuda texto={ayudaPrueba(estado, resPrueba)} etiqueta="La prueba contra el azar"/>
-    </div>
-  )
   // §128: «Comparar planes», activo con al menos dos planes guardados.
   const botonComparar = <button data-boton="comparar" disabled={!hayComparar} title={hayComparar ? 'Ver tus planes guardados uno al lado del otro' : TEXTO_SIN_PLANES} onClick={() => setComparando(true)}
     style={{ ...S.boton, padding: '6px 12px', fontSize: 13, ...(hayComparar ? {} : { color: B.apagado, cursor: 'not-allowed' }) }}>Comparar planes</button>
@@ -762,9 +756,7 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
   // §174: en la misma línea, «La estrategia, tal como la usa este plan» (uso); «Comparar…» sube a la fila de las pestañas de planes.
   const avisosDe = (uso) => actual ? (
     <div data-avisos className="bp-avisos" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 24px', alignItems: 'center', marginBottom: 10 }}>
-      {estrategia && !multi && (avisoPrueba || <div data-aviso="prueba" data-estado="leyendo" style={S.secundario}>Leyendo la prueba…</div>)}
       {enlaceTesis?.('plan', fila?.id)}
-      {!enLista && !multi && <div data-aviso="a-mano" style={{ color: AMARILLO, display: 'flex', alignItems: 'center', gap: 2 }}>⚠ {AVISO_A_MANO}<Ayuda texto={AYUDA_PLAN.aMano} etiqueta={AVISO_A_MANO}/></div>}
       {nuevaActual && <div data-aviso="sin-guardar" style={{ color: AMARILLO }}>Sin guardar: se perderá al recargar</div>}
       {calc.calculando && <div data-calculando style={{ color: AMARILLO }}>Calculando…</div>}
       {uso}
@@ -1281,7 +1273,6 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
           {resultado}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
             <BotonCopiar obtenerTexto={texto} titulo="Copia en texto plano todos los ajustes, el plan y sus cifras"/>
-            {!estBorrada && <button data-boton="paso2" style={S.boton} onClick={() => pide({ tipo: 'paso2' })}>Volver al paso 2</button>}
           </div>
         </div>
       </div> : orden && <div data-sin-pestanas style={{ ...S.tarjeta, ...S.cuerpo, ...S.secundario, marginTop: 6, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>Ningún plan abierto. Pulsa «+ Añadir plan».{hayComparar && botonComparar}</div>}

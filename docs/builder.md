@@ -3979,3 +3979,6 @@ Boceto bocetos/condiciones-con-pasos.html aceptado por Sergi el 24/11 («sí, a 
 
 ## §272 · Replay: la ventana de empezar ya no se sale por la derecha
 - Captura de Sergi (27/11): con una vista del screener, el texto de la línea de resumen y el aviso del PEG salían fuera de la ventana. La rejilla de la ventana pasa de «auto 1fr» a «auto minmax(0, 1fr)» (la columna ya no crece hasta el texto más largo) y la ventana, de 420 a 480 px. Comprobado por mí en la app (vista «Crecer a buen precio», hace 5 años): nada sale por la derecha. Ninguna cifra cambia.
+
+## §273 · Plan: fuera los restos del antiguo «paso 3»
+- Decisión de Sergi (27/11): los planes son LIBRES, como el Backtesting; las validaciones son de las estrategias. Se quitan de la pantalla del plan (components/BuilderPlan.js): la línea «Estrategia: prueba del paso 2 … · Ver la prueba / Probarla ahora» con su «?», el aviso «⚠ Acción elegida a mano» y el botón «Volver al paso 2» (y su orden 'paso2'; la prop onPaso2 se queda sin uso). Queda solo la etiqueta gris del desplegable de la estrategia («no pasa», «sin prueba», «pasa el azar»). «Comparar planes» y «Copiar para Claude» no cambian. Comprobaciones ajustadas: plan-lista.js, planes-pantalla.js, tesis-enlaces.js y version-paso2.js (ahora mira la etiqueta del desplegable). Ninguna cifra cambia.

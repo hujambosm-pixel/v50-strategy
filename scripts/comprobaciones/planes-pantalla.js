@@ -211,9 +211,9 @@ const planMano = (fs, extra = {}) => ({ tipo: 'plan', formato: 1, calculo: 1, di
   // Los avisos de la línea de debajo
   const conEst = (estado) => plano({ planes: [tres[0]], orden: ['g1'], pestana: 'g1', pruebas: estado === 'sin' ? [] : [{ id: 1, estrategia_id: 'x', estrategia_foto: est, resultado: { veredicto: estado } }], resultadoPrueba: { veredicto: estado } })
   v = conEst('sin')
-  ok(v.includes('Estrategia: sin prueba del paso 2') && v.includes('Probarla ahora') && v.includes('Acción elegida a mano'), 'sin prueba: «Estrategia: sin prueba del paso 2 · Probarla ahora»')
+  ok(!v.includes('sin prueba del paso 2') && !v.includes('Probarla ahora') && !v.includes('Acción elegida a mano') && !v.includes('Volver al paso 2'), '§273: sin prueba: ni la línea de la prueba, ni «Acción elegida a mano», ni «Volver al paso 2»')
   v = conEst('noPasa')
-  ok(v.includes('Estrategia: prueba del paso 2 ✕ No pasa') && v.includes('Ver la prueba'), 'no pasa: «Estrategia: prueba del paso 2 ✕ No pasa (…) · Ver la prueba»')
+  ok(!v.includes('Estrategia: prueba del paso 2') && !v.includes('Ver la prueba'), '§273: no pasa: tampoco la línea de la prueba (queda el «no pasa» del desplegable)')
 
   // §97: un resultado de OTROS ajustes (aún no ha llegado el cálculo de los de ahora) se ve atenuado; el de los ajustes de ahora, no.
   const planAhora = Pa.planDe({ ...Pa.AJUSTES_PLAN, activo: 'TEST', ocioso: 'OCI' }, est)
