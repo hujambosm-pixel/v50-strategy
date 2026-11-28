@@ -123,6 +123,30 @@ const txt = (x) => JSON.stringify(x)
     ok(txt(W.simbolosFilas(bloque([['S', 1]], [regla({ despues: { tipo: 'cuando', filas: [caida('U')] } })]))) === txt(['T', 'U']) && txt(W.simbolosAcciones(bloque([['S', 1]], [regla({ accion: { tipo: 'moverBloque', pct: 10, de: 'S', a: 'GLD' } })]))) === txt(['S', 'GLD']), 'los símbolos que miran y que compran las reglas')
   }
 
+  // ── 6 · §286 · «Volver a los pesos: Según una condición» ──
+  // 80 % S + 20 % T, sin reglas, vuelve a los pesos el día en que «T cierra por encima de su SMA (3)» PASA a cumplirse (al cierre; a la
+  // apertura siguiente). Cierres de T y su SMA (3): 04/03 70 < 90; 05/03 55; 08/03 55 < 60; 09/03 60 > 56,67 → PASA (vuelve el 10/03);
+  // 10/03 60 > 58,33 (sigue cumpliéndose: nada); 11/03 60 = 60 (no); … 15/04 101 > 73,67 → PASA (vuelve el 16/04); 16/04 101 > 87,33
+  // (nada); 19/04 101 = 101 (no); 22/04 60 (no).
+  //   · 10/03 (T a 60): S 8.000 + T 1.200 = 9.200 → 80/20 = 7.360 / 1.840: vende 640 € de S (6,4) y compra 10,6667 T → 73,6 S, 30,6667 T.
+  //   · 16/04 (T a 101): 7.360 + 3.097,33 = 10.457,33 → 8.365,87 / 2.091,47: vende 1.005,87 € de T y compra 10,0587 S → 83,6587 S y
+  //     20,7076 T. Final (07/05, T a 60): 8.365,87 + 1.242,46 = 9.608,32 €. Sin volver (nunca): 9.200 €.
+  {
+    const sma3 = { quien: 'T', si: { c: 'precioVsMedia', p: { tipo: 'SMA', periodo: 3, lado: 'encima' } }, velas: 'diarias' }
+    const pasa = W.pasaACumplirse([false, true, true, false, true, null, true])
+    ok(txt(pasa) === txt([false, true, false, false, true, false, true]), `pasaACumplirse: solo el día en que pasa de no a sí (${txt(pasa)})`)
+    ok(txt(W.pasaACumplirse([true, true])) === txt([false, false]), 'el primer día no cuenta (no hay día anterior)')
+    const r = corre(bloque([['S', 0.8], ['T', 0.2]], [], { cada: 'condicion', filas: [sma3] }))
+    ok(cerca(r.valorNeto, 9608.322112211, 1e-8), `vuelve el 10/03 y el 16/04: final 9.608,32 € (${r.valorNeto.toFixed(4)})`)
+    const nunca = corre(bloque([['S', 0.8], ['T', 0.2]], [], { cada: 'nunca' }))
+    ok(cerca(nunca.valorNeto, 9200), `con «nunca», 9.200 € (${nunca.valorNeto.toFixed(2)})`)
+    // V no se mueve: nunca cierra por encima de su SMA (3), así que su condición nunca «pasa a cumplirse» → como «nunca»
+    const siempre = corre(bloque([['S', 0.8], ['T', 0.2]], [], { cada: 'condicion', filas: [{ quien: 'V', si: { c: 'precioVsMedia', p: { tipo: 'SMA', periodo: 3, lado: 'encima' } }, velas: 'diarias' }] }))
+    ok(cerca(siempre.valorNeto, 9200), `una condición que nunca pasa de no a sí no hace nada (${siempre.valorNeto.toFixed(2)})`)
+    ok(P.validaPlan(plan(bloque([['S', 1]], [], { cada: 'condicion', filas: [] }))).some(x => /Volver a los pesos» \(según una condición\)/.test(x)), 'sin condiciones, lo dice')
+    ok(txt(W.simbolosFilas(bloque([['S', 1]], [], { cada: 'condicion', filas: [sma3, { ...sma3, quien: 'U' }] }))) === txt(['T', 'U']), 'carga las velas de los símbolos de su condición')
+  }
+
   console.log(`plan-pesos-reglas: ${fallos ? `${fallos} fallos` : 'todo bien'}`)
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(2) })

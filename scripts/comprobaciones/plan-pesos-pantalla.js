@@ -115,6 +115,14 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
       D.pulsa(seg('2', 'Si alguno se separa')); await hasta(() => bq().conAtributo('data-banda').length === 1)
       await hasta(() => pieza()?.volver?.cada === 'banda')
       ok(bq().conAtributo('data-banda').length === 1 && pieza()?.volver?.puntos === 10, '«Si alguno se separa»: sale «más de 10 puntos» y se calcula con ellos')
+      // §286: «Según una condición»: el editor con una condición por defecto (SPY, el primer activo: cierre sobre su EMA 200) y se calcula con ella
+      D.pulsa(seg('2', 'Según una condición')); await hasta(() => bq().conAtributo('data-volver-condicion').length === 1)
+      await hasta(() => pieza()?.volver?.cada === 'condicion')
+      const fv = pieza()?.volver?.filas || []
+      ok(bq().conAtributo('data-volver-condicion').length === 1 && !bq().conAtributo('data-banda').length && fv.length === 1 && fv[0].quien === 'SPY' && fv[0].velas === 'diarias' && /Vuelve a los pesos el día en que pase a cumplirse/.test(bq().textContent) && !/Si no se cumple/.test(bq().conAtributo('data-volver-condicion')[0].textContent),
+        `«Según una condición»: el editor (sin «Si no se cumple») y se calcula con SPY (${JSON.stringify(fv.map(f => f.quien))})`)
+      ok(/volver a los pesos: según una condición/.test(bq().textContent) && /vuelve a sus pesos el día en que pasa a cumplirse esto: /.test(bq().conAtributo('data-asi-se-lee')[0]?.textContent || ''), 'el resumen y «Así se lee» lo dicen')
+      D.pulsa(seg('2', 'Si alguno se separa')); await hasta(() => pieza()?.volver?.cada === 'banda')
       D.pulsa(seg('3', 'Al que más se ha quedado atrás')); await hasta(() => pieza()?.aportaciones === 'atras')
       ok(pieza()?.aportaciones === 'atras' && /el dinero que llega: al que más se ha quedado atrás/.test(bq().textContent), '«El dinero que le llega»: al que más se ha quedado atrás')
       D.pulsa(bq().conAtributo('data-boton', 'anadir-activo')[0]); await hasta(() => bq().conAtributo('data-fila-peso').length === 3)

@@ -73,10 +73,11 @@ import { numeroEs } from '../lib/utils'
 import { AJUSTES_PLAN, AVISO_NO_EXISTE, avisoPrueba as textoAvisoPrueba, AYUDA_COMISION, AYUDA_PLAN, ETIQUETA_PRUEBA, OCIOSOS_FIJOS, PERIODOS_PLAN, SIN_OCIOSO, SUBIDA_DEFECTO, TIPOS_COMISION, ajustesDe,
   ayudaCaida, avisoListaSimple, reglaDe, baseNueva, cifrasPlan, conCambios, conComa, nombreNueva, creaCalculador, estadoPrueba, estadosPrueba, esSemanal, velasDeEstrategia, velasDelPlan, euros, fechaCorta, fechasDe, finalesDe, fraseCaidas, pct, planDe, puntos, textoCampo, textoEuros, CLAVE_LINEAS, LINEAS_DEFECTO,
   textoCodigo, textoParaClaudePlan, TITULO_ALTERNATIVAS, resumenDinero, bloquesDe, estrategiaBloque, anadeBloque, quitaBloque, repartirResto, sumaPesos, AYUDA_BLOQUES,
-  esBloquePesos, sumaPesosBloque, resumenPesos, AYUDA_PESOS, VOLVER_OPCIONES, LLEGA_OPCIONES, PUNTOS_BANDA_DEFECTO, filaDeMedidas, sinBloque1, cuantosBloques, quitaBloque1, partesDe, cambiaTipoParte, AYUDA_PARTE, lineasPlan, hayParteEstrategia, AYUDA_ASI_SE_LEE, anadeParteEstrategia } from '../lib/builder/planPantalla'
+  esBloquePesos, sumaPesosBloque, resumenPesos, AYUDA_PESOS, VOLVER_OPCIONES, LLEGA_OPCIONES, PUNTOS_BANDA_DEFECTO, filaDeMedidas, sinBloque1, cuantosBloques, quitaBloque1, partesDe, cambiaTipoParte, AYUDA_PARTE, lineasPlan, hayParteEstrategia, AYUDA_ASI_SE_LEE, anadeParteEstrategia, AYUDA_VOLVER_CONDICION } from '../lib/builder/planPantalla'
 import { MAX_SIMBOLOS_PESOS } from '../lib/planes/pesos'
 import ReglasPesos from './ReglasPesos'
 import OciosoRegla from './OciosoRegla'
+import { reglaOciosoNueva as condicionNueva } from '../lib/builder/ociosoReglaPantalla'
 import { reglaOciosoNueva, AYUDA_OCIOSO_REGLA, AYUDA_OCIOSO_SIEMPRE } from '../lib/builder/ociosoReglaPantalla'
 import { fraseBloquePesos, EJEMPLOS_PESOS, AYUDA_REGLAS } from '../lib/builder/reglasPesos'
 // §187: los colores de los bloques (el 1, azul, como siempre): COLORES_BLOQUE de PlanDetalle (§188: los mismos en «Detalle»).
@@ -1011,7 +1012,10 @@ export default function BuilderPlan({ estrategias = [], estrategiaId = null, pla
             </div>
           </>)}
           {seccion(2, 'Volver a los pesos', AYUDA_PESOS.volver, <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <Segmentos etiquetaGrupo={`Volver a los pesos de la parte ${n}`} valor={cada} onCambia={v => ponBloque(b.id, x => ({ ...x, volver: { ...(x.volver || {}), cada: v, puntos: x.volver?.puntos ?? PUNTOS_BANDA_DEFECTO } }))} opciones={VOLVER_OPCIONES}/>
+            <Segmentos etiquetaGrupo={`Volver a los pesos de la parte ${n}`} valor={cada} onCambia={v => ponBloque(b.id, x => ({ ...x, volver: { ...(x.volver || {}), cada: v, puntos: x.volver?.puntos ?? PUNTOS_BANDA_DEFECTO, ...(v === 'condicion' && !(x.volver?.filas || []).length ? { filas: condicionNueva((x.pesos || []).find(p => p.simbolo && p.simbolo !== 'LIQUIDEZ')?.simbolo || 'SPY').filas } : {}) } }))} opciones={VOLVER_OPCIONES}/>
+            {cada === 'condicion' && <div data-volver-condicion style={{ flex: '1 1 100%' }}><OciosoRegla regla={{ filas: b.volver?.filas || [], siNo: 'LIQUIDEZ' }} ocioso={(b.pesos || []).find(p => p.simbolo && p.simbolo !== 'LIQUIDEZ')?.simbolo || 'SPY'} valores={valoresPesos.filter(v => v.simbolo !== 'LIQUIDEZ')} Segmentos={Segmentos}
+              onCambia={r => ponBloque(b.id, x => ({ ...x, volver: { ...(x.volver || {}), cada: 'condicion', filas: r.filas } }))} conSiNo={false} titulo="Vuelve a los pesos el día en que pase a cumplirse todo esto:" ayudaFilas={AYUDA_VOLVER_CONDICION}
+              frase={`Al cierre de cada día se mira; el día en que pasa a cumplirse, a la apertura siguiente vende lo que sobra y compra lo que falta para volver a ${resumenPesos(b).replace(/ · .*$/, '')}. Mientras siga cumpliéndose, no hace nada más.`} tituloCatalogo={`Añadir condición · volver a los pesos de la parte ${n}`}/></div>}
             {cada === 'banda' && <span data-banda style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>más de <CampoNumero etiqueta={`Puntos de la parte ${n}`} valor={b.volver?.puntos} onCambia={v => ponBloque(b.id, x => ({ ...x, volver: { ...x.volver, puntos: v } }))} ancho={50} minimo={1}/> puntos</span>}
           </div>)}
           {seccion(3, 'El dinero que le llega', AYUDA_PESOS.llega, <Segmentos etiquetaGrupo={`El dinero que le llega a la parte ${n}`} valor={b.aportaciones || 'ahora'} onCambia={v => ponBloque(b.id, x => ({ ...x, aportaciones: v }))} opciones={LLEGA_OPCIONES}/>)}

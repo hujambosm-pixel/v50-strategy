@@ -163,6 +163,15 @@ const ok = (c, t) => { console.log(`${c ? 'OK  ' : 'MAL '} ${t}`); if (!c) fallo
     m.quita(); await D.espera(5)
   }
 
+  // ── §286 · «Volver a los pesos: Según una condición»: ida y vuelta pantalla ↔ plan guardado ──
+  {
+    const fila = { quien: 'SPY', si: { c: 'precioVsMedia', p: { tipo: 'EMA', periodo: 200, lado: 'encima' } }, velas: 'semanales' }
+    const a = { ...Pa.AJUSTES_PLAN, activo: 'AAPL', sinBloque1: true, bloques: [{ ...Pa.bloquePesosNuevo('b2', 100), pesos: [{ simbolo: 'SPY', peso: 78 }, { simbolo: 'TQQQ', peso: 22 }], volver: { cada: 'condicion', puntos: 10, filas: [fila] } }] }
+    const p = Pa.planDe(a, est), v = p.piezas[0].volver, b2 = Pa.ajustesDe(p).bloques[0]
+    ok(v.cada === 'condicion' && v.filas.length === 1 && v.filas[0].quien === 'SPY' && v.filas[0].velas === 'semanales' && !('union' in v.filas[0]), 'al plan: { cada: condicion, filas } (la primera fila sin unión)')
+    ok(b2.volver.cada === 'condicion' && JSON.stringify(b2.volver.filas) === JSON.stringify(v.filas) && JSON.stringify(Pa.planDe(Pa.ajustesDe(p), est)) === JSON.stringify(p), 'y de vuelta, idéntico')
+    ok(/vuelve a los pesos cada vez que su condición pasa a cumplirse/.test(Pa.lineasPlan(a).partes[0].texto), `«Así se lee tu plan» lo dice («${Pa.lineasPlan(a).partes[0].texto}»)`)
+  }
   // ── §285 · «Usar en un plan ▾» → «Añadir como parte a «X»» (anadeParteEstrategia) y el menú del botón ──
   {
     const e1 = { a: { ...Pa.AJUSTES_PLAN, activo: 'AAPL' }, estId: '7', version: 'guardada' }

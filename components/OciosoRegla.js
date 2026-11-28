@@ -18,7 +18,8 @@ import { conY, nombreOcioso, fraseOciosoRegla, AYUDA_OCIOSO_REGLA } from '../lib
 
 const eti = { color: B.secundario, fontSize: 13, display: 'flex', alignItems: 'center', margin: '10px 0 4px' }
 
-export default function OciosoRegla({ regla, ocioso, onCambia, valores = [], estrategia = null, multi = false, Segmentos, inicial = null }) {
+// §286: titulo, ayudaFilas, conSiNo, frase y tituloCatalogo (opcionales) para usarlo también en «Volver a los pesos: Según una condición».
+export default function OciosoRegla({ regla, ocioso, onCambia, valores = [], estrategia = null, multi = false, Segmentos, inicial = null, titulo = null, ayudaFilas = null, conSiNo = true, frase = null, tituloCatalogo = null }) {
   const [catalogo, setCatalogo] = useState(!!inicial?.catalogo)
   const [buscar, setBuscar] = useState(inicial?.buscar || '')
   const [otro, setOtro] = useState(null)   // la fila que está eligiendo «Otro símbolo…»
@@ -44,7 +45,7 @@ export default function OciosoRegla({ regla, ocioso, onCambia, valores = [], est
   )
   return (
     <div data-ocioso-regla={fs.length}>
-      <div style={eti}>Está en {nombreOcioso(ocioso).replace(/^el /, '')} mientras se cumpla todo esto:<Ayuda texto={AYUDA_OCIOSO_REGLA.filas} etiqueta="Las condiciones del dinero ocioso"/></div>
+      <div style={eti}>{titulo || `Está en ${nombreOcioso(ocioso).replace(/^el /, '')} mientras se cumpla todo esto:`}<Ayuda texto={ayudaFilas || AYUDA_OCIOSO_REGLA.filas} etiqueta={titulo ? 'Las condiciones' : 'Las condiciones del dinero ocioso'}/></div>
       {fs.map((f, j) => (
         <div key={j} data-fila-ocioso={j}>
           {j > 0 && <div style={{ ...S.apagado, marginTop: 6 }}>y además</div>}
@@ -75,17 +76,19 @@ export default function OciosoRegla({ regla, ocioso, onCambia, valores = [], est
       <div style={{ marginTop: 8 }}><button type="button" data-boton="anadir-condicion-ocioso" disabled={fs.length >= MAX_FILAS_REGLA} title={fs.length >= MAX_FILAS_REGLA ? `Como mucho ${MAX_FILAS_REGLA} condiciones` : 'Otra condición del catálogo, sobre el ocioso u otro símbolo'}
         style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }} onClick={() => setCatalogo(true)}>+ condición</button></div>
 
+      {conSiNo && <>
       <div style={eti}>Si no se cumple<Ayuda texto={AYUDA_OCIOSO_REGLA.siNo} etiqueta="Si no se cumple"/></div>
       <Segmentos etiquetaGrupo="Si no se cumple" valor={enOtro ? 'OTRO' : 'LIQUIDEZ'} opciones={[['LIQUIDEZ', 'Espera en liquidez'], ['OTRO', 'En otro símbolo…']]}
         onCambia={v => { if (v === 'OTRO') setOtroSiNo(true); else { setOtroSiNo(false); onCambia({ ...regla, siNo: 'LIQUIDEZ' }) } }}/>
       {enOtro && <div data-sino-otro style={{ marginTop: 8 }}><BuscadorValor valores={sinLiquidez} valor={regla?.siNo && regla.siNo !== 'LIQUIDEZ' ? regla.siNo : ''} onCambia={s => onCambia({ ...regla, siNo: s })} etiqueta="Símbolo donde espera si no se cumple"/></div>}
+      </>}
 
-      <div data-asi-se-lee-ocioso style={{ ...S.secundario, fontSize: 13, marginTop: 10, lineHeight: 1.45 }}><strong style={{ color: B.texto }}>Así se lee:</strong> {fraseOciosoRegla(regla, ocioso, { estrategia, multi })}</div>
+      <div data-asi-se-lee-ocioso style={{ ...S.secundario, fontSize: 13, marginTop: 10, lineHeight: 1.45 }}><strong style={{ color: B.texto }}>Así se lee:</strong> {frase ?? fraseOciosoRegla(regla, ocioso, { estrategia, multi })}</div>
 
       {catalogo && (
         <div data-catalogo-ocioso role="dialog" aria-modal="true" aria-label="Añadir condición" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onMouseDown={e => { if (e.target === e.currentTarget) cierra() }}>
           <div style={{ ...S.tarjeta, padding: 20, maxWidth: 680, width: '100%', maxHeight: '86vh', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ color: B.titulo, fontWeight: 700, fontSize: 16 }}>Añadir condición · dinero ocioso</div>
+            <div style={{ color: B.titulo, fontWeight: 700, fontSize: 16 }}>{tituloCatalogo || 'Añadir condición · dinero ocioso'}</div>
             <div style={{ ...S.secundario, fontSize: 13, margin: '4px 0 10px' }}>El mismo catálogo que al crear una estrategia. Después eliges de qué símbolo es, sus números y con qué velas se mira.</div>
             <ConLimpiar valor={buscar} onLimpia={() => setBuscar('')} bloque><input aria-label="Buscar condiciones" placeholder="Buscar: media, caída, RSI…" value={buscar} onChange={e => setBuscar(e.target.value)} data-buscar="catalogo-ocioso" style={{ ...entrada, width: '100%', boxSizing: 'border-box' }}/></ConLimpiar>
             <div style={{ overflowY: 'auto', marginTop: 10, minHeight: 0 }}>
