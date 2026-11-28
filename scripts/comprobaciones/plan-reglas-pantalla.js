@@ -30,10 +30,10 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
       for (const r of b.reglas) for (const fs of [r.filas, r.despues?.filas || []]) ok(J(G.filasGuardadasRegla(fs.map(G.filaDePantallaRegla))) === J(fs), `ejemplo «${e.nombre}»: las filas pasan a pantalla y vuelven idénticas`)
     }
     const fr = G.fraseBloquePesos(blq(G.EJEMPLOS_PESOS[0]))
-    ok(fr[0] === 'El bloque empieza con 80 % SPY + 20 % TQQQ; cada año vuelve a sus pesos; el dinero que le llega va según los pesos de ese momento.', `«Así se lee», 1.ª línea: «${fr[0]}»`)
+    ok(fr[0] === 'La parte empieza con 80 % SPY + 20 % TQQQ; cada año vuelve a sus pesos; el dinero que le llega va según los pesos de ese momento.', `«Así se lee», 1.ª línea: «${fr[0]}»`)
     ok(/^Regla 1: si .*TQQQ.*40.*, a la apertura siguiente pasa a 60 % SPY \+ 40 % TQQQ, lo mantiene al menos 12 meses y después vuelve a los pesos de partida; no se repite hasta que TQQQ cierre por encima del máximo/.test(fr[1]) && fr.length === 2, `«Así se lee», la regla: «${fr[1]}»`)
     const f2 = G.fraseBloquePesos(blq(G.EJEMPLOS_PESOS[1]))[1], f3 = G.fraseBloquePesos(blq(G.EJEMPLOS_PESOS[2]))[1]
-    ok(/mueve un 20 % de todo el bloque de QQQ a TQQQ y después se queda así/.test(f2), `rota: «${f2}»`)
+    ok(/mueve un 20 % de toda la parte de QQQ a TQQQ y después se queda así/.test(f2), `rota: «${f2}»`)
     ok(/\(velas semanales\)/.test(f3) && /pasa a 20 % QQQ \+ 50 % GLD \+ 30 % liquidez, lo mantiene al menos 1 mes y después vuelve a los pesos de partida cuando/.test(f3) && /se repite cada vez que se cumpla/.test(f3), `refugio: «${f3}»`)
     ok(G.fraseBloquePesos(Pa.bloquePesosNuevo('b2', 50))[1] === 'Sin reglas: los pesos solo cambian al volver a ellos (comprar y mantener).', 'sin reglas, lo dice')
     const c = G.catalogoRegla(''), ids = c.grupos.flatMap(g => g.conds)
@@ -61,7 +61,7 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
       const bq = () => m.raiz.conAtributo('data-tipo-bloque', 'pesos')[0], s4 = () => bq().conAtributo('data-seccion-pesos', '4')[0]
       const boton = (id, z = bq()) => z.conAtributo('data-boton', id)[0]
       ok(!!s4() && /4 · Reglas «si… entonces…»/.test(s4().textContent) && /Sin reglas/.test(s4().textContent) && !bq().conAtributo('data-aviso', 'reglas-guardadas').length, 'sección 4 «Reglas «si… entonces…»», sin reglas')
-      ok(/El bloque empieza con 80 % SPY \+ 20 % TQQQ; nunca vuelve a sus pesos/.test(bq().conAtributo('data-asi-se-lee')[0]?.textContent || ''), '«Así se lee» con la frase del bloque')
+      ok(/La parte empieza con 80 % SPY \+ 20 % TQQQ; nunca vuelve a sus pesos/.test(bq().conAtributo('data-asi-se-lee')[0]?.textContent || ''), '«Así se lee» con la frase del bloque')
       D.pulsa(boton('anadir-regla')); await hasta(() => bq().conAtributo('data-regla').length === 1)
       const rg = () => bq().conAtributo('data-regla', '0')[0]
       ok(rg().conAtributo('data-fila', 'caidaDesdeMaximoHistorico').length === 1 && /Buy&Hold · 80 % SPY \+ 20 % TQQQ · 1 regla/.test(bq().textContent), '«+ Añadir regla»: una regla con su condición; la fila del bloque dice «1 regla»')

@@ -263,7 +263,7 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
     const aPaso1 = () => onPaso1?.(tarjetas.find(s => String(s.id) === String(viendo.fila.estrategia_id)) || estrategia)
     return (
       <div style={S.pagina}>
-        <CabeceraPasos actual={2} estrategia={viendo.fila.estrategia_nombre || nombre} onVolver={onVolver} enlace={enlaceTesis?.('estrategia', viendo.fila.estrategia_id)} onPaso={(n) => { if (n === 1) aPaso1() }} onUsar={() => onPaso3?.(viendo.fila.estrategia_id)} extra={botonGuia}/>
+        <CabeceraPasos actual={2} estrategia={viendo.fila.estrategia_nombre || nombre} onVolver={onVolver} enlace={enlaceTesis?.('estrategia', viendo.fila.estrategia_id)} onPaso={(n) => { if (n === 1) aPaso1() }} onUsar={(destino) => onPaso3?.(viendo.fila.estrategia_id, destino)} extra={botonGuia}/>
         <BuilderAzarResultado prueba={viendo.fila} resultado={viendo.resultado} onVolver={() => setViendo(null)} onPaso1={aPaso1} onPaso3={() => onPaso3?.(viendo.fila.estrategia_id)} onBorrar={() => pideBorrar(viendo.fila)}
           obtenerPrecios={() => leePrecios([viendo.fila.valor, ...tickersDe(viendo.fila.estrategia_foto.definition)])} ctx={ctx} version={version}/>
         {ventanaBorrar}
@@ -272,7 +272,7 @@ export default function BuilderAzar({ estrategias = [], estrategiaId = null, api
   }
   return (
     <div style={S.pagina}>
-      <CabeceraPasos actual={2} estrategia={estrategia?.name || null} onVolver={onVolver} bloqueada={enMarcha} enlace={enlaceTesis?.('estrategia', estrategia?.id)} onPaso={(n) => { if (n === 1) onPaso1?.(estrategia) }} onUsar={estrategia ? () => onPaso3?.(estrategia.id) : null} extra={botonGuia}/>
+      <CabeceraPasos actual={2} estrategia={estrategia?.name || null} onVolver={onVolver} bloqueada={enMarcha} enlace={enlaceTesis?.('estrategia', estrategia?.id)} onPaso={(n) => { if (n === 1) onPaso1?.(estrategia) }} onUsar={estrategia ? (destino) => onPaso3?.(estrategia.id, destino) : null} extra={botonGuia}/>
       <div style={{ fontSize: 20, fontWeight: 700, color: B.titulo, marginTop: 8 }}>¿Gana «{nombre}» por algo más que suerte?</div>
       <div style={{ ...S.secundario, marginTop: 4, marginBottom: 16 }}>Tú eliges dónde probarla y confirmas. Lo demás lo hace la app sola, en orden.</div>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>

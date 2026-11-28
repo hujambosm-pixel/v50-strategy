@@ -74,7 +74,7 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     ok(!('bloquesPesos' in sinPesos), 'sin bloque «Con pesos», la salida del motor no cambia (no lleva bloquesPesos)')
     const det = Dp.detallePlan({ evaluacion: { plan: { ejecucion: r, medidas: { valorNeto: r.valorNeto } } } }, plan)
     const bP = det?.bloques?.find(z => z.id === 'p'), bX = det?.bloques?.find(z => z.id === 'x')
-    ok(det?.bloques?.length === 2 && bP?.n === 2 && bP.nombre === 'Con pesos · 100 % B' && bP.donde === 'B', `«Detalle»: dos bloques; el 2, «${bP?.nombre}» en ${bP?.donde}`)
+    ok(det?.bloques?.length === 2 && bP?.n === 2 && bP.nombre === 'Buy&Hold · 100 % B' && bP.donde === 'B', `«Detalle»: dos bloques; el 2, «${bP?.nombre}» en ${bP?.donde}`)
     ok(cerca(bP?.aporto, 0) && cerca(bX?.aporto, 1000) && cerca(bP?.enEl, 0.5), `por bloque: X +1.000 €, P 0 €, con el 50 % del dinero de media (${bX?.aporto}, ${bP?.aporto}, ${bP?.enEl})`)
   }
 

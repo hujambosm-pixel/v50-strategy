@@ -199,6 +199,7 @@ const EMA = { tipo: 'editor', motor: 1, formato: 1, nombre: 'EMA', stops: [{ id:
   ok(await cambia({ name: 'Otro nombre' }) === false && await cambia({ description: 'otra' }) === false && await cambia({ definition: { ...fila.definition, nombre: 'Otro', descripcion: 'otra' } }) === false, 'plan: otro nombre u otra descripción, sin aviso')
   ok(await cambia({ params: { ema: 30, intervalo: 'diario' } }) === true && await cambia({ definition: { ...fila.definition, stops: [{ id: 'inicial', pct: 5, tipo: 'porcentaje', motivo: 'stop' }] } }) === true, 'plan: otra regla (un número o un stop), con aviso')
   ok((await comparaEstrategia(plan, [])).borrada === true, 'plan: estrategia borrada, como siempre')
+  ok((await comparaEstrategia({ piezas: [{ id: 'b2', tipo: 'pesos' }] }, [])).borrada === false, '§285: un plan solo Buy&Hold (sin estrategia) no avisa de «estrategia borrada»')
   ok(JSON.stringify(plan) === copiaPlan, 'la copia guardada en el plan no cambia')
   const fuentes = ['components/BuilderCodigo.js', 'components/BuilderEditor.js', 'components/TesisEnlace.js', 'lib/builder/enlaces.js', 'lib/builder/misListas.js', 'lib/builder/ayuda.js', 'lib/builder/planPantalla.js', 'lib/tesis.js'].map(a => require('fs').readFileSync(path.join(R, a), 'utf8')).join('\n')
   for (const x of ['«V50 EMA10/11»', '«SuperTrend 10/3»', '«Growth investing»', '«EMA20»', '«EMA20 con', '«EMA20 en AAPL', 'EMA20 en AAPL compra', 'Copia editor 23', 'laboratorios de la prueba']) ok(!fuentes.includes(x), `ya no sale ${x}`)

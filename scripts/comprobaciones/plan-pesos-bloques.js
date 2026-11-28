@@ -88,8 +88,8 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
   // ── 6 · Validación ──
   {
     const v = (piezas) => P.validaPlan(plan(piezas, F))
-    ok(v([bloqueX(0.5, 'GLD'), bloqueP('p', [['GLD', 1]], 0.5)]).some(x => x.includes('no puede estar en un bloque «Con pesos»')), 'el ocioso de la cuenta no puede estar en un bloque «Con pesos»')
-    ok(v([bloqueP('p', [['B', 1]], 0.5), { id: 'q', tipo: 'activo', activo: 'QQQ', peso: 0.5 }]).some(x => x.includes('solo puede ir con otros bloques')), 'con piezas de activo, no')
+    ok(v([bloqueX(0.5, 'GLD'), bloqueP('p', [['GLD', 1]], 0.5)]).some(x => x.includes('no puede estar en una parte Buy&Hold')), 'el ocioso de la cuenta no puede estar en un bloque «Con pesos»')
+    ok(v([bloqueP('p', [['B', 1]], 0.5), { id: 'q', tipo: 'activo', activo: 'QQQ', peso: 0.5 }]).some(x => x.includes('solo puede ir con otras partes')), 'con piezas de activo, no')
     ok(v([bloqueP('p', [['B', 1]], 0.5), bloqueP('cuenta', [['A', 1]], 0.5)]).some(x => x.includes('«cuenta»')), 'ningún bloque se puede llamar «cuenta»')
     ok(v([bloqueP('a', [['A', 1]], 0.6), bloqueP('b', [['B', 1]], 0.4)]).length === 0, 'dos bloques «Con pesos» solos, válidos (ocioso: liquidez)')
   }

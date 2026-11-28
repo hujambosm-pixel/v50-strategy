@@ -117,7 +117,7 @@ export function GraficoValores({ curvas, elegido = null, onElegir = null, ocioso
         {sel && <polyline data-linea-valor={sel.simbolo} data-elegida="si" points={ruta(sel.v)} fill="none" stroke={sel.color === GRIS ? B.titulo : sel.color} strokeWidth={2.6} strokeLinejoin="round"/>}
         {etq.map(e => <text key={e.t} x={W - DER + 8} y={e.y + 4} fontSize={12} fill={e.color === GRIS ? B.texto : e.color} fontWeight={e.fuerte ? 700 : 400} opacity={sel && !e.fuerte ? 0.45 : 1}>{e.t}</text>)}
         {hov != null && <><line x1={x(hov)} x2={x(hov)} y1={ARR} y2={H - ABJ} stroke={B.titulo} strokeWidth={1} opacity={0.6}/>
-          <text data-valores-dato x={IZQ} y={H + 14} fontSize={12} fill={B.texto}>{`${fechaCorta(curvas.fechas[hov])} · ${sel ? `${sel.nombre}: ${conSigno(sel.v[hov])} ganados hasta ese día` : `${deBloques ? "todos los bloques" : "todos los valores"}: ${conSigno(total(hov))} ganados hasta ese día`}`}</text></>}
+          <text data-valores-dato x={IZQ} y={H + 14} fontSize={12} fill={B.texto}>{`${fechaCorta(curvas.fechas[hov])} · ${sel ? `${sel.nombre}: ${conSigno(sel.v[hov])} ganados hasta ese día` : `${deBloques ? "todas las partes" : "todos los valores"}: ${conSigno(total(hov))} ganados hasta ese día`}`}</text></>}
         <rect x={IZQ} y={ARR} width={Math.max(0, W - IZQ - DER)} height={H - ARR - ABJ} fill="transparent" onMouseLeave={() => setHov(null)} onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); const i = Math.round((e.clientX - r.left) / Math.max(1, r.width) * (n - 1)); setHov(Math.max(0, Math.min(n - 1, i))) }}/>
       </svg>
       <div data-leyenda-valores style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
@@ -162,7 +162,7 @@ export function GraficoDondeEsta({ donde, ocioso = 'LIQUIDEZ' }) {
   return (
     <div ref={ref} style={{ width: '100%' }}>
       <svg data-grafico="donde-esta" data-dias={n} width={W} height={H + 18} role="img" aria-label={resumen} style={{ display: 'block', fontFamily: B.letra }}>
-        {/* §188: con varios bloques, la parte en valores partida por bloque (cada uno con su color) */}
+        {/* §188: con varias partes, la parte en valores dividida por partes (cada una con su color) */}
         {donde.bloques ? donde.bloques.map((b, k) => <polygon key={b.n} data-banda={`bloque-${b.n}`} points={banda(z => z.bq.slice(0, k).reduce((t, q) => t + q, 0), z => z.bq.slice(0, k + 1).reduce((t, q) => t + q, 0))} fill={colorBloque(b.n)} opacity={0.85}/>)
           : <polygon data-banda="valores" points={banda(() => 0, z => z.valores)} fill={AZUL} opacity={0.85}/>}
         <polygon data-banda="ocioso" points={banda(z => z.valores, z => z.valores + z.ocioso)} fill={AMARILLO} opacity={0.6}/>
@@ -170,11 +170,11 @@ export function GraficoDondeEsta({ donde, ocioso = 'LIQUIDEZ' }) {
         {[0, 0.5, 1].map(t => <text key={t} x={IZQ - 6} y={y(t) + 4} textAnchor="end" fontSize={11} fill={B.apagado}>{pct(t, 0)}</text>)}
         {anios.filter((_, k) => k % cada === 0).map(([i, a]) => <text key={a} x={x(i)} y={H - 6} fontSize={11} fill={B.apagado}>{a}</text>)}
         {d && <><line x1={x(hov)} x2={x(hov)} y1={ARR} y2={H - ABJ} stroke={B.titulo} strokeWidth={1}/>
-          <text data-donde-dato x={IZQ} y={H + 13} fontSize={12} fill={B.texto}>{`${fechaCorta(fechas[hov])} · en valores ${pct(d.valores, 0)}${donde.bloques ? ` (${donde.bloques.map((b, k) => `bloque ${b.n} ${pct(d.bq[k], 0)}`).join(', ')})` : ''}${sinOc ? '' : ` · en el ocioso ${pct(d.ocioso, 0)}`} · en liquidez ${pct(d.liquidez, 0)}`}</text></>}
+          <text data-donde-dato x={IZQ} y={H + 13} fontSize={12} fill={B.texto}>{`${fechaCorta(fechas[hov])} · en valores ${pct(d.valores, 0)}${donde.bloques ? ` (${donde.bloques.map((b, k) => `parte ${b.n} ${pct(d.bq[k], 0)}`).join(', ')})` : ''}${sinOc ? '' : ` · en el ocioso ${pct(d.ocioso, 0)}`} · en liquidez ${pct(d.liquidez, 0)}`}</text></>}
         <rect x={IZQ} y={ARR} width={Math.max(0, W - IZQ - DER)} height={H - ARR - ABJ} fill="transparent" onMouseLeave={() => setHov(null)} onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); const i = Math.round((e.clientX - r.left) / Math.max(1, r.width) * (n - 1)); setHov(Math.max(0, Math.min(n - 1, i))) }}/>
       </svg>
       <div data-leyenda-donde style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: 12, color: B.secundario, marginTop: 4 }}>
-        {donde.bloques ? donde.bloques.map(b => <span key={b.n} data-leyenda-bloque={b.n}><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: colorBloque(b.n), marginRight: 5 }}/>bloque {b.n} · {pct(b.media, 0)} de media</span>)
+        {donde.bloques ? donde.bloques.map(b => <span key={b.n} data-leyenda-bloque={b.n}><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: colorBloque(b.n), marginRight: 5 }}/>parte {b.n} · {pct(b.media, 0)} de media</span>)
           : <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: AZUL, marginRight: 5 }}/>en valores · {pct(media.valores, 0)} de media</span>}
         {!sinOc && <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: AMARILLO, marginRight: 5 }}/>en el ocioso ({nombreOcioso(ocioso)}) · {pct(media.ocioso, 0)}</span>}
         <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: GRIS, marginRight: 5 }}/>en liquidez · {pct(media.liquidez, 0)}</span>
@@ -258,7 +258,7 @@ export function Historial({ ops, movs = [], desde, hasta, nombre = 'plan', inici
         <button type="button" data-vista-historial="movimientos" aria-pressed={vista === 'movimientos'} onClick={() => { setVista('movimientos'); setCuantas(POR_PAGINA) }} title="Además de las operaciones: el dinero ocioso, los impuestos de cada julio y las aportaciones" style={boton(vista === 'movimientos')}>Todos los movimientos</button>
         <button type="button" data-vista-historial="gantt" aria-pressed={vista === 'gantt'} onClick={() => setVista('gantt')} style={boton(vista === 'gantt')}>📅 Gantt</button></span>
       <ConLimpiar valor={busca} onLimpia={() => { setBusca(''); setCuantas(POR_PAGINA) }}>
-        <input data-busca-historial type="text" value={busca} placeholder={conBloque ? 'Buscar valor o «bloque 2»…' : 'Buscar valor…'} aria-label="Buscar un valor en el historial" onChange={e => { setBusca(e.target.value); setCuantas(POR_PAGINA) }}
+        <input data-busca-historial type="text" value={busca} placeholder={conBloque ? 'Buscar valor o «parte 2»…' : 'Buscar valor…'} aria-label="Buscar un valor en el historial" onChange={e => { setBusca(e.target.value); setCuantas(POR_PAGINA) }}
           style={{ fontFamily: B.letra, fontSize: 13, background: B.fondo, color: B.texto, border: `1px solid ${B.borde}`, borderRadius: 6, padding: '5px 8px', width: 150 }}/></ConLimpiar>
       {busca && !conMovs && <span data-historial-filtro style={{ ...S.secundario, fontSize: 13 }}>{numero(lista.length, 0)} de {numero(ops.length, 0)} · {conSigno(tot, 0)}</span>}
       {busca && conMovs && <span data-historial-filtro style={{ ...S.secundario, fontSize: 13 }}>{numero(listaM.length, 0)} de {numero(movs.length, 0)} movimientos</span>}
@@ -267,7 +267,7 @@ export function Historial({ ops, movs = [], desde, hasta, nombre = 'plan', inici
     </div>
     {conMovs ? (!listaM.length ? <div data-historial-vacio style={S.secundario}>{busca ? `Ningún movimiento de «${busca}».` : 'Sin movimientos.'}</div>
       : <><div style={{ overflowX: 'auto' }}><table data-tabla="detalle-movimientos" style={{ borderCollapse: 'collapse', width: '100%' }}>
-        <thead><tr><th style={cab}>Fecha</th>{conBloque && <th style={cab}>Bloque</th>}<th style={cab}>Qué pasa</th>{['Importe', 'Comisión', 'En valores', `En el ocioso (${listaM[0].nombreOcioso})`].map(h => <th key={h} style={cabNum}>{h}</th>)}</tr></thead>
+        <thead><tr><th style={cab}>Fecha</th>{conBloque && <th style={cab}>Parte</th>}<th style={cab}>Qué pasa</th>{['Importe', 'Comisión', 'En valores', `En el ocioso (${listaM[0].nombreOcioso})`].map(h => <th key={h} style={cabNum}>{h}</th>)}</tr></thead>
         <tbody>{listaM.slice(0, cuantas).map(m => <tr key={m.k} data-movimiento={m.tipo}>
           <td style={{ ...celda, whiteSpace: 'nowrap' }}>{fechaCorta(m.fecha)}</td>{conBloque && celdaBloque(m.bloque)}<td style={{ ...celda, color: COLOR_MOV[m.clase] || B.texto }}>{m.que}</td>
           <td style={{ ...num, color: m.tipo === 'impuesto' || m.tipo === 'impuestoFinal' ? ROJO : B.texto }}>{m.signo < 0 ? '−' : '+'}{euros(m.importe, 2)}</td><td style={{ ...num, color: B.secundario }}>{m.coste ? euros(m.coste, 2) : ''}</td>
@@ -278,7 +278,7 @@ export function Historial({ ops, movs = [], desde, hasta, nombre = 'plan', inici
         <GanttChart trades={trades} startDate={desde} endDate={hasta} modoAsig="compartido" sinDescartados/></div>
       : !lista.length ? <div data-historial-vacio style={S.secundario}>Ninguna operación de «{busca}».</div>
       : <><div style={{ overflowX: 'auto' }}><table data-tabla="detalle-historial" style={{ borderCollapse: 'collapse', width: '100%' }}>
-        <thead><tr>{conBloque && <th style={cab}>Bloque</th>}<th style={cab}>Valor</th><th style={cab}>Compra</th><th style={cab}>Venta</th>{['Acciones', 'Precio de compra', 'Precio de venta', 'Resultado', '%'].map(h => <th key={h} style={cabNum}>{h}</th>)}</tr></thead>
+        <thead><tr>{conBloque && <th style={cab}>Parte</th>}<th style={cab}>Valor</th><th style={cab}>Compra</th><th style={cab}>Venta</th>{['Acciones', 'Precio de compra', 'Precio de venta', 'Resultado', '%'].map(h => <th key={h} style={cabNum}>{h}</th>)}</tr></thead>
         <tbody>{lista.slice(0, cuantas).map((o, k) => <tr key={`${o.simbolo}-${o.entryDate}-${k}`} data-operacion={o.simbolo} onClick={onOperacion ? () => onOperacion(o) : undefined} title={onOperacion ? `Pulsa para ver esta operación en el gráfico de ${o.simbolo}` : undefined} style={onOperacion ? { cursor: 'pointer' } : undefined}>
           {conBloque && celdaBloque(o.bloque)}<td style={{ ...celda, color: B.texto }}>{o.simbolo}</td>
           <td style={celda}>{fechaCorta(o.entryDate)}</td><td style={celda}>{fechaCorta(o.exitDate)}{o.abierta && <span title="Seguía abierta el último día: se cuenta vendida ese día" style={{ color: AMARILLO }}> · abierta</span>}</td>
@@ -356,14 +356,14 @@ function celdasCifras(f, { quien, enElTexto = null, opsExtra = null } = {}) {
     <td key="d" style={num}>{opsExtra || numero(f.operaciones, 0)}</td>,
     <td key="e" style={num}>{pct(f.ganadoras, 1)}</td>,
     <td key="f" style={num}>{f.pf == null ? '—' : numero(f.pf, 2)}</td>,
-    <td key="g" style={{ ...num, color: f.caidaEur < 0 ? ROJO : undefined }} title={f.compartido ? `${quien} está en varios bloques: su caída no se puede separar` : f.caidaEur < 0 ? `${conSigno(f.caidaEur, 0)} de lo ganado con ${quien}` : 'Sin caídas'}>{f.caidaPct == null || !(f.caidaEur < 0) ? '—' : pct(f.caidaPct, 1)}</td>,
-    <td key="h" style={num} title={f.compartido ? `${quien} está en varios bloques: el motor lleva sus acciones juntas` : `De media, ${euros(f.enElEur, 0)} en ${quien}`}>{enElTexto ?? (f.enEl == null ? '—' : pct(f.enEl, 1))}</td>,
+    <td key="g" style={{ ...num, color: f.caidaEur < 0 ? ROJO : undefined }} title={f.compartido ? `${quien} está en varias partes: su caída no se puede separar` : f.caidaEur < 0 ? `${conSigno(f.caidaEur, 0)} de lo ganado con ${quien}` : 'Sin caídas'}>{f.caidaPct == null || !(f.caidaEur < 0) ? '—' : pct(f.caidaPct, 1)}</td>,
+    <td key="h" style={num} title={f.compartido ? `${quien} está en varias partes: el motor lleva sus acciones juntas` : `De media, ${euros(f.enElEur, 0)} en ${quien}`}>{enElTexto ?? (f.enEl == null ? '—' : pct(f.enEl, 1))}</td>,
     <td key="i" style={num}>{pct(f.dentro, 0)}</td>,
   ]
 }
 // §191: la fila del dinero ocioso (las dos tablas): lo que aportó, su CAGR, sus órdenes, su peor caída, cuánto dinero tuvo de media y la parte
 // de los días con algo en él. Sin ganadoras ni Profit Factor («—» con el motivo al pasar el ratón).
-const SIN_OPERACIONES_OCIOSO = 'El dinero ocioso no hace operaciones con resultado: entra y sale a trozos cuando los bloques sueltan o piden dinero, sin ninguna regla que acierte o falle. Para saber si te ayuda, mira lo que aportó y la fila «El mismo plan con el dinero ocioso en liquidez» de «Tu dinero».'
+const SIN_OPERACIONES_OCIOSO = 'El dinero ocioso no hace operaciones con resultado: entra y sale a trozos cuando las partes sueltan o piden dinero, sin ninguna regla que acierte o falle. Para saber si te ayuda, mira lo que aportó y la fila «El mismo plan con el dinero ocioso en liquidez» de «Tu dinero».'
 function celdasOcioso(ocioso, s) {
   const sinOc = ocioso.simbolo === 'LIQUIDEZ', gris = { ...num, fontWeight: 400, color: B.secundario }
   return [
@@ -386,10 +386,10 @@ function TarjetaReglas({ r }) {
   const total = r.tramos.reduce((t, x) => t + x.dias, 0) || 1
   let x0 = 0
   return (
-    <Tarjeta id={`detalle-reglas-${r.n}`} titulo={<span style={{ display: 'inline-flex', alignItems: 'center' }}><Punto n={r.n}/>Bloque {r.n} · cuándo actuó cada regla</span>} ayuda={AYUDA_DETALLE.reglas}
+    <Tarjeta id={`detalle-reglas-${r.n}`} titulo={<span style={{ display: 'inline-flex', alignItems: 'center' }}><Punto n={r.n}/>Parte {r.n} · cuándo actuó cada regla</span>} ayuda={AYUDA_DETALLE.reglas}
       derecha={<span data-reglas-veces style={{ color: B.secundario, fontSize: 13 }}>{r.filas.filter(f => !f.vuelta).length === 1 ? 'actuó 1 vez' : `actuó ${numero(r.filas.filter(f => !f.vuelta).length, 0)} veces`}</span>}>
       <div data-reglas-frases style={{ display: 'grid', gap: 3, fontSize: 12.5, color: B.secundario, marginBottom: 10 }}>{r.reglas.map(x => <div key={x.n}><span aria-hidden="true" style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: colorRegla(x.n), marginRight: 6 }}/>{x.frase}</div>)}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: B.secundario, marginBottom: 4 }}>Estado del bloque cada día<Ayuda texto={AYUDA_DETALLE.franjaReglas} etiqueta="Estado del bloque cada día"/></div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: B.secundario, marginBottom: 4 }}>Estado de la parte cada día<Ayuda texto={AYUDA_DETALLE.franjaReglas} etiqueta="Estado de la parte cada día"/></div>
       <svg data-franja-reglas={r.n} viewBox={`0 0 1000 18`} preserveAspectRatio="none" width="100%" height={18} role="img" aria-label={r.tiempo.map(t => `${nombreEstado(t.estado)} ${pct(t.parte, 0)}`).join(', ')} style={{ display: 'block', borderRadius: 3 }}>
         {r.tramos.map((t, k) => { const x = x0 / total * 1000, w = t.dias / total * 1000; x0 += t.dias
           return <rect key={k} data-tramo-regla={t.estado} x={x} y={0} width={Math.max(w, 0.6)} height={18} fill={colorRegla(t.estado)} opacity={t.estado ? 0.9 : 0.35}><title>{`${nombreEstado(t.estado)} · ${fechaCorta(t.desde)} → ${fechaCorta(t.hasta)}`}</title></rect> })}
@@ -402,20 +402,20 @@ function TarjetaReglas({ r }) {
           <td style={{ ...celda, whiteSpace: 'nowrap' }}>{fechaCorta(f.cumple)}</td><td style={{ ...celda, whiteSpace: 'nowrap' }}>{fechaCorta(f.actua)}</td>
           <td style={{ ...celda, whiteSpace: 'nowrap' }}><span aria-hidden="true" style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: colorRegla(f.regla), marginRight: 6 }}/>{f.regla}</td>
           <td style={celda}>{f.que}</td><td style={num}>{euros(f.movido, 0)}</td><td style={celda}>{f.pesos}</td></tr>)}</tbody>
-      </table></div> : <div data-reglas-ninguna style={S.secundario}>Ninguna regla llegó a cumplirse en este periodo: el bloque se quedó con sus pesos.</div>}
+      </table></div> : <div data-reglas-ninguna style={S.secundario}>Ninguna regla llegó a cumplirse en este periodo: la parte se quedó con sus pesos.</div>}
     </Tarjeta>
   )
 }
 function TablaBloques({ bloques, total, ocioso, s, cifras, senales, abiertos, abiertoTotal, todosAbiertos, onTotal, onAbre, onTodos, onVelas, onIrAValor, elegido }) {
   const nombreOc = nombreOcioso(ocioso.simbolo)
   return (
-    <Tarjeta id="detalle-bloques" titulo="Qué aportó cada bloque" ayuda={`${AYUDA_DETALLE.bloques} ${AYUDA_DETALLE.ocioso}`}
+    <Tarjeta id="detalle-bloques" titulo="Qué aportó cada parte" ayuda={`${AYUDA_DETALLE.bloques} ${AYUDA_DETALLE.ocioso}`}
       derecha={<button type="button" data-expande-bloques aria-expanded={todosAbiertos} onClick={onTodos} style={boton(false)}>{todosAbiertos ? 'Plegar todo ▴' : 'Expandir todo ▾'}</button>}>
       <div style={{ overflowX: 'auto' }}><table data-tabla="detalle-bloques" style={{ borderCollapse: 'collapse', width: '100%' }}>
-        <thead><tr><th style={cab}>Bloque / valor</th>{COLUMNAS_DETALLE.map(([h, a]) => <th key={h} data-columna={h} style={cabNum}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{h}{a && <Ayuda texto={a} etiqueta={h}/>}</span></th>)}</tr></thead>
+        <thead><tr><th style={cab}>Parte / valor</th>{COLUMNAS_DETALLE.map(([h, a]) => <th key={h} data-columna={h} style={cabNum}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{h}{a && <Ayuda texto={a} etiqueta={h}/>}</span></th>)}</tr></thead>
         <tbody>
           <tr data-fila-total style={{ fontWeight: 700, color: B.titulo, background: B.cabecera }}>
-            <td style={celda}><button type="button" data-pliega-total aria-expanded={abiertoTotal} onClick={onTotal} title={abiertoTotal ? 'Ocultar los bloques' : 'Ver los bloques'} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.titulo, fontFamily: B.letra, fontSize: 'inherit', fontWeight: 700, textAlign: 'left' }}>{abiertoTotal ? '▾' : '▸'} Los {numero(bloques.length, 0)} bloques <span style={{ fontWeight: 400, color: B.secundario }}>(sin el ocioso)</span></button></td>
+            <td style={celda}><button type="button" data-pliega-total aria-expanded={abiertoTotal} onClick={onTotal} title={abiertoTotal ? 'Ocultar las partes' : 'Ver las partes'} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.titulo, fontFamily: B.letra, fontSize: 'inherit', fontWeight: 700, textAlign: 'left' }}>{abiertoTotal ? '▾' : '▸'} Las {numero(bloques.length, 0)} partes <span style={{ fontWeight: 400, color: B.secundario }}>(sin el ocioso)</span></button></td>
             {celdasCifras({ ...total, dentro: cifras?.tiempoInvertido, enEl: total.enValores, enElEur: total.enValoresEur }, { quien: 'los valores',
               opsExtra: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>{numero(total.operaciones, 0)}{senales && <span data-senales title={textoSenales(senales)} style={{ fontSize: 10, fontWeight: 400, cursor: 'help', borderRadius: 3, padding: '1px 4px', color: senales.pct >= 0.995 ? VERDE : C.naranjaVivo, background: senales.pct >= 0.995 ? 'rgba(126,226,160,0.10)' : 'rgba(255,159,67,0.12)' }}>{Math.round(senales.pct * 100)} %</span>}</span> })}
           </tr>
@@ -423,16 +423,16 @@ function TablaBloques({ bloques, total, ocioso, s, cifras, senales, abiertos, ab
             return <Fragment key={b.n}>
               <tr data-fila-bloque={b.n} style={{ fontWeight: 700, color: B.titulo }}>
                 <td style={{ ...celda, paddingLeft: 24 }}>
-                  <button type="button" data-pliega-bloque={b.n} aria-expanded={ab} onClick={() => onAbre(b.n)} title={ab ? 'Ocultar sus valores' : 'Ver sus valores'} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.titulo, fontFamily: B.letra, fontSize: 'inherit', fontWeight: 700, display: 'inline-flex', alignItems: 'center', textAlign: 'left' }}>{ab ? '▾' : '▸'}&nbsp;<Punto n={b.n}/>Bloque {b.n} · {b.nombre}</button>
+                  <button type="button" data-pliega-bloque={b.n} aria-expanded={ab} onClick={() => onAbre(b.n)} title={ab ? 'Ocultar sus valores' : 'Ver sus valores'} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.titulo, fontFamily: B.letra, fontSize: 'inherit', fontWeight: 700, display: 'inline-flex', alignItems: 'center', textAlign: 'left' }}>{ab ? '▾' : '▸'}&nbsp;<Punto n={b.n}/>Parte {b.n} · {b.nombre}</button>
                   <div data-resumen-bloque-detalle style={{ ...S.apagado, fontWeight: 400, paddingLeft: 30 }}>{pct(b.peso, 0)} de tu dinero · {b.donde} · velas {b.velas}</div>
                 </td>
-                {celdasCifras(b, { quien: `el bloque ${b.n}` })}
+                {celdasCifras(b, { quien: `la parte ${b.n}` })}
               </tr>
               {ab && b.valores.map(v => <tr key={v.simbolo} data-valor-bloque={`${b.n}-${v.simbolo}`} aria-selected={v.simbolo === elegido} style={v.simbolo === elegido ? { background: B.cabecera } : undefined}>
                 <td style={{ ...celda, paddingLeft: 60 }}>
                   <button type="button" data-elige-valor={v.simbolo} onClick={() => onVelas(v.simbolo)} title={`Pulsa para ver las velas de ${v.simbolo} con sus operaciones`} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: B.texto, fontFamily: B.letra, fontSize: 'inherit' }}>{v.simbolo}</button>
                   {onIrAValor && <button type="button" data-ir-valor={v.simbolo} onClick={() => onIrAValor(v.simbolo)} title={`Abrir ${v.simbolo} en la Watchlist`} style={{ background: 'none', border: 'none', padding: '0 0 0 6px', cursor: 'pointer', color: B.enlace, fontSize: 13 }}>↗</button>}
-                  {v.compartido && <span title="Este valor está también en otro bloque" style={{ ...S.apagado, marginLeft: 6 }}>· en varios bloques</span>}
+                  {v.compartido && <span title="Este valor está también en otra parte" style={{ ...S.apagado, marginLeft: 6 }}>· en varias partes</span>}
                 </td>
                 {celdasCifras(v, { quien: v.simbolo })}
               </tr>)}
@@ -483,7 +483,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
       </div>
       <div data-detalle-suma data-cuadra={s.cuadra ? 'si' : 'no'} style={{ display: 'flex', gap: '4px 9px', alignItems: 'center', flexWrap: 'wrap', background: B.cabecera, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, padding: '9px 12px', marginTop: 8, fontVariantNumeric: 'tabular-nums' }}>
         {parte('aportado', B.texto, `${euros(s.aportado, 0)} que pusiste`)}
-        {bloques ? bloques.map(b => parte(`bloque-${b.n}`, signo(b.aporto) || B.texto, <><Punto n={b.n}/>{ganadoTexto(b.aporto, `con el bloque ${b.n}`)}</>))
+        {bloques ? bloques.map(b => parte(`bloque-${b.n}`, signo(b.aporto) || B.texto, <><Punto n={b.n}/>{ganadoTexto(b.aporto, `con la parte ${b.n}`)}</>))
           : parte('valores', signo(s.valores) || B.texto, `${s.valores < 0 ? '−' : '+'} ${euros(Math.abs(s.valores), 0)} ${s.valores < 0 ? 'perdidos' : 'ganados'} en los valores`)}
         {!sinOcioso && parte('ocioso', signo(s.ocioso) || B.texto, `${s.ocioso < 0 ? '−' : '+'} ${euros(Math.abs(s.ocioso), 0)} ${s.ocioso < 0 ? 'perdidos' : 'ganados'} en el ocioso`)}
         {Math.abs(s.otros) >= 0.005 && parte('otros', signo(s.otros) || B.texto, `${s.otros < 0 ? '−' : '+'} ${euros(Math.abs(s.otros), 0)} en lo demás`)}
@@ -492,7 +492,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
         <span style={{ color: B.texto }}>=</span>
         <b data-suma="final" style={{ color: B.titulo, fontSize: 17, whiteSpace: 'nowrap' }}>{euros(s.final, 0)}</b>
         <span data-suma-nota style={{ color: s.cuadra ? B.apagado : ROJO, fontSize: 12 }}>{s.cuadra ? '= «Tienes al final» de «Tu dinero» ✓' : '✕ no cuadra con «Tu dinero» (no debería pasar)'}</span>
-        <Ayuda etiqueta="La suma del plan" texto={`${bloques ? AYUDA_DETALLE.sumaBloques : AYUDA_DETALLE.suma} En este plan, al céntimo: ${euros(s.aportado, 2)} ${bloques ? bloques.map(b => `${b.aporto < 0 ? '−' : '+'} ${euros(Math.abs(b.aporto), 2)} (bloque ${b.n})`).join(' ') : `${s.valores < 0 ? '−' : '+'} ${euros(Math.abs(s.valores), 2)}`} ${sinOcioso ? '' : `${s.ocioso < 0 ? '−' : '+'} ${euros(Math.abs(s.ocioso), 2)} `}− ${euros(s.costes, 2)} − ${euros(s.impuestos, 2)} = ${euros(s.final, 2)}.`}/>
+        <Ayuda etiqueta="La suma del plan" texto={`${bloques ? AYUDA_DETALLE.sumaBloques : AYUDA_DETALLE.suma} En este plan, al céntimo: ${euros(s.aportado, 2)} ${bloques ? bloques.map(b => `${b.aporto < 0 ? '−' : '+'} ${euros(Math.abs(b.aporto), 2)} (parte ${b.n})`).join(' ') : `${s.valores < 0 ? '−' : '+'} ${euros(Math.abs(s.valores), 2)}`} ${sinOcioso ? '' : `${s.ocioso < 0 ? '−' : '+'} ${euros(Math.abs(s.ocioso), 2)} `}− ${euros(s.costes, 2)} − ${euros(s.impuestos, 2)} = ${euros(s.final, 2)}.`}/>
       </div>
 
       {/* §162: la fila de cifras (las de la tabla del Backtesting que más se miran) */}
@@ -540,7 +540,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
       {(!verValor || unValor) && <Tarjeta id="detalle-crece" titulo="Cómo crece" ayuda={modo === 'valores' && !unValor ? AYUDA_DETALLE.valorAValor : modo === 'bloques' && bloques ? AYUDA_DETALLE.bloqueABloque : AYUDA_DETALLE.bh}
         derecha={unValor ? null : <span role="group" aria-label="Qué se dibuja" style={{ display: 'inline-flex', gap: 6 }}>
           <button type="button" data-modo-crece="plan" aria-pressed={modo === 'plan'} onClick={() => setModo('plan')} style={boton(modo === 'plan')}>El plan</button>
-          {bloques && detalle.curvasBloques && <button type="button" data-modo-crece="bloques" aria-pressed={modo === 'bloques'} onClick={() => setModo('bloques')} style={boton(modo === 'bloques')}>Bloque a bloque</button>}
+          {bloques && detalle.curvasBloques && <button type="button" data-modo-crece="bloques" aria-pressed={modo === 'bloques'} onClick={() => setModo('bloques')} style={boton(modo === 'bloques')}>Parte a parte</button>}
           <button type="button" data-modo-crece="valores" aria-pressed={modo === 'valores'} onClick={() => setModo('valores')} style={boton(modo === 'valores')}>Valor a valor</button></span>}>
         {modo === 'plan' || unValor ? <>
           <Ampliable titulo="Cómo crece · el plan">{graficoPlan}</Ampliable>
@@ -549,7 +549,7 @@ export default function PlanDetalle({ detalle, cifras, graficoPlan = null, onIrA
             <tbody>{bh.map(x => <tr key={x.id} data-fila-bh={x.id} style={x.id === 'PLAN' ? { fontWeight: 700, color: B.titulo } : { color: B.secundario }}>
               <td style={celda}>{x.nombre}</td><td style={num}>{euros(x.final, 0)}</td><td style={{ ...num, color: signo(x.twr) }}>{pct(x.twr)}</td><td style={{ ...num, color: signo(x.caida) }}>{pct(x.caida)}</td></tr>)}</tbody>
           </table></div>}
-        </> : modo === 'bloques' && bloques && detalle.curvasBloques ? <Ampliable titulo="Cómo crece · bloque a bloque"><GraficoValores curvas={detalle.curvasBloques} elegido={elegidoB} onElegir={setElegidoB} ocioso={ocioso.simbolo}/></Ampliable>
+        </> : modo === 'bloques' && bloques && detalle.curvasBloques ? <Ampliable titulo="Cómo crece · parte a parte"><GraficoValores curvas={detalle.curvasBloques} elegido={elegidoB} onElegir={setElegidoB} ocioso={ocioso.simbolo}/></Ampliable>
         : <Ampliable titulo="Cómo crece · valor a valor"><GraficoValores curvas={detalle.curvas} elegido={elegido} onElegir={setElegido} ocioso={ocioso.simbolo}/></Ampliable>}
       </Tarjeta>}
       {/* §157 (parte 3a) */}

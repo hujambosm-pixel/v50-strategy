@@ -163,6 +163,36 @@ const ok = (c, t) => { console.log(`${c ? 'OK  ' : 'MAL '} ${t}`); if (!c) fallo
     m.quita(); await D.espera(5)
   }
 
+  // ── §285 · «Usar en un plan ▾» → «Añadir como parte a «X»» (anadeParteEstrategia) y el menú del botón ──
+  {
+    const e1 = { a: { ...Pa.AJUSTES_PLAN, activo: 'AAPL' }, estId: '7', version: 'guardada' }
+    const r1 = Pa.anadeParteEstrategia(e1, 9)
+    ok(r1 && r1.estId === '7' && r1.a.peso === 50 && r1.a.bloques.length === 1 && r1.a.bloques[0].estId === '9' && r1.a.bloques[0].peso === 50 && !Pa.esBloquePesos(r1.a.bloques[0]), 'plan de una parte con otra estrategia: parte 2 «Con una estrategia» con la nueva, 50 % y 50 %')
+    ok(Pa.anadeParteEstrategia(e1, 7) === null && Pa.anadeParteEstrategia(r1, 9) === null, 'si el plan ya la usa (en la parte 1 o en otra), no añade nada (solo se abre)')
+    const bh = Pa.cambiaTipoParte(e1.a, 'e', 'pesos'), r2 = Pa.anadeParteEstrategia({ ...e1, a: bh }, 9)
+    ok(r2 && r2.estId === '9' && !r2.a.sinBloque1 && r2.a.peso === 50 && r2.a.bloques.length === 1 && Pa.esBloquePesos(r2.a.bloques[0]) && r2.a.bloques[0].peso === 50, 'plan solo Buy&Hold: la estrategia entra como parte 1 (50 %) y el Buy&Hold queda al 50 %')
+    // el botón: con planes guardados, «Usar en un plan ▾» con su menú; sin planes, va directo a «plan nuevo»
+    const D = require('./domFalso'); D.pon()
+    const path = require('path'), React = require(path.join(R, 'node_modules', 'react')), RDC = require(path.join(R, 'node_modules', 'react-dom', 'client'))
+    const BPan = require(R + '/components/BuilderPanel.js'), h = React.createElement, destinos = []
+    const cab = (planes) => h(BPan.PlanesUsarCtx.Provider, { value: planes }, h(BPan.CabeceraPasos, { actual: 1, estrategia: 'Cruce de medias 50/200', onUsar: (d) => destinos.push(d) }))
+    let m = D.monta(cab([{ id: 4, nombre: 'Plan · Cruce de medias / oro' }, { id: 6, nombre: 'Otro plan' }]), RDC); await D.espera(20)
+    const b = () => m.raiz.conAtributo('data-boton', 'usar-en-plan')[0]
+    ok(/Usar en un plan ▾/.test(b()?.textContent || '') && !m.raiz.conAtributo('data-menu', 'usar-en-plan').length, 'con planes guardados: «Usar en un plan ▾», cerrado')
+    D.pulsa(b()); await D.espera(10)
+    ok(m.raiz.conAtributo('data-usar').length === 3 && /Plan nuevo con esta estrategia/.test(m.raiz.conAtributo('data-menu', 'usar-en-plan')[0]?.textContent || ''), 'al pulsarlo: «Plan nuevo con esta estrategia» y un plan por línea')
+    D.pulsa(m.raiz.conAtributo('data-usar', '6')[0]); await D.espera(10)
+    ok(destinos.length === 1 && destinos[0].planId === 6 && !m.raiz.conAtributo('data-menu', 'usar-en-plan').length, 'elegir un plan: onUsar({ planId }) y se cierra')
+    D.pulsa(b()); await D.espera(10); D.pulsa(m.raiz.conAtributo('data-usar', 'nuevo')[0]); await D.espera(10)
+    ok(destinos[1]?.nuevo === true, '«Plan nuevo con esta estrategia»: onUsar({ nuevo: true })')
+    m.quita(); await D.espera(5)
+    m = D.monta(cab([]), RDC); await D.espera(20)
+    ok(!/▾/.test(b()?.textContent || ''), 'sin planes guardados: sin ▾')
+    D.pulsa(b()); await D.espera(10)
+    ok(destinos[2]?.nuevo === true && !m.raiz.conAtributo('data-menu', 'usar-en-plan').length, 'y pulsarlo va directo a un plan nuevo')
+    m.quita(); await D.espera(5)
+  }
+
   console.log(fallos ? `FALLOS: ${fallos}` : 'plan-solo-pesos: todo bien')
   process.exit(fallos ? 1 : 0)
 })().catch(e => { console.error(e); process.exit(1) })

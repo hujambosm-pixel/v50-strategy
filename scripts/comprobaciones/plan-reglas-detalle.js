@@ -40,7 +40,7 @@ const dia = (f, n) => { const out = []; for (let d = new Date(f + 'T00:00:00Z');
   const ev = Ev.evaluaPlan(plan, datos, { detalle: true, libro: true })
   ok(cerca(ev.plan.medidas.valorNeto, 10850), `con la regla, 10.850 € (${ev.plan.medidas.valorNeto})`)
   const sr = ev.referencias.find(r => r.id === 'SINREGLAS_p')
-  ok(!!sr && sr.nombre === 'El bloque 2 sin sus reglas' && cerca(sr.medidas.valorNeto, 9800), `«El bloque 2 sin sus reglas» = 9.800 € (${sr?.nombre}, ${sr?.medidas.valorNeto})`)
+  ok(!!sr && sr.nombre === 'La parte 2 sin sus reglas' && cerca(sr.medidas.valorNeto, 9800), `«El bloque 2 sin sus reglas» = 9.800 € (${sr?.nombre}, ${sr?.medidas.valorNeto})`)
   ok(!ev.referencias.some(r => r.id === 'SINREGLAS_a'), 'el bloque 1, sin reglas, no tiene esa fila')
   const sinR = { ...plan, piezas: [plan.piezas[0], bloque('p', [['B', 0.8], ['T', 0.2]], 0.5)] }
   ok(!Ev.referenciasDe(sinR).some(r => r.id.startsWith('SINREGLAS_')), 'sin reglas en ningún bloque, no sale ninguna fila «sin sus reglas»')

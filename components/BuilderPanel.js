@@ -4,7 +4,7 @@
 // (V9.1043, components/BuilderEditor.js, el paso 1) con una COPIA nueva (de la plantilla o de la estrategia elegida), que se guarda
 // al pulsar «Guardar y pasar al paso 2»; una estrategia de código se abre en su apartado «Código de la estrategia» (V9.1048). El paso 2
 // («Probarla contra el azar») es otra pantalla del propio Builder: components/BuilderAzar.js (§45–§46). §59: un solo sistema de pruebas; las antiguas de lotes se retiraron. Se edita pulsando el nombre.
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } from 'react'
 import { PLANTILLAS, VACIA } from '../lib/builder/plantillas'
 import { AYUDA_MI_TRABAJO, construyeMisEstrategias, CHIP_AZAR } from '../lib/builder/misListas'
 import { ctxConSesion, getSupaUrl, getSupaH, hayConfigSupabase } from '../lib/supabase'
@@ -134,6 +134,30 @@ export function BarraPasos({ actual = 1, onPaso = null, desactivados = {} }) {
 // y el botón «Usar en un plan» (onUsar; usarMotivo: por qué no se puede, en el tooltip). Un plan no lleva pasos: no es el paso de ninguna estrategia.
 // bloqueada: mientras corre algo, nada se pulsa. §56: cada círculo con su nombre al lado; en una ventana estrecha (< 900 px) el texto se oculta y queda en el tooltip.
 // enlace: lo que va a la derecha de la ruta («💡 …», components/TesisEnlace.js). extra: lo que va delante de los pasos (la guía, en «Validar»).
+// §285: los planes guardados para el menú de «Usar en un plan ▾» ([{ id, nombre }]); los da BuilderPanel.
+export const PlanesUsarCtx = createContext([])
+// §285: «Usar en un plan ▾»: «Plan nuevo con esta estrategia» o «Añadir como parte a «X»» (uno por plan guardado). onUsar(destino):
+// { nuevo: true } o { planId }. Sin planes guardados, el botón hace directamente lo de «Plan nuevo».
+function BotonUsar({ usable, usarMotivo, onUsar }) {
+  const planes = useContext(PlanesUsarCtx) || [], [abierto, setAbierto] = useState(false)
+  const item = { display: 'block', width: '100%', textAlign: 'left', background: 'transparent', border: 'none', borderRadius: 4, padding: '7px 10px', cursor: 'pointer', fontFamily: B.letra, fontSize: 13, color: B.texto }
+  const sobre = { onMouseEnter: e => { e.currentTarget.style.background = B.fondo }, onMouseLeave: e => { e.currentTarget.style.background = 'transparent' } }
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', marginLeft: 10 }}>
+      <button data-boton="usar-en-plan" aria-expanded={abierto} style={{ ...(usable ? S.boton : S.botonDesactivado), padding: '4px 12px', fontSize: 13 }} disabled={!usable}
+        onClick={usable ? () => { if (!planes.length) onUsar({ nuevo: true }); else setAbierto(x => !x) } : undefined}
+        title={usarMotivo || 'Prepara un plan nuevo con esta estrategia o la añade como parte a uno de tus planes (no se guarda hasta que tú lo digas)'}>Usar en un plan{planes.length ? ' ▾' : ''}</button>
+      {abierto && <>
+        <div aria-hidden="true" onClick={() => setAbierto(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }}/>
+        <div data-menu="usar-en-plan" role="menu" style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 41, minWidth: 280, maxWidth: 380, maxHeight: 360, overflowY: 'auto', background: B.tarjeta, border: `1px solid ${B.borde}`, borderRadius: B.radioBoton, boxShadow: '0 6px 18px rgba(0,0,0,.35)', padding: 4 }}>
+          <button type="button" role="menuitem" data-usar="nuevo" style={{ ...item, fontWeight: 700, color: B.titulo }} {...sobre} onClick={() => { setAbierto(false); onUsar({ nuevo: true }) }}>Plan nuevo con esta estrategia</button>
+          <div style={{ ...S.apagado, fontSize: 12, padding: '6px 10px 2px', borderTop: `1px solid ${B.borde}`, marginTop: 4 }}>Añadirla como parte a uno de tus planes</div>
+          {planes.map(p => <button key={p.id} type="button" role="menuitem" data-usar={p.id} title={`Abre «${p.nombre}» con una parte nueva para esta estrategia (si ya la usa, solo lo abre). No se guarda hasta que tú lo digas.`} style={{ ...item, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} {...sobre} onClick={() => { setAbierto(false); onUsar({ planId: p.id }) }}>{p.nombre}</button>)}
+        </div>
+      </>}
+    </span>
+  )
+}
 export function CabeceraPasos({ actual = 1, onPaso = null, desactivados = {}, hechos = {}, estrategia = null, onVolver = null, bloqueada = false, enlace = null, zona = 'estrategia', plan = null, onUsar = null, usarMotivo = null, extra = null }) {
   const miga = { ...S.enlace, color: B.secundario, fontSize: 13 }, sep = <span aria-hidden="true" style={{ color: B.apagado }}>›</span>
   const enPlan = zona === 'plan', nombre = enPlan ? plan : estrategia, usable = !!onUsar && !usarMotivo && !bloqueada
@@ -160,8 +184,7 @@ export function CabeceraPasos({ actual = 1, onPaso = null, desactivados = {}, he
             </Caja>
           </span>)
         })}
-        {(onUsar || usarMotivo) && <button data-boton="usar-en-plan" style={{ ...(usable ? S.boton : S.botonDesactivado), padding: '4px 12px', fontSize: 13, marginLeft: 10 }} disabled={!usable} onClick={usable ? () => onUsar() : undefined}
-          title={usarMotivo || 'Abre el plan que usa esta estrategia; si aún no tiene ninguno, prepara uno nuevo con ella (no se guarda hasta que tú lo digas)'}>Usar en un plan</button>}
+        {(onUsar || usarMotivo) && <BotonUsar usable={usable} usarMotivo={usarMotivo} onUsar={onUsar}/>}
       </div></>}
     </div>
   )
@@ -310,7 +333,9 @@ function PanelDelBuilder({ estrategias = [], salida = null, onAbrirEstrategia, o
   useEffect(() => { if (irMiTrabajo) seccionMiTrabajo.current?.scrollIntoView?.({ block: 'start' }) }, [irMiTrabajo])
   const alVolver = (cierra, z) => (donde) => { cierra(); setZona(z); recarga(); if (donde === 'miTrabajo') setIrMiTrabajo(Date.now()) }
   const abreAzar = (estrategiaId) => setAzar({ estrategiaId, n: Date.now() })
-  const abrePlan = (estrategiaId) => setPlan({ estrategiaId, n: Date.now() })
+  // §285: destino de «Usar en un plan ▾»: { nuevo: true } (plan nuevo con ella) o { planId } (añadirla como parte a ese plan).
+  const abrePlan = (estrategiaId, destino = null) => setPlan({ estrategiaId, n: Date.now(), ...(destino?.planId != null ? { planId: destino.planId, anadirParte: true } : destino?.nuevo ? { nuevaCon: true } : {}) })
+  const planesUsar = useMemo(() => (datos.planes || []).map(p => ({ id: p.id, nombre: p.nombre })), [datos.planes])
   // «💡 …» de una estrategia o un plan (docs/tesis.md): solo enlaces directos, leídos de las tesis del usuario.
   // guardia (opcional): quien lo pinta pregunta antes si tiene cambios sin guardar; guardia(seguir).
   const enlaceTesis = (tipo, id, guardia = null) => <TesisEnlace lista={tesisDe(datos.tesis, tipo, id)} onAbrir={t => guardia ? guardia(() => onAbrirTesis?.(t)) : onAbrirTesis?.(t)}/>
@@ -353,16 +378,16 @@ function PanelDelBuilder({ estrategias = [], salida = null, onAbrirEstrategia, o
   }
   if (editor && esDeCodigo(editor.fila)) return <ProteccionPanel nombre="Estrategia de código"><BuilderCodigo key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
     onVolver={() => { setEditor(null); recarga() }} onGuardada={alGuardarCodigo}/></ProteccionPanel>
-  if (editor) return <ProteccionPanel nombre="Editor por tarjetas"><BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
-    salida={salida} onVolver={alVolver(() => setEditor(null), 'estrategias')} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} onPaso2={f => { setEditor(null); abreAzar(f.id) }} onPaso3={f => { setEditor(null); abrePlan(f.id) }} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'} entradaBuilder={entrada} enlaceTesis={enlaceTesis}/></ProteccionPanel>
-  if (azar) return <ProteccionPanel nombre="Probarla contra el azar"><BuilderAzar key={azar.n} estrategias={estrategiasEf} estrategiaId={azar.estrategiaId} version={version}
-    cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} onVolver={alVolver(() => setAzar(null), 'estrategias')} onPaso1={f => { setAzar(null); if (f) abreEditor(f); else recarga() }} onPaso3={id => { setAzar(null); abrePlan(id) }} enlaceTesis={enlaceTesis}/></ProteccionPanel>
-  if (plan) return <ProteccionPanel nombre="Convertirla en plan"><BuilderPlan key={plan.n} estrategias={estrategiasEf} estrategiaId={plan.estrategiaId} planId={plan.planId ?? null} nuevo={!!plan.nuevo} comparar={!!plan.comparar} salida={salida} apiFetch={apiFetch} version={version}
+  if (editor) return <PlanesUsarCtx.Provider value={planesUsar}><ProteccionPanel nombre="Editor por tarjetas"><BuilderEditor key={editor.n} fila={editor.fila} estrategias={estrategiasEf} apiFetch={apiFetch}
+    salida={salida} onVolver={alVolver(() => setEditor(null), 'estrategias')} onGuardada={alGuardar} onEditorClasico={f => onAbrirEstrategia?.(f, 'editor')} onPaso2={f => { setEditor(null); abreAzar(f.id) }} onPaso3={(f, destino) => { setEditor(null); abrePlan(f.id, destino) }} cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} comisiones={comisiones} pestanaInicial={editor.pestana || 'tarjetas'} entradaBuilder={entrada} enlaceTesis={enlaceTesis}/></ProteccionPanel></PlanesUsarCtx.Provider>
+  if (azar) return <PlanesUsarCtx.Provider value={planesUsar}><ProteccionPanel nombre="Probarla contra el azar"><BuilderAzar key={azar.n} estrategias={estrategiasEf} estrategiaId={azar.estrategiaId} version={version}
+    cargaSimbolos={cargaSimbolos} cargaVelas={cargaVelas} onVolver={alVolver(() => setAzar(null), 'estrategias')} onPaso1={f => { setAzar(null); if (f) abreEditor(f); else recarga() }} onPaso3={(id, destino) => { setAzar(null); abrePlan(id, destino) }} enlaceTesis={enlaceTesis}/></ProteccionPanel></PlanesUsarCtx.Provider>
+  if (plan) return <ProteccionPanel nombre="Convertirla en plan"><BuilderPlan key={plan.n} estrategias={estrategiasEf} estrategiaId={plan.estrategiaId} planId={plan.planId ?? null} nuevo={!!plan.nuevo} nuevaCon={!!plan.nuevaCon} anadirParte={!!plan.anadirParte} comparar={!!plan.comparar} salida={salida} apiFetch={apiFetch} version={version}
     cargaSimbolos={cargaSimbolosCache} datosLista={datosLista} onIrAValor={onIrAValor} tema={tema} onVolver={alVolver(() => setPlan(null), 'planes')} onPaso1={f => { setPlan(null); if (f) abreEditor(f); else recarga() }} onPaso2={id => { setPlan(null); abreAzar(id) }} enlaceTesis={enlaceTesis}/></ProteccionPanel>
   // §140: la portada de PLANES: los planes guardados, con su cartera y su dinero. Las cifras se ven al abrirlo o en «Comparar planes» (se calculan allí).
   // §190: con varios bloques, «2 bloques · «Cruce de medias 50/200» (60 %) + «Sigue la tendencia» (40 %)».
-  const carteraDe = (p) => { try { const bs = (p.plan?.piezas || []).filter(x => x.tipo === 'estrategia' || x.tipo === 'pesos'); if (bs.length === 1 && bs[0].tipo === 'pesos') { const x = bs[0]; return '100 % · «Con pesos · ' + (x.pesos || []).map(q => q.simbolo === 'LIQUIDEZ' ? 'liquidez' : q.simbolo).join('/') + (x.reglas?.length ? ' · ' + (x.reglas.length === 1 ? '1 regla' : x.reglas.length + ' reglas') : '') + '»' }   // §279
-    if (bs.length > 1) return `${bs.length} bloques · ${bs.map(x => `${x.tipo === 'pesos' ? `«Con pesos · ${(x.pesos || []).map(q => q.simbolo === 'LIQUIDEZ' ? 'liquidez' : q.simbolo).join('/')}${x.reglas?.length ? ` · ${x.reglas.length === 1 ? '1 regla' : `${x.reglas.length} reglas`}` : ''}»` : `«${x.estrategia?.name || 'Estrategia'}»`} (${Math.round((Number(x.peso) || 0) * 1000) / 10} %)`.replace('.', ',')).join(' + ')}`
+  const carteraDe = (p) => { try { const bs = (p.plan?.piezas || []).filter(x => x.tipo === 'estrategia' || x.tipo === 'pesos'); if (bs.length === 1 && bs[0].tipo === 'pesos') { const x = bs[0]; return '100 % · «Buy&Hold · ' + (x.pesos || []).map(q => q.simbolo === 'LIQUIDEZ' ? 'liquidez' : q.simbolo).join('/') + (x.reglas?.length ? ' · ' + (x.reglas.length === 1 ? '1 regla' : x.reglas.length + ' reglas') : '') + '»' }   // §279
+    if (bs.length > 1) return `${bs.length} partes · ${bs.map(x => `${x.tipo === 'pesos' ? `«Buy&Hold · ${(x.pesos || []).map(q => q.simbolo === 'LIQUIDEZ' ? 'liquidez' : q.simbolo).join('/')}${x.reglas?.length ? ` · ${x.reglas.length === 1 ? '1 regla' : `${x.reglas.length} reglas`}` : ''}»` : `«${x.estrategia?.name || 'Estrategia'}»`} (${Math.round((Number(x.peso) || 0) * 1000) / 10} %)`.replace('.', ',')).join(' + ')}`
     const a = ajustesDe(p.plan), n = fotoDelPlan(p.plan)?.name || 'Estrategia'; return `100 % · «${n}» en ${a.donde === 'lista' ? (a.lista?.universo && a.lista.universo !== 'manual' ? 'el Nasdaq-100' : `una lista de ${(a.lista?.simbolos || []).length} valores`) : a.activo}` } catch (_) { return '—' } }
   const planesVis = (datos.planes || []).filter(p => coincide(buscarP, p.nombre, carteraDe(p))), nPlanes = (datos.planes || []).length
   const marcadosVivos = (marcados || []).filter(id => (datos.planes || []).some(p => Number(p.id) === Number(id)))

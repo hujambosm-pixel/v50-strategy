@@ -27,7 +27,7 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     const fr = O.fraseOciosoRegla(r, 'GLD', { estrategia: 'Cruce de medias 50/200' })
     ok(/^El dinero que no usa «Cruce de medias 50\/200» va al oro \(GLD\) solo mientras se cumpla: GLD .*200.*espera en liquidez; vuelve al oro \(GLD\)/.test(fr) && /lo coge esté donde esté\.$/.test(fr), `«Así se lee»: «${fr}»`)
     const fr2 = O.fraseOciosoRegla({ ...r, siNo: 'SHV', filas: [{ ...r.filas[0], velas: 'semanales' }] }, 'GLD', { multi: true })
-    ok(/no usa ningún bloque/.test(fr2) && /va a SHV/.test(fr2) && /velas semanales/.test(fr2) && /Si un bloque necesita/.test(fr2), `«Así se lee» con varios bloques, SHV y semanales: «${fr2}»`)
+    ok(/no usa ninguna parte/.test(fr2) && /va a SHV/.test(fr2) && /velas semanales/.test(fr2) && /Si una parte necesita/.test(fr2), `«Así se lee» con varios bloques, SHV y semanales: «${fr2}»`)
     ok(J(O.conY([{ quien: 'A', union: 'O' }, { quien: 'B', union: 'O' }])) === J([{ quien: 'A' }, { quien: 'B', union: 'Y' }]), 'todas las filas con «Y» (la primera, sin unión)')
     // Un bloque
     const sin = { ...Pa.AJUSTES_PLAN, activo: 'AAPL', ocioso: 'GLD' }

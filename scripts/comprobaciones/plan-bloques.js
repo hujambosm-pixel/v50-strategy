@@ -146,13 +146,13 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
       reparto: { aportacionesA: 'pesos', rebalanceo: { calendario: 'nunca', banda: null }, ...reparto }, impuestos: { regimen: 'ninguno' }, costes: null, periodo: { desde: '2020-01-01', hasta: '2021-01-01' } })
     const tiene = (p, t) => P.validaPlan(p).some(e => e.includes(t))
     ok(P.validaPlan(pl([pz('a'), pz('b', { activo: 'MSFT' })])).length === 0, 'dos bloques con el mismo ocioso: válido')
-    ok(tiene(pl([pz('a'), pz('b', { ocioso: 'QQQ' })]), 'el mismo en todos'), 'ocioso distinto en cada bloque: no')
+    ok(tiene(pl([pz('a'), pz('b', { ocioso: 'QQQ' })]), 'el mismo en todas'), 'ocioso distinto en cada parte: no')
     ok(tiene(pl([pz('a'), pz('b', { apalancamiento: 2 })]), 'sin apalancar'), 'apalancado: todavía no')
     ok(tiene(pl([pz('a'), pz('b', { aportacionDentro: 'compra' })]), 'compra más acción'), '«compra más acción»: todavía no')
     ok(tiene(pl([pz('a'), pz('b')], { rebalanceo: { calendario: 'anual', banda: null } }), '«nunca»'), 'vender para volver al reparto: todavía no')
     ok(tiene(pl([pz('a'), pz('b')], { dineroLibre: 'otro' }), '«tope» o «prioridad»'), 'dinero libre desconocido: no')
     ok(P.esBloques(pl([pz('a'), pz('b')])) && !P.esBloques(pl([pz('a', { peso: 1 })])) && !P.esBloques(pl([pz('a'), { id: 'q', tipo: 'activo', activo: 'QQQ', peso: 0.5 }])), 'esBloques: dos o más bloques de estrategia')
-    ok(tiene(pl([pz('a'), pz('b', { activo: 'GLD' })]), 'el valor de un bloque'), 'el ocioso no puede ser el valor de un bloque')
+    ok(tiene(pl([pz('a'), pz('b', { activo: 'GLD' })]), 'el valor de una parte'), 'el ocioso no puede ser el valor de una parte')
   }
 
   // ── 6 · El dinero de una venta a mitad de sesión ──
@@ -265,16 +265,16 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     ok(cerca(r1.estrategias.x.dentro[0], 0.6) && Number.isFinite(b1.enEl) && b1.valores[0].enEl != null && !b1.valores[0].compartido, `dinero en el bloque 1 el día 0: 60 %; un valor que solo está en un bloque lleva su «Dinero en él»`)
     ok(dt.curvasBloques.series.length === 2 && dt.curvasBloques.series.map(s => s.bloque).join() === '1,2' && cerca(dt.curvasBloques.series[0].v[5], 1200) && cerca(dt.curvasBloques.series[1].v[5], 956), '«Bloque a bloque»: una curva por bloque que acaba en lo que ganó')
     ok(dt.porOperacion.ops.every(o => o.bloque === (o.simbolo === 'A' ? 1 : 2)) && dt.movimientos.filter(m => m.tipo === 'compra').every(m => m.bloque === (m.simbolo === 'A' ? 1 : 2)) && dt.movimientos[0].bloque === null, 'cada operación y cada compra con el número de su bloque; lo de la cuenta, sin bloque')
-    ok(De.historial(dt.porOperacion.ops, 'bloque 2').length === 2 && De.filtraMovimientos(dt.movimientos, 'bloque 1').length === 2, 'buscar «bloque 2» en el historial deja solo las suyas')
+    ok(De.historial(dt.porOperacion.ops, 'bloque 2').length === 2 && De.filtraMovimientos(dt.movimientos, 'bloque 1').length === 2 && De.historial(dt.porOperacion.ops, 'parte 2').length === 2 && De.filtraMovimientos(dt.movimientos, 'Parte 1').length === 2, 'buscar «bloque 2» en el historial deja solo las suyas')
     ok(dt.donde.dias.every(z => cerca(z.bq[0] + z.bq[1], z.valores)) && cerca(dt.donde.dias[0].bq[0], 0.6) && dt.donde.bloques.length === 2, '«Dónde está tu dinero»: los bloques suman «en valores» cada día (el día 0, el bloque 1 es el 60 %)')
     ok(!dt.unValor && dt.cabecera.bloques === 2 && dt.cabecera.valores === 3, 'con varios bloques no es «un valor»: 2 bloques, 3 valores')
-    ok(/QUÉ APORTÓ CADA BLOQUE/.test(De.textoDetalle(dt)) && /Bloque 2 · Sigue la tendencia/.test(De.textoDetalle(dt)), '«Copiar para Claude» con los bloques')
+    ok(/QUÉ APORTÓ CADA PARTE/.test(De.textoDetalle(dt)) && /Parte 2 · Sigue la tendencia/.test(De.textoDetalle(dt)), '«Copiar para Claude» con los bloques')
     // §190: las filas «Solo el bloque N con todo tu dinero»: el bloque 1 solo con 10.000 € compra 1.000 A a 10 y las vende a 12 → 12.000 €;
     // el bloque 2 solo, lo mismo que calcular aparte ese plan de un bloque.
     { const Ev2 = require(R + '/lib/planes/evalua.js'), ev = Ev2.evaluaPlan(p1, d1, { detalle: true })
       const rx = ev.referencias.find(x => x.id === 'BLOQUE_x'), ry = ev.referencias.find(x => x.id === 'BLOQUE_y')
       const solo = P.ejecutaPlan({ ...p1, piezas: [{ ...p1.piezas[1], peso: 1 }], reparto: { aportacionesA: 'pesos', rebalanceo: { calendario: 'nunca', banda: null } } }, { ...d1, lista: d1.listas.y })
-      ok(rx?.nombre === 'Solo el bloque 1 con todo tu dinero' && cerca(rx.medidas.valorNeto, 12000) && cerca(ry?.medidas.valorNeto, solo.valorNeto), `«Solo el bloque 1» 12.000 € y «Solo el bloque 2» = su plan de un bloque (${rx?.medidas.valorNeto}, ${ry?.medidas.valorNeto} / ${solo.valorNeto})`)
+      ok(rx?.nombre === 'Solo la parte 1 con todo tu dinero' && cerca(rx.medidas.valorNeto, 12000) && cerca(ry?.medidas.valorNeto, solo.valorNeto), `«Solo el bloque 1» 12.000 € y «Solo el bloque 2» = su plan de un bloque (${rx?.medidas.valorNeto}, ${ry?.medidas.valorNeto} / ${solo.valorNeto})`)
       const Pa2 = require(R + '/lib/builder/planPantalla.js'), cf = Pa2.cifrasPlan({ evaluacion: ev, ordenesReferencias: { BLOQUE_x: 3, BLOQUE_y: 5 } }, p1)
       ok(cf.alternativas.map(x => x.id).slice(0, 3).join() === 'PLAN,BLOQUE_x,BLOQUE_y' && cf.alternativas[1].bloque === 1 && cf.alternativas[2].bloque === 2 && cf.alternativas[1].ordenes === 3, 'en la tabla, detrás de «Tu plan», una fila por bloque (con su número y sus órdenes)')
       ok(!Ev2.referenciasDe({ ...p1, piezas: [p1.piezas[0]] }).some(x => x.id.startsWith('BLOQUE_')), 'con un solo bloque, ninguna fila «Solo el bloque…»') }
@@ -288,11 +288,11 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     // La pantalla
     const m = D.monta(React.createElement(PD, { detalle: dt, cifras: null }), RDC); await D.espera(30)
     const t = (k, v) => m.raiz.conAtributo(k, v)
-    ok(t('data-tabla', 'detalle-bloques').length === 1 && !t('data-tabla', 'detalle-valores').length && !t('data-fila-bloque').length && /Los 2 bloques/.test(t('data-fila-total')[0]?.textContent || ''), '«Qué aportó cada bloque» en lugar de «Qué aportó cada valor», con «▸ Los 2 bloques (sin el ocioso)» arriba y plegada (§191)')
+    ok(t('data-tabla', 'detalle-bloques').length === 1 && !t('data-tabla', 'detalle-valores').length && !t('data-fila-bloque').length && /Las 2 partes/.test(t('data-fila-total')[0]?.textContent || ''), '«Qué aportó cada bloque» en lugar de «Qué aportó cada valor», con «▸ Los 2 bloques (sin el ocioso)» arriba y plegada (§191)')
     D.pulsa(t('data-pliega-total')[0]); await D.espera(10)
     ok(t('data-fila-bloque').length === 2 && !t('data-valor-bloque').length, 'al pulsarla salen los dos bloques (sus valores, plegados)')
     D.pulsa(t('data-pliega-total')[0]); await D.espera(10)
-    ok(/\+ ?1\.200 € ganados con el bloque 1/.test(t('data-suma', 'bloque-1')[0]?.textContent || '') && /956 € ganados con el bloque 2/.test(t('data-suma', 'bloque-2')[0]?.textContent || ''), `la línea que suma, bloque a bloque (${t('data-suma', 'bloque-1')[0]?.textContent})`)
+    ok(/\+ ?1\.200 € ganados con la parte 1/.test(t('data-suma', 'bloque-1')[0]?.textContent || '') && /956 € ganados con la parte 2/.test(t('data-suma', 'bloque-2')[0]?.textContent || ''), `la línea que suma, bloque a bloque (${t('data-suma', 'bloque-1')[0]?.textContent})`)
     ok(/2 bloques · 3 valores/.test(t('data-detalle-cabecera')[0].textContent) && !/velas diarias/.test(t('data-detalle-cabecera')[0].textContent), 'la cabecera dice «2 bloques · 3 valores» (las velas, en cada bloque)')
     ok(!t('data-valor-bloque').length, 'los bloques, plegados al entrar')
     D.pulsa(t('data-expande-bloques')[0]); await D.espera(10)
@@ -301,9 +301,9 @@ const FOTO = { id: 'x', name: 'Cruce de medias 50/200', definition: EMA, params:
     ok(t('data-valor-bloque').length === 2, 'pulsar el bloque 1 lo pliega (quedan los 2 del bloque 2)')
     ok(t('data-modo-crece', 'bloques').length === 1, 'en «Cómo crece», el botón «Bloque a bloque»')
     D.pulsa(t('data-modo-crece', 'bloques')[0]); await D.espera(10)
-    ok(t('data-grafico', 'bloques').length === 1 && t('data-chip-valor', 'Bloque 1').length === 1, '«Bloque a bloque» dibuja una línea por bloque')
+    ok(t('data-grafico', 'bloques').length === 1 && t('data-chip-valor', 'Parte 1').length === 1, '«Bloque a bloque» dibuja una línea por bloque')
     ok(t('data-banda', 'bloque-1').length === 1 && t('data-banda', 'bloque-2').length === 1 && !t('data-banda', 'valores').length, '«Dónde está tu dinero», con una franja por bloque')
-    ok(t('data-bloque-fila', '2').length === 2 && /Bloque/.test(t('data-tabla', 'detalle-historial')[0].textContent), 'el historial con la columna «Bloque»')
+    ok(t('data-bloque-fila', '2').length === 2 && /Parte/.test(t('data-tabla', 'detalle-historial')[0].textContent), 'el historial con la columna «Parte»')
     m.quita(); await D.espera(5)
   }
 

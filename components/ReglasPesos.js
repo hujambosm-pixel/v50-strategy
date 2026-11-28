@@ -116,7 +116,7 @@ export default function ReglasPesos({ b, n, onCambia, valores = [], color = C.az
         )}
         {(a.tipo === 'moverBloque' || a.tipo === 'moverActivo') && (
           <div data-mover style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-            mover <Numero valor={a.pct} etiqueta={`% que mueve la regla ${k + 1}`} onCambia={v => ponA(x => ({ ...x, pct: v }))}/> % {a.tipo === 'moverBloque' ? 'de todo el bloque, desde' : 'de lo que hay en'}
+            mover <Numero valor={a.pct} etiqueta={`% que mueve la regla ${k + 1}`} onCambia={v => ponA(x => ({ ...x, pct: v }))}/> % {a.tipo === 'moverBloque' ? 'de toda la parte, desde' : 'de lo que hay en'}
             {sim('de', valores, `De dónde sale el dinero (regla ${k + 1})`)} a {sim('a', valores, `A dónde va el dinero (regla ${k + 1})`)}
           </div>
         )}
@@ -139,7 +139,7 @@ export default function ReglasPesos({ b, n, onCambia, valores = [], color = C.az
   )
   return (
     <div data-reglas-pesos={rs.length}>
-      {!rs.length && <div style={{ ...S.apagado, marginBottom: 6 }}>Sin reglas: el bloque compra sus pesos y los mantiene.</div>}
+      {!rs.length && <div style={{ ...S.apagado, marginBottom: 6 }}>Sin reglas: la parte compra sus pesos y los mantiene.</div>}
       {rs.map((r, k) => (
         <div key={k} data-regla={k} style={{ border: `1px solid ${B.borde}`, borderLeft: `3px solid ${color}`, borderRadius: B.radioBoton, background: B.fondo, padding: '8px 10px', marginBottom: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -162,14 +162,14 @@ export default function ReglasPesos({ b, n, onCambia, valores = [], color = C.az
           </select>)}
         </div>
       ))}
-      <button type="button" data-boton="anadir-regla" disabled={rs.length >= MAX_REGLAS} title={rs.length >= MAX_REGLAS ? `Como mucho ${MAX_REGLAS} reglas por bloque` : 'Una regla nueva (se mira después de las que ya hay)'}
+      <button type="button" data-boton="anadir-regla" disabled={rs.length >= MAX_REGLAS} title={rs.length >= MAX_REGLAS ? `Como mucho ${MAX_REGLAS} reglas por parte` : 'Una regla nueva (se mira después de las que ya hay)'}
         onClick={() => pon([...rs, reglaNueva(b)])} style={{ ...S.boton, padding: '4px 10px', fontSize: 13 }}>+ Añadir regla</button>
       {errores.length > 0 && <div data-errores-reglas style={{ color: ROJO, fontSize: 13, marginTop: 6 }}>{errores.map((e, k) => <div key={k}>✕ {e}</div>)}</div>}
 
       {ventana && (
         <div data-catalogo-regla role="dialog" aria-modal="true" aria-label="Añadir condición" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onMouseDown={e => { if (e.target === e.currentTarget) cierra() }}>
           <div style={{ ...S.tarjeta, padding: 20, maxWidth: 680, width: '100%', maxHeight: '86vh', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ color: B.titulo, fontWeight: 700, fontSize: 16 }}>Añadir condición · regla {ventana.k + 1} del bloque {n}</div>
+            <div style={{ color: B.titulo, fontWeight: 700, fontSize: 16 }}>Añadir condición · regla {ventana.k + 1} de la parte {n}</div>
             <div style={{ ...S.secundario, fontSize: 13, margin: '4px 0 10px' }}>El mismo catálogo que al crear una estrategia. Después eliges de qué símbolo es, sus números y con qué velas se mira.</div>
             <ConLimpiar valor={buscar} onLimpia={() => setBuscar('')} bloque><input aria-label="Buscar condiciones" placeholder="Buscar: caída, media, RSI…" value={buscar} onChange={e => setBuscar(e.target.value)} data-buscar="catalogo-regla" style={{ ...entrada, width: '100%', boxSizing: 'border-box' }}/></ConLimpiar>
             <div style={{ overflowY: 'auto', marginTop: 10, minHeight: 0 }}>

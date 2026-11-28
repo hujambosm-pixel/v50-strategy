@@ -349,7 +349,7 @@ export default function BuilderEditor({ fila, estrategias = [], apiFetch, enlace
       {/* §45 y §54: la cabecera B; el paso 2 («Probarla contra el azar») abre la estrategia GUARDADA (una nueva, al guardarla). */}
       <CabeceraPasos actual={1} estrategia={est.nombre.trim() || null} onVolver={(donde) => guardiaTesis(() => onVolver?.(donde))} enlace={enlaceTesis?.('estrategia', fila?.id, guardiaTesis)} onPaso={onPaso2 ? (n) => guardiaTesis(() => { const f = guardada.current || fila; if (n === 2 && f?.id) onPaso2(f) }) : null}
         desactivados={nueva ? { 2: 'Guárdala primero: se valida la estrategia tal como está guardada' } : {}}
-        onUsar={onPaso3 ? () => guardiaTesis(() => { const f = guardada.current || fila; if (f?.id) onPaso3(f) }) : null}
+        onUsar={onPaso3 ? (destino) => guardiaTesis(() => { const f = guardada.current || fila; if (f?.id) onPaso3(f, destino) }) : null}
         usarMotivo={!onPaso3 ? null : nueva ? 'Guárdala primero: el plan usa la estrategia tal como está guardada' : null}/>
       {/* V9.1073: la fila del título, fija arriba al desplazarse (con la barra de los cambios). */}
       <div data-fila-titulo style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 20, background: B.fondo, padding: '6px 0' }}>
